@@ -26,6 +26,8 @@
 //!   credential store, outside the collection.
 //! - Every output's encoder profile exists, and every profile holds an encoding the
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
+//! - Every output's video mix exists, every mix passes `VideoMix::problem`, and the
+//!   scene a `scene` mix shows exists.
 //!
 //! The structs have private fields so that later additions (source `filters[]`, item
 //! `effects[]`, the full 3D transform) don't break callers.
@@ -33,7 +35,7 @@
 use jstream_protocol::{
     Canvas, Crop, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
     KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole, Settings,
-    SourceId, SourceKind,
+    SourceId, SourceKind, VideoMix as MixSpec, VideoMixId,
 };
 use std::collections::BTreeMap;
 
@@ -98,6 +100,7 @@ pub struct State {
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
     pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
+    pub(crate) video_mixes: BTreeMap<VideoMixId, VideoMix>,
 }
 
 impl State {
@@ -169,6 +172,16 @@ impl State {
             Some(id) => self.encoders.get(id)?.profile,
             None => EncoderProfile::DEFAULT,
         })
+    }
+
+    /// Every video mix, ordered by ID.
+    pub fn video_mixes(&self) -> impl ExactSizeIterator<Item = &VideoMix> {
+        self.video_mixes.values()
+    }
+
+    /// The video mix with this ID.
+    pub fn video_mix(&self, id: &VideoMixId) -> Option<&VideoMix> {
+        self.video_mixes.get(id)
     }
 
     pub(crate) fn scene_index(&self, id: &SceneId) -> Option<usize> {
@@ -319,6 +332,7 @@ pub struct Output {
     pub(crate) id: OutputId,
     pub(crate) kind: OutputKind,
     pub(crate) encoder_profile: Option<EncoderProfileId>,
+    pub(crate) video_mix: Option<VideoMixId>,
 }
 
 impl Output {
@@ -335,6 +349,11 @@ impl Output {
     /// The encoder profile it uses, or `None` for the engine's default.
     pub fn encoder_profile(&self) -> Option<&EncoderProfileId> {
         self.encoder_profile.as_ref()
+    }
+
+    /// The video mix it shows, or `None` for the program at the engine's capture size.
+    pub fn video_mix(&self) -> Option<&VideoMixId> {
+        self.video_mix.as_ref()
     }
 }
 
@@ -360,5 +379,30 @@ impl Encoder {
     /// The encoding.
     pub fn profile(&self) -> &EncoderProfile {
         &self.profile
+    }
+}
+
+/// One video mix: a named picture at a size and rate that outputs can show.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VideoMix {
+    pub(crate) id: VideoMixId,
+    pub(crate) name: String,
+    pub(crate) mix: MixSpec,
+}
+
+impl VideoMix {
+    /// Its ID.
+    pub fn id(&self) -> &VideoMixId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// What it shows, and at what size and rate.
+    pub fn mix(&self) -> &MixSpec {
+        &self.mix
     }
 }

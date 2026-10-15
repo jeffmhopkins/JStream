@@ -23,6 +23,7 @@ use crate::{
     VisibleIf,
 };
 use crate::{HistoryCall, HistoryDirection, HistoryOp};
+use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -230,6 +231,71 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::EncoderDelete {
             profile_id: EncoderProfileId::new("enc_old"),
         },
+        Edit::VideoMixCreate {
+            mix_id: VideoMixId::new("mix_cam"),
+            name: "Camera".into(),
+            mix: camera_mix(),
+        },
+        Edit::VideoMixUpdate {
+            mix_id: VideoMixId::new("mix_cam"),
+            name: "Program 720p".into(),
+            mix: program_mix(),
+        },
+        Edit::OutputSetVideoMix {
+            output_id: OutputId::new("out_rec"),
+            mix_id: Some(VideoMixId::new("mix_cam")),
+        },
+        Edit::OutputSetVideoMix {
+            output_id: OutputId::new("out_yt"),
+            mix_id: None,
+        },
+        Edit::VideoMixDelete {
+            mix_id: VideoMixId::new("mix_old"),
+        },
+    ]
+}
+
+/// One scene at 1280×720 and half the base rate.
+fn camera_mix() -> VideoMix {
+    VideoMix {
+        input: MixInput::Scene {
+            scene_id: SceneId::new("scn_cam"),
+        },
+        resolution: MixResolution {
+            width: 1280,
+            height: 720,
+        },
+        fps_divisor: 2,
+    }
+}
+
+/// The program at 1280×720 and the base rate.
+fn program_mix() -> VideoMix {
+    VideoMix {
+        input: MixInput::Program,
+        resolution: MixResolution {
+            width: 1280,
+            height: 720,
+        },
+        fps_divisor: 1,
+    }
+}
+
+fn mix_infos() -> Vec<VideoMixInfo> {
+    vec![
+        VideoMixInfo {
+            mix_id: VideoMixId::new("mix_cam"),
+            name: "Camera".into(),
+            mix: camera_mix(),
+        },
+        VideoMixInfo {
+            mix_id: VideoMixId::new("mix_preview"),
+            name: "Preview".into(),
+            mix: VideoMix {
+                input: MixInput::Preview,
+                ..program_mix()
+            },
+        },
     ]
 }
 
@@ -283,11 +349,13 @@ fn output_infos() -> Vec<OutputInfo> {
                 container: RecordContainer::Mp4,
             },
             encoder_profile: Some(EncoderProfileId::new("enc_rec")),
+            video_mix: Some(VideoMixId::new("mix_cam")),
         },
         OutputInfo {
             output_id: OutputId::new("out_yt"),
             kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
             encoder_profile: None,
+            video_mix: None,
         },
     ]
 }
@@ -332,6 +400,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::OutputList,
         Query::StudioGet,
         Query::EncoderList,
+        Query::VideoMixList,
         Query::DeletePlan {
             target: DeleteTarget::Scene {
                 scene_id: SceneId::new("scn_mask"),
@@ -602,6 +671,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             ],
             outputs: output_infos(),
             encoders: encoder_infos(),
+            video_mixes: mix_infos(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -645,6 +715,10 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
+        },
+        QueryResult::VideoMixList {
+            rev: Rev(12),
+            video_mixes: mix_infos(),
         },
         QueryResult::DeletePlan {
             rev: Rev(12),
@@ -765,6 +839,11 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
                     id: "src_cam".into(),
                     field: "settings.mask".into(),
                 },
+                Blocker {
+                    entity: EntityKind::VideoMix,
+                    id: "mix_mask".into(),
+                    field: "mix.input.scene_id".into(),
+                },
             ],
         },
         ProtocolError::UndoConflict {
@@ -791,6 +870,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Source,
         EntityKind::Output,
         EntityKind::Encoder,
+        EntityKind::VideoMix,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,

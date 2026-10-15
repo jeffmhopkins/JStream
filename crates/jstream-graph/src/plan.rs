@@ -8,8 +8,8 @@
 use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
-    DeleteTarget, Edit, EntityKind, ItemId, ProtocolError, QueryResult, Settings, SourceId,
-    SourceKind,
+    DeleteTarget, Edit, EntityKind, ItemId, MixInput, ProtocolError, QueryResult, Settings,
+    SourceId, SourceKind, VideoMix, VideoMixId,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -25,6 +25,8 @@ impl Graph {
     /// - one `source.set_settings` per remaining source whose settings refer to a deleted
     ///   object, setting each such parameter to `null`;
     /// - `source.delete` for each `scene` source that shows a deleted scene;
+    /// - `video_mix.update` for each video mix that shows the deleted scene, keeping its
+    ///   name, resolution and rate and showing the program instead;
     /// - the delete of the target.
     pub fn delete_plan(&self, target: &DeleteTarget) -> Result<QueryResult, ProtocolError> {
         let state = &self.state;
@@ -72,11 +74,13 @@ impl Graph {
         }
 
         let mut removes: Vec<ItemId> = Vec::new();
+        let mut repoints: Vec<VideoMixId> = Vec::new();
         let mut clears: BTreeMap<SourceId, Settings> = BTreeMap::new();
         for node in &deleted {
             for blocker in deps::blockers(state, node) {
                 match (blocker.entity, blocker.field.strip_prefix("settings.")) {
                     (EntityKind::Item, _) => removes.push(ItemId::new(blocker.id)),
+                    (EntityKind::VideoMix, _) => repoints.push(VideoMixId::new(blocker.id)),
                     (EntityKind::Source, Some(param)) => {
                         let source_id = SourceId::new(blocker.id);
                         // A source the batch deletes anyway needs no clearing.
@@ -108,6 +112,17 @@ impl Graph {
                 .into_iter()
                 .map(|source_id| Edit::SourceDelete { source_id }),
         );
+        edits.extend(repoints.into_iter().filter_map(|mix_id| {
+            let current = state.video_mix(&mix_id)?;
+            Some(Edit::VideoMixUpdate {
+                name: current.name.clone(),
+                mix: VideoMix {
+                    input: MixInput::Program,
+                    ..current.mix.clone()
+                },
+                mix_id,
+            })
+        }));
         edits.push(last);
         Ok(QueryResult::DeletePlan {
             rev: self.rev,

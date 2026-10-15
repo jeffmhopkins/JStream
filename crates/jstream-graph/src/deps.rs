@@ -126,8 +126,11 @@ fn dfs(
 
 /// Everything that stops `target`'s delete, in a stable order: the items that place a
 /// source (scene display order, then stacking order), the `scene` sources that show a
-/// scene (ID order), then every settings value that refers to the target (source ID
-/// order, then parameter order). `delete.plan` removes exactly these.
+/// scene (ID order), every settings value that refers to the target (source ID order,
+/// then parameter order), then the video mixes that show a scene (ID order).
+/// `delete.plan` removes exactly these, and points those mixes at the program.
+///
+/// A mix is not a node: nothing depends on it but outputs, so it can't be in a cycle.
 pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
     let mut out = Vec::new();
     match target {
@@ -163,6 +166,18 @@ pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
                     entity: EntityKind::Source,
                     id: source.id.as_str().to_owned(),
                     field: format!("settings.{param}"),
+                }),
+        );
+    }
+    if let Node::Scene(scene_id) = target {
+        out.extend(
+            state
+                .video_mixes()
+                .filter(|m| m.mix.scene() == Some(scene_id))
+                .map(|m| Blocker {
+                    entity: EntityKind::VideoMix,
+                    id: m.id.as_str().to_owned(),
+                    field: "mix.input.scene_id".into(),
                 }),
         );
     }

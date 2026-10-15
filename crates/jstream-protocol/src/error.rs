@@ -165,6 +165,8 @@ pub enum EntityKind {
     Output,
     /// An encoder profile.
     Encoder,
+    /// A video mix.
+    VideoMix,
 }
 
 impl fmt::Display for EntityKind {
@@ -175,6 +177,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Source => "source",
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
+            EntityKind::VideoMix => "video_mix",
         })
     }
 }
@@ -187,14 +190,15 @@ impl fmt::Display for EntityKind {
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Blocker {
-    /// What kind of object refers to the target: an `item` that places a source, or a
-    /// `source` that shows a scene or whose settings refer to the target.
+    /// What kind of object refers to the target: an `item` that places a source, a
+    /// `source` that shows a scene or whose settings refer to the target, or a
+    /// `video_mix` that shows a scene.
     pub entity: EntityKind,
     /// That object's ID.
     pub id: String,
     /// The field of that object that refers to the target, as a dotted path into its
-    /// query form: `source_id` for an item, `kind.scene_id` for a `scene` source, and
-    /// `settings.<param>` for a settings reference.
+    /// query form: `source_id` for an item, `kind.scene_id` for a `scene` source,
+    /// `settings.<param>` for a settings reference, and `mix.input.scene_id` for a mix.
     pub field: String,
 }
 

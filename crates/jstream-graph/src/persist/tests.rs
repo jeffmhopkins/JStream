@@ -215,6 +215,41 @@ fn a_file_without_encoder_profiles_loads() {
     );
 }
 
+/// A file saved before video mixes existed has neither `video_mixes` nor any output's
+/// `video_mix`. It loads with no mixes, every output showing none.
+#[test]
+fn a_file_without_video_mixes_loads() {
+    let file = edit_file(|v| {
+        v.as_object_mut().map(|o| o.remove("video_mixes"));
+        for output in v["outputs"].as_array_mut().into_iter().flatten() {
+            output.as_object_mut().map(|o| o.remove("video_mix"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    assert_eq!(graph.state().video_mixes().len(), 0);
+    assert!(graph.state().outputs().all(|o| o.video_mix().is_none()));
+}
+
+/// A mix is rebuilt with `video_mix.create`, so one showing a scene the file lacks is
+/// refused, and so is an output naming a mix the file lacks.
+#[test]
+fn mixes_and_outputs_naming_missing_objects_are_refused() {
+    let file = edit_file(|v| v["video_mixes"][1]["mix"]["input"]["scene_id"] = json!("gone"));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "video mix `side`"),
+        "{:?}",
+        load(&file)
+    );
+    let file = edit_file(|v| v["outputs"][0]["video_mix"] = json!("gone"));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "output `rec`"),
+        "{:?}",
+        load(&file)
+    );
+}
+
 #[test]
 fn an_output_naming_a_missing_profile_is_refused() {
     let file = edit_file(|v| v["outputs"][0]["encoder_profile"] = json!("gone"));

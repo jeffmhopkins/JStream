@@ -3970,6 +3970,7 @@ fn output_edits_configure_the_collection() {
             output_id: OutputId::new("out_yt"),
             kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
             encoder_profile: None,
+            video_mix: None,
         }]
     );
     assert_eq!(
@@ -3994,6 +3995,7 @@ fn output_edits_configure_the_collection() {
                 output_id: OutputId::new("out_yt"),
                 kind: rtmp_output("rtmps://a.rtmps.youtube.com:443/live2"),
                 encoder_profile: None,
+                video_mix: None,
             }]
         ),
         other => panic!("not a state: {other:?}"),

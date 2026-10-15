@@ -17,6 +17,7 @@ use crate::{Graph, Placement};
 use jstream_protocol::{
     Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
     OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneRole, Settings, SourceId, SourceKind,
+    VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -108,6 +109,9 @@ struct File {
     /// without profiles saves as it did before they existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     encoders: Vec<FileEncoder>,
+    /// Video mixes, ordered by ID; omitted when there are none, like `encoders`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    video_mixes: Vec<FileMix>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -163,6 +167,9 @@ struct FileOutput {
     /// The output's encoder profile; omitted for the engine's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     encoder_profile: Option<EncoderProfileId>,
+    /// The video mix the output shows; omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    video_mix: Option<VideoMixId>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -171,6 +178,14 @@ struct FileEncoder {
     id: EncoderProfileId,
     name: String,
     profile: EncoderProfile,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileMix {
+    id: VideoMixId,
+    name: String,
+    mix: VideoMix,
 }
 
 impl Graph {
@@ -233,6 +248,7 @@ impl Graph {
                     id: output.id.clone(),
                     kind: output.kind.clone(),
                     encoder_profile: output.encoder_profile.clone(),
+                    video_mix: output.video_mix.clone(),
                 })
                 .collect(),
             encoders: state
@@ -242,6 +258,15 @@ impl Graph {
                     id: encoder.id.clone(),
                     name: encoder.name.clone(),
                     profile: encoder.profile,
+                })
+                .collect(),
+            video_mixes: state
+                .video_mixes
+                .values()
+                .map(|mix| FileMix {
+                    id: mix.id.clone(),
+                    name: mix.name.clone(),
+                    mix: mix.mix.clone(),
                 })
                 .collect(),
         };
@@ -335,8 +360,8 @@ fn migrate_with(value: &mut Value, migrations: &[Migration]) -> Result<(), LoadE
 /// The edits that build `file`'s collection from an empty one, each with the object it
 /// creates for the error message. The canvas comes first (when not the default), then
 /// scenes, empty, in display order and with their roles; then sources, each after the
-/// sources its settings refer to; then items, encoder profiles, and outputs, each with
-/// its profile.
+/// sources its settings refer to; then items, encoder profiles, video mixes, and
+/// outputs, each with its profile and mix.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -423,6 +448,16 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             },
         ));
     }
+    for mix in &file.video_mixes {
+        edits.push((
+            format!("video mix `{}`", mix.id),
+            Edit::VideoMixCreate {
+                mix_id: mix.id.clone(),
+                name: mix.name.clone(),
+                mix: mix.mix.clone(),
+            },
+        ));
+    }
     for output in &file.outputs {
         let object = format!("output `{}`", output.id);
         edits.push((
@@ -434,10 +469,19 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         ));
         if output.encoder_profile.is_some() {
             edits.push((
-                object,
+                object.clone(),
                 Edit::OutputSetEncoder {
                     output_id: output.id.clone(),
                     profile_id: output.encoder_profile.clone(),
+                },
+            ));
+        }
+        if output.video_mix.is_some() {
+            edits.push((
+                object,
+                Edit::OutputSetVideoMix {
+                    output_id: output.id.clone(),
+                    mix_id: output.video_mix.clone(),
                 },
             ));
         }

@@ -12,7 +12,10 @@
 use crate::encoder::EncoderProfile;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
-use crate::id::{EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{
+    EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId, VideoMixId,
+};
+use crate::mix::VideoMix;
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
 use schemars::JsonSchema;
@@ -59,9 +62,9 @@ pub enum Edit {
         role: SceneRole,
     },
     /// Deletes a scene and its items; the sources they placed stay. Rejected with
-    /// `invalid_argument` while a `scene` source shows it or any source's settings refer
-    /// to it: delete those sources, or clear those references, first (in the same batch
-    /// if needed). Inverse: `scene.create`, then `scene.reorder` to its old
+    /// `invalid_argument` while a `scene` source or a video mix shows it, or any source's
+    /// settings refer to it: delete those sources, point those mixes elsewhere, or clear
+    /// those references, first (in the same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old
     /// display position (unless it was last), `scene.set_role` if it was a group, then
     /// each deleted item's `item.remove` inverse, from bottom to top.
     #[serde(rename = "scene.delete")]
@@ -366,6 +369,53 @@ pub enum Edit {
         /// The profile to delete.
         profile_id: EncoderProfileId,
     },
+    /// Adds a video mix: what an output's video can show, at what size and rate. A mix
+    /// renders only while an output that shows it runs. Inverse: `video_mix.delete`.
+    #[serde(rename = "video_mix.create")]
+    VideoMixCreate {
+        /// The new mix's ID, chosen by the client. Rejected if it exists.
+        mix_id: VideoMixId,
+        /// Display name.
+        name: String,
+        /// What it shows, and at what size and rate. An input the engine doesn't know, a
+        /// side that is odd or outside 16..=8192, or an `fps_divisor` outside 1..=60 is
+        /// rejected with `invalid_argument`, and a `scene` input naming a scene that
+        /// doesn't exist with `not_found`.
+        mix: VideoMix,
+    },
+    /// Replaces a video mix's name, input, resolution and rate. Running outputs that
+    /// show it follow a new input from the next frame; a new resolution or rate applies
+    /// from each output's next `output.start`. Inverse: `video_mix.update` with the
+    /// previous name and mix.
+    #[serde(rename = "video_mix.update")]
+    VideoMixUpdate {
+        /// The mix to change.
+        mix_id: VideoMixId,
+        /// The new display name.
+        name: String,
+        /// The new mix, validated as in `video_mix.create`.
+        mix: VideoMix,
+    },
+    /// Deletes a video mix. Rejected with `invalid_argument` while an output shows it:
+    /// point those outputs elsewhere with `output.set_video_mix` first (in the same batch
+    /// if needed). Inverse: `video_mix.create` with its name and mix.
+    #[serde(rename = "video_mix.delete")]
+    VideoMixDelete {
+        /// The mix to delete.
+        mix_id: VideoMixId,
+    },
+    /// Chooses the video mix an output shows, or none: the program at the engine's
+    /// capture size and base rate. A running output keeps its encoder session; the mix
+    /// applies from its next `output.start`. Inverse: `output.set_video_mix` with the
+    /// previous mix.
+    #[serde(rename = "output.set_video_mix")]
+    OutputSetVideoMix {
+        /// The output to change.
+        output_id: OutputId,
+        /// The mix, which must exist, else `not_found`. Absent or `null` means none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mix_id: Option<VideoMixId>,
+    },
 }
 
 impl Edit {
@@ -399,6 +449,10 @@ impl Edit {
             Edit::EncoderUpdate { .. } => "encoder.update",
             Edit::EncoderDelete { .. } => "encoder.delete",
             Edit::CanvasSetSize { .. } => "canvas.set_size",
+            Edit::VideoMixCreate { .. } => "video_mix.create",
+            Edit::VideoMixUpdate { .. } => "video_mix.update",
+            Edit::VideoMixDelete { .. } => "video_mix.delete",
+            Edit::OutputSetVideoMix { .. } => "output.set_video_mix",
         }
     }
 }

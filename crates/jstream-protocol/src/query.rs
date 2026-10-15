@@ -6,6 +6,7 @@ use crate::event::OutputState;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
+use crate::mix::VideoMixInfo;
 use crate::output::OutputInfo;
 use crate::settings::Settings;
 use schemars::JsonSchema;
@@ -40,7 +41,7 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
-    /// items, every output and every encoder profile) at one revision: what a client
+    /// items, every output, every encoder profile and every video mix) at one revision: what a client
     /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
     /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
@@ -75,6 +76,9 @@ pub enum Query {
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
+    /// Lists the collection's video mixes, ordered by ID.
+    #[serde(rename = "video_mix.list")]
+    VideoMixList,
     /// The batch that deletes a scene or source together with everything that refers to
     /// it, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`
     /// lists those `blockers`). The plan removes the items that place a deleted source,
@@ -122,6 +126,7 @@ impl Query {
             Query::OutputList => "output.list",
             Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
+            Query::VideoMixList => "video_mix.list",
             Query::DeletePlan { .. } => "delete.plan",
         }
     }
@@ -206,6 +211,10 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
+        /// Every video mix, ordered by ID. Missing (from a server older than 0.17)
+        /// parses as empty.
+        #[serde(default)]
+        video_mixes: Vec<VideoMixInfo>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -257,6 +266,14 @@ pub enum QueryResult {
         /// The profiles, ordered by ID.
         encoders: Vec<EncoderProfileInfo>,
     },
+    /// The result of `video_mix.list`.
+    #[serde(rename = "video_mix.list")]
+    VideoMixList {
+        /// The revision the list was read at.
+        rev: Rev,
+        /// The mixes, ordered by ID.
+        video_mixes: Vec<VideoMixInfo>,
+    },
     /// The result of `delete.plan`.
     #[serde(rename = "delete.plan")]
     DeletePlan {
@@ -286,6 +303,7 @@ impl QueryResult {
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
+            QueryResult::VideoMixList { .. } => "video_mix.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
         }
     }

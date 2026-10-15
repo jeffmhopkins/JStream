@@ -17,6 +17,7 @@ mod geometry;
 mod history;
 mod id;
 mod kind;
+mod mix;
 mod output;
 #[cfg(feature = "fixtures")]
 pub mod parity;
@@ -45,12 +46,14 @@ pub use geometry::{
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{
-    ClientId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId,
+    ClientId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId,
+    SourceId, VideoMixId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
 };
+pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
 pub use query::{DeleteTarget, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
 pub use schema::json_schema;
