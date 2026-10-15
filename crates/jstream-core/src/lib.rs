@@ -14,7 +14,7 @@
 //! [`Engine::with_audit`](engine::Engine::with_audit), every batch, undo, redo and action
 //! is recorded in an [`AuditSink`]. There is no persistence yet.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0032-live-edits-and-undo.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, crates/jstream-core/README.md#runtime, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0032-live-edits-and-undo.md
 
 #![forbid(unsafe_code)]
 

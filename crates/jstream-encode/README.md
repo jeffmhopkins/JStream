@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:cfb047f63f17e308", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#200, #202, #199, #206, #184 groups, #194 WindowsVcam) into C1a, stamp-only conflicts: stamp-only, stale through a dependency; encode untouched by C1a" }
+verified = { hash = "b3:7ba3b0bdb57969a0", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main into ADR-0042: encode text is main's; relies only on the Encode (per session) row of ARCH#threading, unchanged here; holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
