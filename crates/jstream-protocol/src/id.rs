@@ -72,6 +72,10 @@ opaque_id!(
     EncoderProfileId
 );
 opaque_id!(
+    /// A transition preset in the collection (ADR-0029).
+    TransitionPresetId
+);
+opaque_id!(
     /// A connected client, assigned by the server in `welcome`. Undo history and the
     /// audit log are keyed by it.
     ClientId

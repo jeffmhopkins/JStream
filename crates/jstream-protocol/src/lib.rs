@@ -23,6 +23,7 @@ pub mod parity;
 mod query;
 mod schema;
 mod settings;
+mod transition;
 mod version;
 
 pub use command::{
@@ -45,7 +46,8 @@ pub use geometry::{
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{
-    ClientId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId,
+    ClientId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId,
+    SourceId, TransitionPresetId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
@@ -55,6 +57,12 @@ pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretStri
 pub use query::{DeleteTarget, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
+pub use transition::{
+    CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, MAX_DELAY_MS,
+    MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, TransitionEffect, TransitionPresetInfo,
+    TransitionStarted, TransitionsInfo, builtin_kinds as builtin_transition_kinds,
+    check_preset_timing, initial_preset,
+};
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};
 
 #[cfg(test)]

@@ -987,9 +987,10 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId, Finite32, FitMode,
-        ItemGeometry, ItemId, ItemTransform, OutputId, RateControl, Rev, SceneId, SceneRole,
-        Settings, Size, SourceId, SourceKind, Vec2,
+        Crop, DeleteTarget, Easing, Edit, EncoderProfile, EncoderProfileId, Finite32, FitMode,
+        Glide, ItemEasing, ItemGeometry, ItemId, ItemTransform, ItemTransition, OutputId,
+        RateControl, Rev, SceneId, SceneRole, Settings, Size, SourceId, SourceKind,
+        TransitionEffect, TransitionPresetId, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1027,6 +1028,7 @@ mod property {
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
+        let presets: Vec<String> = state.presets().map(|p| p.id().to_string()).collect();
         let urls = [
             "rtmp://a.example/live",
             "rtmps://b.example:443/live",
@@ -1040,6 +1042,28 @@ mod property {
         let output = |rng: &mut Rng| rng.pick(&outputs).unwrap_or_else(|| pool(rng, "out"));
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let encoder = |rng: &mut Rng| rng.pick(&encoders).unwrap_or_else(|| pool(rng, "enc"));
+        let preset = |rng: &mut Rng| rng.pick(&presets).unwrap_or_else(|| pool(rng, "tr"));
+        // A built-in transition kind, or one in four times a source kind.
+        let kind = |rng: &mut Rng| ["cut", "fade", "move", "color"][rng.below(4)].to_owned();
+        let preset_settings = |rng: &mut Rng| -> Settings {
+            match rng.below(4) {
+                0 => Settings::new(),
+                1 => [("unmatched", json!("slide"))].into_iter().collect(),
+                2 => [("stagger_ms", json!(40)), ("unmatched", Value::Null)]
+                    .into_iter()
+                    .collect(),
+                _ => [("stagger_ms", json!(-1))].into_iter().collect(),
+            }
+        };
+        let duration = |rng: &mut Rng| [0, 300, 600, 70_000][rng.below(4)];
+        let easing = |rng: &mut Rng| {
+            [
+                Easing::EaseInOut,
+                Easing::EaseOut,
+                Easing::Linear,
+                Easing::Spring,
+            ][rng.below(4)]
+        };
         // Out of range one time in eight.
         let profile = |rng: &mut Rng| {
             let mut profile = EncoderProfile::DEFAULT;
@@ -1077,7 +1101,7 @@ mod property {
                 ..ItemGeometry::covering_canvas(1, 1).expect("positive")
             }
         };
-        match rng.below(31) {
+        match rng.below(37) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1240,6 +1264,43 @@ mod property {
                 settings: Settings::new(),
                 duplicated_from: Some(SourceId::new(source(rng))),
             },
+            29 => Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new(pool(rng, "tr")),
+                name: pool(rng, "name "),
+                kind: kind(rng),
+                duration_ms: duration(rng),
+                easing: easing(rng),
+                settings: preset_settings(rng),
+            },
+            30 => Edit::TransitionUpdate {
+                preset_id: TransitionPresetId::new(preset(rng)),
+                name: (rng.below(2) == 0).then(|| pool(rng, "name ")),
+                kind: (rng.below(2) == 0).then(|| kind(rng)),
+                duration_ms: (rng.below(2) == 0).then(|| duration(rng)),
+                easing: (rng.below(2) == 0).then(|| easing(rng)),
+                patch: preset_settings(rng),
+            },
+            31 => Edit::TransitionDelete {
+                preset_id: TransitionPresetId::new(preset(rng)),
+            },
+            32 => Edit::TransitionSetDefault {
+                preset_id: TransitionPresetId::new(preset(rng)),
+            },
+            33 => Edit::SceneSetTransitions {
+                scene_id: SceneId::new(scene(rng)),
+                transition_in: (rng.below(2) == 0).then(|| TransitionPresetId::new(preset(rng))),
+                transition_out: (rng.below(2) == 0).then(|| TransitionPresetId::new(preset(rng))),
+            },
+            34 => Edit::ItemSetTransition {
+                item_id: ItemId::new(item(rng)),
+                transition: ItemTransition {
+                    delay_ms: [0, 120, 70_000][rng.below(3)],
+                    easing: [ItemEasing::Inherit, ItemEasing::Spring][rng.below(2)],
+                    glide: [Glide::Auto, Glide::Never][rng.below(2)],
+                    appear: [TransitionEffect::Inherit, TransitionEffect::Slide][rng.below(2)],
+                    disappear: [TransitionEffect::None, TransitionEffect::Scale][rng.below(2)],
+                },
+            },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1332,6 +1393,12 @@ mod property {
             "encoder.update",
             "encoder.delete",
             "canvas.set_size",
+            "transition.create",
+            "transition.update",
+            "transition.delete",
+            "transition.set_default",
+            "scene.set_transitions",
+            "item.set_transition",
         ]
         .into();
         assert_eq!(applied_names, all);

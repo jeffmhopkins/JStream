@@ -9,13 +9,14 @@
 //!
 //! Docs: crates/jstream-protocol/README.md#purpose
 
+use crate::ItemTransition;
 use crate::{
     AudioCodec, AudioEncoding, Batch, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId,
     EncoderProfileInfo, EntityKind, Finite32, FitMode, HardwarePreference, ItemGeometry, ItemId,
     ItemInfo, ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind,
     PlacementForm, ProtocolError, Query, QueryResult, RateControl, RecordContainer, Rev,
     RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId, SourceInfo,
-    SourceKind, Vec2, VideoCodec, VideoEncoding,
+    SourceKind, TransitionsInfo, Vec2, VideoCodec, VideoEncoding,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -256,17 +257,22 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         scene_id: scene("b"),
                         name: "B".into(),
                         role: SceneRole::Scene,
+                        transition_in: None,
+                        transition_out: None,
                         items: items_of_b(),
                     },
                     SceneInfo {
                         scene_id: scene("a"),
                         name: "A".into(),
                         role: SceneRole::Scene,
+                        transition_in: None,
+                        transition_out: None,
                         items: items_of_a(),
                     },
                 ],
                 outputs: outputs(),
                 encoders: encoders(),
+                transitions: TransitionsInfo::default(),
             }),
         ),
         // Outputs by ID, whatever order they were created in.
@@ -970,6 +976,7 @@ fn items_of_a() -> Vec<ItemInfo> {
         geometry: None,
         crop: Crop::NONE,
         visible: true,
+        transition: ItemTransition::default(),
     };
     vec![
         ItemInfo {
@@ -980,6 +987,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             geometry: None,
             crop: CROP,
             visible: false,
+            transition: ItemTransition::default(),
         },
         plain("i1", "cam_copy"),
         plain("i2", "b_src"),
@@ -996,5 +1004,6 @@ fn items_of_b() -> Vec<ItemInfo> {
         geometry: Some(BOXED),
         crop: Crop::NONE,
         visible: true,
+        transition: ItemTransition::default(),
     }]
 }

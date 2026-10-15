@@ -18,9 +18,12 @@ mod plan;
 mod read;
 mod target;
 mod touched;
+mod transition;
 
 pub use apply::Applied;
-pub use model::{Encoder, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
+pub use model::{
+    Encoder, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Preset, Scene, Source, State,
+};
 pub use persist::{LoadError, SCHEMA_VERSION};
 pub use touched::Touched;
 

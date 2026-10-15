@@ -22,6 +22,8 @@ pub enum KindCategory {
     VideoFilter,
     /// An audio filter kind.
     AudioFilter,
+    /// A transition kind, which a transition preset names (ADR-0037).
+    Transition,
 }
 
 /// One kind in a `kind.list` result.

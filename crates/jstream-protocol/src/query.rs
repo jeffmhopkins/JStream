@@ -4,10 +4,11 @@ use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
-use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId, TransitionPresetId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::output::OutputInfo;
 use crate::settings::Settings;
+use crate::transition::{ItemTransition, TransitionsInfo};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -68,8 +69,8 @@ pub enum Query {
     /// sends. Outputs have no display order of their own.
     #[serde(rename = "output.list")]
     OutputList,
-    /// Reads the studio state: which scene is on program. It is runtime state, not
-    /// collection state (ADR-0030), so the result carries no `rev`.
+    /// Reads the studio state: which scenes are on program and on preview. It is runtime
+    /// state, not collection state (ADR-0030), so the result carries no `rev`.
     #[serde(rename = "studio.get")]
     StudioGet,
     /// Lists the collection's encoder profiles, ordered by ID.
@@ -206,6 +207,11 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
+        /// The transition presets and which one is the default (ADR-0029). Missing
+        /// (from a server older than 0.17) parses as the one `cut` preset every
+        /// collection starts with.
+        #[serde(default)]
+        transitions: TransitionsInfo,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -248,6 +254,10 @@ pub enum QueryResult {
         /// The scene on program. Omitted only while the collection has no scene.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
+        /// The scene on preview, which `studio.set_preview` sets. Omitted only while the
+        /// collection has no scene, and by a server older than 0.17.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preview_scene: Option<SceneId>,
     },
     /// The result of `encoder.list`.
     #[serde(rename = "encoder.list")]
@@ -337,6 +347,14 @@ pub struct SceneInfo {
     /// Omitted for a `scene`.
     #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
     pub role: SceneRole,
+    /// The preset a switch into this scene uses, unless the switch names one. Omitted
+    /// for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_in: Option<TransitionPresetId>,
+    /// The preset a switch out of this scene uses, unless the switch or the next scene
+    /// names one. Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_out: Option<TransitionPresetId>,
     /// Its items, in stacking order: the first is at the bottom.
     pub items: Vec<ItemInfo>,
 }
@@ -366,4 +384,8 @@ pub struct ItemInfo {
     pub crop: Crop,
     /// Whether it is drawn.
     pub visible: bool,
+    /// Its transition settings (ADR-0029 §6). Omitted while they are the defaults it
+    /// was added with.
+    #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
+    pub transition: ItemTransition,
 }

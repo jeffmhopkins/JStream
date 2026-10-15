@@ -11,15 +11,15 @@ use crate::target::{record_path_problem, rtmp_url_problem};
 use crate::touched::Touched;
 use jstream_protocol::{
     Batch, Blocker, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId,
-    ItemTransform, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
-    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneRole, Settings,
-    SourceId, SourceKind,
+    ItemTransform, ItemTransition, KindCategory, KindDescriptor, Media, OutputId, OutputKind,
+    ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference, Rev, RtmpTarget,
+    SceneId, SceneRole, Settings, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The kinds a graph can create, by ID.
-type Kinds = BTreeMap<String, KindDescriptor>;
+pub(crate) type Kinds = BTreeMap<String, KindDescriptor>;
 
 /// The result of a successful [`Graph::apply`].
 #[derive(Clone, Debug, PartialEq)]
@@ -283,6 +283,9 @@ fn apply_edit(
     if let Some(applied) = crate::encoder::apply(state, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::transition::apply(state, kinds, edit, at) {
+        return applied;
+    }
     match edit {
         Edit::SceneCreate { scene_id, name } => {
             check_id(scene_id.as_str(), at, "scene_id")?;
@@ -294,6 +297,8 @@ fn apply_edit(
                 id: scene_id.clone(),
                 name: name.clone(),
                 role: SceneRole::Scene,
+                transition_in: None,
+                transition_out: None,
                 items: Vec::new(),
             });
             Ok(vec![Edit::SceneDelete {
@@ -343,6 +348,13 @@ fn apply_edit(
                 inverse.push(Edit::SceneSetRole {
                     scene_id: scene.id.clone(),
                     role: scene.role,
+                });
+            }
+            if scene.transition_in.is_some() || scene.transition_out.is_some() {
+                inverse.push(Edit::SceneSetTransitions {
+                    scene_id: scene.id.clone(),
+                    transition_in: scene.transition_in.clone(),
+                    transition_out: scene.transition_out.clone(),
                 });
             }
             // Re-adding bottom to top puts each item back at its own index.
@@ -399,6 +411,7 @@ fn apply_edit(
                 placement,
                 crop: Crop::NONE,
                 visible: true,
+                transition: ItemTransition::default(),
             });
             Ok(vec![Edit::ItemRemove {
                 item_id: item_id.clone(),
@@ -540,7 +553,14 @@ fn apply_edit(
                             format!("there is no kind `{kind}`; `kind.list` names them"),
                         )
                     })?;
-                    complete_settings(state, kinds, descriptor, source_id, settings, at)?
+                    if descriptor.category != KindCategory::Source {
+                        return Err(invalid(
+                            at,
+                            "kind.kind",
+                            format!("`{kind}` is not a source kind; `kind.list` names them"),
+                        ));
+                    }
+                    complete_settings(state, kinds, descriptor, Some(source_id), settings, at)?
                 }
                 _ => {
                     return Err(unsupported(at, "kind", "this source kind"));
@@ -880,22 +900,41 @@ fn restore_item(
             visible: false,
         });
     }
+    if !item.transition.is_default() {
+        edits.push(Edit::ItemSetTransition {
+            item_id: item.id.clone(),
+            transition: item.transition,
+        });
+    }
     Ok(edits)
 }
 
-/// The complete settings of a new source of kind `descriptor`: `given`, checked, with
-/// every parameter it leaves out (or sends as `null`, outside reference parameters) at
-/// its default.
-fn complete_settings(
+/// The complete settings of a new source (`owner`) or preset (`None`) of kind
+/// `descriptor`: `given`, checked, with every parameter it leaves out (or sends as
+/// `null`, outside reference parameters) at its default. `prefix` names the field
+/// (`settings` or `patch`).
+pub(crate) fn complete_settings(
     state: &State,
     kinds: &Kinds,
     descriptor: &KindDescriptor,
-    source_id: &SourceId,
+    owner: Option<&SourceId>,
     given: &Settings,
     at: usize,
 ) -> Result<Settings, ProtocolError> {
+    complete_settings_in(state, kinds, descriptor, owner, given, at, "settings")
+}
+
+pub(crate) fn complete_settings_in(
+    state: &State,
+    kinds: &Kinds,
+    descriptor: &KindDescriptor,
+    owner: Option<&SourceId>,
+    given: &Settings,
+    at: usize,
+    prefix: &str,
+) -> Result<Settings, ProtocolError> {
     for (id, value) in given.iter() {
-        let field = format!("settings.{id}");
+        let field = format!("{prefix}.{id}");
         let param = descriptor.param(id).ok_or_else(|| {
             invalid(
                 at,
@@ -904,7 +943,7 @@ fn complete_settings(
             )
         })?;
         if !value.is_null() || param.is_reference() {
-            check_value(state, kinds, source_id, param, value, at, &field)?;
+            check_value(state, kinds, owner, param, value, at, &field)?;
         }
     }
     Ok(descriptor
@@ -961,7 +1000,7 @@ fn set_settings(
         let value = if value.is_null() && !param.is_reference() {
             &param.default
         } else {
-            check_value(state, kinds, source_id, param, value, at, &field)?;
+            check_value(state, kinds, Some(source_id), param, value, at, &field)?;
             value
         };
         new.push((id.to_owned(), value.clone()));
@@ -984,14 +1023,14 @@ fn set_settings(
     }])
 }
 
-/// Checks one settings value for `param` of source `source_id`: its type and
-/// constraints, that a referenced scene or source exists (`not_found` if not), and that a
-/// referenced source produces what the parameter needs. A source may name itself here;
-/// [`check_reference_cycles`] rejects that as a cycle.
-fn check_value(
+/// Checks one settings value for `param` of source `source_id` (`None` for a preset's):
+/// its type and constraints, that a referenced scene or source exists (`not_found` if
+/// not), and that a referenced source produces what the parameter needs. A source may
+/// name itself here; [`check_reference_cycles`] rejects that as a cycle.
+pub(crate) fn check_value(
     state: &State,
     kinds: &Kinds,
-    source_id: &SourceId,
+    source_id: Option<&SourceId>,
     param: &ParamDescriptor,
     value: &Value,
     at: usize,
@@ -1004,7 +1043,7 @@ fn check_value(
         Some(Reference::Scene { scene_id }) => {
             find_scene(state, &scene_id)?;
         }
-        Some(Reference::Source { source_id: target }) if &target != source_id => {
+        Some(Reference::Source { source_id: target }) if Some(&target) != source_id => {
             let referenced = state
                 .source(&target)
                 .ok_or_else(|| not_found(EntityKind::Source, target.as_str()))?;
