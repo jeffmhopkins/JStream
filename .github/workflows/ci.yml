@@ -10,6 +10,8 @@ name: ci
 
 on:
   pull_request:
+    # ready_for_review: draft PRs skip every job below, so CI runs when a draft is marked ready.
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -26,6 +28,7 @@ env:
 
 jobs:
   fmt:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,6 +36,7 @@ jobs:
       - run: cargo fmt --all --check
 
   clippy:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
@@ -49,6 +53,7 @@ jobs:
         run: cargo clippy -p jstream-platform-windows --all-targets --features hw-tests --locked -- -D warnings
 
   test:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
@@ -76,6 +81,7 @@ jobs:
         run: cargo test --workspace --locked
 
   doc:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -D warnings
@@ -86,6 +92,7 @@ jobs:
       - run: cargo doc --workspace --no-deps --locked
 
   deny:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -99,6 +106,7 @@ jobs:
   # and checked against pinned SHA-256 sums; the wasm-bindgen CLI must match Cargo.lock.
   # `ui-e2e` pins the same versions: change both together.
   wasm:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     env:
       TRUNK_VERSION: 0.21.14
@@ -138,6 +146,7 @@ jobs:
   # wasm-bindgen CLI are installed as in `wasm`; Playwright comes from the lockfile, with
   # install scripts off, and downloads no browser. Not required (R-GIT-003).
   ui-e2e:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     env:
       TRUNK_VERSION: 0.21.14
@@ -181,7 +190,7 @@ jobs:
           npx --no-install playwright test
 
   pr-title:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - name: Conventional Commit title (R-GIT-002)
@@ -198,6 +207,7 @@ jobs:
 
   # The documentation graph (docs/DOCS.md); R-DOC-* rules the tool implements so far.
   docs:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -207,6 +217,7 @@ jobs:
 
   # Crate layering, unsafe declarations, links= allowlist, workspace deps (xtask/src/lint_deps.rs).
   lint-deps:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -216,6 +227,7 @@ jobs:
 
   # The merge gate's decision logic (ADR-0019), tested against the deployed workflow file.
   gate-test:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -223,6 +235,7 @@ jobs:
 
   # Not required until M3 (R-GIT-003).
   macos:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: macos-latest
     continue-on-error: true
     steps:

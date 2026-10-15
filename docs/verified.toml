@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:65144e0ec510d20b", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: K2's jstream-anim row kept beside C9's MediaDecoders in the platform row and jstream-sources' deps; re-read, holds" }
+stamp = { hash = "b3:46c88d9f22338dba", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (94e5586: X1 effects #359, Q4 #361, #370, #383) into C9: X1's jstream-effects row kept beside C9's MediaDecoders in the platform row; re-read the table and layering text, holds" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -40,6 +40,9 @@ stamp = { hash = "b3:e5fef95eb12cb895" }
 
 ["ARCH#crate-map"."file:crates/jstream-core/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:a8d2d95e5d1a7c3b" }
+
+["ARCH#crate-map"."file:crates/jstream-effects/Cargo.toml#jstream-meta"]
+stamp = { hash = "b3:100b037ae75599a7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-encode/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:8b934df550ca875e" }
@@ -147,10 +150,13 @@ stamp = { hash = "b3:74636e2565276acc" }
 stamp = { hash = "b3:1f10a420e9f6a9bc" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/Cargo.toml"]
-stamp = { hash = "b3:5a7c9b80875ea235" }
+stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:f719dde317481bce" }
+stamp = { hash = "b3:99bce65cb31e7d4f", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
+stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:071eeba73136670c" }
@@ -666,7 +672,7 @@ stamp = { hash = "b3:0ebe67af161ddd4e" }
 stamp = { hash = "b3:e5a6edbd7802a068" }
 
 ["CRATE-jstream-audio#realtime"."body"]
-stamp = { hash = "b3:b6e44fd4493acdd6", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: main's text plus D6's 'activity gains' in the mixer thread's work; holds" }
+stamp = { hash = "b3:044226cbcf228628", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph (input_push 1024 / 940-941 frames) holds against benches/mix.rs" }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:27f72f3f6ef95752" }
@@ -1286,8 +1292,47 @@ stamp = { hash = "b3:99e633ebddadb039" }
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/main.rs"]
 stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
+["CRATE-jstream-effects#purpose"."body"]
+stamp = { hash = "b3:43dd619147c37ef5", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "Round 1 (B1, N1-N3): re-read; hot reload now stamps the manifest plus named shaders and retries duplicate-refused folders when an ID is freed; contract adds overrides; prelude validated alone" }
+
+["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
+stamp = { hash = "b3:43d3c8a43e07d1d8" }
+
+["CRATE-jstream-effects#purpose"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
+stamp = { hash = "b3:b655210653447199" }
+
+["CRATE-jstream-effects#purpose"."dep:docs/adr/0035-clap-plugins-out-of-process.md"]
+stamp = { hash = "b3:56b6301e2e6a132b" }
+
+["CRATE-jstream-effects#purpose"."dep:docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
+stamp = { hash = "b3:b5397b5d6407b040" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/error.rs"]
+stamp = { hash = "b3:86e5ac6016021cc2" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/lib.rs"]
+stamp = { hash = "b3:d8bdadac3cc97bf5" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/manifest.rs"]
+stamp = { hash = "b3:b65c103b271db580" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/pack.rs"]
+stamp = { hash = "b3:9bd6619c606101df" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/shader.rs"]
+stamp = { hash = "b3:3ae83479a3f82d0e" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/tests.rs"]
+stamp = { hash = "b3:cf107bf4051a2857" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/watch.rs"]
+stamp = { hash = "b3:c605dc3799e8d4cc" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/tests/fixtures/host-prelude.wgsl"]
+stamp = { hash = "b3:08d1db37fb68e030" }
+
 ["CRATE-jstream-encode#design"."body"]
-stamp = { hash = "b3:a0353286f83c8702", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: Sharing paragraph now says jstream-core keys its registry by the protocol encoder profile (id and settings) and maps it to platform configs; Not yet drops encoder profiles in the protocol" }
+stamp = { hash = "b3:469ca075b74bfbaf", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Performance bullet matches benches/session.rs" }
 
 ["CRATE-jstream-encode#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -1572,7 +1617,7 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:20caa632a5d049a6" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:7c902ba9d37e539b", by = "agent:claude", note = "re-read the Tests paragraph against the shutdown_over_tls test now waiting for the server's read timeout before the client shuts down (a test-only ordering fix for macOS EINVAL); the test list and every Transport claim still hold" }
+stamp = { hash = "b3:cfcb6044c7a4e3a7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against PR #370 diff: URLs-and-keys bullet now states Rejected redacts the key, then cuts code/description to 512 chars (MAX_REMOTE_TEXT) and replaces control chars with spaces, matching rejected()/remote_text() in rtmp/publisher.rs and its new tests; rest of section unaffected by the merge." }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:2ef270bb1b4e0cc6" }
@@ -1614,10 +1659,10 @@ stamp = { hash = "b3:56db1c333933c322" }
 stamp = { hash = "b3:48aabf739157f73d" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/publisher.rs"]
-stamp = { hash = "b3:5d006624a81efe15" }
+stamp = { hash = "b3:39da26659f649772", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against PR #370 diff: URLs-and-keys bullet now states Rejected redacts the key, then cuts code/description to 512 chars (MAX_REMOTE_TEXT) and replaces control chars with spaces, matching rejected()/remote_text() in rtmp/publisher.rs and its new tests; rest of section unaffected by the merge." }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/publisher/tests.rs"]
-stamp = { hash = "b3:5e5202f939f23f5d" }
+stamp = { hash = "b3:2a8136c51316c064", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against PR #370 diff: URLs-and-keys bullet now states Rejected redacts the key, then cuts code/description to 512 chars (MAX_REMOTE_TEXT) and replaces control chars with spaces, matching rejected()/remote_text() in rtmp/publisher.rs and its new tests; rest of section unaffected by the merge." }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/reconnect.rs"]
 stamp = { hash = "b3:2e491927c123a8d9" }
@@ -1641,7 +1686,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:65144e0ec510d20b", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: stale only through ARCH#crate-map (K2's jstream-anim row); gpu-frames text unaffected; re-read, holds" }
+stamp = { hash = "b3:46c88d9f22338dba", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (94e5586: X1 effects #359, Q4 #361, #370, #383) into C9: stale only through ARCH#crate-map's new effects row; gpu-frames text unaffected; re-read, holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
@@ -2103,7 +2148,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:af178dd41ff64ab0" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/Cargo.toml"]
-stamp = { hash = "b3:5a7c9b80875ea235" }
+stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Cargo.toml only adds the criterion dev-dependency and the composite bench target" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:071eeba73136670c" }
@@ -2142,7 +2187,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:e262bbf38ca8d7b4", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 golden geometry tests) into E1: the E1 layer/cache test list and B3's golden tests are both in tests.rs; holds" }
+stamp = { hash = "b3:d6b297a7651495df", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph matches benches/composite.rs (every item rotated, CI panics without an adapter)" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
