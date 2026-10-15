@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:7d612e98e2d7ee00", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B6 groups/item.move, G3a WindowsVcam, #199, ADR-0043) into E1: B6's role/item.move/scene_id text beside E1's 8-level program-mix limit; a group nests like a scene source, under the same limit; both hold" }
+verified = { hash = "b3:9cb6ae0afcf2dba8", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#205, E1): Built so far keeps encoder profiles beside E1's 8-level limit; the stale 'Nothing is persisted yet' now points at Persistence, which saves profiles and each output's profile" }
 -->
 
 ```
@@ -370,13 +370,14 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
-  `outputs` and `encoders`. Nothing is persisted yet.
+  `outputs` and `encoders`. The collection file saves all of these, encoder profiles
+  and each output's profile included ([Persistence](#persistence)).
 
 <a id="threading"></a>
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:b53354403aab317a", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: took main's pointer paragraph in place of the output-pipeline detail; E1's model text (render snapshot through arc-swap, generation stamp, Collector row naming both collectors) stays as the engine-wide model and doesn't contradict core #runtime" }
+verified = { hash = "b3:a736f599f1a6e11e", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (E1 #172): the render collector is now one per program stage, shared by every running output, not one per output; Collector row and render-snapshot paragraph say so; rest is E1's model and holds" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -394,7 +395,7 @@ every mix runs at the base rate divided by an integer.
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One per running output for its render thread, and the mixer's own for the mixer and audio threads. |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage's render thread while any output runs, and the mixer's own for the mixer and audio threads. |
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
 next to its code, which that section covers: the output pipeline in
@@ -464,8 +465,8 @@ the last one showed allocates no texture: an unchanged frame is not uploaded aga
 each nested scene is redrawn into the layer it had. An image no frame references is
 retired, then freed once the GPU has finished the last frame that used it (a
 `Queue::on_submitted_work_done` fence the cache polls without blocking). The render
-thread hands those images, and each render snapshot it replaces, to the output's
-collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
+thread hands those images, and each render snapshot it replaces, to the program
+stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
 reader slot as the handover below says. When a fatal error stops its drawing it
 publishes the stopped marker too: it adopts nothing more and only repeats the frame it
 last drew until teardown. The audio and outputs snapshots are not built.

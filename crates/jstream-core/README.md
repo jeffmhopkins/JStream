@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:548e864cb0868064", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: B1's Tests and Collection file bullets are main's beside E1's bullets; the Not-yet line drops persistence and keeps the audio/outputs snapshots" }
+verified = { hash = "b3:af71d9e0f5c8886e", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (E1 #172): Runtime bullet merges the shared program stage with E1's render snapshot (runtime/render.rs); Snapshot and stub-kind bullets are E1's; Collection file bullet holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -137,7 +137,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bf611e7fa88cc5aa", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: the render-snapshot paragraph now names undo/redo and a collection file's load among the re-plans (with_collection_file publishes after replacing the graph; tests/collection.rs checks the loaded program scene); B1's Collection file subsection is main's; Not-yet line keeps both sides (persistence built, audio/outputs snapshots not)" }
+verified = { hash = "b3:e17ba3e80f6b618e", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (E1 #172): render-thread paragraph now sends to the program stage's collector, joined by Program after the render thread, and adopts snapshots while it has no session; E1's Snapshots text and F3's encoder profile and sharing paragraphs hold against pipeline.rs and render.rs" }
 -->
 
 ### Engine and sessions
@@ -770,7 +770,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:87fed6ac34327e35", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: carried E1's output-pipeline paragraph over (program mix from the render snapshot, capture fallback, render collector) with main's recording and stats text; matches pipeline.rs and runtime/render.rs" }
+verified = { hash = "b3:39e630206eb94dd6", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (E1 #172): merged E1's program-mix render (render snapshot, capture fallback, collector) into F3's shared program stage text (serialized starts, per-profile sessions over channels, last-output drain and stats, program failure to every output); matches launch_program and render_loop" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

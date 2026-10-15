@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:ac2dc8828f4a211b", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: platform traits text unchanged; holds" }
+verified = { hash = "b3:c78bb341d2028c88", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main: stale via ARCH#threading collector row only; platform text unchanged; holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
