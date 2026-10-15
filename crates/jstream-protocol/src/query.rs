@@ -220,6 +220,11 @@ pub struct SourceInfo {
     /// source and for a kind without parameters.
     #[serde(default, skip_serializing_if = "Settings::is_empty")]
     pub settings: Settings,
+    /// The source this one was copied from by `source.duplicate`, while that source
+    /// exists. Omitted if it was not copied, or its original has been deleted. An item
+    /// placing this source can go back to placing the original with `item.set_source`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duplicated_from: Option<SourceId>,
 }
 
 /// One scene with its items, as `state.get` reports it.

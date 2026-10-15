@@ -12,7 +12,9 @@
 //! - Every `builtin` source's kind is one the graph's kinds describe, and its settings
 //!   hold exactly that kind's parameters, each valid for its descriptor. A `scene`
 //!   source has no settings.
-//! - Every scene and source that a settings value refers to exists.
+//! - Every scene and source that a settings value refers to exists. A source's
+//!   `duplicated_from` is a plain link, not a reference: it never names the source
+//!   itself, but may name one that no longer exists.
 //! - The dependency edges (items placing sources, `scene` sources showing scenes, and
 //!   scene and source references in settings) have no cycle.
 //! - Every RTMP output's URL is a valid `rtmp://` or `rtmps://` server URL that carries
@@ -151,6 +153,7 @@ pub struct Source {
     pub(crate) name: String,
     pub(crate) kind: SourceKind,
     pub(crate) settings: Settings,
+    pub(crate) duplicated_from: Option<SourceId>,
 }
 
 impl Source {
@@ -172,6 +175,13 @@ impl Source {
     /// Its settings: every parameter of its kind, or empty for a `scene` source.
     pub fn settings(&self) -> &Settings {
         &self.settings
+    }
+
+    /// The source it was copied from, as `source.duplicate` recorded it (ADR-0023). A
+    /// plain link, not a dependency edge: it may name a source that has since been
+    /// deleted, and queries report it only while that source exists.
+    pub fn duplicated_from(&self) -> Option<&SourceId> {
+        self.duplicated_from.as_ref()
     }
 }
 

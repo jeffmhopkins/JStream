@@ -84,6 +84,7 @@ pub(crate) fn edits() -> Vec<Edit> {
                 kind: "webcam".into(),
             },
             settings: Settings::new(),
+            duplicated_from: None,
         },
         Edit::SourceCreate {
             source_id: SourceId::new("src_bg"),
@@ -92,6 +93,7 @@ pub(crate) fn edits() -> Vec<Edit> {
                 kind: "color".into(),
             },
             settings: color_settings(),
+            duplicated_from: None,
         },
         Edit::SourceCreate {
             source_id: SourceId::new("src_intro"),
@@ -100,6 +102,7 @@ pub(crate) fn edits() -> Vec<Edit> {
                 scene_id: SceneId::new("scn_1"),
             },
             settings: Settings::new(),
+            duplicated_from: None,
         },
         Edit::SourceRename {
             source_id: SourceId::new("src_bg"),
@@ -122,6 +125,19 @@ pub(crate) fn edits() -> Vec<Edit> {
             source_id: SourceId::new("src_cam"),
             new_source_id: SourceId::new("src_cam_2"),
             name: "Camera 2".into(),
+        },
+        Edit::SourceCreate {
+            source_id: SourceId::new("src_cam_2"),
+            name: "Camera 2".into(),
+            kind: SourceKind::Builtin {
+                kind: "webcam".into(),
+            },
+            settings: Settings::new(),
+            duplicated_from: Some(SourceId::new("src_cam")),
+        },
+        Edit::ItemSetSource {
+            item_id: ItemId::new("itm_2"),
+            source_id: SourceId::new("src_cam_2"),
         },
         Edit::SourceDelete {
             source_id: SourceId::new("src_cam_2"),
@@ -330,6 +346,7 @@ fn source_infos() -> Vec<SourceInfo> {
                 kind: "color".into(),
             },
             settings: color_settings(),
+            duplicated_from: None,
         },
         SourceInfo {
             source_id: SourceId::new("src_cam"),
@@ -338,6 +355,16 @@ fn source_infos() -> Vec<SourceInfo> {
                 kind: "webcam".into(),
             },
             settings: Settings::new(),
+            duplicated_from: None,
+        },
+        SourceInfo {
+            source_id: SourceId::new("src_cam_2"),
+            name: "Camera 2".into(),
+            kind: SourceKind::Builtin {
+                kind: "webcam".into(),
+            },
+            settings: Settings::new(),
+            duplicated_from: Some(SourceId::new("src_cam")),
         },
         SourceInfo {
             source_id: SourceId::new("src_intro"),
@@ -346,6 +373,7 @@ fn source_infos() -> Vec<SourceInfo> {
                 scene_id: SceneId::new("scn_intro"),
             },
             settings: Settings::new(),
+            duplicated_from: None,
         },
     ]
 }

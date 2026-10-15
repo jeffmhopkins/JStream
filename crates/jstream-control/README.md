@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:e64e024557ae14a1", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: trait, errors, mock and ws bullets hold; the mock now also accepts record outputs with graph's path rule" }
+verified = { hash = "b3:14419bda270b5dd1", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: re-read; trait, errors, mock and ws bullets hold; mock gains item.set_source and duplicated_from (Design describes them)" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:12bb0846138edf20", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: added recording-path, set_target-on-recording and unknown kind/target/container checks to the mock's edit list, and recording paths to the parity sentence; matches mock.rs check_record/record_path_problem" }
+verified = { hash = "b3:ebc998f77e7022dd", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: mock rules list now has item.set_source in the cycle check and the duplicated_from self-link rejection/plain-link reporting, matching mock.rs and the parity fixture" }
 -->
 
 ### The trait
@@ -110,7 +110,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - reorder indices out of range;
   - deleting a source that an item places, or a scene that a scene source shows, or
     either while a source's settings refer to it;
-  - nesting cycles;
+  - nesting cycles from `item.add` and `item.set_source`;
+  - a `source.create` whose `duplicated_from` names the source itself. Like the graph,
+    the mock stores `duplicated_from` as a plain link (`source.duplicate` sets it) and
+    reports it only while the source it names exists;
   - RTMP server URLs in `output.create` and `output.set_target` (`jstream-graph`'s
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;

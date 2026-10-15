@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:ed042041866f86ba", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166) into F2b: only the CLI README's edit-form wording changed under apps/**; diagram (outputs list includes record) and host table hold" }
+verified = { hash = "b3:5f76f4fbe9dfbbae", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: under apps/** only the CLI gains the item.set_source edit form and help line; diagram and host table hold" }
 -->
 
 ```
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:39a005ebabd81f23", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; ADR-0040 hotkey sentence and depends_on are main's; Built so far still lists Record { path, container: mp4 } with its path checks" }
+verified = { hash = "b3:31b9a0f7d0184f3b", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: Built so far now lists item.set_source and duplicated_from (plain link, absent once the original is deleted); removed both from Not yet; model block already had duplicated_from?" }
 -->
 
 ```
@@ -342,7 +342,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   scene, with `settings` checked against the kind's descriptor and stored complete; no
   filters yet), scenes in display order, and items in stacking order with `source_id`,
   protocol 0.3's 2D transform (top-left corner and scale, which ADR-0022 replaces),
-  `crop` and `visible`. Items refer to sources; they never copy them. Scene and source
+  `crop` and `visible`. Items refer to sources; they never copy them, and
+  `item.set_source` retargets one, keeping its id, placement and stacking position.
+  A source copied by `source.duplicate` records its original in `duplicated_from`, a
+  plain link that reads as absent once the original is deleted. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
@@ -352,7 +355,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   checked to be absolute and to end in a file name. A stream key is never collection state: it
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
-  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
+  `effects[]`, the transition fields, the canvas,
   `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
   variants and overrides, folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
@@ -503,7 +506,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f7428a0902cef033", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; no message, edit, query or transport rule changed by the mock/parity merge; record kind bullet still says 0.9" }
+verified = { hash = "b3:c1a7acde2c3f8d9a", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: re-read; no envelope, versioning or error rule changed; new edit is additive per R-API-001" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -604,7 +607,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:9b8fb2677f948e39", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#169 Y2, #153 I1) into F2b round 2: took main's verified line and re-read; I1's /mcp text; tools.snap unchanged by round 2 (Unknown variants are schemars-skipped)" }
+verified = { hash = "b3:43215a1c51f82d9a", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: tools.snap grew to about 87 KB with item.set_source and duplicated_from; updated the size; rest holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -618,7 +621,7 @@ verified = { hash = "b3:9b8fb2677f948e39", by = "agent:claude@session_01RsUPFGhw
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 80 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 87 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

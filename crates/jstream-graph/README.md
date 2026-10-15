@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:4352b2d343ce4ac4", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; ADR-0040 text from main; F2b record path checks and Unknown refusals still match target.rs and apply.rs" }
+verified = { hash = "b3:5b83cb9f5338809b", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: re-read whole section; added duplicated_from (plain link, read omits when original gone), item.set_source keeping id/placement/stack, cycle check list, to_info(&State), tests and the property test's no-cycle invariant, matching apply.rs/read.rs/deps.rs/tests.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -32,10 +32,15 @@ codes, so the engine passes them to clients unchanged.
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
   so one source can sit in many scenes, or several times in one, and is still one
-  capture. `source.duplicate` makes a separate copy under a new ID. Removing an item
-  never deletes its source.
+  capture. `source.duplicate` makes a separate copy under a new ID and records the
+  original in the copy's `duplicated_from`, a plain link that is no dependency edge:
+  the original may be deleted, and reads then omit the link. Removing an item never
+  deletes its source.
 - `Scene`: a name and its items in stacking order, bottom first.
-- `Item`: the source it places, a `transform`, a `crop` and `visible`.
+- `Item`: the source it places, a `transform`, a `crop` and `visible`. `item.set_source`
+  changes the source and keeps the rest, the item's ID and its stacking position, so
+  it converts the item between a reference and a clone
+  ([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)).
 - `Output`: an ID and an `OutputKind` (so far RTMP to a generic URL, or a recording
   to an MP4 file). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
@@ -60,7 +65,9 @@ goes up by exactly one, and the result carries the **inverse batch**.
   given value with the protocol's `ParamDescriptor::check`, and stores the complete map
   with defaults filled in. `source.set_settings` checks and applies a patch (`null`
   resets a parameter to its default) and its inverse is the patch of the old values.
-  `source.rename` renames. A reference to a missing scene or source is `not_found`, and
+  `source.rename` renames. `source.create` rejects a `duplicated_from` naming the new
+  source itself, and accepts one naming a missing source, as `source.delete`'s inverse
+  may need after the original went first. A reference to a missing scene or source is `not_found`, and
   a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
   places the source or a setting refers to it, and `scene.delete` while a `scene`
@@ -84,8 +91,8 @@ goes up by exactly one, and the result carries the **inverse batch**.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
   scenes and sources its settings refer to. Asset references are not edges. Every edit
-  that adds an edge runs the cycle check: `item.add`, `source.create` and
-  `source.set_settings`; `source.duplicate` copies outgoing edges onto a source nothing
+  that adds an edge runs the cycle check: `item.add`, `item.set_source` (from the item's
+  scene to its new source), `source.create` and `source.set_settings`; `source.duplicate` copies outgoing edges onto a source nothing
   depends on, so it can't close one. A cycle is `invalid_argument` naming it
   (for example scene `a` -> source `sa` -> scene `a`).
 
@@ -95,19 +102,22 @@ with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
 unknown kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
 `not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
-display order, items bottom first, outputs ordered by ID; `Source::to_info`,
+display order, items bottom first, outputs ordered by ID; `Source::to_info` (given the
+`State`, to omit a `duplicated_from` whose source is gone),
 `Scene::to_info`, `Item::to_info` and `Output::to_info` convert single objects. Reads change nothing.
 
 **Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
-edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds, and through
-settings references, one case per edge-adding edit), settings checks and defaults,
+edit, shared sources, references and clones (`item.set_source` keeping the item, the
+`duplicated_from` link through deletes and undo, and both conversions as one batch),
+cycles (self, 2- and 3-cycles, legal diamonds, and through settings references, one
+case per edge-adding edit), settings checks and defaults,
 delete rejection by references, output URL checks and the refused delete of a running
 output, exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
-batches. After each successful one, applying its
+batches. After each successful one, the state must hold no cycle, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged.
 

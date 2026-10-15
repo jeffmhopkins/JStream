@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:a655b1c4ad444569", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: parity bullet now says the collection has a recording output and recording path rejections, matching parity.rs" }
+verified = { hash = "b3:b830862a60d193cc", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: Commands list adds item.set_source; parity bullet covers the clone, the dangling duplicated_from and the new rejections, matching parity.rs; PROTOCOL_VERSION unchanged until the queue bump" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -30,7 +30,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `ClientMessage::parse` maps every parse failure to `malformed`.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
   `scene.reorder`, `item.add`, `item.remove`, `item.reorder`, `item.set_transform`,
-  `item.set_crop`, `item.set_visible`, `source.create`, `source.rename`,
+  `item.set_crop`, `item.set_visible`, `item.set_source`, `source.create`, `source.rename`,
   `source.set_settings`, `source.duplicate`, `source.delete`, `output.create`,
   `output.set_target`, `output.delete`), with `ItemTransform`, `Crop` and `SourceKind`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
@@ -78,9 +78,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection with two RTMP
-  outputs and a recording output, the exact answer to every collection read of it
+  outputs and a recording output, a clone made with `source.duplicate` and
+  `item.set_source`, and a `duplicated_from` naming a missing source, the exact answer to every collection read of it
   (`output.list` included), and the exact error for batches rejected against it (RTMP
-  URL and recording path checks included).
+  URL and recording path checks, and `item.set_source` and `duplicated_from`, included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -93,7 +94,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:1eebe9000cc00689", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's 0.9 record kind and Compatibility/OQ8; #166 changed only parity.rs and the mock, no wire type" }
+verified = { hash = "b3:718552af3d3e3115", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: sources paragraph explains references/clones, item.set_source and duplicated_from per ADR-0023; cycle list and closed-under-inversion paragraph include item.set_source and source.create's duplicated_from; snapshots regenerated" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -179,8 +180,17 @@ and an undo can re-create a deleted object under its old ID. IDs are opaque stri
 Sources are shared instances, independent of scenes. `source.create` adds one, and
 `item.add` places an existing source by reference, so one source can appear in many
 scenes, or several times in one, as the same capture. `source.duplicate` makes a
-separate copy under a new ID, with the same kind and settings, and `source.rename`
-renames one. A `SourceKind` is `builtin` (a kind the engine describes) or `scene`, which
+separate copy under a new ID, with the same kind and settings, and records the source it
+copied in the copy's `duplicated_from`; `source.rename` renames one. An item placing a
+shared source is a **reference**, and one placing a copy is a **clone**
+([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)). `item.set_source`
+changes which source an item places and keeps the item's ID, placement and stacking
+position, so a client converts between the two in one batch: `source.duplicate` then
+`item.set_source` to the copy, or `item.set_source` back to `duplicated_from` then
+`source.delete` of the unplaced copy. `duplicated_from` is a plain link, not a
+dependency: deleting the original is allowed, `SourceInfo` then omits the link, and
+`source.create` takes it (never naming the new source itself) so that undoing a
+`source.delete` restores it. A `SourceKind` is `builtin` (a kind the engine describes) or `scene`, which
 nests another scene. Positions are indexes: scenes in display order, items in stacking
 order with 0 at the bottom.
 
@@ -223,7 +233,8 @@ never a type per kind.
   letter or leading `/`; an asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
-  edit that would close a cycle (`item.add`, `source.create`, `source.set_settings`) is
+  edit that would close a cycle (`item.add`, `item.set_source`, `source.create`,
+  `source.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
   scene `a`). `scene.delete` and `source.delete` are rejected while a setting refers to the
   target, naming each `<source>.settings.<param>`. Asset references are not edges.
@@ -340,7 +351,8 @@ that sets it: `scene.reorder` and `item.reorder` restore positions, and
 `item.remove` is `item.add` plus whichever of `item.reorder`, `item.set_crop` and
 `item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
 `scene.reorder` unless it was last, and each item's restore, bottom to top. Undoing
-`source.delete` is `source.create` with the complete stored settings, and undoing
+`source.delete` is `source.create` with the complete stored settings and its
+`duplicated_from`, undoing `item.set_source` is `item.set_source` back, and undoing
 `source.set_settings` is a patch of the old values. Deleting a source that items still
 place or a setting refers to, or a scene that a `scene` source shows or a setting refers
 to, is rejected, so no edit removes more than the object it names. `jstream-graph`'s property

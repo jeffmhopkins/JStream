@@ -112,6 +112,7 @@ fn builtin(id: &str) -> Edit {
             kind: "color".into(),
         },
         settings: Settings::new(),
+        duplicated_from: None,
     }
 }
 
@@ -123,6 +124,7 @@ fn scene_source(id: &str, scene: &str) -> Edit {
             scene_id: SceneId::new(scene),
         },
         settings: Settings::new(),
+        duplicated_from: None,
     }
 }
 
@@ -976,7 +978,8 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        Crop, Edit, ItemId, ItemTransform, OutputId, Rev, SceneId, SourceId, Vec2,
+        Crop, Edit, ItemId, ItemTransform, OutputId, Rev, SceneId, Settings, SourceId, SourceKind,
+        Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1027,7 +1030,7 @@ mod property {
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let index = |rng: &mut Rng| u32::try_from(rng.below(6)).expect("fits");
         let f = |rng: &mut Rng| f32::from(u16::try_from(rng.below(2000)).expect("fits")) - 1000.0;
-        match rng.below(20) {
+        match rng.below(22) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1108,6 +1111,19 @@ mod property {
                     output_create(&pool(rng, "out"), url(rng))
                 }
             }
+            20 => Edit::ItemSetSource {
+                item_id: ItemId::new(item(rng)),
+                source_id: SourceId::new(source(rng)),
+            },
+            21 => Edit::SourceCreate {
+                source_id: SourceId::new(pool(rng, "src")),
+                name: "linked".into(),
+                kind: SourceKind::Builtin {
+                    kind: "color".into(),
+                },
+                settings: Settings::new(),
+                duplicated_from: Some(SourceId::new(source(rng))),
+            },
             18 => Edit::OutputSetTarget {
                 output_id: OutputId::new(output(rng)),
                 target: target(url(rng)),
@@ -1149,6 +1165,9 @@ mod property {
                         successes += 1;
                         applied_names.extend(edits.iter().map(Edit::name));
                         assert_eq!(applied.rev, Rev(before.rev().0 + 1));
+                        // Every edge-adding edit is cycle checked, so no batch, whatever
+                        // its edits, leaves a cycle behind.
+                        assert_eq!(crate::deps::any_cycle(graph.state()), None, "{edits:?}");
                         let after = graph.clone();
 
                         let undo = graph
@@ -1181,6 +1200,7 @@ mod property {
             "item.set_transform",
             "item.set_visible",
             "item.set_crop",
+            "item.set_source",
             "source.create",
             "source.duplicate",
             "source.delete",
@@ -1211,6 +1231,7 @@ fn a_new_source_stores_every_parameter_with_its_defaults() {
                 kind: "color".into(),
             },
             settings: settings(&[("size", json!(5)), ("color", Value::Null)]),
+            duplicated_from: None,
         }],
     );
     let bg = graph.state().source(&SourceId::new("bg")).expect("created");
@@ -1243,6 +1264,7 @@ fn tone(id: &str) -> Edit {
             kind: "tone".into(),
         },
         settings: Settings::new(),
+        duplicated_from: None,
     }
 }
 
@@ -1254,6 +1276,7 @@ fn create_color(id: &str, entries: &[(&str, Value)]) -> Edit {
             kind: "color".into(),
         },
         settings: settings(entries),
+        duplicated_from: None,
     }
 }
 
@@ -1269,6 +1292,7 @@ fn settings_are_checked_against_the_descriptor() {
                     kind: "hologram".into(),
                 },
                 settings: Settings::new(),
+                duplicated_from: None,
             },
             "edits.0.kind.kind",
         ),
@@ -1310,6 +1334,7 @@ fn settings_are_checked_against_the_descriptor() {
                     scene_id: SceneId::new("a"),
                 },
                 settings: settings(&[("size", json!(3))]),
+                duplicated_from: None,
             },
             "edits.0.settings",
         ),
@@ -1495,7 +1520,7 @@ fn a_deleted_source_comes_back_with_its_settings() {
 }
 
 /// ADR-0025: every edit that can add a dependency edge runs the cycle check: `item.add`
-/// (scene to source), `source.create` and `source.set_settings` (source to the scenes
+/// and `item.set_source` (scene to source, see `set_source_rejects_missing_objects_and_cycles`), `source.create` and `source.set_settings` (source to the scenes
 /// and sources its settings refer to). `source.duplicate` copies outgoing edges onto a
 /// source nothing depends on yet, so it can't close a cycle.
 #[test]
@@ -1562,5 +1587,265 @@ fn every_edge_adding_edit_is_cycle_checked() {
     apply_ok(
         &mut g,
         vec![set_settings("cam", &[("mask", scene_ref("c"))])],
+    );
+}
+
+fn set_source(item: &str, source: &str) -> Edit {
+    Edit::ItemSetSource {
+        item_id: ItemId::new(item),
+        source_id: SourceId::new(source),
+    }
+}
+
+fn duplicate(source: &str, copy: &str) -> Edit {
+    Edit::SourceDuplicate {
+        source_id: SourceId::new(source),
+        new_source_id: SourceId::new(copy),
+        name: format!("Copy of {source}"),
+    }
+}
+
+/// The `duplicated_from` that `source.list` reports for `id`.
+fn reported_original(graph: &Graph, id: &str) -> Option<String> {
+    let Some(QueryResult::SourceList { sources, .. }) = graph
+        .query(&jstream_protocol::Query::SourceList)
+        .and_then(Result::ok)
+    else {
+        panic!("source.list answers");
+    };
+    sources
+        .into_iter()
+        .find(|s| s.source_id.as_str() == id)
+        .expect("listed")
+        .duplicated_from
+        .map(|o| o.to_string())
+}
+
+/// ADR-0023 §4: `item.set_source` changes only which source an item places.
+#[test]
+fn set_source_keeps_the_item_and_its_placement() {
+    let mut g = fixture();
+    let moved = ItemTransform {
+        position: Vec2::new(5.0, 6.0).expect("finite"),
+        ..ItemTransform::IDENTITY
+    };
+    apply_ok(
+        &mut g,
+        vec![
+            add("a", "i1", "cam"),
+            add("a", "i2", "mic"),
+            add("a", "i3", "cam"),
+            Edit::ItemSetTransform {
+                item_id: ItemId::new("i1"),
+                transform: moved,
+            },
+            Edit::ItemSetCrop {
+                item_id: ItemId::new("i1"),
+                crop: Crop {
+                    left: 4,
+                    ..Crop::NONE
+                },
+            },
+            Edit::ItemSetVisible {
+                item_id: ItemId::new("i1"),
+                visible: false,
+            },
+        ],
+    );
+    let before = g.state().item(&ItemId::new("i1")).expect("i1").1.clone();
+    let applied = apply_ok(&mut g, vec![set_source("i1", "sb")]);
+    assert_eq!(applied.inverse.edits, vec![set_source("i1", "cam")]);
+    let (scene, item) = g.state().item(&ItemId::new("i1")).expect("i1");
+    assert_eq!(scene.id().as_str(), "a");
+    assert_eq!(item.source_id().as_str(), "sb");
+    assert_eq!(item.transform(), before.transform());
+    assert_eq!(item.crop(), before.crop());
+    assert!(!item.visible());
+    assert_eq!(ids(&g, "a"), ["i1", "i2", "i3"]);
+    // The other placement of `cam` is untouched.
+    assert_eq!(g.state().placements(&SourceId::new("cam")).count(), 1);
+    // Setting the source it already places is allowed and undoes to itself.
+    let applied = apply_ok(&mut g, vec![set_source("i1", "sb")]);
+    assert_eq!(applied.inverse.edits, vec![set_source("i1", "sb")]);
+}
+
+#[test]
+fn set_source_rejects_missing_objects_and_cycles() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "i1", "cam"), add("b", "ib", "sa")]);
+    assert_eq!(
+        apply_err(&mut g, vec![set_source("ghost", "cam")]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Item,
+            id: "ghost".into(),
+        }
+    );
+    assert_eq!(
+        apply_err(&mut g, vec![set_source("i1", "ghost")]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Source,
+            id: "ghost".into(),
+        }
+    );
+    // `a` can't show itself.
+    let (field, reason) = invalid_reason(apply_err(&mut g, vec![set_source("i1", "sa")]));
+    assert_eq!(field, "edits.0.source_id");
+    assert!(
+        reason.ends_with("scene `a` -> source `sa` -> scene `a`"),
+        "{reason}"
+    );
+    // `b` shows `a`, so `a` can't show `b`, even in a later edit of the batch.
+    let (field, reason) = invalid_reason(apply_err(
+        &mut g,
+        vec![add("c", "ic", "cam"), set_source("i1", "sb")],
+    ));
+    assert_eq!(field, "edits.1.source_id");
+    assert!(
+        reason.ends_with("scene `a` -> source `sb` -> scene `b` -> source `sa` -> scene `a`"),
+        "{reason}"
+    );
+    // Through a settings reference: `mic` masks with `a`, so `a` can't place `mic`.
+    apply_ok(
+        &mut g,
+        vec![set_settings("mic", &[("mask", scene_ref("a"))])],
+    );
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![set_source("i1", "mic")]));
+    assert_eq!(field, "edits.0.source_id");
+    // Retargeting `ib` away from `sa` first frees `a` to show `b`, in one batch.
+    apply_ok(
+        &mut g,
+        vec![set_source("ib", "cam"), set_source("i1", "sb")],
+    );
+}
+
+/// ADR-0023 §4: `source.duplicate` records the original, the link is reported only while
+/// the original exists, and every inverse keeps it.
+#[test]
+fn duplicated_from_is_a_plain_link() {
+    let mut g = fixture();
+    apply_ok(
+        &mut g,
+        vec![duplicate("cam", "cam2"), duplicate("cam2", "cam3")],
+    );
+    let state = g.state();
+    let link = |id: &str| {
+        state
+            .source(&SourceId::new(id))
+            .and_then(|s| s.duplicated_from())
+            .map(ToString::to_string)
+    };
+    assert_eq!(link("cam2").as_deref(), Some("cam"));
+    // A copy of a copy names the copy it was made from.
+    assert_eq!(link("cam3").as_deref(), Some("cam2"));
+    assert_eq!(link("cam"), None);
+    assert_eq!(reported_original(&g, "cam2").as_deref(), Some("cam"));
+
+    // Deleting the original is allowed; the link then reads as absent, and undo brings
+    // it back.
+    let applied = apply_ok(
+        &mut g,
+        vec![Edit::SourceDelete {
+            source_id: SourceId::new("cam"),
+        }],
+    );
+    assert_eq!(reported_original(&g, "cam2"), None);
+    g.apply(&applied.inverse.edits, None).expect("undo");
+    assert_eq!(reported_original(&g, "cam2").as_deref(), Some("cam"));
+
+    // Deleting the copy undoes to a `source.create` that carries the link, even when the
+    // original went first in the same batch.
+    let applied = apply_ok(
+        &mut g,
+        vec![
+            Edit::SourceDelete {
+                source_id: SourceId::new("cam"),
+            },
+            Edit::SourceDelete {
+                source_id: SourceId::new("cam3"),
+            },
+            Edit::SourceDelete {
+                source_id: SourceId::new("cam2"),
+            },
+        ],
+    );
+    let Some(Edit::SourceCreate {
+        source_id,
+        duplicated_from,
+        ..
+    }) = applied.inverse.edits.first()
+    else {
+        panic!("inverse starts with source.create");
+    };
+    assert_eq!(source_id.as_str(), "cam2");
+    assert_eq!(duplicated_from.as_ref().map(SourceId::as_str), Some("cam"));
+
+    // `source.create` may name a source that doesn't exist, but not itself.
+    let linked = |id: &str, original: &str| Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: "Linked".into(),
+        kind: SourceKind::Builtin {
+            kind: "color".into(),
+        },
+        settings: Settings::new(),
+        duplicated_from: Some(SourceId::new(original)),
+    };
+    apply_ok(&mut g, vec![linked("x", "gone")]);
+    assert_eq!(reported_original(&g, "x"), None);
+    let (field, reason) = invalid_reason(apply_err(&mut g, vec![linked("y", "y")]));
+    assert_eq!(
+        (field.as_str(), reason.as_str()),
+        ("edits.0.duplicated_from", "must not name the source itself")
+    );
+    // The link is not a dependency: it blocks no delete and closes no cycle.
+    apply_ok(&mut g, vec![add("a", "ix", "x"), linked("sa2", "sa")]);
+}
+
+/// ADR-0023 §4: converting between reference and clone is one batch each way, and keeps
+/// the item.
+#[test]
+fn reference_and_clone_convert_in_one_batch_each() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "i1", "cam"), add("b", "i2", "cam")]);
+    // Reference -> clone.
+    apply_ok(
+        &mut g,
+        vec![duplicate("cam", "cam_c"), set_source("i1", "cam_c")],
+    );
+    assert_eq!(g.state().placements(&SourceId::new("cam")).count(), 1);
+    assert_eq!(reported_original(&g, "cam_c").as_deref(), Some("cam"));
+    // The clone changes independently of the original.
+    apply_ok(
+        &mut g,
+        vec![set_settings("cam_c", &[("color", json!("#ff0000ff"))])],
+    );
+    assert_ne!(
+        g.state()
+            .source(&SourceId::new("cam_c"))
+            .map(|s| s.settings()),
+        g.state()
+            .source(&SourceId::new("cam"))
+            .map(|s| s.settings())
+    );
+    // Clone -> reference: back to `duplicated_from`, then drop the unplaced clone.
+    let applied = apply_ok(
+        &mut g,
+        vec![
+            set_source("i1", "cam"),
+            Edit::SourceDelete {
+                source_id: SourceId::new("cam_c"),
+            },
+        ],
+    );
+    assert_eq!(g.state().placements(&SourceId::new("cam")).count(), 2);
+    assert!(g.state().source(&SourceId::new("cam_c")).is_none());
+    assert_eq!(ids(&g, "a"), ["i1"]);
+    // Undo restores the clone with its own settings and its link.
+    g.apply(&applied.inverse.edits, None).expect("undo");
+    assert_eq!(reported_original(&g, "cam_c").as_deref(), Some("cam"));
+    assert_eq!(
+        g.state()
+            .item(&ItemId::new("i1"))
+            .map(|(_, i)| i.source_id().as_str()),
+        Some("cam_c")
     );
 }

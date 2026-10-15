@@ -5,7 +5,7 @@
 //! Reads never change the graph. Each collection result carries the revision it was
 //! read at; kinds are not collection state, so their results carry none.
 
-use crate::model::{Graph, Item, Output, Scene, Source};
+use crate::model::{Graph, Item, Output, Scene, Source, State};
 use jstream_protocol::{
     EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query, QueryResult, SceneId,
     SceneInfo, SceneSummary, SourceInfo,
@@ -74,7 +74,11 @@ impl Graph {
     pub fn source_list(&self) -> QueryResult {
         QueryResult::SourceList {
             rev: self.rev,
-            sources: self.state.sources().map(Source::to_info).collect(),
+            sources: self
+                .state
+                .sources()
+                .map(|s| s.to_info(&self.state))
+                .collect(),
         }
     }
 
@@ -108,7 +112,11 @@ impl Graph {
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
-            sources: self.state.sources().map(Source::to_info).collect(),
+            sources: self
+                .state
+                .sources()
+                .map(|s| s.to_info(&self.state))
+                .collect(),
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
         }
@@ -116,13 +124,18 @@ impl Graph {
 }
 
 impl Source {
-    /// This source as query results report it.
-    pub fn to_info(&self) -> SourceInfo {
+    /// This source as query results report it, in `state`, which holds it: its
+    /// `duplicated_from` only while `state` still has that source.
+    pub fn to_info(&self, state: &State) -> SourceInfo {
         SourceInfo {
             source_id: self.id.clone(),
             name: self.name.clone(),
             kind: self.kind.clone(),
             settings: self.settings.clone(),
+            duplicated_from: self
+                .duplicated_from
+                .clone()
+                .filter(|original| state.source(original).is_some()),
         }
     }
 }

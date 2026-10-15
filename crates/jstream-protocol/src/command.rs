@@ -107,6 +107,22 @@ pub enum Edit {
         /// relative order.
         index: u32,
     },
+    /// Changes which source an item places, keeping the item's ID, transform, crop,
+    /// visibility and stacking position (ADR-0023). It switches an item between a
+    /// reference and a clone: `source.duplicate` then `item.set_source` to the copy makes
+    /// a clone, and `item.set_source` back to the copy's `duplicated_from` (then
+    /// `source.delete` of the copy if nothing else places it) makes it a reference again.
+    /// Rejected with `not_found` if the item or the source doesn't exist, and with
+    /// `invalid_argument` naming the cycle if the scene would then contain itself,
+    /// directly or through other scenes. Inverse: `item.set_source` with the previous
+    /// source.
+    #[serde(rename = "item.set_source")]
+    ItemSetSource {
+        /// The item to change.
+        item_id: ItemId,
+        /// The source it places from now on.
+        source_id: SourceId,
+    },
     /// Replaces an item's crop. Inverse: `item.set_crop` with the previous one.
     #[serde(rename = "item.set_crop")]
     ItemSetCrop {
@@ -132,6 +148,12 @@ pub enum Edit {
         /// defaults.
         #[serde(default, skip_serializing_if = "Settings::is_empty")]
         settings: Settings,
+        /// The source this one was copied from, as `source.duplicate` records it. A plain
+        /// link: it may name a source that no longer exists (`source.delete`'s inverse
+        /// restores it that way), and is reported only while that source exists. It must
+        /// not name the new source itself, else `invalid_argument`. Omitted means none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duplicated_from: Option<SourceId>,
     },
     /// Renames a source. Inverse: `source.rename` back to the previous name.
     #[serde(rename = "source.rename")]
@@ -155,8 +177,9 @@ pub enum Edit {
         patch: Settings,
     },
     /// Copies a source under a new ID: a separate instance with the same kind and
-    /// settings, which changes independently from then on. Placing the *same* source again
-    /// is `item.add` with its existing `source_id`. Inverse: `source.delete` of the copy.
+    /// settings, which changes independently from then on. The copy's `duplicated_from`
+    /// names the source it was copied from. Placing the *same* source again is `item.add`
+    /// with its existing `source_id`. Inverse: `source.delete` of the copy.
     #[serde(rename = "source.duplicate")]
     SourceDuplicate {
         /// The source to copy.
@@ -168,8 +191,9 @@ pub enum Edit {
     },
     /// Deletes a source. Rejected with `invalid_argument` while any item still places it,
     /// or any source's settings refer to it: remove those items, or clear those
-    /// references, first (in the same batch if needed). Inverse: `source.create` with its
-    /// name, kind and settings.
+    /// references, first (in the same batch if needed). Deleting a source that others were
+    /// copied from is allowed: their `duplicated_from` then reads as absent. Inverse:
+    /// `source.create` with its name, kind, settings and `duplicated_from`.
     #[serde(rename = "source.delete")]
     SourceDelete {
         /// The source to delete.
@@ -231,6 +255,7 @@ impl Edit {
             Edit::ItemReorder { .. } => "item.reorder",
             Edit::SceneReorder { .. } => "scene.reorder",
             Edit::ItemSetCrop { .. } => "item.set_crop",
+            Edit::ItemSetSource { .. } => "item.set_source",
             Edit::SourceCreate { .. } => "source.create",
             Edit::SourceRename { .. } => "source.rename",
             Edit::SourceSetSettings { .. } => "source.set_settings",
