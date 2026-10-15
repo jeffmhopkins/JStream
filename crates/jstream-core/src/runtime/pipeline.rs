@@ -65,9 +65,10 @@ const KEYFRAME_INTERVAL: u32 = 60;
 const VIDEO_KBPS: u32 = 2500;
 const AUDIO_KBPS: u32 = 160;
 const SAMPLE_RATE: u32 = 48_000;
-/// How long `output.start` waits for the render thread to open the compositor on the
-/// software adapter, unless the engine was given another bound. It only keeps a stuck
-/// adapter from blocking the call forever; a slower open is not a pipeline fault.
+/// How long `output.start` waits for the render thread to open the compositor, on the
+/// platform's GPU context or, without one, on the software adapter, unless the engine
+/// was given another bound. It only keeps a stuck adapter from blocking the call
+/// forever; a slower open is not a pipeline fault.
 pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 /// Composite errors in a row that the render thread rides out by repeating the last
 /// frame. One more reports the output failed: one second at the base rate.
@@ -138,8 +139,9 @@ pub struct OutputStats {
     /// CPU readbacks on the render thread. There is no encode target yet, so every
     /// encoded frame is one of these.
     pub readbacks: u64,
-    /// New capture frames the render thread composited from a texture shared with the
-    /// platform, with no CPU copy. Zero on the CPU path.
+    /// New capture frames the render thread took from the mailbox on the GPU path: each
+    /// a texture shared with the platform, composited with no CPU copy. Zero on the CPU
+    /// path.
     pub gpu_captures: u64,
 }
 
@@ -455,10 +457,12 @@ pub(crate) fn launch(
     generation: u64,
     fail_tx: Sender<PipelineEvent>,
 ) -> Result<Running, String> {
+    // `context` is bound first, so on an early return it drops last, after the stream,
+    // as in the render loop.
     let OpenedCapture {
+        context,
         size,
         stream: capture,
-        context,
     } = open_capture(&parts)?;
     let format = engine_format()?;
     // Bindings drop in reverse pattern order, so on an early return the streams (and

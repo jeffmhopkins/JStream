@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:5000b661aeec85f6", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (C1a jstream-sources) into E3b: main's kinds and sources text sits beside E3b's Runtime and Tests additions; re-read, no overlap; holds" }
+verified = { hash = "b3:8537c67e87323e79", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = '#219 review B1: Tests bullet now says windows_gpu.rs is behind hw-tests and ignored, matching the cfg(all(windows, feature = "hw-tests")) gate in tests.rs' }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -101,7 +101,8 @@ state machine. Contents:
   published snapshot (CPU stand-in), which capture path an output takes and each
   fallback, and an output compositing GPU capture frames, on a software device that
   stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
-  the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, ignored), the
+  the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, behind
+  `hw-tests` and ignored), the
   pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
   stage-failure, late-tick, teardown, final-tick, link-loss and stalled-stop tests run
@@ -139,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:aac4bf3d732d6e1e", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (C1a) into E3b: main's source-kind text and E3b's capture import, scaled capture and GPU-path render text are independent; holds" }
+verified = { hash = "b3:02d324a7225d8f0c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "#219 review B1: dev-dependency list adds the cfg(windows) jstream-platform-windows dev-dependency and the hw-tests feature that compiles windows_gpu.rs; checked against Cargo.toml" }
 -->
 
 ### Engine and sessions
@@ -189,7 +190,9 @@ the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. D
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
-values and saved collection files in `src/tests.rs`, `src/tests/` and `tests/mcp.rs`). All of them
+values and saved collection files in `src/tests.rs`, `src/tests/` and `tests/mcp.rs`), and
+on Windows `jstream-platform-windows` (the GPU capture hardware test,
+`src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature). All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
@@ -749,7 +752,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:329f07c453b3dee5", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: new Capture path paragraph matches open_capture/gpu_capture (open_device, Capture::on_context, start fallback, each fallback logged), OutputStats::gpu_captures and readbacks, and render_loop's drop order (frames, draw, capture, context)" }
+verified = { hash = "b3:3d273daf1230090a", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "#219 review N1/N3: gpu_captures now documented as frames taken from the mailbox on the GPU path; launch binds context first so it drops after the stream, matching the 'before the context' text" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

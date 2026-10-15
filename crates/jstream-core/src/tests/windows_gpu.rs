@@ -1,8 +1,8 @@
 //! The GPU capture path on a real Windows machine (R-TEST-004): an output on the WGC
 //! capture of the primary display and the platform's DX12 device, composited with no
-//! CPU copy of the capture. `#[ignore]`d, because CI machines have no display and no
-//! GPU. Run it with the screen changing (a video playing), with
-//! `cargo test -p jstream-core --lib windows_gpu -- --ignored --nocapture`.
+//! CPU copy of the capture. Behind `hw-tests` and `#[ignore]`d, because CI machines have
+//! no display and no GPU. Run it with the screen changing (a video playing), with
+//! `cargo test -p jstream-core --features hw-tests --lib windows_gpu -- --ignored --nocapture`.
 //!
 //! Audio and the encoders are the fakes: this checks the video path only, and the
 //! platform's encoders do not take the engine's frames yet.

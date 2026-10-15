@@ -46,7 +46,7 @@ jobs:
       # Platform tests (`hw-tests`) only run on real hardware, but they must still compile:
       # type-check them on the platform they target.
       - if: runner.os == 'Windows'
-        run: cargo clippy -p jstream-platform-windows --all-targets --features hw-tests --locked -- -D warnings
+        run: cargo clippy -p jstream-platform-windows -p jstream-core --all-targets --features hw-tests --locked -- -D warnings
 
   test:
     strategy:

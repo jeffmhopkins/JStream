@@ -6,7 +6,7 @@
 mod collection;
 mod gpu_capture;
 mod history;
-#[cfg(windows)]
+#[cfg(all(windows, feature = "hw-tests"))]
 mod windows_gpu;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
