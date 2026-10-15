@@ -1,7 +1,7 @@
 //! The built binary end to end: it starts on a free `127.0.0.1` port with a token file
 //! it creates, `jstream-control`'s WebSocket client drives it (handshake, a batch, a
-//! query and the `state.changed` event), and a SIGINT stops it gracefully. A second run
-//! reuses the token. Hermetic: loopback only, files under the target directory (the
+//! query and the `state.changed` event), an MCP client reads the result over streamable
+//! HTTP, and a SIGINT stops it gracefully. A second run reuses the token. Hermetic: loopback only, files under the target directory (the
 //! platform data directory, where logs go by default, is pointed there too).
 
 use futures_util::StreamExt;
@@ -21,6 +21,48 @@ fn scratch(name: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("the scratch directory is created");
     dir
+}
+
+/// POSTs one JSON-RPC message to the daemon's MCP endpoint at `authority`, with `token`
+/// and the session ID if given, and returns the status, the `Mcp-Session-Id` answered and
+/// the body.
+fn mcp_post(
+    authority: &str,
+    token: &str,
+    session: Option<&str>,
+    body: &str,
+) -> (u16, Option<String>, String) {
+    use std::io::Write;
+    let mut stream = std::net::TcpStream::connect(authority).expect("connects");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .expect("a read timeout");
+    let session = session
+        .map(|id| format!("Mcp-Session-Id: {id}\r\n"))
+        .unwrap_or_default();
+    let request = format!(
+        "POST /mcp HTTP/1.1\r\nHost: {authority}\r\nAuthorization: Bearer {token}\r\n\
+         Content-Type: application/json\r\n{session}Connection: close\r\n\
+         Content-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
+    stream.write_all(request.as_bytes()).expect("sends");
+    let mut answer = String::new();
+    stream
+        .read_to_string(&mut answer)
+        .expect("reads the answer");
+    let (head, body) = answer.split_once("\r\n\r\n").unwrap_or((&answer, ""));
+    let status = head
+        .split(' ')
+        .nth(1)
+        .and_then(|code| code.parse().ok())
+        .unwrap_or(0);
+    let session = head.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("mcp-session-id")
+            .then(|| value.trim().to_owned())
+    });
+    (status, session, body.to_owned())
 }
 
 /// A running daemon, killed if the test fails before stopping it.
@@ -199,9 +241,18 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     ]);
     assert!(daemon.url.starts_with("ws://127.0.0.1:"), "{}", daemon.url);
     assert!(daemon.url.ends_with("/api/v1/ws"), "{}", daemon.url);
+    let authority = daemon
+        .url
+        .strip_prefix("ws://")
+        .and_then(|rest| rest.strip_suffix("/api/v1/ws"))
+        .expect("ws://<authority>/api/v1/ws")
+        .to_owned();
     assert_eq!(
         daemon.banner,
-        [format!("token file: {token_arg} (created, new token)")]
+        [
+            format!("token file: {token_arg} (created, new token)"),
+            format!("mcp endpoint: http://{authority}/mcp"),
+        ]
     );
     let token = std::fs::read_to_string(&token_file).expect("the token file exists");
     let token = token.trim();
@@ -261,6 +312,23 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         other => panic!("expected scene.list, got {other:?}"),
     }
 
+    // An MCP client over streamable HTTP is its own engine client and sees the scene.
+    let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"daemon-mcp-test","version":"1"}}}"#;
+    let (status, session, body) = mcp_post(&authority, token, None, initialize);
+    assert_eq!(status, 200, "{body}");
+    assert!(
+        body.contains("\"protocolVersion\":\"2025-11-25\""),
+        "{body}"
+    );
+    let session = session.expect("an Mcp-Session-Id");
+    let list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"scene","arguments":{"op":{"type":"scene.list"}}}}"#;
+    let (status, _, body) = mcp_post(&authority, token, Some(&session), list);
+    assert_eq!(status, 200, "{body}");
+    assert!(body.contains("\"isError\":false"), "{body}");
+    assert!(body.contains("main"), "{body}");
+    let (status, _, _) = mcp_post(&authority, WRONG_TOKEN, None, initialize);
+    assert_eq!(status, 401, "the MCP endpoint needs the token too");
+
     stop(&mut daemon);
     // The log on stderr (default level `info`) shows the refusal and the accepted
     // connection, and neither token (R-SEC-001).
@@ -271,6 +339,7 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     assert!(log.contains("connection refused"), "{log}");
     assert!(log.contains("missing or wrong control token"), "{log}");
     assert!(log.contains("connection accepted"), "{log}");
+    assert!(log.contains("mcp session opened"), "{log}");
     assert!(!log.contains(token), "the token was logged: {log}");
     assert!(
         !log.contains(WRONG_TOKEN),
@@ -310,7 +379,16 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     ]);
     assert_eq!(
         again.banner,
-        [format!("token file: {token_arg} (existing token)")]
+        [
+            format!("token file: {token_arg} (existing token)"),
+            format!(
+                "mcp endpoint: {}",
+                again
+                    .url
+                    .replace("ws://", "http://")
+                    .replace("/api/v1/ws", "/mcp")
+            ),
+        ]
     );
     assert_eq!(
         std::fs::read_to_string(&token_file)

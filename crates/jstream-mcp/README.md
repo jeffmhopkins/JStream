@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:056772acb84961af", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; server, tools, events, jsonrpc, stdio and error bullets unaffected" }
+verified = { hash = "b3:993572bf1e636ad2", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; contents bullets unchanged, streamable HTTP served by jstream-server" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -37,15 +37,15 @@ Contents (a first cut; [Design](#design) explains the choices):
   `BufRead`/`Write` pair.
 - **Errors** (`error.rs`): `McpError`, a `thiserror` enum for a transport that stops.
 
-The streamable-HTTP transport is not in this crate: `jstream-server` serves it, and it is
-not built yet ([Design](#design)).
+The streamable-HTTP transport is not in this crate: `jstream-server` serves it, feeding
+each request body to `Server::handle` ([Design](#design)).
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:7ca271a9d8764fb2", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): tool table lists item, kind, output, scene, source, state, video, matching the regenerated tools.snap; revisions, results and logging unchanged" }
+verified = { hash = "b3:04cf05697ae74a56", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; Tools table gains kind (main), I1's Session/Async paragraphs on /mcp sessions hold" }
 -->
 
 ### Tools
@@ -165,8 +165,9 @@ noticing, and this server doesn't check for that.
 
 Authentication happens below this crate: the session the host passes in already holds
 the control token ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)). The stdio
-transport is not a listener; the streamable-HTTP transport will be, so it must check the
-token and `Host`, and an `Origin` that is present ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
+transport is not a listener; the streamable-HTTP transport is, so `jstream-server` checks
+the token and `Host`, and an `Origin` that is present, before a message reaches this
+crate ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
 
 ### Events
 
@@ -221,9 +222,11 @@ one at a time, in order. Blank lines are skipped, a line that isn't UTF-8 gets a
 error, and end of input ends the transport. Nothing else may write to the stdout it is
 given.
 
-Streamable HTTP is served by `jstream-server` on the control port, behind the same token
-and `Origin` checks as the WebSocket API (decided, not built yet): it owns the HTTP stack
-and will feed request bodies to `Server::handle`. stdio stays in the CLI
+Streamable HTTP is served by `jstream-server` at `/mcp` on the control port, behind the
+same token, `Host` and `Origin` checks as the WebSocket API: it owns the HTTP stack and
+feeds each request body to `Server::handle`, keeping one `Server` per MCP session
+([jstream-server › Design](../jstream-server/README.md#design)). Requests to one
+session may run concurrently there; each is answered on its own. stdio stays in the CLI
 (`jstream-cli mcp`).
 
 ### Logging
@@ -276,11 +279,13 @@ official Rust SDK (`rmcp`):
    the `events` polling tool with a server-local cursor and a bounded buffer that
    reports dropped events ([Design](#design)). MCP notifications may be added beside
    it once the server has an outgoing channel.
-4. **Streamable HTTP.** Decided: `jstream-server` serves it on the control port, behind
-   the same token and `Origin` checks, and stdio stays in the CLI
-   ([Async and transports](#design)). Not built yet; question 6 is still open for it.
+4. **Streamable HTTP.** Settled and built: `jstream-server` serves it at `/mcp` on the
+   control port, behind the same checks, and stdio stays in the CLI
+   ([Async and transports](#design)).
 5. **Legacy support.** How long to keep the handshake-based era once clients move to
    2026-07-28.
 6. **One session per server.** Every MCP client of one server shares an undo history.
-   That fits stdio (one client per process). Over HTTP, should each client identity get
-   its own `Control` session?
+   That fits stdio (one client per process). Over HTTP, `jstream-server` gives each
+   `initialize` its own `Server`, so each handshake-era client has its own `Control`
+   session; stateless 2026-07-28 requests carry no session, so they all share one.
+   Whether those should be split by client identity (`clientInfo.name`) is open.
