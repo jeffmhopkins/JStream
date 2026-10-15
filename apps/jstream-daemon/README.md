@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:7ed1ec1907c71806", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (G3b #213) into C9: daemon text unchanged by main; MfMediaDecoders in Live and the delay-load list still right; re-read, holds" }
+verified = { hash = "b3:6944cf5bfc86cda9", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: stale only through core#design; daemon code unchanged, MfMediaDecoders' audio adds no DLL import (MF types are compile-time GUIDs, MFCreateMediaType already from mfplat); re-read, holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

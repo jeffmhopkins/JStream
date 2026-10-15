@@ -1,6 +1,6 @@
 //! The `Source` and `SourceKind` seams, and what a source is created with.
 
-use crate::SourceError;
+use crate::{MediaAudio, SourceError};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::MediaDecoders;
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
@@ -40,6 +40,12 @@ pub trait Source: Send {
     /// default does nothing.
     fn show(&mut self, at: MediaTime) {
         let _ = at;
+    }
+
+    /// The source's sound, for the engine to mix while the program shows the source: a
+    /// `media` file's audio. `None`, the default, for a kind without sound of its own.
+    fn audio(&self) -> Option<MediaAudio> {
+        None
     }
 
     /// Applies a new settings map. Only parameters marked `live` in the kind's

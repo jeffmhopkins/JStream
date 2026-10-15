@@ -31,5 +31,6 @@ mod text;
 
 pub use audio::AudioTarget;
 pub use error::SourceError;
+pub use media::MediaAudio;
 pub use registry::Registry;
 pub use source::{AssetRoots, Context, Limits, Source, SourceKind, needs_restart};

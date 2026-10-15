@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:29322f44d1131014", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (CL1 part 1 #272, #266) into C9: main only restamped these via ARCH crate-map's jstream-plugin-proto row; text untouched; Media files bullet holds" }
+verified = { hash = "b3:62bfcf9a2a82742c", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: Media files bullet rewritten for MediaDecoderConfig::audio, MediaAudioInfo, next_audio and seek moving both streams; fake bullet names FakeAudio and the audio_blocks stat; re-read against media_file.rs and fake.rs" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -88,16 +88,21 @@ Contents:
 - **Media files** (`media_file.rs`,
   [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `MediaDecoders`
   (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the
-  video pixel format and a `HardwarePreference`) as a `MediaDecoder` (`Send`), which
-  owns the whole file: the platform demuxes and decodes it with its own APIs, unlike
-  the packet-level `VideoDecoder`. `info()` gives a `MediaInfo`: the first video stream
-  (`MediaVideoInfo`: frame size and nominal frame period) or `None`, whether there is
-  audio, and the duration when the container says. `next_video()` blocks while it
-  decodes the next frame, in presentation order, and is `Ok(None)` at the end;
-  `seek(to)` restarts decoding at the key frame at or before `to`, so the frames up to
-  it may come out first. Frame times are on the file's own timeline from its start, not
-  the media clock; the `media` source maps them onto the clock. Audio decoding comes
-  with the media source's audio.
+  video pixel format, a `HardwarePreference`, and whether to decode audio too) as a
+  `MediaDecoder` (`Send`), which owns the whole file: the platform demuxes and decodes
+  it with its own APIs, unlike the packet-level `VideoDecoder`. `info()` gives a
+  `MediaInfo`: the first video stream (`MediaVideoInfo`: frame size and nominal frame
+  period) or `None`, the first audio stream as it decodes (`MediaAudioInfo`: its
+  format, the stream's own rate in a layout `jstream-media` has, interleaved `f32`,
+  never resampled) or `None` when there is none, it wasn't asked for or the platform
+  can't decode it, and the duration when the container says. `next_video()` and
+  `next_audio()` (an `AudioBuffer`) block while they decode the next frame or block of
+  their stream, in presentation order, and are `Ok(None)` at its end. The caller reads
+  the two in step by time, since a backend holds what one stream demuxed while the
+  other is read. `seek(to)` moves both: video restarts at the key frame at or before
+  `to`, so the frames up to it may come out first, and audio at or before `to`. Times
+  are on the file's own timeline from its start, not the media clock; the `media`
+  source maps them onto the clock.
 - **Virtual camera:** `VcamSink` (`Send`): `start` with a `VcamFormat`, `publish`
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
@@ -135,8 +140,9 @@ Contents:
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
   `FakeMediaDecoders` (a path registered with `add` plays a `FakeClip`, synthetic RGBA
   frames whose colour tells them apart, seeking to the key frame before as a real
-  decoder does; any other path is `Unsupported`, and nothing is read from disk; its
-  `stats` count opens, seeks and frames),
+  decoder does, and with a `FakeAudio` blocks of one level each, which tells them
+  apart; any other path is `Unsupported`, and nothing is read from disk; its `stats`
+  count opens, seeks, frames and audio blocks),
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
   `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,

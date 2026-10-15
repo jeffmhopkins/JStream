@@ -16,6 +16,11 @@
 //! after plans that didn't is told it is shown again ([`Source::show`]), so a media file
 //! can restart. A source built before plans that didn't reach it (on a scene that isn't
 //! the program yet, or behind a hidden item) counts as shown again when one first does.
+//!
+//! A source with sound of its own (a media file, [`Source::audio`]) is heard while the
+//! latest plan reaches it ([`LiveSources::end_plan`]). The engine hands its audio to the
+//! program stage, which mixes it like an audio source (`crate::audio_sources`):
+//! [`LiveSources::take_audio`] says when what there is to mix changed.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -26,7 +31,7 @@ use std::time::{Duration, Instant};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{MediaClock, MediaDecoders};
 use jstream_protocol::{Settings, SourceId, SourceKind};
-use jstream_sources::{Context, Registry, Source, SourceError};
+use jstream_sources::{Context, MediaAudio, Registry, Source, SourceError};
 
 use crate::lock;
 use crate::snapshot::Frame;
@@ -55,7 +60,28 @@ pub(crate) struct LiveSources {
     /// Numbers the plans of the program mix, from 1, so a source can tell whether the
     /// previous plan reached it.
     plan: u64,
+    /// Whether a source's sound came, went or moved on the clock since
+    /// [`take_audio`](Self::take_audio) last said.
+    audio_changed: bool,
 }
+
+/// A live source's sound, for the program stage to mix.
+#[derive(Clone, Debug)]
+pub(crate) struct LiveAudio {
+    /// The build it came from: a new build is a new input.
+    pub(crate) ticket: u64,
+    /// The source's time zero on the media clock, which its audio is stamped from.
+    pub(crate) start: MediaTime,
+    pub(crate) audio: MediaAudio,
+}
+
+impl PartialEq for LiveAudio {
+    fn eq(&self, other: &Self) -> bool {
+        self.ticket == other.ticket && self.start == other.start
+    }
+}
+
+impl Eq for LiveAudio {}
 
 /// What the engine wants for one source, and what it runs now.
 struct Entry {
@@ -69,6 +95,10 @@ struct Entry {
 /// A built source and the frame it showed last.
 struct Running {
     source: Box<dyn Source>,
+    /// The build it came from.
+    ticket: u64,
+    /// Its sound, if it has any.
+    audio: Option<MediaAudio>,
     /// When it was built, on the media clock: its time zero.
     start: MediaTime,
     shown: Option<(Arc<VideoFrame>, Frame)>,
@@ -123,6 +153,7 @@ impl LiveSources {
             host,
             started: false,
             plan: 0,
+            audio_changed: false,
         }
     }
 
@@ -135,6 +166,7 @@ impl LiveSources {
         for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
             running.start = now;
         }
+        self.audio_changed = true;
     }
 
     /// The platform's media files, which `media` sources play through. Sources built
@@ -161,11 +193,13 @@ impl LiveSources {
     /// source that is new or whose settings changed, and drops the ones deleted.
     pub(crate) fn sync(&mut self, state: &jstream_graph::State) {
         let registry = Arc::clone(&self.registry);
+        let before = self.entries.len();
         self.entries.retain(|id, _| {
             state
                 .source(id)
                 .is_some_and(|s| framed(&registry, s.kind()).is_some())
         });
+        self.audio_changed |= self.entries.len() != before;
         let mut jobs = Vec::new();
         for source in state.sources() {
             let Some(kind) = framed(&registry, source.kind()) else {
@@ -211,9 +245,12 @@ impl LiveSources {
             return false;
         }
         let plan = self.plan;
+        self.audio_changed = true;
         entry.running = match built.result {
             Ok(source) => Some(Running {
+                audio: source.audio(),
                 source,
+                ticket: built.ticket,
                 start: self.worker.now(),
                 shown: None,
                 planned: plan,
@@ -284,6 +321,41 @@ impl LiveSources {
             .next_change(at)
             .and_then(|change| after(running.start, change, now.timebase()));
         Some((frame, next))
+    }
+
+    /// Ends a plan of the program mix: a source's sound is heard while the plan reached
+    /// it.
+    pub(crate) fn end_plan(&self) {
+        let plan = self.plan;
+        for running in self.entries.values().filter_map(|e| e.running.as_ref()) {
+            if let Some(audio) = &running.audio {
+                audio.set_audible(running.planned == plan);
+            }
+        }
+    }
+
+    /// Every live source's sound, if that changed since the last call.
+    pub(crate) fn take_audio(&mut self) -> Option<BTreeMap<SourceId, LiveAudio>> {
+        if !std::mem::take(&mut self.audio_changed) {
+            return None;
+        }
+        let audio = self
+            .entries
+            .iter()
+            .filter_map(|(id, entry)| {
+                let running = entry.running.as_ref()?;
+                let audio = running.audio.clone()?;
+                Some((
+                    id.clone(),
+                    LiveAudio {
+                        ticket: running.ticket,
+                        start: running.start,
+                        audio,
+                    },
+                ))
+            })
+            .collect();
+        Some(audio)
     }
 
     /// Asks the thread to re-plan at `at`, or at no set time.

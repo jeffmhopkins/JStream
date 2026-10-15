@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:a16cc48af14d796d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (G3b VirtualCam #213, #275, #292) into C9: with_backends keeps G3b's vcam take and C9's set_media in one function; re-read main's virtual-camera text beside C9's media text; holds" }
+verified = { hash = "b3:f49c43ce2b02c75d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: Audio sources bullet adds live sources' sound; Tests line names the media-sound test in src/tests/audio.rs; re-read" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -65,8 +65,9 @@ state machine. Contents:
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input, sent to master at unity, for each `audio_input`, `desktop_audio` and
   `app_audio` source, added when the source is created and removed when it is deleted;
-  while there is none, the default microphone and desktop audio (see *Audio sources*
-  in [Design](#design)).
+  while there is none, the default microphone and desktop audio; and one more for each
+  live source with sound of its own (a `media` file), fed while the program shows it
+  (see *Audio sources* in [Design](#design)).
 - **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -137,7 +138,9 @@ state machine. Contents:
   stand-in (`src/tests/audio.rs`: the defaults while there is none, sources added and
   deleted while an output runs, an unavailable device or application that leaves the
   output running, a failed stream reopened, an application found again under a new
-  process ID, and a settings change reopening its input), the output edits and the
+  process ID, a settings change reopening its input, and a media file's sound reaching
+  its own input beside the defaults, silent while hidden and removed with the source),
+  the output edits and the
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
@@ -164,7 +167,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4879bec163436e04", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (G3b VirtualCam #213, #275, #292) into C9: with_backends keeps G3b's vcam take and C9's set_media in one function; re-read main's virtual-camera text beside C9's media text; holds" }
+verified = { hash = "b3:3ed0110e9a513d11", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: Live sources says end_plan sets audibility and take_audio feeds AudioSources::sync_live; Audio sources gains the live-sound paragraph (MediaAudio::open on the stage clock, rebuild is a new input, defaults rule unchanged); re-read against live.rs, audio_sources.rs and engine.rs publish_render" }
 -->
 
 ### Engine and sessions
@@ -413,7 +416,13 @@ animation restarts with it. A build that fails is logged at `warn` with the sour
 and an error that never names a host path, and the source draws nothing; a kind that
 is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 (`audio_input`, `desktop_audio`, `app_audio`, whose descriptors have no video) get no
-`Source`: the program stage records them (*Audio sources*).
+`Source`: the program stage records them (*Audio sources*). A source with sound of
+its own (`Source::audio`, a `media` file's `MediaAudio`) keeps it beside the source:
+after each plan (`end_plan`) it is audible exactly when that plan reached the source,
+so a hidden item, or a scene that isn't the program, is silent. `take_audio` hands the
+engine every running source's sound, with its build's number and time zero, when an
+install, a deletion or a new clock changed it; the engine passes that to the audio
+sources (`AudioSources::sync_live`) as it publishes the plan.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source; `sync` runs beside the live
@@ -450,6 +459,15 @@ program records the default microphone and desktop audio, as it did before audio
 sources existed, so an earlier collection is not silent; the first audio source
 replaces them. Whether a source is recording or unavailable is not reported to
 clients yet: that needs a protocol field (D5's lane).
+
+A live source's sound is one more input of the same set, keyed by its source ID and
+sent to master at unity. The thread opens it by adding a mixer input in the sound's
+format and opening the source's own stream on its producer
+(`MediaAudio::open`, stamped on the program stage's media clock from the source's
+time zero), and closes it like any other. A rebuilt source, or one whose time zero
+moved, is a new input. It doesn't count as an audio source for the defaults: a
+collection whose only sound is a video still records the microphone and desktop
+audio.
 
 `snapshot::plan_with` asks for the frame of each source an item it reaches places:
 the stored frame if `set_source_frame` gave one, else the live source's frame at the
@@ -956,7 +974,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:3f20bc1b0c367a9b", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at e7e7433 (#272 CLAP filter contract and mixer side, #266 canvas styles); stamp-only conflicts; re-read main's text beside this PR's virtual-camera text; no jstream-core code changed by the merge; holds" }
+verified = { hash = "b3:9e6c8477d14b8106", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: mixer line mentions media files' sound; jstream-media-audio thread per media input started and joined by the input; AudioInputs::start takes the stage clock; re-read against runtime/pipeline.rs" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -970,8 +988,9 @@ Design) at the encoder size: the program scene and the scenes it nests, with eve
 it draws the capture filling the frame. It repeats the last capture when the mailbox
 is empty, and reads the frame back. This cut encodes that CPU readback, and the
 readback is counted. The mixer thread polls the media clock and pushes 48 kHz stereo
-blocks mixed from the audio sources' inputs (see *Audio sources* in Design; the
-microphone and the desktop loopback while the collection has none). Every running
+blocks mixed from the audio sources' inputs and the media files' sound (see *Audio
+sources* in Design; the microphone and the desktop loopback while the collection has
+no audio source). Every running
 output shares that one program stage (capture, render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same encoder profile share one
@@ -1007,4 +1026,6 @@ cut. The mixer also has its own collector, which frees input rings and their cou
 removed buses' state, and removed filter chains and filters. The program stage's
 `jstream-audio-sources` thread opens and closes the audio sources' inputs as the
 collection changes (see *Audio sources* in Design); it takes no engine lock and is
-joined, and every input closed, after the mixer thread stops.
+joined, and every input closed, after the mixer thread stops. A media file's input is
+fed by that source's `jstream-media-audio` thread, which `jstream-sources` starts when
+the input opens and joins when it closes.

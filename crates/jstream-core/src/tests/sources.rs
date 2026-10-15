@@ -343,7 +343,7 @@ fn a_media_file_plays_on_the_clock_and_restarts_when_shown_again() {
             frame_period: Timebase::new(1, 10).expect("a time base"),
             frames: 10,
             key_every: 1,
-            audio: false,
+            audio: None,
         },
     );
     let engine = Engine::new()
@@ -401,7 +401,7 @@ fn a_media_file_first_shown_long_after_it_was_built_plays_from_the_start() {
             frame_period: Timebase::new(1, 10).expect("a time base"),
             frames: 10,
             key_every: 1,
-            audio: false,
+            audio: None,
         },
     );
     let engine = Engine::new()

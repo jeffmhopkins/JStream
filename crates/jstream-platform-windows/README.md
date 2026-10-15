@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:52ace67d2eb217e6", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (CL1 part 1 #272, #266) into C9: main only restamped these via ARCH crate-map's jstream-plugin-proto row; text untouched; MfMediaDecoders bullet holds" }
+verified = { hash = "b3:a54acf0d1e62fd03", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: MfMediaDecoders gains the Audio bullet (float PCM, stereo fallback, unselected when undecodable, format change Unsupported) and seeking covers both streams; Not yet drops audio; re-read against decode/reader.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -255,7 +255,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     decoder's YUV to RGB32 and deinterlaces; `HardwarePreference::Prefer` also turns on
     hardware decoders, `Avoid` leaves them off, and `Require` is `Unsupported`, because
     the reader doesn't say which decoder it picked. Only the first video stream is
-    selected. The file plays what Media Foundation does: MP4, MOV, MKV and WebM, and
+    selected, and the first audio stream too when `MediaDecoderConfig::audio` asks for
+    it. The file plays what Media Foundation does: MP4, MOV, MKV and WebM, and
     H.264, HEVC, VP9 and AV1 where the OS has the decoder (Store extensions for the
     last three). A missing file is `NotFound`; a container or codec the OS can't read
     is `Unsupported`.
@@ -266,12 +267,19 @@ The code is ported from spikes S1 to S3. This first cut has:
     so a decoder that pads 1080 rows to 1088 shows 1080. A frame's `pts` is the
     sample's time, in 100 ns, on the file's timeline. A media type change mid-stream
     re-reads the shape. Colour is BT.709 full range, as RGB.
-  - **Seeking** sets the reader's position in 100 ns units; the reader restarts at the
-    key frame before it.
+  - **Audio:** the reader decodes to float PCM at the stream's own rate
+    (`MFAudioFormat_Float`), in the stream's channel count when that is mono, stereo or
+    6 (read as 5.1), else asking the decoder for stereo. A stream it can't decode either
+    way is left unselected and `info().audio` is `None`, so the video still plays.
+    Each sample is copied out as whole frames of little-endian `f32`, its `pts` the
+    sample's time. A format change mid-stream is `Unsupported`, since the engine's
+    mixer input was made for the first.
+  - **Seeking** sets the reader's position in 100 ns units, for both streams; the
+    reader restarts video at the key frame before it.
   - **Threads:** `open` joins the MTA for its calls; each open file holds Media
     Foundation started and the MTA alive (`MfStarted`), so the thread that reads it,
     the source's decode thread, uses the free-threaded reader as an implicit MTA member.
-  - **Not yet:** audio, and frames on the GPU (they follow the zero-copy work).
+  - **Not yet:** frames on the GPU (they follow the zero-copy work).
 
 - **`WindowsGpu`** (`GpuInterop`, [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)
   step 2, plus the D3D11 device that steps 1 and 5 will use; ported from spike S1):

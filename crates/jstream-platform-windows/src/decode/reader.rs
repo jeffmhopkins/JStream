@@ -1,29 +1,33 @@
 //! The Media Foundation Source Reader on a local file: it demuxes, and decodes video
 //! through the OS decoders, converting to RGB32 with its video processor; this module
-//! hands the frames on as packed RGBA or BGRA.
+//! hands the frames on as packed RGBA or BGRA. Audio, when asked for, comes out as
+//! interleaved `f32` at the stream's own rate, mixed down to stereo by the decoder when
+//! its channel count has no layout here.
 
 use std::path::Path;
 
 use jstream_platform::media::{
-    ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane, VideoFrame,
-    VideoFrameInfo,
+    AudioBuffer, AudioFormat, ChannelLayout, ColorInfo, ColorRange, ColorSpace, FrameSize,
+    MediaTime, PixelFormat, Plane, SampleFormat, VideoFrame, VideoFrameInfo,
 };
 use jstream_platform::{
-    HardwarePreference, MediaDecoder, MediaDecoderConfig, MediaDecoders, MediaInfo, MediaVideoInfo,
-    PlatformError,
+    HardwarePreference, MediaAudioInfo, MediaDecoder, MediaDecoderConfig, MediaDecoders, MediaInfo,
+    MediaVideoInfo, PlatformError,
 };
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND};
 use windows::Win32::Media::MediaFoundation::{
     IMF2DBuffer, IMFAttributes, IMFMediaBuffer, IMFMediaType, IMFSample, IMFSourceReader,
     MF_E_INVALIDMEDIATYPE, MF_E_INVALIDSTREAMNUMBER, MF_E_TOPO_CODEC_NOT_FOUND,
-    MF_E_UNSUPPORTED_BYTESTREAM_TYPE, MF_E_UNSUPPORTED_FORMAT, MF_MT_DEFAULT_STRIDE,
-    MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_MAJOR_TYPE, MF_MT_MINIMUM_DISPLAY_APERTURE,
-    MF_MT_SUBTYPE, MF_PD_DURATION, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS,
-    MF_SOURCE_READER_ALL_STREAMS, MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING,
-    MF_SOURCE_READER_FIRST_AUDIO_STREAM, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-    MF_SOURCE_READER_MEDIASOURCE, MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED,
-    MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READERF_ERROR, MFCreateAttributes, MFCreateMediaType,
-    MFCreateSourceReaderFromURL, MFMediaType_Video, MFVideoArea, MFVideoFormat_RGB32,
+    MF_E_UNSUPPORTED_BYTESTREAM_TYPE, MF_E_UNSUPPORTED_FORMAT, MF_MT_AUDIO_NUM_CHANNELS,
+    MF_MT_AUDIO_SAMPLES_PER_SECOND, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
+    MF_MT_MAJOR_TYPE, MF_MT_MINIMUM_DISPLAY_APERTURE, MF_MT_SUBTYPE, MF_PD_DURATION,
+    MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, MF_SOURCE_READER_ALL_STREAMS,
+    MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, MF_SOURCE_READER_FIRST_AUDIO_STREAM,
+    MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_MEDIASOURCE,
+    MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED, MF_SOURCE_READERF_ENDOFSTREAM,
+    MF_SOURCE_READERF_ERROR, MFAudioFormat_Float, MFCreateAttributes, MFCreateMediaType,
+    MFCreateSourceReaderFromURL, MFMediaType_Audio, MFMediaType_Video, MFVideoArea,
+    MFVideoFormat_RGB32,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::core::{GUID, HSTRING, Interface};
@@ -85,9 +89,14 @@ impl MediaDecoders for MfMediaDecoders {
             size: shape.size,
             frame_period: frame_period(&reader),
         });
+        let audio = if config.audio {
+            select_audio(&reader)?
+        } else {
+            None
+        };
         let info = MediaInfo {
             video,
-            audio: has_audio(&reader),
+            audio: audio.map(|format| MediaAudioInfo { format }),
             duration: duration(&reader),
         };
         Ok(Box::new(MfMediaDecoder {
@@ -257,10 +266,68 @@ fn frame_period(reader: &IMFSourceReader) -> Option<jstream_platform::media::Tim
     rate.ok().and_then(convert::frame_period)
 }
 
-/// Whether the file has an audio stream (not selected: audio isn't decoded yet).
-fn has_audio(reader: &IMFSourceReader) -> bool {
+/// Selects the first audio stream too, decoded to interleaved `f32`, and returns its
+/// format. `None`, with the stream left unselected, for a file with no audio stream or
+/// one the OS can't decode to a layout the engine mixes: the video still plays.
+fn select_audio(reader: &IMFSourceReader) -> Result<Option<AudioFormat>, PlatformError> {
     // SAFETY: plain COM call on a live reader.
-    unsafe { reader.GetNativeMediaType(AUDIO, 0) }.is_ok()
+    match unsafe { reader.SetStreamSelection(AUDIO, true) } {
+        Err(e) if e.code() == MF_E_INVALIDSTREAMNUMBER => return Ok(None),
+        result => result.os("IMFSourceReader::SetStreamSelection")?,
+    }
+    // As the decoder gives it, then mixed down to stereo when that has no layout here.
+    for channels in [None, Some(2)] {
+        if set_float(reader, channels).is_ok()
+            && let Some(format) = audio_format(reader)?
+        {
+            return Ok(Some(format));
+        }
+    }
+    // SAFETY: as above.
+    unsafe { reader.SetStreamSelection(AUDIO, false) }.os("IMFSourceReader::SetStreamSelection")?;
+    Ok(None)
+}
+
+/// Asks the reader for float PCM on the audio stream, with `channels` when set.
+fn set_float(reader: &IMFSourceReader, channels: Option<u32>) -> windows::core::Result<()> {
+    // SAFETY: plain calls on live objects.
+    unsafe {
+        let wanted: IMFMediaType = MFCreateMediaType()?;
+        wanted.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
+        wanted.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_Float)?;
+        if let Some(channels) = channels {
+            wanted.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, channels)?;
+        }
+        reader.SetCurrentMediaType(AUDIO, None, &wanted)
+    }
+}
+
+/// The audio format the reader delivers now, or `None` when its channel count has no
+/// layout here.
+fn audio_format(reader: &IMFSourceReader) -> Result<Option<AudioFormat>, PlatformError> {
+    // SAFETY: plain COM calls on a live reader and the type it returns.
+    let (rate, channels) = unsafe {
+        let t = reader
+            .GetCurrentMediaType(AUDIO)
+            .os("IMFSourceReader::GetCurrentMediaType")?;
+        (
+            t.GetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND)
+                .os("IMFMediaType::GetUINT32")?,
+            t.GetUINT32(&MF_MT_AUDIO_NUM_CHANNELS)
+                .os("IMFMediaType::GetUINT32")?,
+        )
+    };
+    let layout = match channels {
+        1 => ChannelLayout::Mono,
+        2 => ChannelLayout::Stereo,
+        6 => ChannelLayout::Surround51,
+        _ => return Ok(None),
+    };
+    Ok(Some(AudioFormat::new(
+        rate,
+        layout,
+        SampleFormat::F32Interleaved,
+    )?))
 }
 
 /// How long the file plays, when the container says.
@@ -339,6 +406,51 @@ impl MediaDecoder for MfMediaDecoder {
         }
     }
 
+    fn next_audio(&mut self) -> Result<Option<AudioBuffer>, PlatformError> {
+        let Some(audio) = self.info.audio else {
+            return Ok(None);
+        };
+        loop {
+            let mut flags = 0u32;
+            let mut timestamp = 0i64;
+            let mut sample: Option<IMFSample> = None;
+            // SAFETY: valid out-pointers for the duration of the call.
+            unsafe {
+                self.reader.ReadSample(
+                    AUDIO,
+                    0,
+                    None,
+                    Some(&mut flags),
+                    Some(&mut timestamp),
+                    Some(&mut sample),
+                )
+            }
+            .os("IMFSourceReader::ReadSample")?;
+            if flags & MF_SOURCE_READERF_ERROR.0.cast_unsigned() != 0 {
+                return Err(PlatformError::Os {
+                    call: "IMFSourceReader::ReadSample",
+                    code: None,
+                    message: "the audio stream failed".into(),
+                });
+            }
+            if flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED.0.cast_unsigned() != 0
+                && audio_format(&self.reader)? != Some(audio.format)
+            {
+                // The engine's mixer input was made for the first format.
+                return Err(PlatformError::Unsupported {
+                    what: "an audio format change partway through".into(),
+                });
+            }
+            if let Some(sample) = sample {
+                return samples(&sample, audio.format, timestamp).map(Some);
+            }
+            if flags & MF_SOURCE_READERF_ENDOFSTREAM.0.cast_unsigned() != 0 {
+                return Ok(None);
+            }
+            // No sample and no end: a gap in the stream. Read on.
+        }
+    }
+
     fn seek(&mut self, to: MediaTime) -> Result<(), PlatformError> {
         let hns = convert::to_hns(to)
             .ok_or_else(|| PlatformError::Unsupported {
@@ -383,6 +495,47 @@ impl MfMediaDecoder {
         let row = shape.size.width() as usize * 4;
         Ok(VideoFrame::new(info, vec![Plane::new(pixels, row)])?)
     }
+}
+
+/// A decoded float PCM sample as a block of `format`, starting at `timestamp` (100 ns
+/// units).
+fn samples(
+    sample: &IMFSample,
+    format: AudioFormat,
+    timestamp: i64,
+) -> Result<AudioBuffer, PlatformError> {
+    // SAFETY: plain COM call on a live sample.
+    let buffer =
+        unsafe { sample.ConvertToContiguousBuffer() }.os("IMFSample::ConvertToContiguousBuffer")?;
+    /// A locked buffer, unlocked on drop.
+    struct Locked(IMFMediaBuffer);
+    impl Drop for Locked {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful Lock below, once.
+            let _ = unsafe { self.0.Unlock() };
+        }
+    }
+    let mut ptr = std::ptr::null_mut();
+    let mut len = 0u32;
+    // SAFETY: valid out-pointers.
+    unsafe { buffer.Lock(&mut ptr, None, Some(&mut len)) }.os("IMFMediaBuffer::Lock")?;
+    let locked = Locked(buffer);
+    let bytes: &[u8] = if ptr.is_null() {
+        &[]
+    } else {
+        // SAFETY: the locked pointer is valid for `len` bytes until Unlock, which runs
+        // when `locked` drops, after the last use of `bytes`.
+        unsafe { std::slice::from_raw_parts(ptr, len as usize) }
+    };
+    // Whole frames only: a decoder never splits one, but a short buffer can't be trusted.
+    let frame = format.channels() * 4;
+    let whole = bytes.len() / frame * frame;
+    let pcm: Vec<f32> = bytes[..whole]
+        .chunks_exact(4)
+        .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .collect();
+    drop(locked);
+    Ok(AudioBuffer::new(format, convert::from_hns(timestamp), pcm)?)
 }
 
 /// Calls `f` with a buffer's picture, locked for the duration of the call: its bytes
