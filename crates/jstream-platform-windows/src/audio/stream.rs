@@ -180,6 +180,31 @@ impl Source {
     }
 }
 
+/// The format [`open_input`] would deliver `target` in if it were opened now. It runs
+/// on the calling thread, joining the multithreaded apartment unless the thread already
+/// has one.
+pub(crate) fn input_format(target: &AudioInputTarget) -> Result<AudioFormat, PlatformError> {
+    let source = Source::input(target)?;
+    let _com = Com::init()?;
+    match &source.endpoint {
+        Endpoint::Default(flow) => {
+            device::endpoint_format(&device::default_endpoint(&device::enumerator()?, *flow)?)
+        }
+        Endpoint::Device(id, flow) => {
+            device::endpoint_format(&device::by_id(&device::enumerator()?, id, *flow)?)
+        }
+        Endpoint::Process(pid) => {
+            if !super::process::list()?.iter().any(|p| p.pid == *pid) {
+                return Err(PlatformError::NotFound {
+                    kind: "process",
+                    id: pid.to_string(),
+                });
+            }
+            device::process_format()
+        }
+    }
+}
+
 /// Everything a stream thread sets up before its loop.
 ///
 /// Fields drop in order, so the COM objects go before the MMCSS and COM guards.

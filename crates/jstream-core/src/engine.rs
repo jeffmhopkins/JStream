@@ -7,6 +7,7 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::audio_sources::AudioSources;
 use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
@@ -208,6 +209,7 @@ impl Engine {
                 .live
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
+            state.audio.sync(state.graph.state());
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             *file = Some(opened);
@@ -787,6 +789,7 @@ impl Engine {
                     Arc::clone(&lock(&host.draw)),
                     *lock(&host.open_timeout),
                     Arc::clone(&state.render),
+                    state.audio.wanted(),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1065,6 +1068,15 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
         Arc::clone(&lock(&self.shared.state).render)
+    }
+
+    /// How the program stage fares with audio source `source_id`, for tests.
+    #[cfg(test)]
+    pub(crate) fn audio_status(
+        &self,
+        source_id: &SourceId,
+    ) -> Option<crate::audio_sources::AudioStatus> {
+        lock(&self.shared.state).audio.status(source_id)
     }
 
     /// Waits until the live sources have built everything asked of them, for tests.
@@ -1443,6 +1455,8 @@ struct State {
     /// A running `jstream-sources` source for each source whose kind produces frames
     /// (C1b). An item shows its source's stored frame if it has one, else this.
     live: LiveSources,
+    /// The audio-only sources the program stage records, one mixer input each (C5).
+    audio: AudioSources,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -1629,6 +1643,7 @@ impl State {
     ) {
         self.outputs.sync(self.graph.state());
         self.live.sync(self.graph.state());
+        self.audio.sync(self.graph.state());
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()

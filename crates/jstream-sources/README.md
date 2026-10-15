@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:03c7f285c58c489f", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#222 C1b) into png 0.18: kept main's C1b seams text; png 0.18 maps a usize-overflowing frame size to a decode error, not described here; holds" }
+verified = { hash = "b3:21ff8216b8e34881", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: Kinds adds audio_input/desktop_audio/app_audio (audio-only, create fails AudioOnly, AudioTarget::of, free-text settings so an unplugged device still loads); unit tests line adds the audio target test; rest re-read and holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -72,6 +72,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
+- `audio_input` (a `device` ID; empty follows the system's default input),
+  `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
+  found again when the application restarts) are audio-only: their descriptors have
+  audio and no video, `create` fails with `SourceError::AudioOnly`, and the engine
+  records them through the platform's audio I/O from the `AudioTarget` that
+  `AudioTarget::of(kind, settings)` reads from their settings (see `jstream-core`'s
+  *Audio sources*). Both settings are free text rather than a list of what is present,
+  so a collection naming an unplugged device still loads.
 - `display`, `media`, `text`, `webcam` and `window` are described only, with the
   settings B4 gave them: sources of them can be created and configured, and `create`
   fails with `SourceError::NotBuilt`.
@@ -99,7 +107,7 @@ undecodable file is an error from `create`, never from the edit that set it.
 `image-webp` and `gif`, each with default features off
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
-**Tests.** Unit tests cover colour parsing and animation timing. `tests/sources.rs`
+**Tests.** Unit tests cover colour parsing, animation timing and reading an audio target from settings. `tests/sources.rs`
 runs every kind through the public API on files in a temporary folder: PNG, GIF and
 lossless WebP files are encoded by the test, and `tests/data` holds a JPEG, a lossy
 WebP and an animated WebP made once with Pillow, as the test's header describes.

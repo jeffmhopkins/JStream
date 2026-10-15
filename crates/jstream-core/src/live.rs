@@ -140,14 +140,15 @@ impl LiveSources {
     /// Brings the live sources in line with the collection's: queues a build for every
     /// source that is new or whose settings changed, and drops the ones deleted.
     pub(crate) fn sync(&mut self, state: &jstream_graph::State) {
+        let registry = Arc::clone(&self.registry);
         self.entries.retain(|id, _| {
             state
                 .source(id)
-                .is_some_and(|s| builtin(s.kind()).is_some())
+                .is_some_and(|s| framed(&registry, s.kind()).is_some())
         });
         let mut jobs = Vec::new();
         for source in state.sources() {
-            let Some(kind) = builtin(source.kind()) else {
+            let Some(kind) = framed(&registry, source.kind()) else {
                 continue;
             };
             let entry = self.entries.entry(source.id().clone()).or_insert(Entry {
@@ -299,6 +300,13 @@ fn builtin(kind: &SourceKind) -> Option<&str> {
         SourceKind::Builtin { kind } => Some(kind),
         _ => None,
     }
+}
+
+/// The kind of a source that `jstream-sources` may run and that makes frames: every
+/// built-in kind but the audio-only ones, which the program stage records instead
+/// (`crate::audio_sources`).
+fn framed<'a>(registry: &Registry, kind: &'a SourceKind) -> Option<&'a str> {
+    builtin(kind).filter(|kind| registry.descriptor(kind).is_none_or(|d| d.video))
 }
 
 /// `now - start` in milliseconds, the time base sources count in; zero before the start.
