@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:3114ad1e18d827f8", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 N2: register.rs log_status doc now says warn for Moved, info for Missing; purpose bullets unchanged and hold" }
+verified = { hash = "b3:97e53d36e49b11bb", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 --ui-dir: re-read; not-yet list drops serving the web UI; startup and serving bullets hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -57,9 +57,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   headers to check that the backends' Media Foundation DLLs are delay-loaded and none
   is a load-time import).
 
-Not here yet: serving the web UI (it waits on `jstream-server`,
-[jstream-server › Design](../../crates/jstream-server/README.md#design)),
-YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
+Not here yet: YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
@@ -71,7 +69,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:71f39c73730f3eae", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 B2: exit-code 0 row now includes a successful --register-vcam; N1: Virtual camera bullet says an already-current registration keeps the file's ACL as it is" }
+verified = { hash = "b3:08383bca8d7cfb6c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 --ui-dir: re-read against args.rs and main.rs: new option row, ui: banner line before listening on, Web UI bullet, exit 1 for a non-directory" }
 -->
 
 ```sh
@@ -87,6 +85,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--token-file <path>` | The control token file. Default: the `JSTREAM_TOKEN_FILE` environment variable, which `jstream-cli` reads too. One of them is required. |
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
 | `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding the empty collection, if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
+| `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1. Default: no UI. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
@@ -104,9 +103,15 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 - **Output.** On stdout: `token file: <path> (created, new token)` or
   `… (existing token)`, then `mcp endpoint: http://127.0.0.1:<port>/mcp` (point an MCP
   client there, with the token as `Authorization: Bearer <token>`), then
+  `ui: http://127.0.0.1:<port>/` with `--ui-dir`, then
   `listening on ws://127.0.0.1:<port>/api/v1/ws` once it
   serves (a script waits for this line), and `stopped` after a graceful stop. Errors go
   to stderr as `error: <message>`.
+- **Web UI.** With `--ui-dir`, open the `ui:` address in a browser on the same
+  machine. It asks for a user name and password: enter anything as the user name and
+  the token file's contents as the password. The browser keeps them for the session
+  and sends them on the UI's WebSocket connection too
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)).
 - **Logs.** The libraries' log lines go to stderr, never stdout, and to log files:
   connections accepted and refused (with the reason, never the token), handshakes,
   output actions, and how connections end. `--log-level`, else `RUST_LOG`, filters
@@ -175,7 +180,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -184,7 +189,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:873b0656a5ac7112", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: stale only through server design; re-read: daemon does not set ui_dir yet, MCP and listening bullets hold" }
+verified = { hash = "b3:9b14be0e5e257921", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 --ui-dir: re-read; Listening bullet says the UI directory is the third ServerConfig change; bind passes ui_dir" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -255,7 +260,7 @@ verified = { hash = "b3:873b0656a5ac7112", by = "agent:claude@session_01WbL3WRbc
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is
   no option to turn it off: it is behind the same token as the WebSocket API, which
   already gives full control ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)).
-- **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port and MCP changed):
+- **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port, MCP and the UI directory changed):
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
   option to listen on other addresses until remote browsers need it (with TLS and token

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:fd2f10fecf76c5ac", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6): daemon row is main's (loads and saves --collection) plus registering the virtual camera (--register-vcam); diagram unchanged" }
+verified = { hash = "b3:ef0d81bd5f21f057", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 --ui-dir: re-read; daemon row's first cut now serves the UI's built files (--ui-dir); diagram unchanged" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:fd2f10fecf76c5ac", by = "agent:claude@session_01Lx8gSdsa
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -519,7 +519,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:160cce3c32ad09ff", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; delete.plan and blockers at 0.15 beside main's 0.14 text; #203 changes no wire shape" }
+verified = { hash = "b3:229fe196cfb1f6b9", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; transport bullet now says the server serves the UI files behind the same checks with Basic credentials; rest unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

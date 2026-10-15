@@ -17,7 +17,7 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
+verified = { hash = "b3:2bd24eb35d4b24f3", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 --ui-dir: daemon Usage gained --ui-dir and the ui: line; prerequisites unaffected; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:0c5afc650f4200a0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: stale only through server design; the runbook uses the CLI with Bearer tokens, unchanged; holds" }
+verified = { hash = "b3:0729ee7423a67906", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 --ui-dir: steps start the daemon without --ui-dir and use the CLI; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:398610ab5da52a07", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; script steps and exit codes unaffected; holds" }
+verified = { hash = "b3:4dedde06ed7f18ac", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 --ui-dir: smoke.ps1 matches mcp endpoint and listening on lines by regex; the ui: line only appears with --ui-dir, which it doesn't pass; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

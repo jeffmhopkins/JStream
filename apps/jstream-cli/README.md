@@ -223,7 +223,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:96f8118049fee449", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; exit-code table still maps invalid_argument to 17; blockers ride in its detail" }
+verified = { hash = "b3:317dd0807ba98ae4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: stale only through control design's browser-token wording; the CLI sends Bearer from the token file, unchanged; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

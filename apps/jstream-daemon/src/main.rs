@@ -234,7 +234,8 @@ fn run(options: Options) -> Result<(), Failure> {
     runtime.block_on(async {
         let stop = serve::shutdown_signal().context("could not install the Ctrl-C handler")?;
         let engine = serve::engine(&options, Arc::new(audit))?;
-        let server = serve::bind(engine, options.port, token)
+        let ui_dir = options.ui_dir.as_deref().map(Path::new);
+        let server = serve::bind(engine, options.port, token, ui_dir)
             .await
             .map_err(anyhow::Error::from)?;
         let shown = path.display();
@@ -248,8 +249,12 @@ fn run(options: Options) -> Result<(), Failure> {
             .mcp_url()
             .map(|url| format!("mcp endpoint: {url}\n"))
             .unwrap_or_default();
+        let ui_line = server
+            .ui_url()
+            .map(|url| format!("ui: {url}\n"))
+            .unwrap_or_default();
         let _ = print(&format!(
-            "{token_line}\n{mcp_line}listening on {}\n",
+            "{token_line}\n{mcp_line}{ui_line}listening on {}\n",
             server.ws_url()
         ));
         server
