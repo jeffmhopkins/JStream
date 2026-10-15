@@ -9,9 +9,9 @@ use crate::{
     Action, Batch, Call, CallResult, ClientId, ClientMessage, Command, CommandClass, Crop,
     DropCounts, Edit, EntityKind, ErrorResponse, Event, EventMessage, Finite32, Hello,
     IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
-    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, Request, RequestId, Response, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, ServerMessage, Settings, SourceId,
-    SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId,
+    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, ServerMessage,
+    Settings, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
@@ -138,6 +138,13 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::OutputDelete {
             output_id: OutputId::new("out_yt"),
+        },
+        Edit::OutputCreate {
+            output_id: OutputId::new("out_rec"),
+            kind: OutputKind::Record {
+                path: "/home/me/Videos/show.mp4".into(),
+                container: RecordContainer::Mp4,
+            },
         },
     ]
 }

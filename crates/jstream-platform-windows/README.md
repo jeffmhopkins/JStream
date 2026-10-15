@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:45ce41ac5a653580", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3a hardware fixes: re-read WgcCapture Times (pts may be up to 100 ms ahead, as seen on Jeff's 29 Hz display), Threads (process-lifetime MTA hold for windows-rs's cached factories), new Teardown bullet (handler state released on drop) and Tests (three captures in one process) against wgc.rs" }
+verified = { hash = "b3:18a629f95029532a", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (F2b #170, G2 #174, #187) into E3a: section text is E3a's (main changed only the verified line); stale via ARCH#threading (recording sink) and crate-map (vcam-windows logging), neither concerns the Windows backends; E3a's capture, GPU, Times, Threads, Teardown and Tests bullets re-read against wgc.rs and gpu/capture.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

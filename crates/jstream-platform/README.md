@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:bbdc1cc3214a5e9a", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3a review B1: Not yet now says Windows capture delivers GPU frames via WgcCapture::on_gpu and only consumers (encoders, vcam) are missing; rest of the list (VideoDevices impl, MJPEG codec, adapter selection) unchanged against main" }
+verified = { hash = "b3:910dfda0dfda06b9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (F2b #170, G2 #174) into E3a: E3a's Not yet (Windows capture delivers GPU frames; consumers missing) kept; main's changes are ARCH#threading's recording sink and the crate-map vcam row, which change no platform trait" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -127,7 +127,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:f5ddba403c99beac", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3a review B1: intro now says Windows capture delivers frames in a ring of shared BGRA textures (Frame lifetime bullet matches capture/ring.rs: free when unheld and fence passed, drop and count when full); only the encoders' GPU input comes next; types and render sentence unchanged" }
+verified = { hash = "b3:a4c909bef3a9b168", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (G2 #174) into E3a: E3a's intro (Windows capture delivers frames in a shared BGRA ring; encoders' GPU input next) kept; stale via ARCH#crate-map's vcam-windows logging clause only, which leaves the GpuInterop/GpuFrame design unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
