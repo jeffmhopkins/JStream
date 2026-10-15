@@ -169,6 +169,8 @@ pub enum EntityKind {
     Folder,
     /// A label.
     Label,
+    /// An audio bus.
+    Bus,
 }
 
 impl fmt::Display for EntityKind {
@@ -181,6 +183,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Encoder => "encoder",
             EntityKind::Folder => "folder",
             EntityKind::Label => "label",
+            EntityKind::Bus => "bus",
         })
     }
 }

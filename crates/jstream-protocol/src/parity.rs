@@ -17,24 +17,36 @@ use crate::{
     RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId, SourceInfo,
     SourceKind, Vec2, VideoCodec, VideoEncoding,
 };
+use crate::{AudioFollow, BusId, BusInfo, SendInfo, SourceAudio};
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
 /// applied to it: the batch is applied as one batch, so exactly one revision later.
 pub const COLLECTION_REV: Rev = Rev(1);
 
 /// The kinds an implementation must describe for [`collection`] to apply: `webcam`, a
-/// source kind without parameters, so every implementation reports its settings as an
-/// empty map.
+/// video kind, and `mic`, an audio kind with no video, both without parameters, so
+/// every implementation reports their settings as an empty map.
 pub fn kinds() -> Vec<KindDescriptor> {
-    vec![KindDescriptor {
-        kind_id: "webcam".into(),
-        category: KindCategory::Source,
-        name: "Webcam".into(),
-        version: 1,
-        video: true,
-        audio: false,
-        params: vec![],
-    }]
+    vec![
+        KindDescriptor {
+            kind_id: "mic".into(),
+            category: KindCategory::Source,
+            name: "Microphone".into(),
+            version: 1,
+            video: false,
+            audio: true,
+            params: vec![],
+        },
+        KindDescriptor {
+            kind_id: "webcam".into(),
+            category: KindCategory::Source,
+            name: "Webcam".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params: vec![],
+        },
+    ]
 }
 
 /// The batch that builds the fixture collection from an empty one: a 1280×720 canvas,
@@ -43,8 +55,11 @@ pub fn kinds() -> Vec<KindDescriptor> {
 /// in `b` with a geometry, scene `b` nested in `a` through the scene source `b_src`, the
 /// RTMP outputs `yt` and `tw` (`tw`'s target changed after it was created), the
 /// virtual camera `vcam`, the
-/// recording output `rec`, and the encoder profiles `hq` (updated after it was created,
-/// used by `rec`) and `low` (used by `yt`, `tw` keeping the engine's default). Then the
+/// recording output `rec`, the encoder profiles `hq` (updated after it was created,
+/// used by `rec`) and `low` (used by `yt`, `tw` keeping the engine's default), and the
+/// audio: the `mic` source and its copy `mic_copy`, the bus `vod` beside the master
+/// (`drums` was created with a send and deleted again), sends and faders changed after
+/// they were made, and `b_src`'s audio turned off. Then the
 /// references and clones of ADR-0023: `cam` is duplicated as `cam_copy` and `i1` is
 /// switched to place the copy, keeping its ID and position; `aux` is created with a
 /// `duplicated_from` naming a source that doesn't exist, which reads as absent.
@@ -184,6 +199,70 @@ pub fn collection() -> Batch {
                 duplicated_from: Some(SourceId::new("gone")),
                 ..aux()
             }),
+            source(mic()),
+            Edit::BusCreate {
+                bus_id: BusId::new("vod"),
+                name: "VOD".into(),
+            },
+            Edit::BusCreate {
+                bus_id: BusId::new("drums"),
+                name: "Drums".into(),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("mic"),
+                bus_id: BusId::new("drums"),
+                gain_db: finite(-12.0),
+            },
+            Edit::BusDelete {
+                bus_id: BusId::new("drums"),
+            },
+            Edit::BusRename {
+                bus_id: BusId::new("vod"),
+                name: "VOD track".into(),
+            },
+            Edit::BusSetFader {
+                bus_id: BusId::new("vod"),
+                gain_db: Some(finite(-6.0)),
+                muted: Some(true),
+            },
+            Edit::BusSetFader {
+                bus_id: BusId::master(),
+                gain_db: Some(finite(-1.0)),
+                muted: None,
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("mic"),
+                bus_id: BusId::new("vod"),
+                gain_db: finite(-3.0),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("mic"),
+                bus_id: BusId::master(),
+                gain_db: finite(-1.5),
+            },
+            Edit::SourceSetAudio {
+                source_id: SourceId::new("mic"),
+                enabled: None,
+                follow: Some(AudioFollow::WhenShown),
+                gain_db: Some(finite(-2.0)),
+                muted: Some(true),
+            },
+            Edit::SourceDuplicate {
+                source_id: SourceId::new("mic"),
+                new_source_id: SourceId::new("mic_copy"),
+                name: "Microphone copy".into(),
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("mic_copy"),
+                bus_id: BusId::master(),
+            },
+            Edit::SourceSetAudio {
+                source_id: SourceId::new("b_src"),
+                enabled: Some(false),
+                follow: None,
+                gain_db: None,
+                muted: None,
+            },
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
@@ -285,6 +364,8 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 encoders: encoders(),
                 folders: Vec::new(),
                 labels: Vec::new(),
+                buses: buses(),
+                sends: sends(),
             }),
         ),
         // Outputs by ID, whatever order they were created in.
@@ -301,6 +382,15 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
             Ok(QueryResult::EncoderList {
                 rev: COLLECTION_REV,
                 encoders: encoders(),
+            }),
+        ),
+        // Buses by ID, the master among them; sends by bus, then by source.
+        (
+            Query::BusList,
+            Ok(QueryResult::BusList {
+                rev: COLLECTION_REV,
+                buses: buses(),
+                sends: sends(),
             }),
         ),
     ]
@@ -773,6 +863,193 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 id: "ghost".into(),
             },
         ),
+        (
+            Batch::single(Edit::BusCreate {
+                bus_id: BusId::master(),
+                name: "Again".into(),
+            }),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Bus,
+                id: "master".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::BusCreate {
+                bus_id: BusId::new(""),
+                name: "Empty".into(),
+            }),
+            invalid("edits.0.bus_id", "must not be empty"),
+        ),
+        // 14 more buses fit beside `master` and `vod`; the 15th is one too many.
+        (
+            Batch {
+                edits: (0..15)
+                    .map(|n| Edit::BusCreate {
+                        bus_id: BusId::new(format!("extra{n}")),
+                        name: format!("Extra {n}"),
+                    })
+                    .collect(),
+                expected_rev: None,
+                idempotency_key: None,
+            },
+            invalid(
+                "edits.14.bus_id",
+                "a collection holds at most 16 buses, the master included",
+            ),
+        ),
+        (
+            Batch::single(Edit::BusDelete {
+                bus_id: BusId::master(),
+            }),
+            invalid("edits.0.bus_id", "the master bus can't be deleted"),
+        ),
+        (
+            Batch::single(Edit::BusDelete {
+                bus_id: BusId::new("ghost"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Bus,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::BusSetFader {
+                bus_id: BusId::new("vod"),
+                gain_db: None,
+                muted: None,
+            }),
+            invalid("edits.0.gain_db", "send `gain_db`, `muted` or both"),
+        ),
+        (
+            Batch::single(Edit::BusSetFader {
+                bus_id: BusId::new("vod"),
+                gain_db: Some(finite(30.0)),
+                muted: None,
+            }),
+            invalid("edits.0.gain_db", "must be at most +24 dB"),
+        ),
+        (
+            Batch::single(Edit::SourceSetAudio {
+                source_id: SourceId::new("cam"),
+                enabled: Some(false),
+                follow: None,
+                gain_db: None,
+                muted: None,
+            }),
+            invalid("edits.0.source_id", "source `cam` has no audio"),
+        ),
+        (
+            Batch::single(Edit::SourceSetAudio {
+                source_id: SourceId::new("mic"),
+                enabled: None,
+                follow: None,
+                gain_db: None,
+                muted: None,
+            }),
+            invalid(
+                "edits.0.enabled",
+                "send at least one of `enabled`, `follow`, `gain_db` and `muted`",
+            ),
+        ),
+        (
+            Batch::single(Edit::SourceSetAudio {
+                source_id: SourceId::new("b_src"),
+                enabled: None,
+                follow: None,
+                gain_db: None,
+                muted: Some(true),
+            }),
+            invalid(
+                "edits.0.muted",
+                "a `scene` source has no fader or mute of its own",
+            ),
+        ),
+        (
+            Batch::single(Edit::SourceSetAudio {
+                source_id: SourceId::new("mic"),
+                enabled: None,
+                follow: None,
+                gain_db: Some(finite(-120.0)),
+                muted: None,
+            }),
+            invalid(
+                "edits.0.gain_db",
+                "must be at least -100 dB; mute for silence",
+            ),
+        ),
+        (
+            Batch::single(Edit::SendSet {
+                source_id: SourceId::new("b_src"),
+                bus_id: BusId::new("vod"),
+                gain_db: Finite32::ZERO,
+            }),
+            invalid(
+                "edits.0.source_id",
+                "a `scene` source has no sends of its own; what it shows sends",
+            ),
+        ),
+        (
+            Batch::single(Edit::SendSet {
+                source_id: SourceId::new("cam"),
+                bus_id: BusId::new("vod"),
+                gain_db: Finite32::ZERO,
+            }),
+            invalid("edits.0.source_id", "source `cam` has no audio"),
+        ),
+        (
+            Batch::single(Edit::SendSet {
+                source_id: SourceId::new("mic"),
+                bus_id: BusId::new("ghost"),
+                gain_db: Finite32::ZERO,
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Bus,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::SendRemove {
+                source_id: SourceId::new("mic_copy"),
+                bus_id: BusId::master(),
+            }),
+            invalid(
+                "edits.0.bus_id",
+                "source `mic_copy` has no send to bus `master`",
+            ),
+        ),
+    ]
+}
+
+/// The collection's buses, ordered by ID.
+fn buses() -> Vec<BusInfo> {
+    vec![
+        BusInfo {
+            bus_id: BusId::master(),
+            name: "Master".into(),
+            gain_db: finite(-1.0),
+            muted: false,
+        },
+        BusInfo {
+            bus_id: BusId::new("vod"),
+            name: "VOD track".into(),
+            gain_db: finite(-6.0),
+            muted: true,
+        },
+    ]
+}
+
+/// The collection's sends, ordered by bus, then by source: the copy keeps `mic`'s send
+/// into `vod`, and lost its master send.
+fn sends() -> Vec<SendInfo> {
+    let send = |source: &str, bus: BusId, gain_db: f32| SendInfo {
+        source_id: SourceId::new(source),
+        bus_id: bus,
+        gain_db: finite(gain_db),
+    };
+    vec![
+        send("mic", BusId::master(), -1.5),
+        send("mic", BusId::new("vod"), -3.0),
+        send("mic_copy", BusId::new("vod"), -3.0),
     ]
 }
 
@@ -887,11 +1164,22 @@ fn outputs() -> Vec<OutputInfo> {
     ]
 }
 
-/// The collection's sources, ordered by ID.
+/// The collection's sources, ordered by ID, as the edits left them.
 fn sources() -> Vec<SourceInfo> {
+    let mic_audio = SourceAudio {
+        gain_db: finite(-2.0),
+        muted: true,
+        ..SourceAudio::new(AudioFollow::WhenShown)
+    };
     vec![
         aux(),
-        nested_b(),
+        SourceInfo {
+            audio: Some(SourceAudio {
+                enabled: false,
+                ..SourceAudio::new(AudioFollow::WhenShown)
+            }),
+            ..nested_b()
+        },
         cam(),
         SourceInfo {
             source_id: SourceId::new("cam_copy"),
@@ -899,7 +1187,32 @@ fn sources() -> Vec<SourceInfo> {
             duplicated_from: Some(SourceId::new("cam")),
             ..cam()
         },
+        SourceInfo {
+            audio: Some(mic_audio),
+            ..mic()
+        },
+        SourceInfo {
+            source_id: SourceId::new("mic_copy"),
+            name: "Microphone copy".into(),
+            duplicated_from: Some(SourceId::new("mic")),
+            audio: Some(mic_audio),
+            ..mic()
+        },
     ]
+}
+
+/// An audio input as `source.create` makes it: an audio kind with no video follows
+/// `always`.
+fn mic() -> SourceInfo {
+    SourceInfo {
+        source_id: SourceId::new("mic"),
+        name: "Microphone".into(),
+        kind: SourceKind::Builtin { kind: "mic".into() },
+        settings: crate::Settings::new(),
+        duplicated_from: None,
+        audio: Some(SourceAudio::new(AudioFollow::Always)),
+        meta: Default::default(),
+    }
 }
 
 /// Created with a `duplicated_from` naming a source that doesn't exist, so it reads as
@@ -922,9 +1235,11 @@ fn cam() -> SourceInfo {
         settings: crate::Settings::new(),
         duplicated_from: None,
         meta: Default::default(),
+        audio: None,
     }
 }
 
+/// A `scene` source as `source.create` makes it: its audio follows `when_shown`.
 fn nested_b() -> SourceInfo {
     SourceInfo {
         source_id: SourceId::new("b_src"),
@@ -935,6 +1250,7 @@ fn nested_b() -> SourceInfo {
         settings: crate::Settings::new(),
         duplicated_from: None,
         meta: Default::default(),
+        audio: Some(SourceAudio::new(AudioFollow::WhenShown)),
     }
 }
 

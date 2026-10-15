@@ -1,5 +1,6 @@
 //! Queries: reads with no effect on state, and their results.
 
+use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
@@ -41,10 +42,9 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
-    /// items, every output, every encoder profile, and the folders and labels) at one
-    /// revision: what a client
-    /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
-    /// sends with `expected_rev`.
+    /// items, every output, every encoder profile, the buses and sends, and the folders
+    /// and labels) at one revision: what a client reads on connecting, after a
+    /// `state.changed` it didn't cause, or before an edit it sends with `expected_rev`.
     #[serde(rename = "state.get")]
     StateGet,
     /// The current program mix, as a PNG.
@@ -77,6 +77,9 @@ pub enum Query {
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
+    /// Lists the collection's audio buses, ordered by ID, and every send into them.
+    #[serde(rename = "bus.list")]
+    BusList,
     /// The batch that deletes a scene, source, folder or label together with everything
     /// that refers to it, which `scene.delete`, `source.delete`, `folder.delete` and
     /// `label.delete` alone refuse (their `invalid_argument` lists those `blockers`). The
@@ -138,6 +141,7 @@ impl Query {
             Query::OutputList => "output.list",
             Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
+            Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
         }
     }
@@ -222,6 +226,14 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
+        /// Every audio bus, ordered by ID, the master among them. Missing (from a
+        /// server older than 0.19) parses as empty.
+        #[serde(default)]
+        buses: Vec<BusInfo>,
+        /// Every send, ordered by bus, then by source. Missing (from a server older
+        /// than 0.19) parses as empty.
+        #[serde(default)]
+        sends: Vec<SendInfo>,
         /// Every folder of the scene list, in folder order (ADR-0024 §3). Omitted when
         /// there are none; missing (from an older server) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -281,6 +293,16 @@ pub enum QueryResult {
         /// The profiles, ordered by ID.
         encoders: Vec<EncoderProfileInfo>,
     },
+    /// The result of `bus.list`.
+    #[serde(rename = "bus.list")]
+    BusList {
+        /// The revision the list was read at.
+        rev: Rev,
+        /// The buses, ordered by ID, the master among them.
+        buses: Vec<BusInfo>,
+        /// Every send, ordered by bus, then by source.
+        sends: Vec<SendInfo>,
+    },
     /// The result of `delete.plan`.
     #[serde(rename = "delete.plan")]
     DeletePlan {
@@ -310,6 +332,7 @@ impl QueryResult {
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
+            QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
         }
     }
@@ -354,6 +377,10 @@ pub struct SourceInfo {
     /// placing this source can go back to placing the original with `item.set_source`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicated_from: Option<SourceId>,
+    /// Its audio settings, for an audio source: one whose kind produces audio, or a
+    /// `scene` source. Omitted for every other source, and by a server older than 0.19.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio: Option<SourceAudio>,
     /// Its labels and favourite flag (ADR-0024 §4), each omitted while it has its
     /// default.
     #[serde(flatten)]

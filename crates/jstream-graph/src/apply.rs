@@ -5,6 +5,7 @@
 //! inverse of a batch is the inverses of its edits in reverse order. Only when every
 //! edit succeeds does the working copy replace the state.
 
+use crate::audio;
 use crate::deps::{self, Node};
 use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
 use crate::target::{record_path_problem, rtmp_url_problem};
@@ -13,7 +14,7 @@ use jstream_protocol::{
     Batch, Blocker, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId,
     ItemTransform, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
     ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, Settings,
-    SourceId, SourceKind,
+    SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -291,6 +292,9 @@ fn apply_edit(
     running: &BTreeSet<OutputId>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     if let Some(applied) = crate::encoder::apply(state, edit, at) {
+        return applied;
+    }
+    if let Some(applied) = crate::audio::apply(state, edit, at) {
         return applied;
     }
     if let Some(applied) = crate::organise::apply(state, edit, at) {
@@ -572,6 +576,7 @@ fn apply_edit(
                     return Err(unsupported(at, "kind", "this source kind"));
                 }
             };
+            let audio = audio::default_audio(kind, kinds);
             let inverse = create_source(
                 state,
                 source_id,
@@ -579,6 +584,7 @@ fn apply_edit(
                 kind,
                 settings,
                 duplicated_from.clone(),
+                audio,
             )?;
             check_reference_cycles(state, source_id, at, "settings")?;
             Ok(inverse)
@@ -605,7 +611,9 @@ fn apply_edit(
                 &kind,
                 settings,
                 Some(source_id.clone()),
+                None,
             )?;
+            audio::copied(state, source_id, new_source_id);
             if let Some(copy) = state.sources.get_mut(new_source_id) {
                 copy.labels = labels;
                 copy.favourite = favourite;
@@ -641,6 +649,8 @@ fn apply_edit(
                 .remove(source_id)
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
             let meta = crate::organise::source_meta(&source);
+            let restore_audio =
+                audio::deleted(state, kinds, &source.id, &source.kind, source.audio);
             let mut inverse = vec![Edit::SourceCreate {
                 source_id: source.id.clone(),
                 name: source.name,
@@ -648,6 +658,7 @@ fn apply_edit(
                 settings: source.settings,
                 duplicated_from: source.duplicated_from,
             }];
+            inverse.extend(restore_audio);
             if !meta.is_default() {
                 inverse.push(Edit::SourceSetMeta {
                     source_id: source.id,
@@ -843,6 +854,7 @@ fn create_source(
     kind: &SourceKind,
     settings: Settings,
     duplicated_from: Option<SourceId>,
+    audio: Option<SourceAudio>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     if state.sources.contains_key(id) {
         return Err(already_exists(EntityKind::Source, id.as_str()));
@@ -855,10 +867,12 @@ fn create_source(
             kind: kind.clone(),
             settings,
             duplicated_from,
+            audio,
             labels: BTreeSet::new(),
             favourite: false,
         },
     );
+    audio::created(state, id);
     Ok(vec![Edit::SourceDelete {
         source_id: id.clone(),
     }])

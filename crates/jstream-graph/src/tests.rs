@@ -2,11 +2,11 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    Canvas, Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId, EntityKind, Finite32,
-    FitMode, ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId,
-    OutputInfo, OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SceneRole, Settings, Size, SourceId,
-    SourceKind, Vec2,
+    AudioFollow, BusId, Canvas, Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId,
+    EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, KindCategory,
+    KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor, ParamType,
+    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId,
+    SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -989,9 +989,9 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId, Finite32, FitMode, FolderId,
-        ItemGeometry, ItemId, ItemTransform, LabelId, OutputId, RateControl, Rev, SceneId,
-        SceneMeta, SceneRole, Settings, Size, SourceId, SourceKind, SourceMeta, Vec2,
+        AudioFollow, BusId, Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId, Finite32,
+        FitMode, FolderId, ItemGeometry, ItemId, ItemTransform, LabelId, OutputId, RateControl,
+        Rev, SceneId, SceneMeta, SceneRole, Settings, Size, SourceId, SourceKind, SourceMeta, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1029,6 +1029,7 @@ mod property {
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
+        let buses: Vec<String> = state.buses().map(|b| b.id().to_string()).collect();
         let folders: Vec<String> = state.folders().iter().map(|f| f.id().to_string()).collect();
         let labels: Vec<String> = state.labels().iter().map(|l| l.id().to_string()).collect();
         let urls = [
@@ -1044,6 +1045,18 @@ mod property {
         let output = |rng: &mut Rng| rng.pick(&outputs).unwrap_or_else(|| pool(rng, "out"));
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let encoder = |rng: &mut Rng| rng.pick(&encoders).unwrap_or_else(|| pool(rng, "enc"));
+        let bus = |rng: &mut Rng| {
+            BusId::new(match rng.below(5) {
+                0 => pool(rng, "bus"),
+                _ => rng.pick(&buses).unwrap_or_else(|| pool(rng, "bus")),
+            })
+        };
+        // Out of the fader's range one time in eight.
+        let gain = |rng: &mut Rng| {
+            Finite32::new([-120.0, -60.0, -12.0, -6.0, -1.5, 0.0, 6.0, 24.0][rng.below(8)])
+                .expect("finite")
+        };
+        let maybe = |rng: &mut Rng| rng.below(2) == 0;
         let folder = |rng: &mut Rng| rng.pick(&folders).unwrap_or_else(|| pool(rng, "f"));
         let label = |rng: &mut Rng| rng.pick(&labels).unwrap_or_else(|| pool(rng, "l"));
         // A folder one time in two, else none.
@@ -1087,7 +1100,7 @@ mod property {
                 ..ItemGeometry::covering_canvas(1, 1).expect("positive")
             }
         };
-        match rng.below(43) {
+        match rng.below(52) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1250,31 +1263,76 @@ mod property {
                 settings: Settings::new(),
                 duplicated_from: Some(SourceId::new(source(rng))),
             },
-            29 => Edit::FolderCreate {
+            29 => Edit::SourceCreate {
+                source_id: SourceId::new(pool(rng, "src")),
+                name: "tone".into(),
+                kind: SourceKind::Builtin {
+                    kind: "tone".into(),
+                },
+                settings: Settings::new(),
+                duplicated_from: None,
+            },
+            30 => Edit::SourceSetAudio {
+                source_id: SourceId::new(source(rng)),
+                enabled: maybe(rng).then(|| maybe(rng)),
+                follow: maybe(rng).then(|| {
+                    if maybe(rng) {
+                        AudioFollow::Always
+                    } else {
+                        AudioFollow::WhenShown
+                    }
+                }),
+                gain_db: maybe(rng).then(|| gain(rng)),
+                muted: maybe(rng).then(|| maybe(rng)),
+            },
+            31 => Edit::BusCreate {
+                bus_id: BusId::new(pool(rng, "bus")),
+                name: pool(rng, "name "),
+            },
+            32 => Edit::BusRename {
+                bus_id: bus(rng),
+                name: pool(rng, "name "),
+            },
+            33 => Edit::BusSetFader {
+                bus_id: bus(rng),
+                gain_db: maybe(rng).then(|| gain(rng)),
+                muted: maybe(rng).then(|| maybe(rng)),
+            },
+            34 => Edit::BusDelete { bus_id: bus(rng) },
+            35 | 36 => Edit::SendSet {
+                source_id: SourceId::new(source(rng)),
+                bus_id: bus(rng),
+                gain_db: gain(rng),
+            },
+            37 => Edit::SendRemove {
+                source_id: SourceId::new(source(rng)),
+                bus_id: bus(rng),
+            },
+            38 => Edit::FolderCreate {
                 folder_id: FolderId::new(pool(rng, "f")),
                 name: pool(rng, "folder "),
                 parent: maybe_folder(rng),
             },
-            30 => Edit::FolderRename {
+            39 => Edit::FolderRename {
                 folder_id: FolderId::new(folder(rng)),
                 name: pool(rng, "folder "),
             },
-            31 => Edit::FolderSetParent {
+            40 => Edit::FolderSetParent {
                 folder_id: FolderId::new(folder(rng)),
                 parent: maybe_folder(rng),
             },
-            32 => Edit::FolderReorder {
+            41 => Edit::FolderReorder {
                 folder_id: FolderId::new(folder(rng)),
                 index: index(rng),
             },
-            33 => Edit::FolderDelete {
+            42 => Edit::FolderDelete {
                 folder_id: FolderId::new(folder(rng)),
             },
-            34 => Edit::SceneSetFolder {
+            43 => Edit::SceneSetFolder {
                 scene_id: SceneId::new(scene(rng)),
                 folder_id: maybe_folder(rng),
             },
-            35 => Edit::SceneSetMeta {
+            44 => Edit::SceneSetMeta {
                 scene_id: SceneId::new(scene(rng)),
                 meta: SceneMeta {
                     icon: (rng.below(2) == 0).then(|| "star".to_owned()),
@@ -1283,26 +1341,26 @@ mod property {
                     show_in_multiview: rng.below(3) != 0,
                 },
             },
-            36 => Edit::LabelCreate {
+            45 => Edit::LabelCreate {
                 label_id: LabelId::new(pool(rng, "l")),
                 name: pool(rng, "label "),
                 color: color(rng).into(),
                 icon: (rng.below(2) == 0).then(|| "tag".to_owned()),
             },
-            37 => Edit::LabelUpdate {
+            46 => Edit::LabelUpdate {
                 label_id: LabelId::new(label(rng)),
                 name: pool(rng, "label "),
                 color: color(rng).into(),
                 icon: None,
             },
-            38 => Edit::LabelReorder {
+            47 => Edit::LabelReorder {
                 label_id: LabelId::new(label(rng)),
                 index: index(rng),
             },
-            39 => Edit::LabelDelete {
+            48 => Edit::LabelDelete {
                 label_id: LabelId::new(label(rng)),
             },
-            40 | 41 => Edit::SourceSetMeta {
+            49 | 50 => Edit::SourceSetMeta {
                 source_id: SourceId::new(source(rng)),
                 meta: SourceMeta {
                     labels: (0..rng.below(3))
@@ -1404,6 +1462,13 @@ mod property {
             "encoder.update",
             "encoder.delete",
             "canvas.set_size",
+            "source.set_audio",
+            "bus.create",
+            "bus.rename",
+            "bus.set_fader",
+            "bus.delete",
+            "send.set",
+            "send.remove",
             "folder.create",
             "folder.rename",
             "folder.set_parent",
@@ -2996,5 +3061,163 @@ fn reference_and_clone_convert_in_one_batch_each() {
             .item(&ItemId::new("i1"))
             .map(|(_, i)| i.source_id().as_str()),
         Some("cam_c")
+    );
+}
+
+fn tone_create(id: &str) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: format!("Tone {id}"),
+        kind: SourceKind::Builtin {
+            kind: "tone".into(),
+        },
+        settings: Settings::new(),
+        duplicated_from: None,
+    }
+}
+
+fn db(value: f32) -> Finite32 {
+    Finite32::new(value).expect("finite")
+}
+
+/// ADR-0028's defaults: an audio input follows `always` and sends to the master at
+/// 0 dB, a nested scene follows `when_shown` and sends nowhere, and a kind without
+/// audio has no audio settings.
+#[test]
+fn new_sources_get_their_kinds_audio_defaults() {
+    let mut graph = fixture();
+    apply_ok(&mut graph, vec![tone_create("t")]);
+    let state = graph.state();
+    let audio = |id: &str| {
+        state
+            .source(&SourceId::new(id))
+            .and_then(|s| s.audio().copied())
+    };
+    assert_eq!(audio("t"), Some(SourceAudio::new(AudioFollow::Always)));
+    assert_eq!(audio("sa"), Some(SourceAudio::new(AudioFollow::WhenShown)));
+    assert_eq!(audio("cam"), None);
+    let sends: Vec<_> = state
+        .sends()
+        .map(|(source, bus, gain)| (source.as_str(), bus.as_str(), gain))
+        .collect();
+    assert_eq!(sends, [("t", "master", Finite32::ZERO)]);
+}
+
+/// A copy takes the original's audio settings and sends; deleting a source takes its
+/// sends with it and its inverse puts back exactly what the delete removed.
+#[test]
+fn duplicate_copies_audio_and_delete_restores_it() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![
+            tone_create("t"),
+            Edit::BusCreate {
+                bus_id: BusId::new("vod"),
+                name: "VOD".into(),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("t"),
+                bus_id: BusId::new("vod"),
+                gain_db: db(-3.0),
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("t"),
+                bus_id: BusId::master(),
+            },
+            Edit::SourceSetAudio {
+                source_id: SourceId::new("t"),
+                enabled: Some(false),
+                follow: None,
+                gain_db: Some(db(-6.0)),
+                muted: None,
+            },
+            Edit::SourceDuplicate {
+                source_id: SourceId::new("t"),
+                new_source_id: SourceId::new("t2"),
+                name: "Copy".into(),
+            },
+        ],
+    );
+    let state = graph.state();
+    let (t, t2) = (SourceId::new("t"), SourceId::new("t2"));
+    assert_eq!(
+        state.source(&t2).and_then(|s| s.audio().copied()),
+        state.source(&t).and_then(|s| s.audio().copied())
+    );
+    assert_eq!(state.send(&t2, &BusId::new("vod")), Some(db(-3.0)));
+    assert_eq!(state.send(&t2, &BusId::master()), None);
+
+    let applied = apply_ok(&mut graph, vec![Edit::SourceDelete { source_id: t2 }]);
+    assert_eq!(
+        applied.inverse.edits[1..],
+        [
+            Edit::SendRemove {
+                source_id: SourceId::new("t2"),
+                bus_id: BusId::master(),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("t2"),
+                bus_id: BusId::new("vod"),
+                gain_db: db(-3.0),
+            },
+            Edit::SourceSetAudio {
+                source_id: SourceId::new("t2"),
+                enabled: Some(false),
+                follow: None,
+                gain_db: Some(db(-6.0)),
+                muted: None,
+            },
+        ]
+    );
+}
+
+/// Deleting a bus deletes the sends into it, and its inverse restores the bus, its
+/// fader and the sends.
+#[test]
+fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
+    let mut graph = fixture();
+    let vod = BusId::new("vod");
+    apply_ok(
+        &mut graph,
+        vec![
+            tone_create("t"),
+            Edit::BusCreate {
+                bus_id: vod.clone(),
+                name: "VOD".into(),
+            },
+            Edit::BusSetFader {
+                bus_id: vod.clone(),
+                gain_db: None,
+                muted: Some(true),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("t"),
+                bus_id: vod.clone(),
+                gain_db: db(-3.0),
+            },
+        ],
+    );
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::BusDelete {
+            bus_id: vod.clone(),
+        }],
+    );
+    assert_eq!(graph.state().bus(&vod), None);
+    assert_eq!(graph.state().send(&SourceId::new("t"), &vod), None);
+    assert_eq!(applied.inverse.edits.len(), 3);
+    let error = apply_err(
+        &mut graph,
+        vec![Edit::BusDelete {
+            bus_id: BusId::master(),
+        }],
+    );
+    assert_eq!(
+        invalid_reason(error),
+        (
+            "edits.0.bus_id".to_owned(),
+            "the master bus can't be deleted".to_owned()
+        )
     );
 }
