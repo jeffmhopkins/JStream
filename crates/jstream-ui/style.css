@@ -1,4 +1,4 @@
-/* The shell's layout. Panels bring their own styles. */
+/* The shell's layout, then each view's classes (panels, canvas). */
 :root {
   color-scheme: light dark;
   --bg: #f6f6f7;

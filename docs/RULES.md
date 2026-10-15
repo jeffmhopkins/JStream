@@ -426,7 +426,7 @@ tags (`@v4`) and branches are not allowed. Dependabot keeps the pins current
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/**"]
+applies_to = ["crates/**", "apps/**"]
 -->
 Every bug fix includes a test that fails without the fix.
 
@@ -454,7 +454,7 @@ The PR shows before and after.
 <!-- @rule
 status = "active"
 enforced_by = ["ci:test"]
-applies_to = ["crates/**", "tests/**"]
+applies_to = ["crates/**", "apps/**", "tests/**"]
 -->
 Tests need no network, real devices or physical GPU, unless they are platform tests
 behind `hw-tests`.
@@ -474,7 +474,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d576006e7238ccc1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through cascade; R-API-001 untouched, subprotocol is transport only; holds" }
+verified = { hash = "b3:c648e1b3e74a9eb0", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
 -->
 
 <a id="R-API-001"></a>
@@ -545,7 +545,10 @@ applies_to = ["crates/jstream-server/**", "crates/jstream-mcp/**"]
 -->
 Every HTTP, WebSocket and MCP listener requires the control token or a paired device's
 token (even on localhost), except `POST /api/v1/pair` while a pairing code is open
-([ADR-0044](adr/0044-pairing-remote-browsers.md)), and validates the `Host` header, and
+([ADR-0044](adr/0044-pairing-remote-browsers.md)) and `GET /pair` on a TLS listener
+([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
+device token, never the control token, as the `__Host-jstream_device` cookie. Every
+listener validates the `Host` header, and
 the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
