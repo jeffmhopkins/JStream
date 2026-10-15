@@ -783,6 +783,13 @@ title = "Encode from GPU frames"
 status = "planned"
 
 [[item]]
+id = "E3d"
+milestone = "M3"
+title = "Composite to NV12 on the GPU"
+status = "review"
+prs = [280]
+
+[[item]]
 id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
