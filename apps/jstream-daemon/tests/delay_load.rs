@@ -19,7 +19,12 @@ fn mfplat_is_delay_loaded() {
     let pe = Pe::parse(&image);
     let imports = pe.dll_names(IMPORT, 20, 12);
     let delayed = pe.dll_names(DELAY_IMPORT, 32, 4);
-    for dll in ["mfplat.dll", "mf.dll", "mfreadwrite.dll"] {
+    for dll in [
+        "mfplat.dll",
+        "mf.dll",
+        "mfreadwrite.dll",
+        "mfsensorgroup.dll",
+    ] {
         assert!(
             delayed.iter().any(|name| name == dll),
             "{dll} is not delay-loaded; delay-loaded: {delayed:?}"
