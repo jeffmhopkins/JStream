@@ -147,7 +147,7 @@ the batch **touched**.
   optional `parent` that must exist, and `folder.set_parent` refuses a parent that would
   put the folder inside itself (`invalid_argument`, field `parent`, naming the chain).
   `scene.set_folder` names an existing folder or none. `label.create` and
-  `label.update` check the colour (`#rrggbb`) and icon (1 to 64 bytes, no whitespace)
+  `label.update` check the colour (`#rrggbb`) and icon (1 to 64 bytes; ADR-0024 §4)
   with the protocol's `check_color` and `check_icon`, and `scene.set_meta` checks the
   same through `SceneMeta::problem`. `source.set_meta` replaces a source's labels (each
   must exist and appear once; stored ordered by ID) and favourite flag, and

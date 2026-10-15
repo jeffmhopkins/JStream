@@ -690,7 +690,7 @@ mod tests {
             label_id: LabelId::new("red"),
             name: "Red".into(),
             color: "#ff0000".into(),
-            icon: Some("two words".into()),
+            icon: Some("x".repeat(65)),
         };
         assert_eq!(field(apply_err(&mut graph, vec![bad_icon])), "edits.0.icon");
         let bad_meta = Edit::SceneSetMeta {

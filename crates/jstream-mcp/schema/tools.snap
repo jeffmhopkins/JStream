@@ -970,7 +970,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's organisation metadata: its icon, colour, favourite flag and\nwhether a multiview shows it. Every field left out takes its default. An icon\nthat is empty, longer than 64 bytes or holds whitespace, or a colour that isn't\n`#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous\nmetadata.",
+                "description": "Replaces a scene's organisation metadata: its icon, colour, favourite flag and\nwhether a multiview shows it. Every field left out takes its default. An icon\nthat is empty or longer than 64 bytes, or a colour that isn't\n`#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous\nmetadata.",
                 "properties": {
                   "color": {
                     "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
@@ -3784,7 +3784,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's organisation metadata: its icon, colour, favourite flag and\nwhether a multiview shows it. Every field left out takes its default. An icon\nthat is empty, longer than 64 bytes or holds whitespace, or a colour that isn't\n`#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous\nmetadata.",
+                "description": "Replaces a scene's organisation metadata: its icon, colour, favourite flag and\nwhether a multiview shows it. Every field left out takes its default. An icon\nthat is empty or longer than 64 bytes, or a colour that isn't\n`#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous\nmetadata.",
                 "properties": {
                   "color": {
                     "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",

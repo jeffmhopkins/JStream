@@ -377,7 +377,7 @@ the source, so every item placing it shares them, and `source.duplicate` copies 
 A scene's `SceneMeta` (`scene.set_meta`) is its `icon`, `color`, `favourite` and
 `show_in_multiview` (default `true`). `scene.set_meta` and `source.set_meta` replace
 the whole metadata, so a field left out takes its default. Colours are sRGB `#rrggbb`;
-an icon is an opaque name from the UI's icon set, 1 to 64 bytes with no whitespace. A
+an icon is an opaque name from the UI's icon set, 1 to 64 bytes, checked only for its length. A
 folder that holds a scene or folder, and a label a source carries, can't be deleted:
 the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`), and
 `delete.plan` with a `folder` or `label` target returns the batch that moves what the

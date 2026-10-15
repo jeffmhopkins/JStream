@@ -122,14 +122,11 @@ impl SourceMeta {
     }
 }
 
-/// Checks an `icon` name: not empty, at most [`MAX_ICON_LEN`] bytes, and no whitespace
-/// or control characters.
+/// Checks an `icon` name's length: 1 to [`MAX_ICON_LEN`] bytes. The name is opaque to
+/// the engine (ADR-0024 §4), so nothing else about it is checked.
 pub fn check_icon(icon: &str) -> Result<(), String> {
     if icon.is_empty() || icon.len() > MAX_ICON_LEN {
         return Err(format!("must be 1 to {MAX_ICON_LEN} bytes"));
-    }
-    if icon.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err("must not hold whitespace or control characters".into());
     }
     Ok(())
 }
@@ -187,8 +184,8 @@ mod tests {
 
     #[test]
     fn icons_and_colours_are_checked() {
-        assert!(check_icon("mic").is_ok());
-        for bad in ["", "two words", &"x".repeat(65)] {
+        assert!(check_icon("mic").is_ok() && check_icon("two words").is_ok());
+        for bad in ["", &"x".repeat(65)] {
             assert!(check_icon(bad).is_err(), "{bad:?}");
         }
         assert!(check_color("#1E1e2e").is_ok());

@@ -180,7 +180,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (reserved, empty in v1), transition }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
-├── labels         Label { id, name, icon, color }   ordered
+├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …

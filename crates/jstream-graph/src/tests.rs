@@ -1048,7 +1048,7 @@ mod property {
         let label = |rng: &mut Rng| rng.pick(&labels).unwrap_or_else(|| pool(rng, "l"));
         // A folder one time in two, else none.
         let maybe_folder = |rng: &mut Rng| (rng.below(2) == 0).then(|| FolderId::new(folder(rng)));
-        // Valid one time in six only when the colour isn't.
+        // Invalid one time in four.
         let color = |rng: &mut Rng| ["#ff8800", "#1E1E2E", "#00aa00", "red"][rng.below(4)];
         // Out of range one time in eight.
         let profile = |rng: &mut Rng| {

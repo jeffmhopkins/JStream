@@ -439,7 +439,7 @@ pub enum Edit {
     },
     /// Replaces a scene's organisation metadata: its icon, colour, favourite flag and
     /// whether a multiview shows it. Every field left out takes its default. An icon
-    /// that is empty, longer than 64 bytes or holds whitespace, or a colour that isn't
+    /// that is empty or longer than 64 bytes, or a colour that isn't
     /// `#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous
     /// metadata.
     #[serde(rename = "scene.set_meta")]
