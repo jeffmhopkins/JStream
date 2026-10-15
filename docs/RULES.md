@@ -602,6 +602,7 @@ applies_to = [".github/workflows/**"]
 -->
 This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`.
 `enforced_by = ["review"]` means the rule is judged by the reviewer agent ([REVIEW.md](../REVIEW.md)).
+On a draft PR every `ci` job is skipped; they run when the PR is marked ready for review.
 
 | Check | Runs | Required | From |
 |---|---|---|---|
