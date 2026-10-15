@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:f9953dd637f128a3", by = "agent:claude", note = "#199 round 2: test-only edit to concurrent_reads_never_return_torn_frames (count frames only after the writer advances, drop guard stops the writer); re-read, the Tests list's 'two-thread test that no torn frame is ever accepted' still holds; ring code unchanged" }
+verified = { hash = "b3:ae235e7d84dce9fb", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4 adds tests/no_alloc.rs (covered by tests/**): re-read the section; added a line on it under Tests; API, errors, time line and sim.rs description unchanged" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -101,6 +101,10 @@ be.
   restart. Each is counted as it should be, and the audio is back on the time line
   afterwards.
 
+`tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
+under `assert_no_alloc`, through the same kinds of glitches and live input changes
+([Real-time design](#realtime)).
+
 The crate is built with `opt-level = 3` in the dev profile (root `Cargo.toml`). Debug
 builds of the app need a resampler fast enough for a real-time thread, and the
 simulations need it to finish in seconds.
@@ -110,7 +114,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:3cf32ddaaf51e05c", by = "agent:claude", note = "#199 round 2: test-only edit to concurrent_reads_never_return_torn_frames (count frames only after the writer advances, drop guard stops the writer); re-read, the Tests list's 'two-thread test that no torn frame is ever accepted' still holds; ring code unchanged" }
+verified = { hash = "b3:ce7c325b8d4e8c06", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "Re-verified after the Purpose edit; no_alloc paragraph checked against tests/no_alloc.rs" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -210,10 +214,21 @@ Each `InputControl` also holds a reference to its input's ring and counters, so 
 control plane drops the last one it frees them there, also off the real-time threads. A
 full command queue refuses the add or the removal rather than blocking the mixer.
 
+**No allocation, tested** (`tests/no_alloc.rs`). The test R-RT-001 names,
+`rt::callback_does_not_allocate`, runs in its own test binary with `assert_no_alloc`'s
+allocator installed globally. After 15 s of warm-up, it runs 30 s of simulated 10 ms
+ticks. In each tick, every input's `on_packet`, `Mixer::poll` and the filter kernels and
+meters on each mixed block run inside an `assert_no_alloc` scope. Any allocation or free
+there fails the test, in debug and release builds alike. Five inputs (mono 44.1 kHz,
+stereo 48 and 96 kHz, 5.1, and 32 kHz added while running) drift and jitter. The checked phase also
+covers timestamp outliers and missing stamps, lost packets, a discontinuity, a stalled
+audio thread that catches up, a 3 s device gap that resets the mapping, silent and
+non-finite packets, a mixer stall long enough to overrun the rings and skip frames,
+and an input added and one removed while the mixer runs. The test checks that each of
+those paths ran. Control-plane calls and dropping a producer (stream teardown) run
+outside the scope. Locks, blocking and logging are still left to review.
+
 **Not yet enforced or measured:**
-- No test proves the absence of allocation. R-RT-001 names
-  `jstream_audio::rt::callback_does_not_allocate`, which needs `assert_no_alloc`, not yet
-  a dependency. Until then, review enforces it.
 - CPU cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 - Catching a panic at the thread boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) is the engine's job, where the threads are.
@@ -278,7 +293,7 @@ true-peak cases from files) are not run; they would add binary fixtures.
 <!-- @section
 covers = ["crates/jstream-audio/src/filter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:ba0f2869af941025", by = "agent:claude@session_01L5hE1i9KRciNcKrq7DGnVM", note = "New section, checked against src/filter/: trait methods, each kernel's ranges, defaults, detector, ramps, latency (limiter look-ahead, delay 0 as a deliberate shift per ADR-0028 D15), limiter algorithm and clamp, tests listed; ADR-0028 decision (keys, latency reporting, delay ring allocated at max on construction, allocation-free) matches" }
+verified = { hash = "b3:cb02503c16657318", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4: dropped the no-allocation test from Not yet and noted tests/no_alloc.rs runs all five kernels (compressor keyed) on the bus under the check; kernel table and tests list unchanged" }
 -->
 
 `src/filter/` holds the audio filter kernels
@@ -315,11 +330,12 @@ static curve, soft knee, attack and release time constants, and ducking from a k
 the limiter's latency, ceiling under bursts, transients and +12 dB overload at several
 look-aheads, its ramp ahead of a peak and its recovery; the delay's shift, maximum and
 changes; block-size independence and reset where state is kept; rejected settings.
+`tests/no_alloc.rs` runs all five, the compressor keyed, on the mixed bus under the
+allocation check ([Real-time design](#realtime)).
 
 **Not yet:** running them in the mixer (filter chains on sources and buses, keys and
 latency compensation in the audio graph), their settings in kind descriptors and the
-protocol, a no-allocation test ([Real-time design](#realtime)), and a CPU measurement:
-their cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
+protocol, and a CPU measurement: their cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 
 <a id="follow-ups"></a>
 ## Not yet
@@ -351,6 +367,6 @@ their cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
   master bus and subscribed buses and sources) with their meter-stream fields and
   `audio.reset_loudness`, and monitor taps; and render-side resampling for output
   devices.
-- **A no-allocation test** with `assert_no_alloc`, and a CPU measurement on hardware.
+- **A CPU measurement** of the mixer on hardware.
 - **Feeding the fitted drift forward** into the controller, which would shorten the
   start-up transient (about 0.46 · drift / (2π · 0.02 Hz): 0.55 ms at 150 ppm).

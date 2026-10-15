@@ -19,7 +19,7 @@ pub use compositor::Compositor;
 pub use error::RenderError;
 pub use gpu::OpenOptions;
 pub use image::Image;
-pub use scene::{Color, Crop, Item, Output, Placement, Scene, Snapshot};
+pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
 
 #[cfg(test)]
 mod tests;
