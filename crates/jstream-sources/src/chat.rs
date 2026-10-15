@@ -1,0 +1,356 @@
+//! The `youtube_chat` source: the featured live chat message (ADR-0041 §2), drawn as
+//! plain text. A [`ChatFeature`] in the [`Context`] holds the message; whoever reads the
+//! chat sets it, and every `youtube_chat` source made from that context draws it.
+
+use crate::color::rgba_frame;
+use crate::describe::{asset, kind, param};
+use crate::source::{self, changed_non_live, setting};
+use crate::text::raster::{render, stack};
+use crate::text::{Align, DEFAULT_FONT, Style, bad, color, parse, pixels};
+use crate::{Context, Limits, Source, SourceError, SourceKind};
+use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
+use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings};
+use serde_json::{Value, json};
+use std::borrow::Cow;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
+
+/// The most characters of a featured message's text drawn.
+pub const MAX_CHAT_TEXT: usize = 1000;
+/// The most characters of an author's name, badge or amount drawn.
+pub const MAX_CHAT_LABEL: usize = 100;
+
+/// The largest `size`, in pixels.
+const MAX_SIZE: f64 = 256.0;
+/// The widest `max_width`, in pixels: a source's widest frame.
+const MAX_WIDTH: u32 = 16384;
+/// The widest `outline_width`, in pixels.
+const MAX_OUTLINE: u32 = 64;
+/// The largest `padding`, in pixels.
+const MAX_PADDING: u32 = 1024;
+/// How often a source looks for a newly featured message, in milliseconds.
+const CHECK_EVERY_MS: i64 = 100;
+
+/// A chat message to show on stream. Every field is untrusted text from a stranger: it
+/// is drawn as plain text, with control characters dropped, and cut to
+/// [`MAX_CHAT_TEXT`] or [`MAX_CHAT_LABEL`] characters.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FeaturedMessage {
+    /// The author's display name.
+    pub author: String,
+    /// A badge shown before the name, such as `Moderator` or `Member`.
+    pub badge: Option<String>,
+    /// The message.
+    pub text: String,
+    /// A Super Chat's amount as displayed, such as `$5.00`.
+    pub amount: Option<String>,
+}
+
+/// The featured message slot: runtime state, not part of the collection (ADR-0041 §2).
+/// Clones share the slot.
+#[derive(Clone, Debug, Default)]
+pub struct ChatFeature(Arc<Slot>);
+
+#[derive(Debug, Default)]
+struct Slot {
+    /// Bumped on every [`ChatFeature::set`], so a source can tell a change without the
+    /// lock.
+    revision: AtomicU64,
+    message: Mutex<Option<Arc<FeaturedMessage>>>,
+}
+
+impl ChatFeature {
+    /// An empty slot.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Features `message`, or clears the slot with `None`.
+    pub fn set(&self, message: Option<FeaturedMessage>) {
+        let mut slot = self
+            .0
+            .message
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        *slot = message.map(Arc::new);
+        self.0.revision.fetch_add(1, Ordering::Release);
+    }
+
+    /// The featured message, if any.
+    pub fn get(&self) -> Option<Arc<FeaturedMessage>> {
+        self.read().1
+    }
+
+    fn revision(&self) -> u64 {
+        self.0.revision.load(Ordering::Acquire)
+    }
+
+    /// The message with the revision it was read at.
+    fn read(&self) -> (u64, Option<Arc<FeaturedMessage>>) {
+        let slot = self
+            .0
+            .message
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        (self.revision(), slot.clone())
+    }
+}
+
+/// The `youtube_chat` kind.
+pub(crate) struct ChatKind(KindDescriptor);
+
+impl ChatKind {
+    pub(crate) fn new() -> Self {
+        let live = |p: ParamDescriptor| ParamDescriptor { live: true, ..p };
+        let pixels = |max: u32| ParamType::Int {
+            min: Some(0),
+            max: Some(i64::from(max)),
+            step: Some(1),
+            unit: Some("px".into()),
+        };
+        let colour = || ParamType::Color { alpha: true };
+        Self(KindDescriptor {
+            params: vec![
+                ParamDescriptor {
+                    description: Some(
+                        "A TrueType or OpenType font. None uses the bundled Roboto, which \
+                         covers Latin text only."
+                            .into(),
+                    ),
+                    ..param("font", "Font", asset(&["ttf", "otf", "ttc"]), Value::Null)
+                },
+                live(param(
+                    "size",
+                    "Size",
+                    ParamType::Float {
+                        min: Some(1.0),
+                        max: Some(MAX_SIZE),
+                        step: Some(1.0),
+                        unit: Some("px".into()),
+                    },
+                    json!(32.0),
+                )),
+                live(param(
+                    "author_color",
+                    "Author colour",
+                    colour(),
+                    json!("#ffd54fff"),
+                )),
+                live(param(
+                    "text_color",
+                    "Text colour",
+                    colour(),
+                    json!("#ffffffff"),
+                )),
+                live(param(
+                    "background",
+                    "Background",
+                    colour(),
+                    json!("#000000b3"),
+                )),
+                live(param("padding", "Padding", pixels(MAX_PADDING), json!(16))),
+                live(ParamDescriptor {
+                    description: Some("Lines wrap at this width. 0 doesn't wrap.".into()),
+                    ..param("max_width", "Maximum width", pixels(MAX_WIDTH), json!(600))
+                }),
+                live(param(
+                    "outline_width",
+                    "Outline width",
+                    pixels(MAX_OUTLINE),
+                    json!(0),
+                )),
+                live(param(
+                    "outline_color",
+                    "Outline colour",
+                    colour(),
+                    json!("#000000ff"),
+                )),
+            ],
+            ..kind("youtube_chat", "YouTube chat message", true, false)
+        })
+    }
+}
+
+impl SourceKind for ChatKind {
+    fn descriptor(&self) -> &KindDescriptor {
+        &self.0
+    }
+
+    /// Reads and checks the font file, so this blocks on I/O, then draws the featured
+    /// message.
+    fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
+        let (font, path) = match source::asset(settings, "font")? {
+            Some((root, path)) => {
+                let bytes = ctx.assets.read(root, &path, ctx.limits.max_file_bytes)?;
+                (Cow::Owned(bytes), path)
+            }
+            None => (Cow::Borrowed(DEFAULT_FONT), "(bundled font)".to_owned()),
+        };
+        parse(&font).map_err(|reason| SourceError::Decode {
+            path,
+            format: "a TrueType or OpenType font",
+            reason,
+        })?;
+        let (revision, message) = ctx.chat.read();
+        let frame = draw(&font, message.as_deref(), settings, &ctx.limits)?;
+        Ok(Box::new(ChatSource {
+            descriptor: self.0.clone(),
+            settings: settings.clone(),
+            limits: ctx.limits,
+            feature: ctx.chat.clone(),
+            font,
+            revision,
+            frame,
+        }))
+    }
+}
+
+/// A running `youtube_chat` source. It redraws when the featured message or its
+/// settings change.
+struct ChatSource {
+    descriptor: KindDescriptor,
+    settings: Settings,
+    limits: Limits,
+    feature: ChatFeature,
+    /// The font file, already checked by [`parse`].
+    font: Cow<'static, [u8]>,
+    /// The slot's revision the frame shows.
+    revision: u64,
+    frame: Arc<VideoFrame>,
+}
+
+impl Source for ChatSource {
+    /// Hands out the drawn frame, redrawing first if another message was featured
+    /// since. Only that redraw allocates.
+    fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
+        if self.feature.revision() != self.revision {
+            let (revision, message) = self.feature.read();
+            self.frame = draw(&self.font, message.as_deref(), &self.settings, &self.limits)?;
+            self.revision = revision;
+        }
+        Ok(Arc::clone(&self.frame))
+    }
+
+    /// The featured message can change at any time, so the source is looked at again
+    /// every 100 ms.
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        let ms = i64::try_from(source::millis(at)).unwrap_or(i64::MAX);
+        Some(MediaTime::new(
+            ms.saturating_add(CHECK_EVERY_MS),
+            Timebase::MILLIS,
+        ))
+    }
+
+    fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
+        if let Some(param) = changed_non_live(&self.descriptor, &self.settings, settings) {
+            return Err(SourceError::NotLive {
+                param: param.to_owned(),
+            });
+        }
+        let (revision, message) = self.feature.read();
+        self.frame = draw(&self.font, message.as_deref(), settings, &self.limits)?;
+        self.revision = revision;
+        self.settings = settings.clone();
+        Ok(())
+    }
+}
+
+/// Draws `message` as `settings` style it: a header line (badge, author, amount) in the
+/// author colour over the text in the text colour. No message draws one transparent
+/// pixel.
+fn draw(
+    font: &[u8],
+    message: Option<&FeaturedMessage>,
+    settings: &Settings,
+    limits: &Limits,
+) -> Result<Arc<VideoFrame>, SourceError> {
+    let size = setting(settings, "size")?
+        .as_f64()
+        .filter(|s| (1.0..=MAX_SIZE).contains(s))
+        .ok_or_else(|| bad("size", &format!("must be a number from 1 to {MAX_SIZE}")))?;
+    let max_width = pixels(settings, "max_width", MAX_WIDTH)?;
+    let padding = pixels(settings, "padding", MAX_PADDING)?;
+    let base = Style {
+        // From 1 to 256, which an f32 holds exactly.
+        size: size as f32,
+        color: color(settings, "text_color")?,
+        align: Align::Left,
+        wrap_width: (max_width > 0).then(|| max_width.saturating_sub(padding * 2).max(1)),
+        outline_width: pixels(settings, "outline_width", MAX_OUTLINE)?,
+        outline_color: color(settings, "outline_color")?,
+        background: [0; 4],
+        padding: 0,
+    };
+    let author_color = color(settings, "author_color")?;
+    let background = color(settings, "background")?;
+    let zero = MediaTime::zero(Timebase::MILLIS);
+    let Some(message) = message else {
+        return Ok(Arc::new(rgba_frame(
+            FrameSize::new(1, 1)?,
+            vec![0; 4],
+            zero,
+        )?));
+    };
+    let font = parse(font).map_err(|reason| SourceError::Decode {
+        path: "(font)".into(),
+        format: "a TrueType or OpenType font",
+        reason,
+    })?;
+
+    let mut header = String::new();
+    if let Some(badge) = message.badge.as_deref().filter(|b| !b.is_empty()) {
+        header.push_str(&plain(badge, MAX_CHAT_LABEL));
+        header.push_str(" · ");
+    }
+    header.push_str(&plain(&message.author, MAX_CHAT_LABEL));
+    if let Some(amount) = message.amount.as_deref().filter(|a| !a.is_empty()) {
+        header.push_str("  ");
+        header.push_str(&plain(amount, MAX_CHAT_LABEL));
+    }
+    let mut blocks = vec![fit(
+        &font,
+        &header,
+        &Style {
+            color: author_color,
+            ..base
+        },
+        limits,
+    )?];
+    let text = plain(&message.text, MAX_CHAT_TEXT);
+    if !text.trim().is_empty() {
+        blocks.push(fit(&font, &text, &base, limits)?);
+    }
+    let gap = (size / 4.0).round() as u32;
+    let (frame_size, rgba) = stack(&blocks, gap, background, padding, limits)?;
+    Ok(Arc::new(rgba_frame(frame_size, rgba, zero)?))
+}
+
+/// Draws `text` as narrow as it fits: on one line when that is no wider than the
+/// style's wrap width, wrapped at that width otherwise.
+fn fit(
+    font: &skrifa::FontRef<'_>,
+    text: &str,
+    style: &Style,
+    limits: &Limits,
+) -> Result<(FrameSize, Vec<u8>), SourceError> {
+    let Some(wrap) = style.wrap_width else {
+        return render(font, text, style, limits);
+    };
+    let unwrapped = Style {
+        wrap_width: None,
+        ..*style
+    };
+    match render(font, text, &unwrapped, limits) {
+        Ok(drawn) if drawn.0.width() <= wrap => Ok(drawn),
+        _ => render(font, text, style, limits),
+    }
+}
+
+/// `text` as one paragraph of plain text: line breaks and other control characters
+/// become spaces, cut to `max` characters.
+fn plain(text: &str, max: usize) -> String {
+    text.chars()
+        .take(max)
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
+}

@@ -58,14 +58,16 @@ pub trait SourceKind: Send + Sync {
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError>;
 }
 
-/// What sources are created with: where asset references point, and how much a
-/// decoded asset may take.
+/// What sources are created with: where asset references point, how much a decoded
+/// asset may take, and the featured chat message.
 #[derive(Clone, Debug, Default)]
 pub struct Context {
     /// The folders behind asset roots.
     pub assets: AssetRoots,
     /// Size limits for decoded assets.
     pub limits: Limits,
+    /// The featured chat message `youtube_chat` sources draw. Clones share it.
+    pub chat: crate::ChatFeature,
 }
 
 /// The folders behind the `collection` and `app` asset roots. `absolute` paths need

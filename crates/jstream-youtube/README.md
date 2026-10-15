@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:da26a4fb309283df", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: re-read; list_broadcasts_of_type and engine wiring hold" }
+verified = { hash = "b3:cd93377bf8af9f2f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4: re-read; added the chat module (chat_messages, ChatMessage/ChatEvent/Paid, ChatPoller pacing, backoff and end states) checked against chat.rs and its tests; Not yet line updated" }
 -->
 
 Layer-2 client for Google sign-in and the
@@ -82,6 +82,22 @@ Contents:
     broadcast) and the monitor stream on (`testing` needs it). `NewStream::new` asks for
     a reusable RTMP stream with variable resolution and frame rate.
   - A stream's key (`cdn.ingestionInfo.streamName`) parses straight into a `Secret`.
+- **`chat`:** reading a broadcast's live chat (ADR-0041 §2, §5).
+  `LiveClient::chat_messages(live_chat_id, page_token)` reads one page of
+  `liveChatMessages.list` (`part=id,snippet,authorDetails`, up to 2000 messages, oldest
+  first; `Scope::Readonly`, which the method accepts along with `youtube`). A
+  `ChatMessage` keeps its ID, time, author (name, channel, and whether owner,
+  moderator, member or verified), the text YouTube displays for it, and its event:
+  text, Super Chat or Super Sticker (amount as displayed, currency, micros),
+  membership, a deletion (naming the removed message), or `Other` by its `type`. Text
+  and names come from strangers: control characters are replaced and they are cut to
+  1000 and 100 characters, and nothing here interprets them. `ChatPoller` drives one
+  chat: it follows the page token, waits the `pollingIntervalMillis` the API returns
+  (never faster, and at least 1 s), backs off doubling after errors (from 60 s up to
+  30 min for quota and rate-limit errors, from 5 s up to 5 min for others), and stops
+  for good when a page reports `offlineAt` or the API answers `liveChatEnded`,
+  `liveChatNotFound` or `liveChatDisabled`. It takes the time as an argument, starts
+  no thread and never sleeps: the engine's loop calls `poll` and waits until `due`.
 - **`fake`** (feature `fake`, and in this crate's tests): `FakeTransport` replays
   queued responses and records requests. Tests run on JSON fixtures in `fixtures/`,
   shaped after the API reference's documented responses, so no test uses the network
@@ -105,5 +121,5 @@ The engine (`jstream-core`, roadmap Y3) holds one `LiveClient`, keeps its refres
 in the `OAuthTokenStore` and exposes these calls as protocol commands, and so as MCP
 tools.
 
-**Not yet:** chat (reading, sending as the channel, the featured message) and audience
-stats from ADR-0041, and quota accounting.
+**Not yet:** sending chat as the channel, the engine's chat polling and its
+`youtube.chat.feature` action, audience stats from ADR-0041, and quota accounting.

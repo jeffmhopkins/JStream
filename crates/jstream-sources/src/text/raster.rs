@@ -392,6 +392,56 @@ fn distance_1d(f: &[f32], d: &mut [f32], v: &mut [usize], z: &mut [f32]) {
     }
 }
 
+/// Stacks drawn blocks (each a size and straight RGBA8 pixels, as [`render`] returns)
+/// top to bottom, left-aligned, `gap` pixels apart, on `background` with `padding`
+/// around them.
+///
+/// # Errors
+/// [`SourceError::Setting`] naming `text` when the result would be larger than `limits`
+/// allow.
+pub(crate) fn stack(
+    blocks: &[(FrameSize, Vec<u8>)],
+    gap: u32,
+    background: [u8; 4],
+    padding: u32,
+    limits: &Limits,
+) -> Result<(FrameSize, Vec<u8>), SourceError> {
+    let inner_w = blocks.iter().map(|(s, _)| s.width()).max().unwrap_or(0);
+    let gaps =
+        gap.saturating_mul(u32::try_from(blocks.len().saturating_sub(1)).unwrap_or(u32::MAX));
+    let inner_h = blocks
+        .iter()
+        .fold(gaps, |h, (s, _)| h.saturating_add(s.height()));
+    let width = side(
+        inner_w.saturating_add(padding.saturating_mul(2)).max(1) as f32,
+        limits,
+    )?;
+    let height = side(
+        inner_h.saturating_add(padding.saturating_mul(2)).max(1) as f32,
+        limits,
+    )?;
+    if u64::from(width) * u64::from(height) * 4 > limits.max_decoded_bytes {
+        return Err(too_large(width, height));
+    }
+    let (w, h) = (width as usize, height as usize);
+    let mut px = vec![premultiplied(background, 1.0); w * h];
+    let mut y0 = padding as usize;
+    for (size, rgba) in blocks {
+        let (bw, bh) = (size.width() as usize, size.height() as usize);
+        for y in 0..bh {
+            for x in 0..bw {
+                let i = (y * bw + x) * 4;
+                let src = [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]];
+                let at = &mut px[(y0 + y) * w + padding as usize + x];
+                *at = over(premultiplied(src, 1.0), *at);
+            }
+        }
+        y0 += bh + gap as usize;
+    }
+    let rgba = px.into_iter().flat_map(straight).collect();
+    Ok((FrameSize::new(width, height)?, rgba))
+}
+
 /// A straight sRGB colour at `coverage`, premultiplied, in 0 to 1.
 fn premultiplied(rgba: [u8; 4], coverage: f32) -> [f32; 4] {
     let a = f32::from(rgba[3]) / 255.0 * coverage;

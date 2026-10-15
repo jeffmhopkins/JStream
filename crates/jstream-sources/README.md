@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:ac15a26828d08135", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Assets paragraph now states hard links inside the root are part of the trusted-root assumption (issue 220); checked against AssetRoots::read's dev/ino check in source.rs, which can't distinguish a hard link from its target" }
+verified = { hash = "b3:db6f0a92ee46ebe3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4: re-read; youtube_chat kind (ChatFeature slot in Context, header over text, fit-then-wrap, plain-text caps, 1x1 when empty, 100 ms next_change, redraw on change) checked against chat.rs, raster::stack and tests/chat.rs; frame allocation caveat added" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -29,8 +29,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   reading and decoding a file, so it never runs on a real-time thread.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
-  `Arc<VideoFrame>`. The built-in kinds make their frames when created or updated, so
-  `frame` neither blocks nor allocates, and a frame handed out stays valid after an
+  `Arc<VideoFrame>`. The built-in kinds make their frames when created or updated (and
+  `youtube_chat` when its featured message changes), so `frame` doesn't block and
+  otherwise doesn't allocate, and a frame handed out stays valid after an
   update. `next_change(at)` says when that frame is next replaced (`None`: never), so
   a renderer can skip re-uploading a still. `update(settings)` applies a change to
   `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
@@ -40,8 +41,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `jstream-sources` thread, never under its collection lock or on the render thread,
   and its program mix asks each source for `frame` and `next_change` (see
   `jstream-core`'s *Live sources*).
-- `Context`: the folders behind the `collection` and `app` asset roots
-  (`AssetRoots`), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
+- `Context`: the featured chat message (`chat`, see `youtube_chat`), the folders
+  behind the `collection` and `app` asset roots (`AssetRoots`), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
   sides and 1 GiB of decoded memory by default. The image's size is checked before
   anything is allocated for it, and the decoded-memory cap counts the frames kept plus
   the working buffers held while decoding: a GIF's canvas and its "restore to
@@ -100,6 +101,23 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`.
+- `youtube_chat` (named "YouTube chat message"): the featured live chat message
+  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) §2). The message is
+  runtime state, not a setting: `Context::chat` holds a `ChatFeature`, a shared slot
+  the host fills with `set(Some(FeaturedMessage { author, badge, text, amount }))` or
+  clears with `set(None)`, and every source created from that context draws what it
+  holds. A header line (badge, a middle dot, the author's name, then a Super Chat's
+  amount) in `author_color` sits over the text in `text_color`, left-aligned, each as
+  narrow as it fits and wrapped at `max_width` less the `padding` (0 doesn't wrap), on
+  `background` with `padding` around both. It draws with the text kind's renderer, so
+  the same font, outline and limits rules apply; the bundled font covers Latin text
+  only, so other scripts need a `font`. Every field is a stranger's text and is drawn
+  as plain text: line breaks and other control characters become spaces, and text is
+  cut to 1000 characters and the name, badge and amount to 100 each. With nothing
+  featured the frame is one transparent pixel. The slot changes outside the source, so
+  `next_change` asks to be looked at again every 100 ms, and `frame` takes the slot's lock and
+  redraws (and so allocates) only when another message was featured since. Every setting but `font` is
+  live.
 - `display`, `media`, `webcam` and `window` are described only, with the settings B4
   gave them: sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.

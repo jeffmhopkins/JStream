@@ -2,6 +2,7 @@
 //! creating sources.
 
 use crate::audio;
+use crate::chat::ChatKind;
 use crate::color::ColorKind;
 use crate::describe::described;
 use crate::image::ImageKind;
@@ -17,7 +18,7 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0031, docs/adr/0031-source-types-and-decoding-scope.md).
-    /// `color`, `image` and `text` produce frames. `audio_input`, `desktop_audio` and
+    /// `color`, `image`, `text` and `youtube_chat` produce frames. `audio_input`, `desktop_audio` and
     /// `app_audio` are audio-only: the engine records them, and `create` fails with
     /// [`SourceError::AudioOnly`]. `display`, `media`, `webcam` and `window` are
     /// described only, so their sources can be created and configured but fail to start
@@ -30,6 +31,7 @@ impl Registry {
         add(Box::new(ColorKind::new()));
         add(Box::new(ImageKind::new()));
         add(Box::new(TextKind::new()));
+        add(Box::new(ChatKind::new()));
         for kind in audio::kinds() {
             add(Box::new(kind));
         }
