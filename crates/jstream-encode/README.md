@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:93df376aa62c6846", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale via ARCH data-model; no encode text concerns audio routing; holds" }
+verified = { hash = "b3:b8a2a28322ae41e4", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "Merge of main (94fb25d, D5 audio) and #325's head (de1dfb7) into F6: re-read against both sides; D5's audio text and E3b/E3c/F6's GPU capture, encode target and HEVC/AV1 text sit side by side without contradiction; holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
