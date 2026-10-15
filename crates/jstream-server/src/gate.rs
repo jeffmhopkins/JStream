@@ -50,6 +50,8 @@ pub(crate) enum Refusal {
     Token,
     /// The server already has as many connections open as it allows.
     Full,
+    /// The server already has as many MCP sessions open as it allows.
+    McpSessions,
 }
 
 impl Refusal {
@@ -60,6 +62,7 @@ impl Refusal {
             Refusal::Origin => "Origin not allowed",
             Refusal::Token => "missing or wrong control token",
             Refusal::Full => "too many connections",
+            Refusal::McpSessions => "too many MCP sessions",
         }
     }
 
@@ -83,6 +86,9 @@ impl IntoResponse for Refusal {
                 .into_response(),
             Refusal::Full => {
                 (StatusCode::SERVICE_UNAVAILABLE, "too many connections\n").into_response()
+            }
+            Refusal::McpSessions => {
+                (StatusCode::SERVICE_UNAVAILABLE, "too many MCP sessions\n").into_response()
             }
         }
     }

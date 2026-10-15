@@ -16,10 +16,14 @@ use crate::gpu::Gpu;
 /// The format uploaded images are stored in: premultiplied linear light.
 pub(crate) const UPLOAD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
+/// The format of a composited scene placed as an image: the composite pass's own,
+/// premultiplied linear light, the same as an upload.
+pub(crate) const LAYER_FORMAT: wgpu::TextureFormat = UPLOAD_FORMAT;
+
 /// How the composite shader reads an image's samples.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Alpha {
-    /// Premultiplied linear (uploads). Filtering is exact at transparent edges.
+    /// Premultiplied linear (uploads and rendered images). Filtering is exact at transparent edges.
     Premultiplied,
     /// Straight sRGB (imports). The shader premultiplies after the filter, which is exact
     /// where alpha is 1, as in a captured frame, and fringes at partly transparent edges.
@@ -72,7 +76,7 @@ impl Image {
         self.height
     }
 
-    /// The sampled texture. For an uploaded image it is `Rgba16Float` holding
+    /// The sampled texture. For an uploaded or rendered image it is `Rgba16Float` holding
     /// premultiplied linear light; for an imported one it is the texture that was given.
     pub fn texture(&self) -> &wgpu::Texture {
         &self.texture
@@ -220,6 +224,11 @@ pub(crate) fn import_frame(maker: &Maker<'_>, frame: &GpuFrame) -> Result<Image,
         frame.texture().clone(),
         Some(Arc::clone(frame.sync())),
     )
+}
+
+/// A texture [`crate::Compositor::render_image`] composited into, as an image.
+pub(crate) fn layer(maker: &Maker<'_>, texture: wgpu::Texture, width: u32, height: u32) -> Image {
+    finish(maker, texture, width, height, Alpha::Premultiplied, None)
 }
 
 fn finish(

@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:10fb68e90ec3ddda", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rewrote the source-image bullet: uploads are premultiplied in linear light into Rgba16Float (image.rs premultiply_to_f16), imports stay Rgba8/Bgra8UnormSrgb read as straight alpha (Alpha::Straight). Added the bullet that render refuses another compositor's Image with Invalid (Owner check in prepare). Placement via legacy_quad, readback and not-in-this-cut list unchanged." }
+verified = { hash = "b3:10dfd4b0711bd43d", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): rewrote the nested-scene bullet (render_image returns an Image on this compositor that the caller places; depth and cycles are jstream-core's); plus review N5 helper rename; other bullets unchanged against main" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -48,8 +48,10 @@ and calls this crate.
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)). The only blend is
   premultiplied src-over. Other modes stay rejected by the engine until a later change
   draws them.
-- Nested scenes are not walked here. The caller renders the inner scene and places
-  that output image in the outer one.
+- Nested scenes are not walked here. The caller renders the inner scene with
+  `render_image`, which returns the composite as an `Image` on this compositor, and
+  places that image in the outer scene. The depth bound and cycle handling are the
+  caller's ([jstream-core › Snapshots](../jstream-core/README.md#design)).
 
 **Where it sits on the existing APIs.**
 
@@ -95,7 +97,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:8c2fbfe838d7906d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rewrote Passes 1-2 against image.rs/composite.wgsl/compositor.rs: CPU sRGB-decode LUT, premultiply, binary16 into Rgba16Float via write_texture without row padding; shader multiplies by sampled alpha only for straight imports, then by opacity; vertex is six f32 (24 bytes). Added the foreign-image Invalid case. Resolve, readback (still 256-byte rows), resources table and R-RT-002 still hold; the owner check allocates only on error." }
+verified = { hash = "b3:f5d2dd7954337afa", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): added the render_image paragraph after pass 2 (new Rgba16Float RENDER_ATTACHMENT|TEXTURE_BINDING texture per call, read as premultiplied, one submit ordered before the outer one) and the render_image resources row; plus review N5 helper rename; render's passes, staging and readback unchanged" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -142,7 +144,15 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    blending off. It `textureLoad`s the FP16 texel, un-premultiplies (zero RGB where
    alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
    alpha is stored as-is. The output usage is `RENDER_ATTACHMENT | COPY_SRC |
-   TEXTURE_BINDING`, so a later nested-scene image or a snapshot can use it.
+   TEXTURE_BINDING`, so a snapshot or a later consumer can use it.
+
+   **`render_image`** (a nested scene) stops after pass 2. It composites into a new
+   `Rgba16Float` texture (`RENDER_ATTACHMENT | TEXTURE_BINDING`) of the canvas size
+   and returns it as an `Image` read as premultiplied, the same as an upload. So
+   placing it filters exactly at partly transparent edges, and nothing is quantised
+   to 8 bits between nesting levels. It is one submit, ordered before the submit of
+   the outer scene that samples it. The texture belongs to the `Image`, not the
+   compositor, so a later `render` cannot overwrite it.
 4. **Readback**, only when asked. `copy_texture_to_buffer` into a map-read buffer,
    rows padded to 256 bytes, then a map and a pack into tightly packed RGBA8. This
    waits on the GPU. The tick that feeds an encoder does not call it. Snapshots and
@@ -163,6 +173,7 @@ the compositor's own, not a shared encode target, so nothing transitions it to
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Cleared and refilled each frame; capacity kept |
 | Per-image texture and bind group | `Image`, dropped with it |
+| `render_image` texture | The returned `Image`, allocated per call |
 
 A returned output texture is a clone of the cached sRGB target. The next `render`
 overwrites those texels, including when the canvas size is unchanged. Readback bytes
@@ -216,7 +227,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:96c3b86ad5f1598c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added the alpha-edge, straight-import and foreign-compositor GPU tests and the adapter-free f16/premultiply/owner unit tests to What is checked. Fixed CI install: per open() in tests.rs a macOS runner without Metal panics because CI is set; the macos job is continue-on-error (ci.yml), not a skip. Device lock, skip-outside-CI and no goldens unchanged." }
+verified = { hash = "b3:2c900748814f915f", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Review N5: the render_image tests are three pixel tests plus an ownership check (four tests), now stated so; rest unchanged" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -241,7 +252,11 @@ the golden tooling cannot update.
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
-staged once per submit and not staged when the item is hidden. Alpha edges: a 2x1
+staged once per submit and not staged when the item is hidden. Nested scenes
+(`render_image`), three pixel tests and an ownership check: an image placed in
+another scene lands where its scene put the item and is transparent elsewhere, and
+survives a later `render`; a half-opaque item stays exact in linear light; images
+nest twice with scaling at each level; another compositor refuses the image. Alpha edges: a 2x1
 opaque-red-then-transparent upload drawn half a pixel off and at scale 2 keeps red
 at 255 where it is partly covered (straight filtering gave 187 on lavapipe); an
 imported sRGB texture is read as straight alpha. An image from another compositor on
@@ -289,11 +304,11 @@ adds a package so tests can render, and it does not weaken a check.
   ends the submit in `PRESENT`. Software adapters often lack `TEXTURE_FORMAT_NV12`,
   so that pass cannot be the CI path. Proposed default: keep this RGBA output, and
   let a later pass sample it into the platform `encode_target` on the real device.
-- **Capture formats.** WGC frames are not sRGB RGBA. A conversion into the sampled
-  format has to land before `import` can take a capture `GpuFrame`. Who owns that
-  pass, this crate or the platform crate, is open. That pass could also write
-  premultiplied linear, which would remove the straight-alpha fringe that a partly
-  transparent import (a browser source, a nested scene's output) still has.
+- **Capture formats.** Windows capture's GPU frames (`WgcCapture::on_gpu`) are opaque
+  `Bgra8UnormSrgb`, which `import` takes as is, so they need no conversion pass. Open:
+  whether a pass that writes premultiplied linear should exist anyway, to remove the
+  straight-alpha fringe that a partly transparent import (a browser source, a nested
+  scene's output) still has, and which crate owns it.
 - **Opacity and blend ownership** was left open by ADR-0022 (decision-register D2).
   The snapshot puts opacity on the item because that is what ARCH's data model and
   the compositor consequences of
