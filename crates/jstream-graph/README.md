@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a4a663441b05d978", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Chains/Filter model, opacity/blend/effects, filter checks, edges, plans, reads, persistence and tests merged with main's Q1 property-suite text; holds" }
+verified = { hash = "b3:66127bf0a9882d28", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; State::master and Output chains, filter.add check order with owner and reference refusal, output.delete inverse, reads, file format master/output filters, rebuild order, tests; holds against filter.rs, persist/mod.rs, read.rs, tests/filters.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -27,8 +27,10 @@ codes, so the engine passes them to clients unchanged.
   sources against. The engine supplies them (`Graph::with_kinds`); they are not
   collection state, and `Graph::new()` describes none.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
-  in display order, the `outputs`, keyed by ID, and the `encoders` (encoder profiles),
-  keyed by ID.
+  in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
+  keyed by ID, and the master stage's filter `Chains` (`State::master`,
+  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). Each `Output`
+  has its own `Chains` too; only their audio chains hold filters so far.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -117,16 +119,19 @@ the batch **touched**.
   accept only `normal` until the compositor draws the other modes. Each is undone by
   the previous value, and removing an item restores both.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  `filter.add` checks, in order, the owner source, the filter ID (non-empty, unused in
-  the source), that the source has the chain (video if its kind produces video, audio
-  if it produces audio and it is not a `scene` source), that the chain has room, that
-  the kind is a filter kind of that chain (`kind`), the settings exactly as a source's,
-  and the index; it is undone by `filter.remove`. `filter.remove` is undone by the
+  `filter.add` checks, in order, the owner (a source, an output or the master stage),
+  the filter ID (non-empty, unused on the owner), that the owner has the chain (a
+  source: video if its kind produces video, audio if it produces audio and it is not a
+  `scene` source; the master and an output that carries audio: audio only, ADR-0027),
+  that the chain has room, that the kind is a filter kind of that chain (`kind`), that
+  a master or output filter's settings refer to no scene or source, the settings
+  exactly as a source's, and the index; it is undone by `filter.remove`. `filter.remove` is undone by the
   `filter.add` that puts the filter back where it was, with its switch and settings;
   `filter.set_enabled`, `filter.set_settings` (a patch, `null` resets) and
   `filter.reorder` by the previous values. `source.duplicate` copies both chains with
-  their IDs, `source.delete`'s inverse re-adds every filter after `source.create`, and
-  `source.create` refuses a filter kind.
+  their IDs, `source.delete`'s inverse re-adds every filter after `source.create`,
+  `output.delete`'s re-adds the output's after `output.create`, and `source.create`
+  refuses a filter kind.
 - **Outputs** (`target.rs` checks the URL): `output.create` and `output.set_target`
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
@@ -189,8 +194,9 @@ protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads 
 stored transform and no geometry. `Source::to_info` (given the `State`, to omit a
 `duplicated_from` whose source is gone),
 `Scene::to_info`, `Item::to_info`, `Filter::to_info` and `Output::to_info` convert single
-objects; a source reports its chains in `filters`, omitted while both are empty, and an
-item its `opacity` and `blend`. Reads change nothing.
+objects; a source and an output report their chains in `filters`
+(`Chains::to_info`), omitted while both are empty, `state.get` the master's in
+`master`, and an item its `opacity` and `blend`. Reads change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
@@ -202,8 +208,9 @@ and `visible`, and its `opacity` and `blend` only when they differ from 1 and
 `builtin` source's settings follow, ADR-0025, `duplicated_from` as stored, even
 when it names a deleted source, and `filters`, omitted while both chains are empty: each
 filter with its `kind_version` and settings, and `enabled` only when false), outputs ordered by ID (each with its
-`encoder_profile`, omitted for the default), and encoder profiles (`encoders`) ordered by
-ID, omitted when there are none. Kinds, undo history and runtime state are not in it, and
+`encoder_profile`, omitted for the default, and its `filters` as a source's), encoder
+profiles (`encoders`) ordered by ID, omitted when there are none, and the `master` with
+its `filters`, omitted while it has none. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -218,7 +225,7 @@ the engine's; this crate does no I/O.
   graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
   sources its settings refer to), then items in their placement form with their crop
   and visibility, opacity and blend, then every source's filters, then encoder
-  profiles, then outputs with their profiles. A
+  profiles, then outputs with their profiles and filters, then the master's filters. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
@@ -242,12 +249,13 @@ delete rejection by references, roles, moves and the grouping and ungrouping bat
 output, encoder edits and their inverses (a profile freed and deleted in one batch),
 opacity and blend checks and inverses, the filter edits (`tests/filters.rs`: each
 check's field, exact inverses, duplicate and delete, references in filter settings as
-cycles, blockers and plans, and the collection file), exact inverses,
+cycles, blockers and plans, the collection file, and the master's and outputs' audio
+chains with their checks), exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
-batches of every edit, including moves, role changes, source switches, addressed placement edits and filter edits. After each successful one, the state must hold no cycle, applying its
+batches of every edit, including moves, role changes, source switches, addressed placement edits and filter edits on sources, outputs and the master. After each successful one, the state must hold no cycle, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged. And
 after every batch, for each scene and source: a plain delete is refused exactly when
@@ -264,7 +272,8 @@ seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
 scene `b` made a group, a clone, a `duplicated_from` naming a missing source,
-opacities and a desktop audio source with two gain filters, one disabled) plus a source whose
+opacities, a desktop audio source with two gain filters, one disabled, and a gain filter
+each on the master and the recording output) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema

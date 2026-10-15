@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:6107dbff7883ceed", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; stale through cascade; R-API rules unchanged; holds" }
+verified = { hash = "b3:5d32bb4df89d9cc1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: stale by cascade; the new owners and fields are additive and omitted while empty, which R-API-001 allows; rules unchanged; holds" }
 -->
 
 <a id="R-API-001"></a>

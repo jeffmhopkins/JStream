@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:f524cd0416ff55b7", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; B7 Source/Filter rows, Filters bullet, Built so far and Not yet merged with main's ADR-0030 dependency; holds" }
+verified = { hash = "b3:1d27b19ee8e96380", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; Master and Output rows now filters { video[], audio[] } as the wire reports, Filters bullet adds master/output owners, audio only, no references; holds against graph model and protocol" }
 -->
 
 ```
@@ -191,9 +191,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  monitor { device, tap: PreFilters | PostFilters }
 │                  an audio filter may name a key source (sidechain)
 ├── encoders       EncoderProfile { id, codec, rate_control, … }
-├── master         Master { video_filters[], audio_filters[] }   applies to everything leaving JStream
+├── master         Master { filters { video[], audio[] } }   applies to everything leaving JStream
 ├── privacy        Privacy { look: Blur { strength } | Slate { color | image }, muted_sources: [source_id] }
-└── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, video_filters[], audio_filters[] }
+└── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, filters { video[], audio[] } }
                    kind: Rtmp { target: Generic { url } | YouTube { broadcast_binding } } | Record { path, container } | VirtualCam
 ```
 
@@ -275,7 +275,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   filter's kind is a `video_filter` or `audio_filter` kind matching its chain, and the
   `filter.*` edits address it by its owner and its ID, which is unique within the source
   and kept by `source.duplicate`. A disabled filter keeps its place and settings and is
-  bypassed. The audio chain runs on the source's input before its fader. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
+  bypassed. The audio chain runs on the source's input before its fader. The master
+  stage and each output own `filters { video, audio }` too, edited with the same
+  `filter.*` edits under the owners `master` and `output`
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)); only their audio chains
+  hold filters until video mixes run the video ones, and their filters can't refer to a
+  scene or source yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.
@@ -539,7 +544,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f0f3aad0184ad054", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Edits bullet's opacity/blend and filter edits sit beside main's scene.switch text; no version number until the queue bump; holds" }
+verified = { hash = "b3:11dd09890608bac7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; Edits bullet names filter.* on source, master and output owners and the three reports; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -565,9 +570,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
   `item.set_opacity` and `item.set_blend` set a placement's opacity and blend mode
   (`item.add` takes both too), and `filter.add`, `filter.remove`, `filter.set_enabled`,
-  `filter.set_settings` and `filter.reorder` edit a source's filter chains, addressed by
-  an `owner` and a filter ID; `SourceInfo.filters` reports them
-  ([ADR-0026](adr/0026-source-filter-chains.md)).
+  `filter.set_settings` and `filter.reorder` edit the filter chains of a source, the
+  master stage or an output, addressed by an `owner` and a filter ID;
+  `SourceInfo.filters`, `OutputInfo.filters` and `state.get`'s `master` report them
+  ([ADR-0026](adr/0026-source-filter-chains.md),
+  [ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -670,7 +677,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:2f74f99cfb552b17", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; tool list has filter and studio; tools.snap is now 181142 bytes, text says about 181 KB; holds" }
+verified = { hash = "b3:30c756ae04299805", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: tools.snap changed only by the generic edit tool's schema gaining the master/output owners and the new fields; MCP section text holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -871,7 +878,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:2e69a6274102064a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; kind_version refusal for filters, opacity/blend/enabled written when non-default, effects empty; holds against persist" }
+verified = { hash = "b3:20fcb20135b66035", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; kind_version, enabled-when-false and the other rules apply to the master's and outputs' filters as to sources'; holds against persist/mod.rs" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

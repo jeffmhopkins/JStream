@@ -208,8 +208,8 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
-        /// The master stage. Omitted while it has no filters; missing (from a server
-        /// older than 0.17) parses as empty.
+        /// The master stage. Omitted while it has no filters, so missing (also from a
+        /// server that predates it) parses as empty.
         #[serde(default, skip_serializing_if = "MasterInfo::is_empty")]
         master: MasterInfo,
     },

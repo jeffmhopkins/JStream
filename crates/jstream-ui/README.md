@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:5412cbf5a35d49d0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; only test edits in canvas/model.rs gained opacity/blend None; contents unchanged; holds" }
+verified = { hash = "b3:0ec84b714321d3a3", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: UI changed only in a test literal (OutputInfo.filters); purpose holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:244289af1aa12b8a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; unaffected by the test change; holds" }
+verified = { hash = "b3:09c572f58ff08a9a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: UI changed only in a test literal (OutputInfo.filters); outputs panel still reads state.get; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

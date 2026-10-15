@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:a37c6b70d1b52e51", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; mock bullet names mock/filter.rs; holds" }
+verified = { hash = "b3:35847e22a7298401", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; mock bullet still names mock/filter.rs, which now takes master and output owners; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:831e33841703750e", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; B7 mock checks (opacity, blend, filters), what it keeps and undo merged with main's studio/scene.switch text; holds against mock.rs and mock/filter.rs" }
+verified = { hash = "b3:08108d46c9e66ed9", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; filter checks list adds master/output audio-only and no-reference checks, output.delete restores filters, parity collection wording; holds against mock/filter.rs and mock.rs" }
 -->
 
 ### The trait
@@ -133,9 +133,12 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     `item.set_opacity` and `item.set_blend`;
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
     a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
-    `scene` source, a full chain and an index out of range. `source.duplicate` copies
-    the chains and `source.delete`'s inverse re-adds them; a reference in a filter's
-    settings blocks deleting its target, as a source's own does.
+    `scene` source, a full chain and an index out of range. The master stage and
+    outputs ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)) take
+    audio filters only, an output only if it carries audio, and their filters no scene
+    or source reference. `source.duplicate` copies the chains, and `source.delete`'s
+    and `output.delete`'s inverses re-add them; a reference in a filter's settings
+    blocks deleting its target, as a source's own does.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind and any filter kind, doesn't check
@@ -179,7 +182,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   settings, `duplicated_from` and filters, each filter edit to the chain as it was, `item.set_source` back to the item's previous source,
   a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
-  back with its encoder profile, encoder profile edits undo to the profile as it was,
+  back with its encoder profile and filters, encoder profile edits undo to the profile as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with
@@ -212,7 +215,7 @@ The mock re-implements these checks and reads rather than calling
 for dev-dependencies, so the dependency would need a layering change. The duplication
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
-its outputs and a filter chain, the exact answer to every read of it, and the exact
+its outputs and filter chains on a source, the master and an output, the exact answer to every read of it, and the exact
 error for batches rejected against it, RTMP URL, recording path and filter rejections
 included. The mock's
 undo test tears that collection down in one batch and checks that undo gives back

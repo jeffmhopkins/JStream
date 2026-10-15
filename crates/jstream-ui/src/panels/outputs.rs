@@ -895,6 +895,7 @@ mod tests {
                     },
                 },
                 encoder_profile: None,
+                filters: Default::default(),
             },
             state,
             key_set,

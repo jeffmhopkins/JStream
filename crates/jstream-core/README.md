@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:10a301dfb91a4c0d", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; kinds and audio filters bullets, audio inputs running filters, tests list; holds" }
+verified = { hash = "b3:10ece475b4c97c83", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: core changed only in tests.rs (OutputInfo.filters in two expected literals); purpose text untouched by this and holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -164,7 +164,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:512791f210147d8f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; serde_json dependency, touched properties, opacity in linear light, audio filter chain paragraph, Not yet; main's D8 master chain text consistent; holds" }
+verified = { hash = "b3:d49c9126be3446d0", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: core changed only in tests.rs (OutputInfo.filters in expected literals); design text, filters.rs paragraph and output reads hold; the master/output chain mapping comes with the core half" }
 -->
 
 ### Engine and sessions

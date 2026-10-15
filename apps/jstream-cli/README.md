@@ -239,7 +239,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:42de2996be9ddaa0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; parser, connector, mock and MCP proxy design unchanged; holds" }
+verified = { hash = "b3:31516264403bb2e7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; the CLI's text output shows no filter chains (sources' neither) and the filter.* edits stay JSON-only, so master and output filters need nothing new; --json carries them; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:34a4937a99c6c3ea", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Commands list has B7's edits plus main's scene.switch action; Filters bullet; parity bullet; holds" }
+verified = { hash = "b3:81ca58670765192f", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; Filters bullet names FilterOwner source/master/output, OutputInfo chains and MasterInfo; parity bullet names the master and recording-output gain filters; holds against filter.rs, query.rs, output.rs, parity.rs" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -47,9 +47,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  `FilterOwner` (tagged `type`; only `source` so far), `FilterChain` (`video`, `audio`),
-  `FilterInfo` and `FilterChains`, the chains `SourceInfo` reports, and
-  `MAX_CHAIN_FILTERS` (8).
+  `FilterOwner` (tagged `type`: `source`, `master` and `output`), `FilterChain`
+  (`video`, `audio`), `FilterInfo` and `FilterChains`, the chains `SourceInfo` and
+  `OutputInfo` report, and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
+  master stage as `state.get` reports it
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
@@ -114,8 +116,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   URL, recording path and encoder profile checks, and `item.set_source` and
   `duplicated_from`, opacity, blend and filter checks, included). The collection also
   holds a clone made with `source.duplicate` and `item.set_source`, a
-  `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, and a
-  desktop audio source with an audio chain of two gain filters, one disabled.
+  `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a
+  desktop audio source with an audio chain of two gain filters, one disabled, and a gain
+  filter each on the master stage's audio chain and on the recording output's.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -130,7 +133,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:554547a53e61d7f1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Opacity, blend and filters subsection, edges, blockers, plans, reads, undo, compat notes merged with main's f64 number text; holds" }
+verified = { hash = "b3:ed24d3bf660176eb", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; new master/output owners paragraph (audio only, video and no-audio outputs refused on chain, missing output not_found, no references, output.delete restores filters), state.get master and output.list filters; holds against graph filter.rs and mock" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -338,6 +341,19 @@ kind for that chain (`invalid_argument` on `edits.N.kind`), and a chain holds at
 8 filters (`edits.N.chain`). A missing filter is `not_found` with entity `filter`.
 `SourceInfo.filters { video, audio }` reports them, each omitted while empty.
 
+The master stage and each output own chains too
+([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), with the owners
+`{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
+master's audio chain runs on every bus that feeds an output, after that bus's own chain;
+an output's runs after it, for that output only, and gives the output its own audio
+encode. Only their audio chains hold filters so far: a video filter is
+`invalid_argument` on `edits.N.chain` until video mixes run them, and so is an audio
+filter on an output that carries no audio. A missing output is `not_found` with entity
+`output`. Their filters can't refer to a scene or source yet (`invalid_argument` on the
+parameter), since the delete checks follow only a source's references. `output.delete`'s
+inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s
+`master { filters }` report them, each omitted while empty.
+
 Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`, an opacity) is a `Finite32`:
 an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde
 would otherwise narrow an out-of-range JSON number such as `1e39` to infinity, which
@@ -414,7 +430,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
-  missing from a pre-0.13 server, it parses as empty). A client reads it on connecting, and again after a
+  missing from a pre-0.13 server, it parses as empty), and the master stage (`master`,
+  with its filter chains; omitted while it has none, so missing parses as empty). A
+  client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
@@ -423,7 +441,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
 - `output.list`: the outputs, ordered by ID (outputs have no display order), each with
-  its `OutputKind` and `encoder_profile` (absent for the default), at a `rev`.
+  its `OutputKind`, `encoder_profile` (absent for the default) and its own `filters`
+  (omitted while empty), at a `rev`.
 - `encoder.list`: the encoder profiles, ordered by ID, at a `rev` (0.13).
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the
   credential store holds its key (missing from a pre-0.7 server, it parses as
