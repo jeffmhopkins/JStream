@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:7a09aca8cacf2988", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Purpose against #129: Drop counts bullet now says the output thread's own drops include what a stop's drain abandons (output_drops in arm_stats); Tests bullet adds the stalled-stop CPU-pipeline test, the loopback server that stops reading, and the rt_panic_is_reported scenario reaching the CPU stand-in through the doc(hidden) Engine::with_cpu_compositor; Runtime/Outputs bullets unchanged" }
+verified = { hash = "b3:4aa7a09a8bf75717", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Purpose for #136 (bounded stop drain, rt_panic_is_reported, with_cpu_compositor test seam) after merging main (#132) and adding a doc comment on discard (#136 review N1: packets queued while draining are counted too); the drop-counts and tests bullets still hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -84,7 +84,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:7f1526c3da160961", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Design against the #129 change: the connect_rtmp paragraph drops 'no shorter drain bound on stop yet' and now describes STOP_DRAIN (2 s from the output thread seeing stop), LivePublish::stop_by, dropping and counting queued packets, and RtmpPublish cutting write timeouts, not reconnecting and skipping the goodbye past the deadline, matching output_loop/discard and publish.rs; drop table gains the Stop drain row (output_drops, renamed from mux_drops, in output_packets); stop paragraph and 'not a second failure' sentence now cover the bounded drain and send errors while stopping" }
+verified = { hash = "b3:84b6113953179e80", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Design for #136 after merging main (#132): the stop paragraph (STOP_DRAIN 2 s, stop_by, drop and count the rest in output_packets, errors while stopping logged) and the Stop drain drop-table row match pipeline.rs; the discard comment only clarifies that late-queued packets are counted, which the row already covers" }
 -->
 
 ### Engine and sessions

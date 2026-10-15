@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:8cd256ea030e8e44", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Threads against #129's pipeline.rs change: the output thread still muxes FLV and sends tags; the new bounded stop drain (STOP_DRAIN, drop and count the rest) is detail described in core Design, and nothing here claims an unbounded drain; panic boundaries, watcher and failed paths unchanged (cpu_draw moved into pipeline.rs as a test stand-in only)" }
+verified = { hash = "b3:3add71b67ae24b75", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#132) into #136: re-read Threads with both; #132's live-value handover paragraph (stopped marker) and this PR's pipeline changes (bounded stop drain, cpu_draw moved into pipeline.rs as a test stand-in) don't touch each other; the output thread still muxes and sends, the drain bound is detail in core Design, and panic boundaries, watcher and failed paths are unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -461,6 +461,13 @@ that carries it, and releases the gesture's live values from the parameter chann
 every thread that reads them has reported a generation at least that high. Until then the
 parameter channel keeps the live value, so no frame shows the old value in between. The
 control side polls the published generations; the real-time threads never wait for it.
+A thread that isn't adopting snapshots counts as caught up, so a gesture's live values
+aren't held while it is stopped or parked (no output running, nothing to render, no
+device to mix for). Before it stops or parks it publishes a stopped marker in place of
+its generation, and it shows nothing while marked. On resuming it clears the marker
+before it loads a snapshot, and reads the parameter channels only after that load. So
+if the control side saw the marker and released a gesture, the thread's next load comes
+after the committing snapshot was published and already carries the committed value.
 
 The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
 reach the render and mixer threads through a parameter channel, not a snapshot rebuild,

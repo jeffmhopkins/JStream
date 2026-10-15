@@ -1186,7 +1186,9 @@ fn output_loop(job: OutputJob) {
 }
 
 /// Takes and counts the packets queued on `sub` without sending them. Nothing when
-/// the stream has already ended (`done`).
+/// the stream has already ended (`done`). An encoder still running can queue a few
+/// more while this drains; they are taken and counted too, so the count can include
+/// packets queued just after the deadline (#136 review N1).
 fn discard(sub: &Subscription, done: bool) -> u64 {
     let mut count: u64 = 0;
     if done {
