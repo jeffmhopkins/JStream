@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:ef7e1b0211c4ba8d", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: Edits bullet merged to say every edit but settings is supported (args.rs arity has source.rename and the three output edits; source.set_settings has no form); output commands, Stream keys bullet (now with the 4096-byte input cap from read_key, review N1) and Reads bullet match run.rs" }
+verified = { hash = "b3:5e8970433d7959a4", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: edit-forms bullet now says output.create's URL form is for generic RTMP and the CLI has no recording form yet; args.rs only parses rtmp(s) URLs" }
 -->
 
 ```sh
@@ -107,9 +107,10 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
-  which is the whole target of the only output kind so far (generic RTMP). An argument
-  without an `rtmp` or `rtmps` scheme is a usage error, which leaves other spellings
-  free for later output kinds; the engine checks the rest. Neither message repeats
+  which is the whole target of a generic RTMP output. The CLI has no form for a
+  recording output yet. An argument without an `rtmp` or `rtmps` scheme is a usage
+  error, which leaves other spellings free for later output kinds; the engine checks
+  the rest. Neither message repeats
   the URL.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
@@ -206,7 +207,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:97399bf670f90c91", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: re-read; parsing, block_on, connector, opt-in mock, writers (mcp and set-key read the BufRead) and MCP bullets unaffected by source.rename or the key-input cap" }
+verified = { hash = "b3:fc2eb1855e933b5e", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: control design change is only the mock's recording checks; CLI design text about WsControl and the mock holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
