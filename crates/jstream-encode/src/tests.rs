@@ -309,7 +309,7 @@ fn a_slow_subscriber_drops_without_affecting_a_fast_one() {
 }
 
 #[test]
-fn a_late_subscriber_starts_at_the_next_keyframe() {
+fn a_late_subscriber_starts_at_a_forced_keyframe() {
     let session = VideoSession::open(&FakeCodecs, video_config(3), options(64)).unwrap();
     let early = session.subscribe();
     let input = session.input();
@@ -317,11 +317,46 @@ fn a_late_subscriber_starts_at_the_next_keyframe() {
     for i in 0..5 {
         assert_eq!(index(&next(&early)), i);
     }
-    // Packets 0..5 are published. The late subscriber is admitted before packet 5 is.
+    // Packets 0..5 are published. Subscribing asks for a keyframe before frame 5 is
+    // encoded, and admits the subscriber before packet 5 is published.
     let late = session.subscribe();
     assert_eq!(late.info(), session.info());
     push_all(&input, 5..10);
-    session.finish().unwrap();
+    let stats = session.finish().unwrap();
+
+    let (packets, end) = drain(&late);
+    assert_eq!(end, StreamEnd::Finished);
+    assert_eq!(
+        packets.iter().map(index).collect::<Vec<_>>(),
+        [5, 6, 7, 8, 9]
+    );
+    assert!(packets[0].is_keyframe());
+    assert_eq!(late.stats().dropped, 0);
+    // The forced keyframe restarts the fake encoder's cadence of three.
+    let (early_packets, _) = drain(&early);
+    let early_keyframes: Vec<i64> = early_packets
+        .iter()
+        .filter(|p| p.is_keyframe())
+        .map(index)
+        .collect();
+    assert_eq!(early_keyframes, [5, 8]);
+    assert_eq!(stats.keyframes, 4);
+    assert_eq!(stats.keyframes_requested, 2, "one per subscriber");
+}
+
+#[test]
+fn a_late_subscriber_waits_for_an_encoder_that_cant_force_keyframes() {
+    // The scripted encoder keeps the trait's default, which refuses.
+    let session = scripted_session(&open_script(), 64);
+    let early = session.subscribe();
+    let input = session.input();
+    push_all(&input, 0..5);
+    for i in 0..5 {
+        assert_eq!(index(&next(&early)), i);
+    }
+    let late = session.subscribe();
+    push_all(&input, 5..10);
+    let stats = session.finish().unwrap();
 
     let (packets, end) = drain(&late);
     assert_eq!(end, StreamEnd::Finished);
@@ -333,6 +368,35 @@ fn a_late_subscriber_starts_at_the_next_keyframe() {
         "skipping to the first keyframe isn't a drop"
     );
     assert_eq!(drain(&early).0.len(), 5);
+    assert_eq!(stats.keyframes_requested, 0);
+}
+
+#[test]
+fn a_running_session_forces_a_keyframe_on_request() {
+    let session = VideoSession::open(&FakeCodecs, video_config(30), options(64)).unwrap();
+    let sub = session.subscribe();
+    let input = session.input();
+    push_all(&input, 0..4);
+    for i in 0..4 {
+        assert_eq!(index(&next(&sub)), i);
+    }
+    // From the session, then twice from a subscription before the next frame: one
+    // keyframe each time.
+    session.request_keyframe();
+    push_all(&input, 4..6);
+    for i in 4..6 {
+        assert_eq!(index(&next(&sub)), i);
+    }
+    sub.request_keyframe();
+    sub.request_keyframe();
+    push_all(&input, 6..8);
+    let stats = session.finish().unwrap();
+
+    let (rest, _) = drain(&sub);
+    assert_eq!(rest.iter().map(index).collect::<Vec<_>>(), [6, 7]);
+    assert!(rest[0].is_keyframe() && !rest[1].is_keyframe());
+    assert_eq!(stats.keyframes, 3, "frames 0, 4 and 6");
+    assert_eq!(stats.keyframes_requested, 3);
 }
 
 #[test]

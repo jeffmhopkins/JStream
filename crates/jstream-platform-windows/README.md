@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:7d9b783f1b6689be", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via ARCH#threading's handover paragraph; WASAPI/WGC/MF threads aren't snapshot readers, so the rule doesn't apply" }
+verified = { hash = "b3:d599e31cdf2a6cff", by = "agent:claude@session_01Q6eRwxiAzJidNbXNzEDHVJ", note = "F4: H.264 encoder gains a Keyframe on demand bullet (CODECAPI_AVEncVideoForceKeyFrame, Unsupported when ICodecAPI or the property is refused); rest of the section unchanged by this diff" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -145,6 +145,10 @@ The code is ported from spikes S1 to S3. This first cut has:
     - **Timing:** each packet gets back its frame's exact `pts`, even when the frame's
       time base doesn't round evenly to the encoder's 100 ns. Keyframes come from
       `MFSampleExtension_CleanPoint`.
+    - **Keyframe on demand:** `request_keyframe` sets `CODECAPI_AVEncVideoForceKeyFrame`,
+      so the next input becomes an IDR frame. An encoder without `ICodecAPI`, or one
+      that refuses the property, reports `Unsupported` and keeps its GOP cadence.
+      Whether the GOP count restarts at a forced keyframe is up to the encoder.
     - **Asynchronous MFTs** (most hardware encoders) ask for input and announce output
       through events. `encode` and `poll` pump those events, so `can_accept` reflects the
       last pump, and the encode thread polls every tick. Each output event gets exactly

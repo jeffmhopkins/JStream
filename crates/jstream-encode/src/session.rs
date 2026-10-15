@@ -87,6 +87,9 @@ pub struct SessionStats {
     pub packets: u64,
     /// How many of those packets were keyframes.
     pub keyframes: u64,
+    /// Video only: keyframe requests passed to the encoder and accepted by it (one per
+    /// frame at most, however many were asked for before it).
+    pub keyframes_requested: u64,
     /// Subscribers attached as of the last packet published.
     pub subscribers: u64,
     /// Packets lost by subscribers, summed over all of them
@@ -104,6 +107,7 @@ pub(crate) struct Counters {
     encoded: AtomicU64,
     pub(crate) packets: AtomicU64,
     pub(crate) keyframes: AtomicU64,
+    keyframes_requested: AtomicU64,
     subscribers: AtomicU64,
     pub(crate) subscriber_drops: AtomicU64,
     pub(crate) silence_frames: AtomicU64,
@@ -124,6 +128,7 @@ impl Counters {
             encoded: get(&self.encoded),
             packets: get(&self.packets),
             keyframes: get(&self.keyframes),
+            keyframes_requested: get(&self.keyframes_requested),
             subscribers: get(&self.subscribers),
             subscriber_drops: get(&self.subscriber_drops),
             silence_frames: get(&self.silence_frames),
@@ -143,6 +148,8 @@ pub(crate) struct Shared {
     /// An input was dropped since the last one queued, so the next one queued follows a
     /// gap.
     gap: AtomicBool,
+    /// A keyframe was asked for: request one before the next input is encoded.
+    keyframe_wanted: AtomicBool,
     end: OnceLock<StreamEnd>,
 }
 
@@ -154,6 +161,7 @@ impl Shared {
             finishing: AtomicBool::new(false),
             aborting: AtomicBool::new(false),
             gap: AtomicBool::new(false),
+            keyframe_wanted: AtomicBool::new(false),
             end: OnceLock::new(),
         })
     }
@@ -165,6 +173,12 @@ impl Shared {
 
     pub(crate) fn end(&self) -> Option<StreamEnd> {
         self.end.get().cloned()
+    }
+
+    /// Asks the encode thread to request a keyframe before it encodes the next input.
+    /// Never blocks; requests made before that input coalesce into one.
+    pub(crate) fn want_keyframe(&self) {
+        self.keyframe_wanted.store(true, Ordering::Release);
     }
 }
 
@@ -193,6 +207,13 @@ pub(crate) trait Driver: Send + 'static {
     ) -> Result<(), PlatformError>;
 
     fn poll(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError>;
+
+    /// Asks the encoder to make the next input a keyframe; `true` when it agreed. An
+    /// encoder that refuses still places its regular keyframes, so a refusal is not an
+    /// error. Audio packets are all keyframes, so the default does nothing.
+    fn request_keyframe(&mut self) -> bool {
+        false
+    }
 
     fn finish(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError>;
 }
@@ -307,7 +328,16 @@ impl<D: Driver> Core<D> {
         // If the thread has ended, the queue is dropped here and the subscription
         // reports how the session ended.
         let _ = self.joins.send(sub);
+        // The subscriber starts at the next keyframe, so ask for one now rather than
+        // leaving it to wait out the keyframe interval. The request is applied before the
+        // next input is encoded, and the subscriber is admitted before that input's packet
+        // is published, so the forced keyframe is its first packet.
+        self.shared.want_keyframe();
         subscription
+    }
+
+    pub(crate) fn request_keyframe(&self) {
+        self.shared.want_keyframe();
     }
 
     pub(crate) fn finish(&self) -> Result<SessionStats, EncodeError> {
@@ -470,6 +500,13 @@ fn encode_one<D: Driver>(
     shared: &Shared,
 ) -> Result<(), EncodeError> {
     let c = &shared.counters;
+    // A load first, so the common case (no request) is a plain read, not a swap.
+    if shared.keyframe_wanted.load(Ordering::Relaxed)
+        && shared.keyframe_wanted.swap(false, Ordering::Acquire)
+        && driver.request_keyframe()
+    {
+        c.keyframes_requested.fetch_add(1, Ordering::Relaxed);
+    }
     match driver.encode(input, after_drop, c) {
         Ok(()) => {
             c.encoded.fetch_add(1, Ordering::Relaxed);
