@@ -364,7 +364,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:608ca4eaa7964169", by = "agent:claude", note = "Re-read against #175's test-only change in rt/ring.rs (torn-frame test now keeps the writer running until the reader has checked 100k frames); clock, thread table and ring/collector prose unchanged and still hold" }
+verified = { hash = "b3:e4fc26a836a83021", by = "agent:claude", note = "#199 round 2: test-only edit to concurrent_reads_never_return_torn_frames (count frames only after the writer advances, drop guard stops the writer); re-read, the Tests list's 'two-thread test that no torn frame is ever accepted' still holds; ring code unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from

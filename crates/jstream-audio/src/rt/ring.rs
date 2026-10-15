@@ -432,9 +432,11 @@ mod tests {
     /// torn copies would show up as mismatches.
     ///
     /// The writer keeps writing until the reader has checked `MIN_CHECKED` frames, so
-    /// every check races a live writer and the test can neither pass vacuously nor fail
-    /// because the writer finished before the reader was scheduled (#175). A wall-clock
-    /// bound on both sides keeps a broken ring from hanging the test.
+    /// the test can neither pass vacuously nor fail because the writer finished before
+    /// the reader was scheduled (#175). Frames count only from reads made after the
+    /// writer moved on, so re-reading one window while the writer is descheduled does
+    /// not add up to a pass. A wall-clock bound on both sides keeps a broken ring from
+    /// hanging the test, and the writer is stopped even if an assert fails.
     #[test]
     fn concurrent_reads_never_return_torn_frames() {
         use std::sync::atomic::AtomicBool;
@@ -465,14 +467,24 @@ mod tests {
                 pos += 7;
             }
         });
+        /// Stops the writer when the reader ends, also by a failed assert.
+        struct StopWriter(Arc<AtomicBool>);
+        impl Drop for StopWriter {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Relaxed);
+            }
+        }
+        let stop = StopWriter(done);
         let mut out = [[0.0f32; 2]; 48];
         let mut checked = 0u64;
+        let mut last = UNSET;
         while checked < MIN_CHECKED && start.elapsed() < DEADLINE {
             let written = r.written.load(Ordering::Acquire);
-            if written == UNSET {
+            if written == UNSET || written == last {
                 std::thread::yield_now();
                 continue;
             }
+            last = written;
             let pos = written - 40;
             let rep = r.read(pos, &mut out);
             // Every frame is either silence (no valid data) or the frame at its own
@@ -488,7 +500,7 @@ mod tests {
             assert!(nonzero <= rep.valid);
             checked += nonzero as u64;
         }
-        done.store(true, Ordering::Relaxed);
+        drop(stop);
         writer.join().expect("writer thread");
         assert!(
             checked >= MIN_CHECKED,
