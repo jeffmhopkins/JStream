@@ -352,6 +352,7 @@ mod tests {
         let capture = capture_drops(CaptureStats {
             frames_captured: 10,
             frames_skipped: 4,
+            frames_undecodable: 0,
         });
         let video = video_encode_drops(SessionStats {
             dropped_queue_full: 2,
