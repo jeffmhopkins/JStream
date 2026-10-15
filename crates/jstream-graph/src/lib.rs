@@ -11,6 +11,7 @@
 mod apply;
 mod deps;
 mod model;
+mod plan;
 mod read;
 mod target;
 

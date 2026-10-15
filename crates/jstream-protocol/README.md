@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:a655b1c4ad444569", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: parity bullet now says the collection has a recording output and recording path rejections, matching parity.rs" }
+verified = { hash = "b3:b0710d441de11f89", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9: re-read; Queries bullet gains delete.plan/DeleteTarget, Errors bullet gains Blocker; version line left at 0.9 until the queue bump" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -41,9 +41,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `video.snapshot`, `kind.list` and `kind.describe`,
-  with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo` and `ItemInfo`
-  shapes the collection reads report. `video.snapshot` returns the program mix as a PNG.
+  `output.list`, `output.status`, `video.snapshot`, `kind.list`, `kind.describe` and
+  `delete.plan` (with its `DeleteTarget`), with `QueryResult` and the `SceneSummary`,
+  `SceneInfo`, `SourceInfo` and `ItemInfo` shapes the collection reads report. `video.snapshot` returns the program mix as a PNG.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
   [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)): `KindDescriptor`,
   `ParamDescriptor` and `ParamType`, the shapes that describe a source or filter kind's
@@ -55,7 +55,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `events.dropped` and
   `stats.tick`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
-  codes, and `WireError`, its wire form with a message.
+  codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
+  form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs, `Rev`, and
   `PROTOCOL_VERSION`.
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
@@ -93,7 +94,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:1eebe9000cc00689", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's 0.9 record kind and Compatibility/OQ8; #166 changed only parity.rs and the mock, no wire type" }
+verified = { hash = "b3:330e5172dd48fd58", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9: re-read; new Deletes bullet (blockers list per ADR-0025), delete.plan in Queries, blockers in the Errors table, OQ12 marked built; compatibility: blockers is optional and defaults when missing" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -225,8 +226,15 @@ never a type per kind.
   scenes, and scene and source references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `source.create`, `source.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
-  scene `a`). `scene.delete` and `source.delete` are rejected while a setting refers to the
-  target, naming each `<source>.settings.<param>`. Asset references are not edges.
+  scene `a`). Asset references are not edges.
+- **Deletes are refused while anything refers to the target**, with no cascading edit
+  ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
+  `source.delete` is refused while an item places the source, and `scene.delete` while a
+  `scene` source shows the scene; either is refused while a setting refers to its
+  target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
+  `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
+  or the source whose setting refers to it (`settings.<param>`). `delete.plan` returns
+  the batch that removes them with the target (see [Queries](#design)).
 
 `SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
 parameters), so a reader of 0.7 messages sees no change for those.
@@ -303,6 +311,17 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `false`). Neither is collection state, so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
+- `delete.plan {target}`: the batch that deletes a scene or source (`target` is
+  `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
+  everything that refers to it, as `edits` and the `rev` it was planned at, or
+  `not_found` for a missing target. In order, the edits remove the items that place a
+  deleted source, set every settings reference to a deleted object to `null` (one
+  `source.set_settings` per source, which keeps the source), delete the `scene` sources
+  that show a deleted scene, and last delete the target. Deleting a scene deletes the
+  `scene` sources that show it, and the cascade stops there, since deleting a source
+  deletes no scene. A target nothing refers to plans just its own delete. The client
+  shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
+  refused if the state moved on, and its undo is the batch's inverse.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
@@ -406,7 +425,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `rev_conflict` | `expected_rev` is stale; nothing applied | `expected`, `current` |
 | `not_found` | A command named a missing object | `entity`, `id` |
 | `already_exists` | A creating edit reused an ID | `entity`, `id` |
-| `invalid_argument` | A field's value was rejected | `field`, `reason` |
+| `invalid_argument` | A field's value was rejected | `field`, `reason`, and `blockers` for a refused delete |
 | `action_failed` | An accepted action could not be carried out | `reason` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
@@ -557,8 +576,7 @@ described above.
     absolute path under a known root in relative form, and kind versions on stored
     settings, which come with persistence.
 12. **Deleting referenced objects.** Settled by
-    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md): rejection stays
-    the only delete, with no cascading edit. The error will list every blocker as a
-    structured detail, and a `delete.plan` query will return the batch that removes the
-    target and its blockers. Not built yet: today the error's `reason` names the
-    blockers, and the client removes them itself.
+    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) and built:
+    rejection stays the only delete, with no cascading edit. The error lists every
+    blocker in `blockers`, and the `delete.plan` query returns the batch that removes
+    the target and its blockers ([Edits, actions and queries](#design)).

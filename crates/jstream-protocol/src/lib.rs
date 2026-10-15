@@ -30,7 +30,7 @@ pub use envelope::{
     Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request, Response,
     ServerMessage, Welcome,
 };
-pub use error::{EntityKind, ProtocolError, WireError};
+pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{DropCounts, Event, OutputState};
 pub use finite::Finite32;
 pub use geometry::{
@@ -43,7 +43,7 @@ pub use kind::{
     VisibleIf, check_asset_path,
 };
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
-pub use query::{ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
+pub use query::{DeleteTarget, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};

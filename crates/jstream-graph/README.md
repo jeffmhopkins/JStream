@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:4352b2d343ce4ac4", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; ADR-0040 text from main; F2b record path checks and Unknown refusals still match target.rs and apply.rs" }
+verified = { hash = "b3:ae7fa740eb6cf797", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9: re-read; delete rejection now lists blockers via deps::blockers, Reading covers delete.plan (plan.rs) and its edit order, Tests mention the plan property check" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -64,10 +64,12 @@ goes up by exactly one, and the result carries the **inverse batch**.
   a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
   places the source or a setting refers to it, and `scene.delete` while a `scene`
-  source shows the scene or a setting refers to it. The error names the blockers (a
-  setting as `<source>.settings.<param>`), and the client removes them first, in the
-  same batch if it likes. Rejecting rather than cascading keeps each edit's effect, and
-  its inverse, limited to the object it names.
+  source shows the scene or a setting refers to it. The `invalid_argument` lists every
+  blocker in `blockers` (`deps::blockers`, the reverse of the cycle check's edges): the
+  item (`source_id`), the `scene` source (`kind.scene_id`) or the setting
+  (`settings.<param>`). The client removes them first, in the same batch if it likes,
+  or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
+  edit's effect, and its inverse, limited to the object it names.
 - **Outputs** (`target.rs` checks the URL): `output.create` and `output.set_target`
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
@@ -93,8 +95,14 @@ goes up by exactly one, and the result carries the **inverse batch**.
 collection (`state.get`, `scene.list`, `source.list`, `item.list` and `output.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
-unknown kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
-`not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
+unknown kind), and `delete.plan` (`plan.rs`,
+[ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
+`not_found` for an `item.list` of a missing scene or a `delete.plan` of a missing
+target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
+check uses: a scene's plan also deletes the `scene` sources that show it, the items
+placing any deleted source are removed, settings references to anything deleted are set
+to `null` (one `source.set_settings` per source), and the target's own delete comes
+last. Sources come ordered by ID, scenes in
 display order, items bottom first, outputs ordered by ID; `Source::to_info`,
 `Scene::to_info`, `Item::to_info` and `Output::to_info` convert single objects. Reads change nothing.
 
@@ -109,7 +117,10 @@ feature) must get exactly the fixture's answers, the same ones the mock is held 
 property test: a seeded generator applies 6000 random
 batches. After each successful one, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
-restore the batch's result. After each failed one, the graph must be unchanged.
+restore the batch's result. After each failed one, the graph must be unchanged. And
+after every batch, for each scene and source: a plain delete is refused exactly when
+it has blockers, the error lists them, and the `delete.plan` batch applies at the
+planned `rev`, removes the target, and undoes exactly.
 
 <a id="follow-ups"></a>
 ## Not yet

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:ed042041866f86ba", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166) into F2b: only the CLI README's edit-form wording changed under apps/**; diagram (outputs list includes record) and host table hold" }
+verified = { hash = "b3:f14b03035c144268", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9: re-read; apps/** change is only a CLI exit.rs test constructor; diagram and host table hold" }
 -->
 
 ```
@@ -503,7 +503,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f7428a0902cef033", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; no message, edit, query or transport rule changed by the mock/parity merge; record kind bullet still says 0.9" }
+verified = { hash = "b3:1dd61a12236ef6bb", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9: re-read; Queries bullet gains delete.plan, Errors bullet gains the blockers detail (ADR-0025)" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -559,7 +559,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
-  schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); later `audio.levels`).
+  schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` → the
+  batch that deletes a scene or source with everything that refers to it, and the `rev`
+  it was planned at; later `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)); the fields are in
@@ -570,7 +572,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   sets or clears the featured message (runtime state, reported by an event) that the chat
   message source draws as plain text. Audience stats (concurrent viewers, likes, chat
   rate) come in a low-rate `youtube.stats` event and a query.
-- **Errors** carry a stable machine-readable `code`, detail fields and a message.
+- **Errors** carry a stable machine-readable `code`, detail fields and a message. A
+  `scene.delete` or `source.delete` refused because something still refers to its
+  target lists every such reference in `invalid_argument`'s `blockers`
+  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
 - **Binary streams** (WebSocket binary frames): preview video and meters. Not designed
   yet, except the meter frame's fields
   ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
@@ -604,11 +609,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:9b8fb2677f948e39", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#169 Y2, #153 I1) into F2b round 2: took main's verified line and re-read; I1's /mcp text; tools.snap unchanged by round 2 (Unknown variants are schemars-skipped)" }
+verified = { hash = "b3:be73dfb71f7639b1", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9: re-read; tool list gains delete (the delete.plan noun); tools.snap about 86 KB, still 'about 80 KB'" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`delete`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
