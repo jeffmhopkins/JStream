@@ -19,7 +19,7 @@ input on the canvas.
 ## Harness
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests/e2e/*.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:26b46b328e65174f", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "deny fix: the harness dropped anyhow (banned outside apps, R-RS-003) for Box<dyn Error>; behaviour and text unchanged" }
+verified = { hash = "b3:0d91f4584a8077aa", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge-only round: re-read; the seed's item.add only gains opacity and blend as None (defaults), so the seeded studio is unchanged; holds" }
 -->
 
 - **The mock daemon** (`mock-daemon/`, the test-only crate `jstream-ui-e2e`) puts
