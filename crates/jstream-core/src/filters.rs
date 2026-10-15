@@ -256,8 +256,10 @@ impl Chain {
     /// Brings `input`'s chain in line with `wanted`. When only settings changed, and
     /// none that rebuilds a filter, each changed filter is updated in place, so its
     /// state (a gate's envelope, a delay line) carries on; otherwise the chain is
-    /// rebuilt. Returns why each filter the mixer refused is bypassed, to log: a refusal
-    /// is a runtime error on that filter, never an edit failure (ADR-0026 §6).
+    /// rebuilt. Returns what the mixer refused, to log: a filter it would not add is
+    /// bypassed, and one whose new settings it would not take keeps its old ones and
+    /// is tried again on the next pass. A refusal is a runtime error on that filter,
+    /// never an edit failure (ADR-0026 §6).
     pub(crate) fn apply(&mut self, input: &InputControl, wanted: &[Chained]) -> Vec<String> {
         self.removing.retain(|control| !control.remove());
         let current: Vec<&Chained> = self.filters.iter().map(|(chained, _)| chained).collect();
@@ -281,7 +283,12 @@ impl Chain {
                 if let (Some(control), Some(params)) = (control, params(&new.kind, &new.settings))
                     && let Err(err) = control.set(params)
                 {
-                    refused.push(format!("{} filter: {err}", new.kind));
+                    // `old` stays as it was, so the next pass tries again.
+                    refused.push(format!(
+                        "{} filter keeps its previous settings: {err}",
+                        new.kind
+                    ));
+                    continue;
                 }
                 *old = new.clone();
             }
@@ -299,7 +306,9 @@ impl Chain {
                 .map(|spec| input.add_filter(spec))
                 .and_then(|added| {
                     added
-                        .map_err(|err| refused.push(format!("{} filter: {err}", chained.kind)))
+                        .map_err(|err| {
+                            refused.push(format!("{} filter is bypassed: {err}", chained.kind));
+                        })
                         .ok()
                 });
             self.filters.push((chained.clone(), control));

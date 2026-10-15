@@ -16,7 +16,6 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:1f4896b294eac7be", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "#300 B1: re-read; this PR's one edit adds the video filter chain runtime to Not in this cut and points at Filters, which is accurate (passes here, chain runtime V0). Nothing else in Purpose is touched by filter/ or apply_filter; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +112,6 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c6f92718a23abe96", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "#300 B1: re-read against apply_filter and filter/pass.rs. apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. 'Does not allocate per item on the steady path' still holds: nothing calls apply_filter on the render thread until V0. Passes, resources and placement text unchanged" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -336,7 +334,6 @@ Assets and references (V3): not yet.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:74b89963f404a5db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Added the filter harness paragraph; the tests.rs helpers became pub(crate) for it, nothing else changed" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
