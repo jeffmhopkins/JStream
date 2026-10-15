@@ -51,7 +51,7 @@ pub enum YoutubeError {
     SignInRequired,
 
     /// The signed-in grant lacks the scope a call needs. Broadcast control needs
-    /// [`Scope::Manage`](crate::Scope::Manage) (ADR-0034 §4).
+    /// [`Scope::Manage`](crate::Scope::Manage) (ADR-0041 §4).
     #[error("the YouTube grant lacks the {needed} scope")]
     MissingScope {
         /// The scope the call needs.
@@ -100,7 +100,7 @@ pub enum YoutubeError {
 pub const MAX_REMOTE_TEXT: usize = 512;
 
 /// API error reasons that mean the project's quota or a rate limit ran out
-/// (ADR-0034 §5: quota errors are surfaced as protocol errors).
+/// (ADR-0041 §5: quota errors are surfaced as protocol errors).
 const QUOTA_REASONS: &[&str] = &[
     "quotaExceeded",
     "dailyLimitExceeded",

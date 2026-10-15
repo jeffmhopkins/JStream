@@ -131,7 +131,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8530f5004443e479", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: re-read; resolved Not yet: daemon --collection/audit file with rendering sources from jstream-sources' registry, plus E1's audio/outputs snapshots bullet as is; Dependencies list jstream-sources and serde_json dev-only, matching Cargo.toml after E1's arc-swap" }
+verified = { hash = "b3:3003b5047d1bc0e9", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the YouTube ADR link in ARCH#protocol and protocol README#design (0034 -> 0041); main's E1 text kept; holds" }
 -->
 
 ### Engine and sessions
