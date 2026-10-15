@@ -6,15 +6,6 @@
 use crate::error::ControlError;
 use std::fmt;
 
-/// The subprotocol a browser client offers and the server selects when it accepts the
-/// token from `Sec-WebSocket-Protocol`. Browsers can't set `Authorization` on a
-/// WebSocket, so the token travels there instead (see [`WS_TOKEN_PROTOCOL_PREFIX`]).
-pub const WS_PROTOCOL: &str = "jstream";
-
-/// The prefix of the subprotocol that carries the control token: a browser offers
-/// `jstream.token.<token>` next to [`WS_PROTOCOL`]. The server never selects it.
-pub const WS_TOKEN_PROTOCOL_PREFIX: &str = "jstream.token.";
-
 /// Where and how to connect.
 #[derive(Clone)]
 pub struct WsConfig {
@@ -106,12 +97,13 @@ pub(crate) fn token_protocol(token: &str) -> Result<String, ControlError> {
             "the control token contains characters a subprotocol can't carry",
         ));
     }
-    Ok(format!("{WS_TOKEN_PROTOCOL_PREFIX}{token}"))
+    Ok(format!("{}{token}", crate::WS_TOKEN_PROTOCOL_PREFIX))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{WS_PROTOCOL, WsConfig, browser_url, token_protocol};
+    use super::{WsConfig, browser_url, token_protocol};
+    use crate::WS_PROTOCOL;
 
     #[test]
     fn browser_urls_get_the_api_path_when_they_have_none() {

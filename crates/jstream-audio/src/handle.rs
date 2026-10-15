@@ -9,6 +9,7 @@ use std::sync::atomic::Ordering;
 use crate::rt::bus::{BusShared, MASTER_ID};
 use crate::rt::chain::{FilterParams, FilterSpec};
 use crate::rt::cmd::{ChainTarget, ControlPlane};
+use crate::rt::host::HostMemory;
 use crate::rt::input::InputShared;
 use crate::rt::ring::FrameRing;
 use crate::rt::shared::db_to_gain;
@@ -56,8 +57,9 @@ impl FilterControl {
         FilterId(self.id)
     }
 
-    /// The latency the filter adds to its chain, frames (the limiter's look-ahead; 0 for
-    /// the others). Fixed when it was built.
+    /// The latency the filter adds to its chain, frames (the limiter's look-ahead, a
+    /// CLAP filter's pipeline depth plus its plugin's latency; 0 for the others). Fixed
+    /// when it was built.
     pub fn latency_frames(&self) -> usize {
         self.latency
     }
@@ -89,6 +91,22 @@ fn insert_filter(
     spec: FilterSpec,
 ) -> Result<FilterControl, AudioError> {
     let (id, latency) = plane.add_filter(target, index, spec)?;
+    Ok(FilterControl {
+        id,
+        target,
+        latency,
+        plane: Arc::clone(plane),
+    })
+}
+
+/// Adds the CLAP filter whose host uses `memory` at `index` in `target`'s chain.
+fn insert_host_filter(
+    plane: &Arc<ControlPlane>,
+    target: ChainTarget,
+    index: usize,
+    memory: HostMemory,
+) -> Result<FilterControl, AudioError> {
+    let (id, latency) = plane.add_host_filter(target, index, memory)?;
     Ok(FilterControl {
         id,
         target,
@@ -156,6 +174,26 @@ impl InputControl {
         spec: FilterSpec,
     ) -> Result<FilterControl, AudioError> {
         insert_filter(&self.plane, ChainTarget::Input(self.id.0), index, spec)
+    }
+
+    /// Adds a CLAP filter at `index` in the input's chain (clamped to its end):
+    /// the mixer's side of the plugin host that uses `memory`
+    /// (docs/adr/0035-clap-plugins-out-of-process.md). The block must be initialised
+    /// for this mixer's rate and block size and its host ready. The mixer never waits
+    /// on the host; a block that isn't back in time is bypassed and counted in the
+    /// block's status. Its latency is the pipeline depth plus the plugin's. Its
+    /// parameters travel through the block's parameter ring, not
+    /// [`FilterControl::set`].
+    ///
+    /// # Errors
+    /// As [`Self::add_filter`], and [`AudioError::InvalidConfig`] for a block that isn't
+    /// initialised for this mixer or whose host isn't ready.
+    pub fn insert_host_filter(
+        &self,
+        index: usize,
+        memory: HostMemory,
+    ) -> Result<FilterControl, AudioError> {
+        insert_host_filter(&self.plane, ChainTarget::Input(self.id.0), index, memory)
     }
 
     /// Removes this input. The mixer drops it on its next block and the ring is freed
@@ -337,6 +375,22 @@ impl BusControl {
         insert_filter(&self.plane, target, index, spec)
     }
 
+    /// [`InputControl::insert_host_filter`] for the bus's chain.
+    ///
+    /// # Errors
+    /// As [`InputControl::insert_host_filter`].
+    pub fn insert_host_filter(
+        &self,
+        index: usize,
+        memory: HostMemory,
+    ) -> Result<FilterControl, AudioError> {
+        let target = ChainTarget::Bus {
+            slot: self.id.slot,
+            id: self.id.id,
+        };
+        insert_host_filter(&self.plane, target, index, memory)
+    }
+
     /// This bus's id, for [`InputControl::set_send`].
     pub fn id(&self) -> BusId {
         self.id
@@ -484,6 +538,23 @@ impl OutputTapControl {
         spec: FilterSpec,
     ) -> Result<FilterControl, AudioError> {
         insert_filter(&self.plane, ChainTarget::OutputTap(self.id.0), index, spec)
+    }
+
+    /// [`InputControl::insert_host_filter`] for the tap's chain.
+    ///
+    /// # Errors
+    /// As [`InputControl::insert_host_filter`].
+    pub fn insert_host_filter(
+        &self,
+        index: usize,
+        memory: HostMemory,
+    ) -> Result<FilterControl, AudioError> {
+        insert_host_filter(
+            &self.plane,
+            ChainTarget::OutputTap(self.id.0),
+            index,
+            memory,
+        )
     }
 
     /// Removes the tap; its filters go with it. False when it was already removed, or

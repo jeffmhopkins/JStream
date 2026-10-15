@@ -1,4 +1,4 @@
-/* The shell's layout, then the panels' styles. */
+/* The shell's layout, then each view's classes (panels, canvas). */
 :root {
   color-scheme: light dark;
   --bg: #f6f6f7;
@@ -174,15 +174,6 @@ textarea { width: 100%; min-height: 4rem; resize: vertical; }
 .row:hover .row-tools, .row.selected .row-tools, .row:focus-within .row-tools { visibility: visible; }
 .row .row-tools button, .row .eye { border-color: transparent; background: none; font-size: 0.75rem; }
 .row .row-tools button:hover:not(:disabled) { border-color: var(--line); }
-.badge {
-  font-size: 0.7rem;
-  padding: 0.05rem 0.4rem;
-  border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.badge.live { background: var(--problem); color: #fff; }
-
 .add { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .add input { flex: 1; min-width: 6rem; }
 .add select { flex-basis: 100%; }
@@ -223,6 +214,34 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .field .reset { border-color: transparent; background: none; }
 .field .problem { grid-column: 1 / -1; }
 .readonly { font-size: 0.8rem; word-break: break-all; }
+
+
+/* The canvas view (canvas/mod.rs). Hosts' CSP refuses inline style attributes, so the
+   views set every static style through a class here. */
+.canvas-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+}
+.canvas-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  width: min(100%, 960px);
+  flex-wrap: wrap;
+}
+.inline-check { width: auto; }
+.stage { position: relative; touch-action: none; outline-offset: 2px; }
+.stage-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
 
 @media (max-width: 800px) {
   .shell {

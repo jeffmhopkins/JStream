@@ -20,6 +20,7 @@ use arc_swap::ArcSwap;
 use jstream_encode::{AudioInput, VideoInput};
 use jstream_render::Reclaimed;
 
+use crate::runtime::vcam::VcamTap;
 use crate::snapshot::Shot;
 
 /// The reader slot's value while no render thread is adopting snapshots: the thread is
@@ -195,6 +196,9 @@ pub(crate) enum Garbage {
     Video(VideoInput),
     /// The same for the audio input the mixer thread let go of.
     Audio(AudioInput),
+    /// A virtual camera's tap the render thread let go of. Once its camera thread has
+    /// ended, it holds the last reference to its channels and the output's stop flag.
+    Vcam(VcamTap),
 }
 
 /// The sending side of a program stage's collector thread (R-RT-003): the render
@@ -240,6 +244,7 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Images(images) => drop(images),
             Garbage::Video(input) => drop(input),
             Garbage::Audio(input) => drop(input),
+            Garbage::Vcam(tap) => drop(tap),
         }
     }
 }
