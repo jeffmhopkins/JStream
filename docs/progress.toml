@@ -705,7 +705,7 @@ prs = [361]
 id = "Q5"
 milestone = "M2"
 title = "Threat model"
-status = "review"
+status = "done"
 prs = [358]
 
 [[item]]
