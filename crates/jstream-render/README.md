@@ -353,7 +353,15 @@ so the missing adapter panics and the job fails. The `macos` job is
 Editing the workflow is a governance change because `.github/**` is protected; it
 adds a package so tests can render, and it does not weaken a check.
 
-**Not measured** ([R-RT-005](../../docs/RULES.md#R-RT-005)). No frame-time numbers.
+**Benchmarks** (`benches/composite.rs`, criterion, [R-RT-005](../../docs/RULES.md#R-RT-005)).
+A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with readback
+(`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
+and refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
+`cargo bench -p jstream-render --bench composite`; the `bench` workflow records them on
+lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
+software adapter's numbers are CPU rasterisation: they track regressions in what the
+compositor submits, and say nothing about GPU frame time. **Not measured:** frame time on
+a hardware GPU.
 
 <a id="open-questions"></a>
 ## Open questions
