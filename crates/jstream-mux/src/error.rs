@@ -90,6 +90,33 @@ pub enum MuxError {
         /// pts − dts, in milliseconds.
         ms: i64,
     },
+    /// A track's decode timestamps did not increase. MP4 needs strictly increasing decode
+    /// times, because a sample's duration is the gap to the next one.
+    #[error(
+        "{codec:?} decode timestamp did not increase: {previous} then {current} (in 1/{timescale} s)"
+    )]
+    DtsNotIncreasing {
+        /// The track's codec.
+        codec: Codec,
+        /// The previous packet's dts, in track ticks from the origin.
+        previous: i64,
+        /// This packet's dts, in track ticks from the origin.
+        current: i64,
+        /// The track's ticks per second.
+        timescale: u32,
+    },
+    /// A composition offset or sample duration did not fit MP4's 32-bit field.
+    #[error("{what} of {ticks} ticks does not fit in 32 bits")]
+    TimestampOutOfRange {
+        /// Which value.
+        what: &'static str,
+        /// The value, in track ticks.
+        ticks: i64,
+    },
+    /// The first video packet was not a keyframe, so the stream could not be decoded from
+    /// its start.
+    #[error("the first video packet must be a keyframe")]
+    FirstVideoNotKeyframe,
     /// AMF0 input ended in the middle of a value.
     #[error("AMF0 data truncated at byte {offset}")]
     Amf0Truncated {
