@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:a655b1c4ad444569", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: parity bullet now says the collection has a recording output and recording path rejections, matching parity.rs" }
+verified = { hash = "b3:651be5acd7e8e518", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3, protocol 0.10: Geometry bullet now says 0.10 is the canvas and geometry surface and 0.9 the record output kind; parity bullet names canvas, geometry item, RTMP and recording outputs; matches version.rs, parity.rs, regenerated snaps" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -98,7 +98,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:1eebe9000cc00689", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's 0.9 record kind and Compatibility/OQ8; #166 changed only parity.rs and the mock, no wire type" }
+verified = { hash = "b3:832ff4370e9e8c2e", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3, protocol 0.10: handshake example minor 10, On the wire (0.10) list, deprecations since 0.10 and pre-0.10 defaults match command.rs/query.rs/geometry.rs doc comments and the regenerated protocol.snap; main's record output text holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

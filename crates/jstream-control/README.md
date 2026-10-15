@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:e64e024557ae14a1", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: trait, errors, mock and ws bullets hold; the mock now also accepts record outputs with graph's path rule" }
+verified = { hash = "b3:37347e34d53d39a2", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: re-read; trait, errors, mock and ws bullets hold with the mock's outputs/recordings (main) and canvas/geometry (B3)" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:12bb0846138edf20", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: added recording-path, set_target-on-recording and unknown kind/target/container checks to the mock's edit list, and recording paths to the parity sentence; matches mock.rs check_record/record_path_problem" }
+verified = { hash = "b3:ff231f7fe4132a4f", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: Mock reads bullet merged: output.list and outputs from main, canvas and item placement (transform or geometry plus its view) from B3; edit checks list keeps main's recording checks and B3's geometry_view/check_canvas_side; matches mock.rs" }
 -->
 
 ### The trait

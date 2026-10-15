@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:ed042041866f86ba", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166) into F2b: only the CLI README's edit-form wording changed under apps/**; diagram (outputs list includes record) and host table hold" }
+verified = { hash = "b3:62953f73495e27af", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: re-read; crate shape unchanged by the merge" }
 -->
 
 ```
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:39a005ebabd81f23", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; ADR-0040 hotkey sentence and depends_on are main's; Built so far still lists Record { path, container: mp4 } with its path checks" }
+verified = { hash = "b3:5139a324778fbe13", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: depends_on from main (ADR-0040); Built so far lists placement forms and canvas at protocol 0.10, outputs incl. recording; matches graph model" }
 -->
 
 ```
@@ -504,7 +504,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f7428a0902cef033", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; no message, edit, query or transport rule changed by the mock/parity merge; record kind bullet still says 0.9" }
+verified = { hash = "b3:3850ed1f5f33e5dc", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: Edits bullet merged (record output kind 0.9; canvas.set_size and item.set_geometry 0.10 deprecating item.set_transform); Queries bullet holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -607,7 +607,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:9b8fb2677f948e39", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#169 Y2, #153 I1) into F2b round 2: took main's verified line and re-read; I1's /mcp text; tools.snap unchanged by round 2 (Unknown variants are schemars-skipped)" }
+verified = { hash = "b3:002f7a312e6e20f4", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: re-read against regenerated tools.snap; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -651,7 +651,7 @@ verified = { hash = "b3:9b8fb2677f948e39", by = "agent:claude@session_01RsUPFGhw
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:d9ef248382cce5c7", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): added the sentence that a nested scene goes through render_image as an on-GPU Rgba16Float image placed in its parent, with the caller bounding depth; plus review N5 rename; steps 1-6, S1 table and output path unchanged" }
+verified = { hash = "b3:83a3eee5c370d83c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: merged the compositor paragraph: C6's render_image nesting kept, fit modes dropped from the not-yet list since place.rs draws them; 3D still outside" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

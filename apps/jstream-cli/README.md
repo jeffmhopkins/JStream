@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:40bcd2eae02a4021", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155, 0.8) into A5: re-read; Running bullet (mcp and output set-key read the BufRead) and contents list hold for args.rs with both source.rename and the output commands" }
+verified = { hash = "b3:410fe3dfd7850640", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (A5 #166, F2b #170) into B3 at 0.10: re-read; contents list holds for args.rs/run.rs with outputs (main) and geometry: None plus the StateGet canvas field ignored by the table printer (B3)" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:5e8970433d7959a4", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: edit-forms bullet now says output.create's URL form is for generic RTMP and the CLI has no recording form yet; args.rs only parses rtmp(s) URLs" }
+verified = { hash = "b3:d0d64aed7dc16f17", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: merged the Edits bullet (main's output forms and settings gap, B3's 0.10 canvas.set_size/item.set_geometry not in the CLI) and the Reads bullet (main's outputs listing and output status, B3's geometry transform-view columns and --json-only canvas); matches args.rs, run.rs and run/tests.rs goldens" }
 -->
 
 ```sh
@@ -211,7 +211,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fc2eb1855e933b5e", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: control design change is only the mock's recording checks; CLI design text about WsControl and the mock holds" }
+verified = { hash = "b3:e801c8e28dd8f5ec", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: re-read; parsing, block_on, connector, mock, writers and MCP proxy bullets hold; the mock now has both main's outputs and B3's canvas/geometry" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

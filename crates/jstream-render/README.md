@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:10dfd4b0711bd43d", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): rewrote the nested-scene bullet (render_image returns an Image on this compositor that the caller places; depth and cycles are jstream-core's); plus review N5 helper rename; other bullets unchanged against main" }
+verified = { hash = "b3:ea15c0bd3bde1a7c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: What one scene means keeps C6's nested-scene bullet (render_image) and B3's two placement forms; matches scene.rs/place.rs and lib.rs" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -104,7 +104,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:f5d2dd7954337afa", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): added the render_image paragraph after pass 2 (new Rgba16Float RENDER_ATTACHMENT|TEXTURE_BINDING texture per call, read as premultiplied, one submit ordered before the outer one) and the render_image resources row; plus review N5 helper rename; render's passes, staging and readback unchanged" }
+verified = { hash = "b3:3b60b5c6ca1a36be", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: re-read; passes include C6's render_image Rgba16Float target and B3's geometry placement in place.rs (local-frame clip, proportional UVs); holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -249,7 +249,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:2c900748814f915f", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Review N5: the render_image tests are three pixel tests plus an ownership check (four tests), now stated so; rest unchanged" }
+verified = { hash = "b3:3e16adcadbe1704c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: tests.rs has C6's render_image tests (migrated to Placement::Legacy) and B3's geometry grids; both paragraphs hold" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
