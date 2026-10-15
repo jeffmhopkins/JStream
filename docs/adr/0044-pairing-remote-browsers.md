@@ -47,7 +47,9 @@ posture, so it is the maintainer's call
   token file. A device token grants exactly what the control token grants (no tiers), is
   named in the audit log as `device:<name>`, and can be listed and revoked by any
   authenticated client (`device.list`, `device.revoke`); revoking one closes its open
-  connections. One unused for 30 days is dropped. The control token is never sent to a
+  connections. One unused for 30 days is dropped. A client presents it as it presents
+  the control token: `Authorization`, or, from a browser's WebSocket, the offered
+  subprotocol `jstream.token.<token>` beside `jstream`. The control token is never sent to a
   device, so revoking a lost tablet doesn't break every other client.
 - **Never logged.** Pairing codes and device tokens never appear in logs, events, the
   audit log, snapshots or MCP results other than `pairing.start`'s own answer
