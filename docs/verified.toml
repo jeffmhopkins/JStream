@@ -1617,7 +1617,7 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:20caa632a5d049a6" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:cfcb6044c7a4e3a7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against PR #370 diff: URLs-and-keys bullet now states Rejected redacts the key, then cuts code/description to 512 chars (MAX_REMOTE_TEXT) and replaces control chars with spaces, matching rejected()/remote_text() in rtmp/publisher.rs and its new tests; rest of section unaffected by the merge." }
+stamp = { hash = "b3:71db17a5973fc33a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#370 RTMP rejection text, #324) into #371: re-read; main's URLs-and-keys bullet (key redacted, 512-char cap, control chars) beside this PR's recorder bullet (hard link then unlink, create_new placeholder fallback) and Tests paragraph (dangling-symlink test); both match code; holds" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:2ef270bb1b4e0cc6" }
