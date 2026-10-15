@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:e6d1ce98acbced93", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Engine bullet names with_key_store, output_kind and the key store calls outside the lock; Outputs bullet says runtime states follow the collection; Tests bullet names the output and key tests and secrets_are_redacted" }
+verified = { hash = "b3:d852e03c5535905f", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#142 outputs and stream keys) into #133: prose is main's; re-read Engine, Outputs and Tests bullets (key store, output_kind, collection outputs); #133's change is only Running field and OpenedAudio binding order, which no bullet describes" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -92,7 +92,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:aef719c0b537e603", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Queries/Actions bullets cover output.list, key_set, set_key/clear_key; Outputs rewritten for collection outputs + Outputs::sync + apply_with_running + with_output declared; new Stream keys paragraph matches key_action/check_key/no_key_store; removed the R-SEC-001 Not yet line" }
+verified = { hash = "b3:cab2a58451ec8ea0", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#142) into #133: prose is main's; re-read Outputs, Stream keys and Pipeline/stop paragraphs; #133's drop order (InputControls after _streams) touches neither the output collection nor the key store and changes no described state, error or deadline" }
 -->
 
 ### Engine and sessions
