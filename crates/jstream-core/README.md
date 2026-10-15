@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:f1e3b9e3aa267ab5", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2: tests-only change (half-rate mix test pumps for up to 30 s); tests list and design text still hold" }
+verified = { hash = "b3:2cd6aa0ccf6dfe94", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2's test-only change (mix test pump budget); privacy text and tests list hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -186,7 +186,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:2790dbb5527b5f41", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2: tests-only change (half-rate mix test pumps for up to 30 s); tests list and design text still hold" }
+verified = { hash = "b3:9da3fcb15f7897c1", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2's test-only change (mix test pump budget); privacy text and tests list hold" }
 -->
 
 ### Engine and sessions
