@@ -3331,6 +3331,23 @@ mod hotkeys {
     }
 
     #[test]
+    fn an_action_that_names_nothing_can_be_bound_and_no_delete_removes_it() {
+        let mut graph = bound();
+        apply_ok(&mut graph, vec![set("F9", Action::AudioResetLoudness {})]);
+        let applied = apply_ok(&mut graph, delete_scene("a"));
+        assert!(
+            applied
+                .removed_hotkeys
+                .iter()
+                .all(|b| b.chord.as_str() != "F9")
+        );
+        assert_eq!(
+            graph.state().hotkey(&Chord::new("F9")),
+            Some(&Action::AudioResetLoudness {})
+        );
+    }
+
+    #[test]
     fn a_binding_must_name_objects_that_exist_and_keep_no_secret() {
         let mut graph = fixture();
         assert_eq!(

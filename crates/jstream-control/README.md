@@ -138,8 +138,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     source with no audio, removing a missing send, and gains outside −100 to +24 dB;
   - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, a refused
     `output.set_key` action and a missing named scene or output, in that order, and
-    `hotkey.clear` of an unbound chord. Deleting a scene, source or output removes the
-    bindings naming it and lists them in the batch result's `removed_hotkeys`.
+    `hotkey.clear` of an unbound chord. Deleting a scene, source, output or encoder
+    profile removes the bindings naming it and lists them in the batch result's `removed_hotkeys`.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind; `MockEngine::with_kinds` only tells

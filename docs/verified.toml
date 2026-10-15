@@ -138,7 +138,7 @@ stamp = { hash = "b3:b5397b5d6407b040" }
 stamp = { hash = "b3:d63ee0e9a7bb859a" }
 
 ["ARCH#data-model"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:e6df7043e0ec9ae2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:e6df7043e0ec9ae2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "model/mod.rs gains hotkeys: BTreeMap<Chord, Action>, accessors and the invariant that a binding's chord is valid, its action bindable and its named objects exist; the tree's 'hotkeys [{ chord, action }]' line already says this, so the section holds." }
 
 ["ARCH#gpu-pipeline"."body"]
 stamp = { hash = "b3:6412cfa1dc90c301", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
@@ -201,7 +201,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:f02a604bb7c00a54", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:f02a604bb7c00a54", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: noun list adds hotkey and tools/list is about 199 KB; checked tools.snap is 198,925 bytes with 19 tools (tests.rs), and the mcp README noun table adds hotkey." }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:8eea55b34b97d6a9" }
@@ -216,10 +216,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:9b08a4d8b05a533b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:9b08a4d8b05a533b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: noun list adds hotkey and tools/list is about 199 KB; checked tools.snap is 198,925 bytes with 19 tools (tests.rs), and the mcp README noun table adds hotkey." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:9787168c7d4f21a4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:9787168c7d4f21a4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: noun list adds hotkey and tools/list is about 199 KB; checked tools.snap is 198,925 bytes with 19 tools (tests.rs), and the mcp README noun table adds hotkey." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -240,7 +240,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:0ed6ea08d23b6b0d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:0ed6ea08d23b6b0d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: noun list adds hotkey and tools/list is about 199 KB; checked tools.snap is 198,925 bytes with 19 tools (tests.rs), and the mcp README noun table adds hotkey." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -252,7 +252,7 @@ stamp = { hash = "b3:1c343ec4bf85722c", by = "agent:claude@session_01D6iWjpMkoHb
 stamp = { hash = "b3:febfe552adc09d5b" }
 
 ["ARCH#persistence"."body"]
-stamp = { hash = "b3:35c872b1bdbe8e0c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:35c872b1bdbe8e0c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: a field added for new collection state (encoder profiles, hotkey bindings) is omitted when empty, so no schema_version bump; checked against persist/mod.rs (hotkeys skipped when empty, validated on load) and persist/tests.rs (round trip, missing-scene binding refused, v1 fixture still loads)." }
 
 ["ARCH#persistence"."dep:docs/RULES.md#R-API-003"]
 stamp = { hash = "b3:f17cde9b0d3da07c" }
@@ -267,10 +267,10 @@ stamp = { hash = "b3:b655210653447199" }
 stamp = { hash = "b3:a6d28eab770c4e2f" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:b648f6836c59c2ca", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:b648f6836c59c2ca", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: a field added for new collection state (encoder profiles, hotkey bindings) is omitted when empty, so no schema_version bump; checked against persist/mod.rs (hotkeys skipped when empty, validated on load) and persist/tests.rs (round trip, missing-scene binding refused, v1 fixture still loads)." }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:84b94604f7538d26", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:84b94604f7538d26", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: a field added for new collection state (encoder profiles, hotkey bindings) is omitted when empty, so no schema_version bump; checked against persist/mod.rs (hotkeys skipped when empty, validated on load) and persist/tests.rs (round trip, missing-scene binding refused, v1 fixture still loads)." }
 
 ["ARCH#principles"."body"]
 stamp = { hash = "b3:5af84c5cc7c0a12d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited principle 8: listeners require a token and check Host, and Origin when present, matching R-SEC-002's new wording; other principles unchanged" }
@@ -285,7 +285,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:cb8e0e9d32edaaa9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:cb8e0e9d32edaaa9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -297,7 +297,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:07915c072e50c894" }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:bb15249ed50e5ec3", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:fa9600567b0383f3", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:e55527bc3d425ace" }
@@ -309,7 +309,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:3d3f1aa628f9f1b6", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:24b17a600eba5056", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -327,28 +327,28 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:5cfa3cb55bbe75fa", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
+stamp = { hash = "b3:ccb1675503e17059", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:80e4235b7d580b58", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:80e4235b7d580b58", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:da8e8e8a2a0acfd3", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:da8e8e8a2a0acfd3", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:d56457e9b4fdc33e", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:c676f281a5900516", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/envelope.rs"]
-stamp = { hash = "b3:8e33dcbd66fc577a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:8e33dcbd66fc577a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:1eda3de57d4c969f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:1eda3de57d4c969f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
@@ -357,7 +357,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:934af96f81dbee2c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:934af96f81dbee2c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -366,7 +366,7 @@ stamp = { hash = "b3:91ec5275ab3c5e9f" }
 stamp = { hash = "b3:abc973f4355bada5" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/hotkey.rs"]
-stamp = { hash = "b3:3a382a5c4fdff32d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:b56a10d0198f4e5c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/id.rs"]
 stamp = { hash = "b3:353359feae2606b3" }
@@ -375,16 +375,16 @@ stamp = { hash = "b3:353359feae2606b3" }
 stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:20fc2a6d60b85d9b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:20fc2a6d60b85d9b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:489f2e86af7bf320" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:8ce4897776c4c1e0", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:8ce4897776c4c1e0", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:392fee06379249d4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:392fee06379249d4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -393,7 +393,7 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-server/Cargo.toml"]
 stamp = { hash = "b3:e9241efe87e7e719" }
@@ -423,7 +423,7 @@ stamp = { hash = "b3:05057d7979293830" }
 stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Control protocol summary against the server shutdown change: envelope, request/response and versioning claims unaffected; a call after shutdown fails Disconnected as the connection closes, detailed in jstream-server README design." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:aff58e3962ce06a8", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:aff58e3962ce06a8", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: adds the hotkey.set/hotkey.clear bullet (ADR-0024 §5, 0.20; deletes remove bindings, removed_hotkeys, undo restores) and delete.plan's hotkeys. Checked against protocol hotkey.rs/command.rs/envelope.rs/query.rs/version.rs, the snapshots, control mock.rs and README (encoder deletes added, N2), protocol README and server tests.rs (CallResult::batch only)." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -822,13 +822,13 @@ stamp = { hash = "b3:81f5ba35d6efa0cd" }
 stamp = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4c2c9dc9c0335c31", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:bd008df43555e8ad", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "args.rs/run.rs/run tests change only how hotkey edits are parsed and how removed_hotkeys and state hotkeys print; still one hello then one request per command. dep jstream-control#design gained the mock's hotkey checks and removed_hotkeys on deletes, which the CLI only prints; nothing here describes mock behaviour." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:161cb24e7e0ada9a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:161cb24e7e0ada9a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "args.rs/run.rs/run tests change only how hotkey edits are parsed and how removed_hotkeys and state hotkeys print; still one hello then one request per command. dep jstream-control#design gained the mock's hotkey checks and removed_hotkeys on deletes, which the CLI only prints; nothing here describes mock behaviour." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -843,10 +843,10 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:fda966f17be4ba41", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:fda966f17be4ba41", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "args.rs/run.rs/run tests change only how hotkey edits are parsed and how removed_hotkeys and state hotkeys print; still one hello then one request per command. dep jstream-control#design gained the mock's hotkey checks and removed_hotkeys on deletes, which the CLI only prints; nothing here describes mock behaviour." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:f69fa1001bdcee61", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:f69fa1001bdcee61", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "args.rs/run.rs/run tests change only how hotkey edits are parsed and how removed_hotkeys and state hotkeys print; still one hello then one request per command. dep jstream-control#design gained the mock's hotkey checks and removed_hotkeys on deletes, which the CLI only prints; nothing here describes mock behaviour." }
 
 ["CRATE-jstream-cli#purpose"."body"]
 stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's, the CLI's commands are unchanged by D5; holds" }
@@ -855,7 +855,7 @@ stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:161cb24e7e0ada9a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:161cb24e7e0ada9a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = 'args.rs and run.rs gain hotkey.set/hotkey.clear edit parsing, a removed-hotkey line after a batch and a hotkeys table in state get; run/tests.rs only adds "hotkeys":[] to a state fixture. The purpose (a thin protocol client for scripting and smoke tests) is unchanged.' }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -870,16 +870,16 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:fda966f17be4ba41", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:fda966f17be4ba41", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = 'args.rs and run.rs gain hotkey.set/hotkey.clear edit parsing, a removed-hotkey line after a batch and a hotkeys table in state get; run/tests.rs only adds "hotkeys":[] to a state fixture. The purpose (a thin protocol client for scripting and smoke tests) is unchanged.' }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:f69fa1001bdcee61", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:f69fa1001bdcee61", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = 'args.rs and run.rs gain hotkey.set/hotkey.clear edit parsing, a removed-hotkey line after a batch and a hotkeys table in state get; run/tests.rs only adds "hotkeys":[] to a state fixture. The purpose (a thin protocol client for scripting and smoke tests) is unchanged.' }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:01d246e83e15c97b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:01d246e83e15c97b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: added hotkey.set <chord> <action> <id> / hotkey.clear <chord>, the removed-hotkey print and the state get hotkeys table; checked against args.rs (hotkey_action takes scene.switch, output.start/stop/clear_key only, else a usage error) and run.rs (prints 'removed hotkey <chord>' per binding; write_hotkeys prints the CHORD/ACTION table only when any are bound)." }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:161cb24e7e0ada9a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:161cb24e7e0ada9a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: added hotkey.set <chord> <action> <id> / hotkey.clear <chord>, the removed-hotkey print and the state get hotkeys table; checked against args.rs (hotkey_action takes scene.switch, output.start/stop/clear_key only, else a usage error) and run.rs (prints 'removed hotkey <chord>' per binding; write_hotkeys prints the CHORD/ACTION table only when any are bound)." }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
 stamp = { hash = "b3:16e79b530b6f8e0a" }
@@ -888,13 +888,13 @@ stamp = { hash = "b3:16e79b530b6f8e0a" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:fda966f17be4ba41", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:fda966f17be4ba41", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: added hotkey.set <chord> <action> <id> / hotkey.clear <chord>, the removed-hotkey print and the state get hotkeys table; checked against args.rs (hotkey_action takes scene.switch, output.start/stop/clear_key only, else a usage error) and run.rs (prints 'removed hotkey <chord>' per binding; write_hotkeys prints the CHORD/ACTION table only when any are bound)." }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:4c2c9dc9c0335c31", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:bd008df43555e8ad", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys bullet lists the mock's checks in order and now says deleting a scene, source, output or encoder profile removes naming bindings (N2); checked against mock.rs apply (EncoderDelete arm, Encoder in the exists check) and its tests. dep ARCH#protocol gained the hotkey.set/clear bullet and delete.plan's hotkeys, which this section matches." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:cb8e0e9d32edaaa9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:cb8e0e9d32edaaa9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys bullet lists the mock's checks in order and now says deleting a scene, source, output or encoder profile removes naming bindings (N2); checked against mock.rs apply (EncoderDelete arm, Encoder in the exists check) and its tests. dep ARCH#protocol gained the hotkey.set/clear bullet and delete.plan's hotkeys, which this section matches." }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -915,7 +915,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:3d3f1aa628f9f1b6", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:24b17a600eba5056", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys bullet lists the mock's checks in order and now says deleting a scene, source, output or encoder profile removes naming bindings (N2); checked against mock.rs apply (EncoderDelete arm, Encoder in the exists check) and its tests. dep ARCH#protocol gained the hotkey.set/clear bullet and delete.plan's hotkeys, which this section matches." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -945,7 +945,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:3d3f1aa628f9f1b6", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:24b17a600eba5056", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "mock.rs adds hotkey.set/hotkey.clear with the graph's checks, hotkey removal on scene/source/output/encoder deletes (encoder added this round, N2) and hotkeys in state.get/delete.plan; the mock is still an in-memory engine double for clients' tests, as the purpose says." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -960,16 +960,16 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
+stamp = { hash = "b3:d303573600824122", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the batch paragraph now says the result lists the bindings the batch's deletes removed (removed_hotkeys), matching engine.rs. dep control#design and dep protocol#design gained hotkey commands and removal-on-delete, which the engine passes through unchanged; dep ARCH#protocol likewise. Idempotency, events and locking text unaffected." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4c2c9dc9c0335c31", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:bd008df43555e8ad", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the batch paragraph now says the result lists the bindings the batch's deletes removed (removed_hotkeys), matching engine.rs. dep control#design and dep protocol#design gained hotkey commands and removal-on-delete, which the engine passes through unchanged; dep ARCH#protocol likewise. Idempotency, events and locking text unaffected." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: re-read; engine/session design does not restate asset-path rules; the protocol Design change only tightens a per-value check" }
+stamp = { hash = "b3:f274807c7fdb4e42", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the batch paragraph now says the result lists the bindings the batch's deletes removed (removed_hotkeys), matching engine.rs. dep control#design and dep protocol#design gained hotkey commands and removal-on-delete, which the engine passes through unchanged; dep ARCH#protocol likewise. Idempotency, events and locking text unaffected." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:cb8e0e9d32edaaa9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:cb8e0e9d32edaaa9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the batch paragraph now says the result lists the bindings the batch's deletes removed (removed_hotkeys), matching engine.rs. dep control#design and dep protocol#design gained hotkey commands and removal-on-delete, which the engine passes through unchanged; dep ARCH#protocol likewise. Idempotency, events and locking text unaffected." }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -990,7 +990,7 @@ stamp = { hash = "b3:9ae9770430e0f01d" }
 stamp = { hash = "b3:98296f7ad634452f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audit.rs"]
-stamp = { hash = "b3:67907044ac5f46cb", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:67907044ac5f46cb", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the batch paragraph now says the result lists the bindings the batch's deletes removed (removed_hotkeys), matching engine.rs. dep control#design and dep protocol#design gained hotkey commands and removal-on-delete, which the engine passes through unchanged; dep ARCH#protocol likewise. Idempotency, events and locking text unaffected." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/collection.rs"]
 stamp = { hash = "b3:6ecb293741341e3b" }
@@ -999,7 +999,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:f49d5448404f02f8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
+stamp = { hash = "b3:309f792f0e8707f1", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the batch paragraph now says the result lists the bindings the batch's deletes removed (removed_hotkeys), matching engine.rs. dep control#design and dep protocol#design gained hotkey commands and removal-on-delete, which the engine passes through unchanged; dep ARCH#protocol likewise. Idempotency, events and locking text unaffected." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1047,7 +1047,7 @@ stamp = { hash = "b3:918fe91ec11037de" }
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:cbc99da5e187dc05", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:cbc99da5e187dc05", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the batch paragraph now says the result lists the bindings the batch's deletes removed (removed_hotkeys), matching engine.rs. dep control#design and dep protocol#design gained hotkey commands and removal-on-delete, which the engine passes through unchanged; dep ARCH#protocol likewise. Idempotency, events and locking text unaffected." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
@@ -1080,7 +1080,7 @@ stamp = { hash = "b3:9ae9770430e0f01d" }
 stamp = { hash = "b3:98296f7ad634452f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audit.rs"]
-stamp = { hash = "b3:67907044ac5f46cb", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:67907044ac5f46cb", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "audit.rs/engine.rs/tests.rs/scenarios.rs only carry the new removed_hotkeys field through CallResult::Batch (engine passes applied.removed_hotkeys; audit and tests use { rev, .. } or CallResult::batch). The engine's purpose is unchanged." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/collection.rs"]
 stamp = { hash = "b3:6ecb293741341e3b" }
@@ -1089,7 +1089,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:f49d5448404f02f8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
+stamp = { hash = "b3:309f792f0e8707f1", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "audit.rs/engine.rs/tests.rs/scenarios.rs only carry the new removed_hotkeys field through CallResult::Batch (engine passes applied.removed_hotkeys; audit and tests use { rev, .. } or CallResult::batch). The engine's purpose is unchanged." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1137,7 +1137,7 @@ stamp = { hash = "b3:918fe91ec11037de" }
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:cbc99da5e187dc05", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:cbc99da5e187dc05", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "audit.rs/engine.rs/tests.rs/scenarios.rs only carry the new removed_hotkeys field through CallResult::Batch (engine passes applied.removed_hotkeys; audit and tests use { rev, .. } or CallResult::batch). The engine's purpose is unchanged." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
@@ -1158,7 +1158,7 @@ stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: tests/mcp.rs change is only block_on's doc comment (hello wait's timer never starts when hello is ready); crate purpose unaffected" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/tests/scenarios.rs"]
-stamp = { hash = "b3:8da057df581d4337", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:8da057df581d4337", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "audit.rs/engine.rs/tests.rs/scenarios.rs only carry the new removed_hotkeys field through CallResult::Batch (engine passes applied.removed_hotkeys; audit and tests use { rev, .. } or CallResult::batch). The engine's purpose is unchanged." }
 
 ["CRATE-jstream-core#runtime"."body"]
 stamp = { hash = "b3:50a6bc0982573317", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
@@ -1191,13 +1191,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via core#design, which now describes Engine::with_browser and a browser page's own audio (Recorded::Own); the daemon wires no with_browser and its Design names no audio sources or page audio; holds" }
+stamp = { hash = "b3:d303573600824122", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "serve.rs change is a test assertion only (CallResult::batch). dep jstream-core#design gained removed_hotkeys in the batch result, and dep ARCH#persistence gained the rule that a new optional collection field (hotkeys) needs no schema_version bump; the daemon still just names the collection file and serves the engine, so neither changes this section." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:35c872b1bdbe8e0c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:35c872b1bdbe8e0c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "serve.rs change is a test assertion only (CallResult::batch). dep jstream-core#design gained removed_hotkeys in the batch result, and dep ARCH#persistence gained the rule that a new optional collection field (hotkeys) needs no schema_version bump; the daemon still just names the collection file and serves the engine, so neither changes this section." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
 stamp = { hash = "b3:9d6ffbf45d26a653" }
@@ -1221,7 +1221,7 @@ stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:d953b62766b64750", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:d953b62766b64750", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "serve.rs change is a test assertion only (CallResult::batch). dep jstream-core#design gained removed_hotkeys in the batch result, and dep ARCH#persistence gained the rule that a new optional collection field (hotkeys) needs no schema_version bump; the daemon still just names the collection file and serves the engine, so neither changes this section." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:5b73caa28ffd99e3" }
@@ -1251,13 +1251,13 @@ stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:d953b62766b64750", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:d953b62766b64750", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "serve.rs (a unit test) and tests/daemon.rs only switch CallResult::Batch { rev } to CallResult::batch(rev) for the new removed_hotkeys field; the daemon's purpose is unchanged." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:5b73caa28ffd99e3" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/daemon.rs"]
-stamp = { hash = "b3:b249f23fb386b551", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:b249f23fb386b551", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "serve.rs (a unit test) and tests/daemon.rs only switch CallResult::Batch { rev } to CallResult::batch(rev) for the new removed_hotkeys field; the daemon's purpose is unchanged." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/delay_load.rs"]
 stamp = { hash = "b3:fa55ac483c3bac65" }
@@ -1497,10 +1497,10 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:21668f51b28f0233" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:73d809f5cde6c770", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:73d809f5cde6c770", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: re-read; graph purpose relies on protocol Edits, IDs and errors, unaffected by the tighter absolute asset-path check" }
+stamp = { hash = "b3:f274807c7fdb4e42", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1509,7 +1509,7 @@ stamp = { hash = "b3:95dbeb7275d807fb" }
 stamp = { hash = "b3:d72def29f6861e6d" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/apply.rs"]
-stamp = { hash = "b3:e395b53ca3233aa2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:e395b53ca3233aa2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/audio.rs"]
 stamp = { hash = "b3:3a5dcf3b621fc077" }
@@ -1521,43 +1521,43 @@ stamp = { hash = "b3:b1dc233b2dfda255" }
 stamp = { hash = "b3:42485db0e5133b45" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/hotkey.rs"]
-stamp = { hash = "b3:5c7646c782202ca4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:5c7646c782202ca4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/lib.rs"]
-stamp = { hash = "b3:6f5cd2e4a078b2fa", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:6f5cd2e4a078b2fa", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:e6df7043e0ec9ae2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:e6df7043e0ec9ae2", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/fixtures/v1.json"]
 stamp = { hash = "b3:a6d28eab770c4e2f" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:b648f6836c59c2ca", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:b648f6836c59c2ca", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:84b94604f7538d26", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:84b94604f7538d26", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/plan.rs"]
-stamp = { hash = "b3:3feae4af134868d5", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:3feae4af134868d5", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/read.rs"]
-stamp = { hash = "b3:29df0200fa788ce5", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:29df0200fa788ce5", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/target.rs"]
 stamp = { hash = "b3:675f46eea33b1c83", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
-stamp = { hash = "b3:31f22b29d6921d57", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:4900feb4bd9c9557", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/touched.rs"]
-stamp = { hash = "b3:504ba542f30a2242", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:504ba542f30a2242", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the collection list gains hotkeys (Chord -> Action, always naming objects that exist) and a Hotkeys bullet (check order, inverses, removal on scene/source/output/encoder delete with removed_hotkeys, touched set); plan/read/persist paragraphs gain delete.plan's hotkeys, state.get's hotkeys and the optional saved field. Checked against hotkey.rs, apply.rs, plan.rs, read.rs, touched.rs, model/mod.rs (hotkeys BTreeMap, invariant), persist/mod.rs and the tests (incl. this round's unnamed-action test). dep protocol#design gained the hotkey commands and HotkeyBinding this matches." }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:f654be8c9f1ab637", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:f654be8c9f1ab637", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the noun table adds hotkey; checked against tests.rs (tool list, count 19) and tools.snap. dep ARCH#mcp gained the hotkey noun and the ~199 KB size, matching this section." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:f02a604bb7c00a54", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:f02a604bb7c00a54", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the noun table adds hotkey; checked against tests.rs (tool list, count 19) and tools.snap. dep ARCH#mcp gained the hotkey noun and the ~199 KB size, matching this section." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1590,7 +1590,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:0ed6ea08d23b6b0d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:0ed6ea08d23b6b0d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the noun table adds hotkey; checked against tests.rs (tool list, count 19) and tools.snap. dep ARCH#mcp gained the hotkey noun and the ~199 KB size, matching this section." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1620,7 +1620,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:0ed6ea08d23b6b0d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:0ed6ea08d23b6b0d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "tests.rs only adds the hotkey noun to the expected tool list (19 tools), hotkeys:[] to a state fixture and CallResult::batch; the MCP server's purpose is unchanged." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -2022,7 +2022,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
+stamp = { hash = "b3:f274807c7fdb4e42", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2040,25 +2040,25 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:80e4235b7d580b58", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:80e4235b7d580b58", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:da8e8e8a2a0acfd3", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:da8e8e8a2a0acfd3", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:d56457e9b4fdc33e", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:c676f281a5900516", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/envelope.rs"]
-stamp = { hash = "b3:8e33dcbd66fc577a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:8e33dcbd66fc577a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:1eda3de57d4c969f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:1eda3de57d4c969f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
@@ -2067,7 +2067,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:934af96f81dbee2c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:934af96f81dbee2c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2076,7 +2076,7 @@ stamp = { hash = "b3:91ec5275ab3c5e9f" }
 stamp = { hash = "b3:abc973f4355bada5" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/hotkey.rs"]
-stamp = { hash = "b3:3a382a5c4fdff32d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:b56a10d0198f4e5c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/id.rs"]
 stamp = { hash = "b3:353359feae2606b3" }
@@ -2085,16 +2085,16 @@ stamp = { hash = "b3:353359feae2606b3" }
 stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:20fc2a6d60b85d9b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:20fc2a6d60b85d9b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:489f2e86af7bf320" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:8ce4897776c4c1e0", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:8ce4897776c4c1e0", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:392fee06379249d4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:392fee06379249d4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -2103,10 +2103,10 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body: the hotkeys subsection (chord grammar, set/clear checks and errors, output.set_key refused, removal on scene/source/output/encoder delete, removed_hotkeys, delete.plan hotkeys, HotkeyBinding as plain JSON) checked against hotkey.rs, command.rs (exhaustive bind_problem), envelope.rs (CallResult::Batch removed_hotkeys, CallResult::batch), query.rs, error.rs, version.rs (minor 20), fixtures.rs, parity.rs and the regenerated protocol.snap/examples.snap." }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:870ad0fdfe96951b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:870ad0fdfe96951b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: protocol 0.20 adds hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result, delete.plan's hotkeys and state.get's hotkeys; this round hotkey.rs uses expect on Action serialization (N3) and command.rs's bind_problem is exhaustive (N4). Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -2115,16 +2115,16 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:d56457e9b4fdc33e", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:c676f281a5900516", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: protocol 0.20 adds hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result, delete.plan's hotkeys and state.get's hotkeys; this round hotkey.rs uses expect on Action serialization (N3) and command.rs's bind_problem is exhaustive (N4). Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/envelope.rs"]
-stamp = { hash = "b3:8e33dcbd66fc577a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:8e33dcbd66fc577a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: protocol 0.20 adds hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result, delete.plan's hotkeys and state.get's hotkeys; this round hotkey.rs uses expect on Action serialization (N3) and command.rs's bind_problem is exhaustive (N4). Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:1eda3de57d4c969f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:1eda3de57d4c969f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: protocol 0.20 adds hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result, delete.plan's hotkeys and state.get's hotkeys; this round hotkey.rs uses expect on Action serialization (N3) and command.rs's bind_problem is exhaustive (N4). Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
@@ -2133,7 +2133,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:934af96f81dbee2c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:934af96f81dbee2c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: protocol 0.20 adds hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result, delete.plan's hotkeys and state.get's hotkeys; this round hotkey.rs uses expect on Action serialization (N3) and command.rs's bind_problem is exhaustive (N4). Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2142,7 +2142,7 @@ stamp = { hash = "b3:91ec5275ab3c5e9f" }
 stamp = { hash = "b3:abc973f4355bada5" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/hotkey.rs"]
-stamp = { hash = "b3:3a382a5c4fdff32d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:b56a10d0198f4e5c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: protocol 0.20 adds hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result, delete.plan's hotkeys and state.get's hotkeys; this round hotkey.rs uses expect on Action serialization (N3) and command.rs's bind_problem is exhaustive (N4). Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/id.rs"]
 stamp = { hash = "b3:353359feae2606b3" }
@@ -2151,16 +2151,16 @@ stamp = { hash = "b3:353359feae2606b3" }
 stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: kind.rs/settings.rs changes only tighten check_asset_path and its docs; the Kinds and settings contents bullet (pure per-value checks incl. check_asset_path) still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:20fc2a6d60b85d9b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:20fc2a6d60b85d9b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: protocol 0.20 adds hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result, delete.plan's hotkeys and state.get's hotkeys; this round hotkey.rs uses expect on Action serialization (N3) and command.rs's bind_problem is exhaustive (N4). Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:489f2e86af7bf320" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:8ce4897776c4c1e0", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:8ce4897776c4c1e0", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: protocol 0.20 adds hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result, delete.plan's hotkeys and state.get's hotkeys; this round hotkey.rs uses expect on Action serialization (N3) and command.rs's bind_problem is exhaustive (N4). Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:392fee06379249d4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:392fee06379249d4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: protocol 0.20 adds hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result, delete.plan's hotkeys and state.get's hotkeys; this round hotkey.rs uses expect on Action serialization (N3) and command.rs's bind_problem is exhaustive (N4). Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -2169,7 +2169,7 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: kind.rs/settings.rs changes only tighten check_asset_path and its docs; the Kinds and settings contents bullet (pure per-value checks incl. check_asset_path) still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "Body and command/envelope/error/fixtures/hotkey/lib/parity/query/version.rs: protocol 0.20 adds hotkey.set/hotkey.clear, Chord and HotkeyBinding, removed_hotkeys on the batch result, delete.plan's hotkeys and state.get's hotkeys; this round hotkey.rs uses expect on Action serialization (N3) and command.rs's bind_problem is exhaustive (N4). Still the wire types shared by engine and clients." }
 
 ["CRATE-jstream-render#design"."body"]
 stamp = { hash = "b3:7f2a94f0736d9611", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
@@ -2292,10 +2292,10 @@ stamp = { hash = "b3:eaa109533b8798d8" }
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4c2c9dc9c0335c31", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:bd008df43555e8ad", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "tests.rs change is test-only (CallResult::batch, { rev, .. }). dep control#design and dep ARCH#protocol gained hotkey commands and removed_hotkeys, which the server forwards as opaque protocol calls; transport, auth and framing text unaffected." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:cb8e0e9d32edaaa9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:cb8e0e9d32edaaa9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "tests.rs change is test-only (CallResult::batch, { rev, .. }). dep control#design and dep ARCH#protocol gained hotkey commands and removed_hotkeys, which the server forwards as opaque protocol calls; transport, auth and framing text unaffected." }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:9bcfb0336f6adad9" }
@@ -2328,7 +2328,7 @@ stamp = { hash = "b3:05057d7979293830" }
 stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:aff58e3962ce06a8", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:aff58e3962ce06a8", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "tests.rs change is test-only (CallResult::batch, { rev, .. }). dep control#design and dep ARCH#protocol gained hotkey commands and removed_hotkeys, which the server forwards as opaque protocol calls; transport, auth and framing text unaffected." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2361,7 +2361,7 @@ stamp = { hash = "b3:05057d7979293830" }
 stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:aff58e3962ce06a8", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:aff58e3962ce06a8", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "tests.rs only switches assertions to CallResult::batch and a { rev, .. } pattern for the new removed_hotkeys field; the server's purpose is unchanged." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2481,7 +2481,7 @@ stamp = { hash = "b3:ff923b70ae781b73" }
 stamp = { hash = "b3:49945f646dfa549c" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:b01a707b3873f10f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:b01a707b3873f10f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "canvas/model.rs only matches CallResult::Batch { rev, .. }; canvas editing, drag and the rev it waits for are unchanged." }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2493,7 +2493,7 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:263637b2f03e8558", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4c2c9dc9c0335c31", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:bd008df43555e8ad", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "canvas/model.rs change is a { rev, .. } pattern only. dep control#design gained hotkeys in the mock, which the UI's tests don't use; the UI does not show or bind hotkeys yet, and this section claims nothing about them." }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -2505,7 +2505,7 @@ stamp = { hash = "b3:8c1bea968ba0a189" }
 stamp = { hash = "b3:49945f646dfa549c" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:b01a707b3873f10f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:b01a707b3873f10f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "canvas/model.rs change is a { rev, .. } pattern only. dep control#design gained hotkeys in the mock, which the UI's tests don't use; the UI does not show or bind hotkeys yet, and this section claims nothing about them." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2547,7 +2547,7 @@ stamp = { hash = "b3:8c1bea968ba0a189" }
 stamp = { hash = "b3:49945f646dfa549c" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:b01a707b3873f10f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:b01a707b3873f10f", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "canvas/model.rs only matches CallResult::Batch { rev, .. } for the new removed_hotkeys field; the UI's purpose is unchanged." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2982,10 +2982,10 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): R-API-003 holds: schema stays 1 and a pre-D5 v1 file now loads with its audio sources' master sends, as it did on main" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:35c872b1bdbe8e0c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:35c872b1bdbe8e0c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "dep ARCH#protocol gained hotkey.set/clear and new result fields, all minor additions under R-API-001 (0.20); dep ARCH#persistence gained the optional hotkeys field with no schema_version bump, consistent with R-API-003 since no bump means no migration is owed. Rules unchanged." }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:cb8e0e9d32edaaa9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:cb8e0e9d32edaaa9", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "dep ARCH#protocol gained hotkey.set/clear and new result fields, all minor additions under R-API-001 (0.20); dep ARCH#persistence gained the optional hotkeys field with no schema_version bump, consistent with R-API-003 since no bump means no migration is owed. Rules unchanged." }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
@@ -3021,7 +3021,7 @@ stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:01d246e83e15c97b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:01d246e83e15c97b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "dep CLI#usage gained hotkey edits and state get's hotkeys table (printed only when any are bound); the smoke checks' commands and expected output are unchanged." }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
@@ -3033,7 +3033,7 @@ stamp = { hash = "b3:a560da0e5768f43e" }
 stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:01d246e83e15c97b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys: merged main at f0cb974 and wave/m1 at 900a8c1 (#376 ledger, #400 waves, #371, #373, #301, #324, #247, #359, #350 and others); re-read: main's changes here (browser client e2e, asset path forms, hello timeout, daemon UI dir, outputs, waves) don't touch hotkeys, and this PR's hotkey text (0.20, removed_hotkeys, state.get/delete.plan hotkeys, CLI hotkey edits, mock checks, persistence) still matches the code; holds" }
+stamp = { hash = "b3:01d246e83e15c97b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "dep CLI#usage gained hotkey.set/clear edits and the hotkeys table in state get; the go-live steps use edit output.create, output list/set-key/status/start, events and video snapshot, none of which changed." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }

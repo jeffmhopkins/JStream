@@ -234,7 +234,7 @@ impl HotkeyBinding {
             chord,
             // An action is plain data: IDs, strings and a secret string, which always
             // serialize. A stream key is never bound, so none is copied here.
-            action: serde_json::to_value(action).unwrap_or(serde_json::Value::Null),
+            action: serde_json::to_value(action).expect("invariant: an Action serializes to JSON"),
         }
     }
 

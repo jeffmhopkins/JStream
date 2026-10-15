@@ -637,7 +637,8 @@ impl Action {
 
     /// Why this action can't be bound to a hotkey, as the field within the action and the
     /// reason, or `None` if it can. The engine rejects `hotkey.set` with it, so every
-    /// implementation gives the same one.
+    /// implementation gives the same one. Every action is listed, so a new one has to be
+    /// classified here: one that carries a secret can't be bound.
     pub fn bind_problem(&self) -> Option<(&'static str, &'static str)> {
         match self {
             Action::OutputSetKey { .. } => Some((
@@ -645,7 +646,11 @@ impl Action {
                 "`output.set_key` can't be bound: a stream key is never stored in the \
                  collection (R-SEC-001)",
             )),
-            _ => None,
+            Action::OutputStart { .. }
+            | Action::OutputStop { .. }
+            | Action::OutputClearKey { .. }
+            | Action::AudioResetLoudness {}
+            | Action::SceneSwitch { .. } => None,
         }
     }
 }

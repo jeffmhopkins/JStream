@@ -448,8 +448,9 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
 - **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
   inverse is `hotkey.set` with the action.
 - **Deleting what a binding names removes the binding**, in the same edit:
-  `scene.delete`, `source.delete` and `output.delete` drop every binding whose action
-  names their target (`Action::named_objects`), and their inverses restore the
+  `scene.delete`, `source.delete`, `output.delete` and `encoder.delete` drop every
+  binding whose action names their target (`Action::named_objects`; today only scenes
+  and outputs are named), and their inverses restore the
   bindings after the target. If another client has bound one of those chords since,
   that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
   A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`

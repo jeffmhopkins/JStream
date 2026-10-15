@@ -612,6 +612,9 @@ impl State {
                 Edit::OutputDelete { output_id } => {
                     Some((EntityKind::Output, output_id.to_string()))
                 }
+                Edit::EncoderDelete { profile_id } => {
+                    Some((EntityKind::Encoder, profile_id.to_string()))
+                }
                 _ => None,
             };
             let mut inverse = next.apply(edit, at, &running)?;
@@ -1415,6 +1418,7 @@ impl Collection {
                         EntityKind::Scene => self.scenes.iter().any(|s| s.id.as_str() == id),
                         EntityKind::Source => self.sources.keys().any(|s| s.as_str() == id),
                         EntityKind::Output => self.outputs.keys().any(|o| o.as_str() == id),
+                        EntityKind::Encoder => self.encoders.keys().any(|p| p.as_str() == id),
                         _ => false,
                     };
                     if !exists {
@@ -3072,6 +3076,27 @@ mod tests {
             panic!("not a state");
         };
         assert_eq!(hotkeys, parity::hotkeys());
+    }
+
+    /// `audio.reset_loudness` names nothing, so it binds and no delete removes it; an
+    /// encoder profile's delete removes no binding either, since no action names one.
+    #[test]
+    fn an_action_that_names_nothing_can_be_bound() {
+        let (_engine, control) = parity_engine();
+        let bind = Batch::single(Edit::HotkeySet {
+            chord: jstream_protocol::Chord::new("F9"),
+            action: Action::AudioResetLoudness {},
+        });
+        assert!(batch(&*control, bind).is_ok());
+        let delete = Batch::single(Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        });
+        assert!(batch(&*control, delete).is_ok());
+        let QueryResult::StateGet { hotkeys, .. } = state(&*control) else {
+            panic!("not a state");
+        };
+        let chords: Vec<_> = hotkeys.iter().map(|b| b.chord.as_str()).collect();
+        assert_eq!(chords, ["F1", "F9"]);
     }
 
     #[test]
