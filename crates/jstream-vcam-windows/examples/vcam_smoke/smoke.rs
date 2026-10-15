@@ -215,6 +215,10 @@ fn report(c: &Control, frames: u64) {
         get(&c.frames_shared),
         get(&c.frames_pattern)
     );
+    // The stream is paced to the contract's rate, so this stays at or below about 1 while
+    // a client watches for the whole run.
+    let per_frame = get(&c.frames_served) as f64 / frames.max(1) as f64;
+    say!("samples per producer frame: {per_frame:.2}");
     let ok = get(&c.frames_shared) > 0;
     say!(
         "verdict: {}",

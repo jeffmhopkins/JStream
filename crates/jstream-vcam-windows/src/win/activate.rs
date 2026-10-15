@@ -84,7 +84,7 @@ impl IMFActivate_Impl for Activate_Impl {
             // SAFETY: `riid` is checked for null before the read.
             let iid = (!riid.is_null()).then(|| unsafe { *riid });
             log(format_args!(
-                "Activate::ActivateObject riid={iid:?} host: {}",
+                "Activate::ActivateObject riid={iid:?} {}",
                 super::log::identity()
             ));
             self.activate(riid, ppv)
