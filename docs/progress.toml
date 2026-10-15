@@ -696,6 +696,13 @@ status = "review"
 prs = [309]
 
 [[item]]
+id = "Q4"
+milestone = "M2"
+title = "Performance benchmarks"
+status = "review"
+prs = [361]
+
+[[item]]
 id = "T1"
 milestone = "M2"
 title = "Studio mode and transitions"
@@ -775,6 +782,7 @@ id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
+prs = [359]
 
 [[item]]
 id = "3D1"
