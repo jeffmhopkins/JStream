@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:12acea01746e7b87", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#184 B6, #206, #199, G3a) into ADR-0042: no shape text changed on main and no app manifest view or main.rs changed; host table holds" }
+verified = { hash = "b3:73e78a15981937b9", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: daemon host row now says the first cut serves WebSocket and MCP over HTTP (not the UI or --collection) and on Windows links jstream-platform-windows to go live over RTMP(S); diagram unchanged" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:12acea01746e7b87", by = "agent:claude@session_01A2ofG8U5
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI or `--collection` yet ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI or `--collection` yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S) ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:d55550601ffa56af", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up (review N7): jstream-platform's manifest summary now matches its row word for word (VideoDevices, Codecs, StreamKeyStore, OAuthTokenStore); no other row or edge changed" }
+verified = { hash = "b3:a80da1a5d3a45874", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (C4b follow-up N7: platform summary row) into A3 (apps row: desktop and daemon link their OS platform crate); both rows match manifests, lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -155,7 +155,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -855,7 +855,7 @@ verified = { hash = "b3:e8da9a7e3807bb8c", by = "agent:claude@session_011UxatT9f
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:435cdce080086191", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main: #190's browser-helper wording and this PR's hardware-run bullet both kept; no conflict in meaning" }
+verified = { hash = "b3:a34329174da15f35", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#193: hardware bullet now says RequestSample is paced to at most 30 a second; rest unchanged" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -898,5 +898,4 @@ Direct3D 12).
     served only the producer's frames, with **no** LOCAL SERVICE grant on the file. So the
     grant matters only for a DLL inside a user profile, which is inferred from S2 rather
     than isolated. Frame Server requested about four samples per producer frame, because
-    the stream doesn't pace `RequestSample` yet
-    (#193).
+    the stream didn't pace `RequestSample`; it now answers at most 30 a second (#193).
