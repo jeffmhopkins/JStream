@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:0b01dcb5a8795296", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; text is main's; contents list unchanged; holds" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +44,6 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:8cad0a0126c9304f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; tool table lists audio, bus, filter and send (19 tools, the count test agrees); holds" }
 -->
 
 ### Tools

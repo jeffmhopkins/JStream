@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:46efa883f60901ee", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; edit list has B7's and D5's edits; parity kinds are webcam, desktop_audio, mic and gain as parity.rs says; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -143,7 +142,6 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:a1fbdc7f76c37b21", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; opacity, blend and filters subsection beside bus.list and audio inverses; source.delete inverse order matches the graph; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

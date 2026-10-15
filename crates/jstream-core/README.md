@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:68056235c653be67", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D6 #299, #360, #381): re-read; B7's filters, kinds and opacity tests beside D6's activity-gain bullet; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -190,7 +189,6 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3e886f68929fb1c1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D6 #299, #360, #381): re-read; filters run before the fader, D6's activity gain after fader and meter, both on the routed input; not-yet list keeps D6's transition-fade item and drops filters from the protocol; holds" }
 -->
 
 ### Engine and sessions
@@ -1048,7 +1046,6 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:ee964bed8bad32e1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

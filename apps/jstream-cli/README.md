@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:1fb813d39de11b8b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; text is main's, contents list unaffected by B7 or D5; holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +46,6 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:7ae3599ba365f639", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; B7's opacity, blend and filter-edit exclusion beside D5's audio-not-in-CLI note; holds against args.rs" }
 -->
 
 ```sh
@@ -243,7 +241,6 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bd3c4460b614df78", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; stale through cascade, text is main's and names nothing of B7; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -47,10 +47,10 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 86% | 30 | 3 | 2 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 30% | 6 | 8 | 6 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 29% | 6 | 9 | 6 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 11% | 1 | 1 | 7 |
 
-75 of 108 items are merged; 7 of those still wait on a run on Windows hardware.
+75 of 109 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -172,7 +172,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M2</b> UI: 6 of 20 merged</summary>
+<summary><b>M2</b> UI: 6 of 21 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -196,6 +196,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | C9 | Media file source | 🔍 in review | #245 |
 | W1 | Audio waveform and spectrum sources | ⏳ planned |  |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned |  |
+| K2 | Keyframe scenes: model and evaluator | 🔍 in review | #350 |
 
 </details>
 
@@ -252,7 +253,6 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token \
 ## Platforms
 <!-- @section
 depends_on = ["docs/adr/0008-windows-support-policy.md"]
-verified = { hash = "b3:174bb43ca018529b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Linux row's link moved from superseded ADR-0003 to ADR-0031, which restates the Linux codec-path deferral unchanged; Windows fact marker and ADR-0008 policy, macOS row unchanged" }
 -->
 
 | Platform | Status | Support |

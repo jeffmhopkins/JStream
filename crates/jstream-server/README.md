@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:a1f50d3313163f2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +56,6 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6765866fd8f092af", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; stale through cascade, text is main's; holds" }
 -->
 
 ### Listening and admission

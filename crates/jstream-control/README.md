@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:c4fa196d136eac67", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; mock contents name mock/filter.rs, mock/audio.rs is main's; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +45,6 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:221e897753fcf907", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; filter and audio rejections, reads and inverses merged; source.delete's inverse restores audio then filters, as mock.rs does; holds" }
 -->
 
 ### The trait
