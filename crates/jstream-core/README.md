@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:87e4c854a688b8f9", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
+verified = { hash = "b3:3a75e323ed3b2ea2", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: main's text; re-checked its render-snapshot mentions (program mix drawn from it, PNG on the snapshot thread) make no lock-free claim for the snapshot thread, holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -156,7 +156,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:2b52c41afc0969e5", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server design; core's mentions of jstream-server (connector, subscriptions) unchanged; holds" }
+verified = { hash = "b3:bc013b6f6916b7d1", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (B10, B6, U-series, D8): locking paragraph still says only the render thread loads the render snapshot lock-free; Snapshots and lock-order text agree with Engine::video_snapshot (rev and snapshot read under the collection lock)" }
 -->
 
 ### Engine and sessions
