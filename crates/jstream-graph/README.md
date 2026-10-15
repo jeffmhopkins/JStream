@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:d52976b0565808d9", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6 #184): collection file paragraph now saves scene role (group) and rebuild sets it with scene.set_role; item crop/visible replays pass scene_id None; B6's model and move prose from main kept" }
+verified = { hash = "b3:5ba1225eef9a66ba", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#214 ADR-0041) into #217, stamp-only conflicts: stale only through protocol#design; graph untouched by #217" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -189,10 +189,9 @@ Planned, and kept possible by the private fields of the model types:
 
 - **Filters and effects:** `filters[]` on sources (applied wherever the source is
   placed) and `effects[]` on items (per placement), with their edits.
-- **Kinds from `jstream-sources`.** The engine's kinds are stubs until that crate
-  supplies the real ones. The collection file records each source's kind version but
-  refuses a mismatch: settings migrations per kind, and keeping the data of a source
-  whose kind is missing, come with them.
+- **Kind versions.** The engine's kinds come from `jstream-sources`. The collection file
+  records each source's kind version but refuses a mismatch: settings migrations per
+  kind, and keeping the data of a source whose kind is missing, come later.
 - Blend modes and opacity on placements (B7). Legacy placements go in 1.0, whose
   collection migration converts them
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) decision 5).
