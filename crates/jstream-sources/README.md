@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:964af01323331c1c", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#214 ADR-0041) into png 0.18: ARCH crate-map change is the YouTube ADR link only; png 0.18 maps a usize-overflowing frame size to a decode error; seams and kind text hold" }
+verified = { hash = "b3:018baf5cda58feac", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "#217 N1: only the unit test's temp-folder cleanup changed (drop guard); the Assets paragraph on open_inside/check_opened still holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -79,6 +79,14 @@ Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
 
 **Assets.** `AssetRoots::resolve` resolves a `collection` or `app` path through
 symlinks and rejects one that leaves its root; an `absolute` path is used as it is.
+`AssetRoots::read` checks the file it opens, not only the path it resolved, so swapping
+a folder inside the root for a symlink meanwhile can't make it read a file outside. On
+Unix the opened file must be, by device and inode, the file its path resolves to inside
+the root afterwards. Stable Rust has no file IDs on Windows, so there the resolved path
+is walked from the root and each folder on it is held open without delete sharing,
+which stops it being renamed or replaced until the file is open; one that has become a
+reparse point is refused. The root folder itself is the host's configuration and is
+trusted.
 Errors name an asset by the root and path its setting holds, never by the host path
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). A missing or
 undecodable file is an error from `create`, never from the edit that set it.

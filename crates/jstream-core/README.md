@@ -131,7 +131,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ef33e7f5e240e598", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#214 ADR-0041) into png 0.18: kept main's ADR-0041 link text; png 0.18 only changes the test-only decode_png helper (Option buffer size); design and Dependencies list hold" }
+verified = { hash = "b3:dcfa185c51eb1555", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#214 ADR-0041) into #217, stamp-only conflicts: stale only through protocol#design; core text untouched by #217" }
 -->
 
 ### Engine and sessions
