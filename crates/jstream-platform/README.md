@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:335720f0efb8e16e", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the enhanced-RTMP ADR link in media README (0034 -> 0041); main's E1 text kept; holds" }
+verified = { hash = "b3:4d07ed3b696066de", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (H7b ADR-0042) into H1: re-read the section; main's text kept; the IDs and errors bullet's MissingComponent addition matches error.rs and nothing else in the section depends on it" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
