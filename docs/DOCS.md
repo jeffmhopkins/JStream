@@ -280,25 +280,15 @@ That means:
 - **Propagation is exactly one hop.** A dependent's `dep:` entry hashes its target's
   text, but not the target's covered files. A verify changes only the ledger, which no
   section can cover, so it never makes another section stale.
-- **Parallel PRs usually merge; a conflict leaves the section stale.** `docs verify`
-  rewrites only the entries whose input changed (they take its `by` and `note`; the
-  others keep theirs). Every entry is a `["DOC-ID#anchor"."<input>"]` header, which
-  doesn't change while the input exists, then one `stamp` line and a blank line, the last
-  entry's included. The headers and blank lines anchor git's diff:
-  - PRs that change different existing inputs merge with the section fresh, and so does
-    a PR adding or removing an input next to one the other PR only changed.
-  - PRs that change the same input conflict on its `stamp` line: neither re-read the
-    combination.
-  - PRs that both add or remove inputs at the same spot can conflict: both adding inputs
-    between the same two neighbours, one adding an input next to one the other removes,
-    or both removing neighbouring inputs. Two PRs adding modules to one crate often do.
-
-  Any ledger conflict is resolved the same way (`docs merge-main` below): the section is
-  left stale, to be re-read after merging `main`. The one exception is two PRs making the
-  same change to an input: main's entry then already verified exactly that content. A
-  verify writes only entries whose input changed or is new, and drops removed ones, so it
-  never rewrites a line for an input it didn't see change; a verify with no input changed
-  writes nothing.
+- **A merge never leaves a section falsely fresh; a conflict usually leaves it stale.**
+  `docs verify` writes only the entries whose input changed or is new (they take its `by`
+  and `note`; the others keep theirs) and drops removed ones; with nothing changed it
+  writes nothing. Every entry is a `["DOC-ID#anchor"."<input>"]` header, which doesn't
+  change while the input exists, then one `stamp` line and a blank line, the last entry's
+  included. The headers and blank lines anchor git's diff, so parallel PRs that change
+  different inputs of a section usually merge with it fresh. When the ledger conflicts,
+  `docs merge-main` (below) takes main's side, which usually leaves the section stale for
+  a re-read after merging `main`.
 - **The ledger is generated.** Only `docs verify` (and `docs migrate`) writes it, in
   sorted, canonical form; `docs check` fails on any other form, and on an inline
   `verified` key in an `@section` block. A stamp for a section that no longer needs one
@@ -319,9 +309,9 @@ cargo xtask docs migrate                       # move inline stamps to the ledge
 ```
 
 `docs merge-main` fetches and merges `origin/main` into a clean working tree. Every
-conflict in the ledger takes main's side, because the section has to be re-read against
-the combined change whichever entry is kept; the result must parse, and is rewritten in
-canonical form. In a doc, a conflict whose two sides are only inline `verified` lines
+conflict in the ledger takes main's side: a merge never leaves a section falsely fresh,
+and a conflict usually leaves it stale, for a re-read. The result must parse, and is
+rewritten in canonical form. In a doc, a conflict whose two sides are only inline `verified` lines
 inside `@section` blocks (either side may have none, as when `main` moved them to the
 ledger) takes main's side too. Any other conflict, including one in a file that also has
 stamp conflicts, is left exactly as git wrote it, and the merge stays open for you to
@@ -415,9 +405,12 @@ holds**. The note says what was checked and why it still holds, e.g.:
   A stock-phrase list alone is too easy to game.
 - A false verification is a bug, and gets fixed and noted like one.
 - A later `docs verify` of the same section in the same PR replaces the `by` and `note`
-  of every entry whose input changed since the previous verify. An earlier note on such an entry survives only in git history (`docs log`), so the
-  last note on each entry must cover the PR's whole change to that input: it is the one
-  the reviewer reads.
+  of every entry whose input changed since the previous verify. An earlier note on such an
+  entry survives only in git history (`docs log`), so the last note on each entry must
+  cover the PR's whole change to that input: it is the one the reviewer reads.
+- A verify that only drops removed inputs, or finds no input changed, records no `by` or
+  `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. Say in
+  the PR what you re-read after removing a covered file.
 - The sweep is to report each section's verify-to-edit ratio from git (not built yet,
   see [Time-based review](#ttl)). A section that gets
   re-verified far more often than it is edited has `covers` that are too broad, so

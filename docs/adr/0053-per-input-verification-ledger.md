@@ -55,27 +55,22 @@ does.
    `["DOC-ID#anchor"."<input>"]` table header, one `stamp` line (`hash`, and `by` and
    `note` when `docs verify` wrote it) and a blank line, sorted by section and input. The
    header doesn't change while the input exists, and the blank line follows every entry,
-   the last included, so they anchor git's diff: changes to different existing entries
-   merge cleanly, and adding or removing entries usually does, apart from the cases in
-   item 4. Only
+   the last included, so they anchor git's diff and parallel PRs that change different
+   inputs usually merge (item 4). Only
    `cargo xtask docs verify` writes it, in that canonical form, which `docs check` enforces.
    An inline `verified` line fails `docs check`. No section can cover the ledger.
 3. **`docs verify` writes only what changed.** Entries whose input still has the recorded
    hash keep their `by` and `note`; changed and new inputs get this verification's; removed
-   inputs are dropped. No other line is rewritten, so a verify that only drops entries, or
-   finds nothing changed, can't conflict with a parallel change to another entry (which
-   would then resolve to fresh, item 4); with nothing changed it writes nothing.
-4. **Two PRs conflict on an input both changed.** Then neither re-read the combination,
-   and its `stamp` line conflicts, as the whole stamp did before. Adding or removing
-   entries at the same spot on both sides can conflict too: both adding inputs between
-   the same two neighbours (two PRs adding modules to one crate often do), one adding an
-   input next to one the other removes, or both removing neighbouring inputs. A change on
-   one side next to an add or remove on the other merges. `docs merge-main` takes main's
-   side of any ledger conflict and reports the section stale, as it did for inline stamps.
-   Every line a verify rewrites is for an input it saw change, so a conflicting line taken
-   from main no longer matches the merged input and the section is stale. The exception is
-   both PRs making the same change to an input, where main's entry already verified that
-   exact content. The fixture test checks each case on stamps `restamp` wrote.
+   inputs are dropped. No other line is rewritten: a verify that only drops entries, or
+   finds nothing changed, records no `by` or `note`, and with nothing changed it writes
+   nothing. Rewriting an unchanged entry to record the re-read could conflict with a
+   parallel change to it, and that conflict would resolve to fresh (item 4).
+4. **A merge never leaves a section falsely fresh; a conflict usually leaves it stale.**
+   Every line a verify writes is for an input it saw change, so when the ledger conflicts
+   and `docs merge-main` takes main's side, as it did for inline stamps, a kept entry
+   either matches the merged input, which main verified at that content, or leaves the
+   section stale for a re-read. Which parallel changes conflict depends on how git aligns
+   the ledger; the fixture test pins the cases on stamps `restamp` wrote.
 5. **One-time migration.** `cargo xtask docs migrate` moves each inline stamp whose hash
    still matches into the ledger, with its `by` and `note` on `body`, and drops one that no
    longer matches, so that section is stale until someone re-reads it. It replaces
@@ -84,11 +79,10 @@ does.
 
 <a id="consequences"></a>
 ## Consequences
-- PRs that change different existing files of a crate no longer conflict on its README,
+- PRs that change different files of a crate usually no longer conflict on its README,
   and the re-verification after merging `main` that a stamp conflict forced is gone for
-  them. PRs that both add or remove files can still conflict, as item 4 says, and are
-  re-verified as before. A fixture test merges ledger edits with git itself to hold the
-  layout to both.
+  them. When they do conflict, they are re-verified as before (item 4). A fixture test
+  merges ledger edits with git itself to hold the layout to this.
 - A doc can now reach `main` verified against each of two changes but not re-read against
   both together, when they changed different inputs. Interactions between such changes are
   what review of the second PR and later edits catch, as for code that merges cleanly.
