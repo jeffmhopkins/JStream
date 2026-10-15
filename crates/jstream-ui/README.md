@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:bc0b061ce777fbcb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#261: canvas styles moved to style.css classes, lib.rs gained a test; contents list still holds" }
+verified = { hash = "b3:03681d80c54c1817", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: outputs.rs gained start_or_stop_all and tests, app.rs connect fields leave the form element; contents list still holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ddf25678fd79ea4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#261: style.css gained canvas classes; connecting, outputs, key and shell bullets unaffected; holds" }
+verified = { hash = "b3:86b7b86fc572f2c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: Outputs bullet says go live/end stream try every output and report each failure; new bullet: key and token fields opt out of password managers (no form, autocomplete=off, non-credential names); connecting bullet still holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -91,7 +91,8 @@ verified = { hash = "b3:ddf25678fd79ea4d", by = "agent:claude@session_01K4N6DrL8
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
   output, and starts and stops each. "Go live" starts every stopped or failed RTMP
   output whose stream key is set, and "End stream" stops the running ones; recordings
-  have only their own buttons. An RTMP output without a key can't be started from the
+  have only their own buttons. Both try every output, even after one fails, and report
+  each failure. An RTMP output without a key can't be started from the
   panel. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
@@ -102,6 +103,12 @@ verified = { hash = "b3:ddf25678fd79ea4d", by = "agent:claude@session_01K4N6DrL8
   sends it back: the panel shows only `output.status`'s `key_set`, re-read after it
   sets or clears a key, since no event reports that. Another client's key change shows
   on the next re-read.
+- **Browser password managers are out of scope.** The stream key and the control
+  token are secrets for the OS credential store, not for the browser's
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)), so their fields opt out: each is
+  `autocomplete="off"` with a name that doesn't look like a credential, and neither
+  sits in a `<form>`: a button click or Enter saves the key or connects, so there is
+  no form submission for the browser to offer saving. A test checks both fields.
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`); only `start()` needs a browser.
