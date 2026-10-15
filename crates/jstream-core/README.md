@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:3a75e323ed3b2ea2", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: main's text; re-checked its render-snapshot mentions (program mix drawn from it, PNG on the snapshot thread) make no lock-free claim for the snapshot thread, holds" }
+verified = { hash = "b3:aa39a8525ce21477", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into pairing: main's render-snapshot lock text kept; credential calls answered unsupported, holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -156,7 +156,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bc013b6f6916b7d1", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (B10, B6, U-series, D8): locking paragraph still says only the render thread loads the render snapshot lock-free; Snapshots and lock-order text agree with Engine::video_snapshot (rev and snapshot read under the collection lock)" }
+verified = { hash = "b3:987d5cf1a2c66501", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into pairing: main's render thread lock-free load wording kept; unsupported credential calls and device:<name> hello bullets hold" }
 -->
 
 ### Engine and sessions

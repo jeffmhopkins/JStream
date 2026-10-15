@@ -195,7 +195,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2141744e29b981e6", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
+verified = { hash = "b3:2162fcf2ed0aaac4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (#267, #215, #262) into pairing: main changes nothing here; device file and pairing bullets from this PR hold" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

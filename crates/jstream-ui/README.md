@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:86b7b86fc572f2c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: Outputs bullet says go live/end stream try every output and report each failure; new bullet: key and token fields opt out of password managers (no form, autocomplete=off, non-credential names); connecting bullet still holds" }
+verified = { hash = "b3:219946530f304b1d", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into pairing: main's go-live 'tries every output' and password-manager bullet kept; pairing sentence (server side built, UI form not yet) holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
