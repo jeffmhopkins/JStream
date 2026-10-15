@@ -1,10 +1,10 @@
 //! Windows platform backends: the implementations of the `jstream-platform` traits on
 //! Windows. It has the QPC media clock (`QpcClock`), WASAPI audio I/O (`WasapiAudio`),
 //! Windows.Graphics.Capture display and window capture (`WgcCapture`), Media Foundation
-//! codecs (`MfCodecs`), GPU interop (`WindowsGpu`) and the Credential Manager store for
-//! stream keys (`WindowsCredentials`); video decoders follow. Layer 2,
-//! and one of the few crates allowed `unsafe` (R-UNSAFE-001): every OS call is wrapped
-//! here behind safe APIs.
+//! codecs (`MfCodecs`), GPU interop (`WindowsGpu`), the Credential Manager store for
+//! stream keys (`WindowsCredentials`) and the virtual camera's engine side
+//! (`WindowsVcam`); video decoders follow. Layer 2, and one of the few crates allowed
+//! `unsafe` (R-UNSAFE-001): every OS call is wrapped here behind safe APIs.
 //!
 //! The backends exist only on Windows. On other platforms the crate builds empty except
 //! for its platform-independent helpers, which are tested everywhere.
@@ -20,6 +20,7 @@ mod com;
 mod credential;
 #[cfg(windows)]
 mod gpu;
+mod vcam;
 
 #[cfg(windows)]
 pub use audio::WasapiAudio;
@@ -35,3 +36,5 @@ pub use credential::CredentialTarget;
 pub use credential::WindowsCredentials;
 #[cfg(windows)]
 pub use gpu::WindowsGpu;
+#[cfg(windows)]
+pub use vcam::WindowsVcam;

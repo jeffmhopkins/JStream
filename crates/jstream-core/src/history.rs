@@ -35,6 +35,8 @@ enum Object {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Prop {
     Name,
+    /// A scene's role.
+    Role,
     /// An item's placement: its legacy transform or its geometry (ADR-0022), which
     /// replace each other.
     Placement,
@@ -84,6 +86,9 @@ impl Touched {
             Edit::SceneRename { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Name);
             }
+            Edit::SceneSetRole { scene_id, .. } => {
+                self.prop(Object::Scene(scene_id.clone()), Prop::Role);
+            }
             Edit::SceneReorder { .. } => self.scene_order = true,
             Edit::CanvasSetSize { .. } => self.canvas = true,
             Edit::ItemAdd {
@@ -110,6 +115,14 @@ impl Touched {
             }
             Edit::ItemReorder { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Index);
+            }
+            // A move sets the item's position, in the scene it names; its inverse names
+            // the scene it left.
+            Edit::ItemMove {
+                item_id, scene_id, ..
+            } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Index);
+                self.uses.insert(Object::Scene(scene_id.clone()));
             }
             Edit::SourceCreate {
                 source_id, kind, ..
@@ -449,6 +462,7 @@ mod tests {
     fn transform(item: &str) -> Edit {
         Edit::ItemSetTransform {
             item_id: ItemId::new(item),
+            scene_id: None,
             transform: ItemTransform::IDENTITY,
         }
     }
@@ -456,6 +470,7 @@ mod tests {
     fn geometry(item: &str) -> Edit {
         Edit::ItemSetGeometry {
             item_id: ItemId::new(item),
+            scene_id: None,
             geometry: ItemGeometry::covering_canvas(1920, 1080).expect("invariant: a valid canvas"),
         }
     }
@@ -470,8 +485,53 @@ mod tests {
     fn visible(item: &str) -> Edit {
         Edit::ItemSetVisible {
             item_id: ItemId::new(item),
+            scene_id: None,
             visible: false,
         }
+    }
+
+    fn item_move(item: &str, scene: &str) -> Edit {
+        Edit::ItemMove {
+            item_id: ItemId::new(item),
+            scene_id: SceneId::new(scene),
+            index: 0,
+        }
+    }
+
+    #[test]
+    fn moves_and_roles_are_known_edits() {
+        let moved = Touched::of(&[item_move("a", "g")], &[item_move("a", "s")]);
+        assert!(!moved.unknown);
+        // Another item's transform, elsewhere, doesn't conflict with the move.
+        let other = Touched::of(&[transform("b")], &[transform("b")]);
+        assert!(!moved.conflicts_with(&other));
+        // Reordering the same item does, and so does deleting either scene.
+        let reorder = Touched::of(
+            &[Edit::ItemReorder {
+                item_id: ItemId::new("a"),
+                index: 1,
+            }],
+            &[],
+        );
+        assert!(moved.conflicts_with(&reorder));
+        let delete = Touched::of(
+            &[Edit::SceneDelete {
+                scene_id: SceneId::new("g"),
+            }],
+            &[],
+        );
+        assert!(moved.conflicts_with(&delete));
+        let role = |r| Edit::SceneSetRole {
+            scene_id: SceneId::new("g"),
+            role: r,
+        };
+        let grouped = Touched::of(
+            &[role(jstream_protocol::SceneRole::Group)],
+            &[role(jstream_protocol::SceneRole::Scene)],
+        );
+        assert!(!grouped.unknown);
+        assert!(!grouped.conflicts_with(&other));
+        assert!(grouped.conflicts_with(&grouped.clone()));
     }
 
     #[test]
