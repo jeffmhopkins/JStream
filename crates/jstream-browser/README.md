@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:86aae8152bdd5239", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 round 1: merged C8b2's B1 fix (RequestPolicy compares by name before opening, runs in the helper here); pipe B1 fix makes 'a helper that exits or doesn't connect fails that open' hold again; re-read the CEF backend and pipe bullets" }
+verified = { hash = "b3:db5346e471ecf3b1", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 merge of C8 round 1 (via C8b2): seam paragraph takes C8's use_device wording (a host-opened device for now; here it also names the helper's adapter); sandboxed-helper, pipe and frame bullets unchanged" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
@@ -28,8 +28,10 @@ the helper's build downloads and builds CEF
 into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageSpec` (a
 location, a size, a frame-rate cap and the custom CSS) and returns a `BrowserPage`:
 its latest frame as a `GpuFrame`, its audio, a way to replace its custom CSS while it
-runs, and how many of its requests were refused (`denied_requests`). `use_device` gives the backend the engine's GPU device, which pages copy their
-paints onto; without one a page renders and plays but delivers no frames. Dropping the
+runs, and how many of its requests were refused (`denied_requests`). `use_device` gives
+the backend a GPU device to copy the pages' paints onto. Today that is one the host
+opens on the media adapter, since the engine doesn't hand out its own device yet;
+without one a page renders and plays but delivers no frames. Dropping the
 page closes it.
 
 **Built everywhere:**

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-browser-helper/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*", "crates/jstream-browser/README.md#purpose", "docs/adr/0048-sandboxed-browser-helper.md"]
-verified = { hash = "b3:bdca60cac80e476e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 round 1: stale only via the browser README's purpose; helper cdylib unchanged, text holds" }
+verified = { hash = "b3:6ab5d0cf05fc31d5", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 merge of C8 round 1: stale only via the browser README's seam paragraph; the cdylib text (RunWinMain, bootstrap exe) holds" }
 -->
 
 The sandboxed browser helper
