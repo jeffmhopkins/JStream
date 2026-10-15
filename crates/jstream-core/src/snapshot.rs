@@ -23,24 +23,18 @@ use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use jstream_graph::{Graph, State};
+use jstream_graph::{Graph, Placement as GraphPlacement, State};
 use jstream_media::FrameSize;
 use jstream_protocol::{
-    Crop as ProtocolCrop, ItemTransform, ProtocolError, QueryResult, Rev, SceneId, SourceId,
-    SourceKind,
+    Canvas, Crop as ProtocolCrop, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind,
 };
 use jstream_render::{
-    Color, Compositor, Crop, Item, OpenOptions, Output, Placement, RenderError, ResourceCache,
-    Scene,
+    Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
+    ResourceCache, Scene,
 };
 
 use crate::lock;
 use crate::runtime::RenderSnapshot;
-
-/// ADR-0022's default canvas. `canvas.set_size` is not in the protocol yet, so every
-/// snapshot uses this size.
-const CANVAS_WIDTH: u32 = 1920;
-const CANVAS_HEIGHT: u32 = 1080;
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
@@ -164,6 +158,8 @@ struct Placed {
 /// to the render thread through `arc-swap`.
 #[derive(Debug, Default)]
 pub(crate) struct Shot {
+    /// The collection's canvas: the size every scene, nested ones included, is drawn at.
+    canvas: Canvas,
     /// The first scene in display order. `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
@@ -197,7 +193,10 @@ impl Shot {
 /// the rest.
 impl PartialEq for Shot {
     fn eq(&self, other: &Self) -> bool {
-        self.program == other.program && self.scenes == other.scenes && self.frames == other.frames
+        self.canvas == other.canvas
+            && self.program == other.program
+            && self.scenes == other.scenes
+            && self.frames == other.frames
     }
 }
 
@@ -206,6 +205,7 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
     let state = graph.state();
     let program = state.scenes().first().map(|scene| scene.id().clone());
     let mut shot = Shot {
+        canvas: state.canvas(),
         program: program.clone(),
         ..Shot::default()
     };
@@ -262,7 +262,7 @@ fn collect(
             };
             placed.push(Placed {
                 source,
-                placement: placement(item.transform()),
+                placement: placement(item.placement()),
                 crop: crop(item.crop()),
             });
         }
@@ -369,11 +369,21 @@ fn visit(
     key
 }
 
-fn placement(transform: &ItemTransform) -> Placement {
-    Placement {
-        position: [transform.position.x.get(), transform.position.y.get()],
-        scale: [transform.scale.x.get(), transform.scale.y.get()],
-        rotation_deg: transform.rotation_deg.get(),
+/// The compositor's placement for an item's stored one, in the same form (ADR-0022): a
+/// legacy transform is evaluated against the frame's size when it is drawn.
+fn placement(placement: &GraphPlacement) -> Placement {
+    match placement {
+        GraphPlacement::Geometry(geometry) => Placement::Geometry(*geometry),
+        GraphPlacement::Legacy(transform) => Placement::Legacy(LegacyTransform {
+            position: [transform.position.x.get(), transform.position.y.get()],
+            scale: [transform.scale.x.get(), transform.scale.y.get()],
+            rotation_deg: transform.rotation_deg.get(),
+        }),
+        // A placement form newer than this engine draws nothing rather than guessing.
+        _ => Placement::Legacy(LegacyTransform {
+            scale: [0.0, 0.0],
+            ..LegacyTransform::IDENTITY
+        }),
     }
 }
 
@@ -639,7 +649,7 @@ fn draw(
         cache,
         shot,
         None,
-        canvas().map_err(from_render)?,
+        shot.canvas().map_err(from_render)?,
         true,
     );
     drop(cache.end_frame(compositor));
@@ -662,12 +672,14 @@ fn draw(
     })
 }
 
-/// ADR-0022's canvas, which every scene is composited at.
-pub(crate) fn canvas() -> Result<FrameSize, RenderError> {
-    FrameSize::new(CANVAS_WIDTH, CANVAS_HEIGHT).map_err(|_| RenderError::Invalid {
-        what: "canvas",
-        detail: "the canvas size is zero".into(),
-    })
+impl Shot {
+    /// The collection's canvas (ADR-0022), which every scene is composited at.
+    pub(crate) fn canvas(&self) -> Result<FrameSize, RenderError> {
+        FrameSize::new(self.canvas.width, self.canvas.height).map_err(|_| RenderError::Invalid {
+            what: "canvas",
+            detail: "the canvas size is zero".into(),
+        })
+    }
 }
 
 /// The pipeline's latest captured display, which `display` sources show on the render
@@ -701,7 +713,7 @@ pub(crate) fn compose(
     output: FrameSize,
     readback: bool,
 ) -> Result<Output, RenderError> {
-    let canvas = canvas()?;
+    let canvas = shot.canvas()?;
     for (key, source) in &shot.uploads {
         if let Some(frame) = shot.frames.get(source) {
             cache.upload(
@@ -794,10 +806,10 @@ fn fill_items<'a>(items: &mut Vec<Item<'a>>, cache: &'a ResourceCache<GpuKey>, p
 fn whole(image: &jstream_render::Image, sx: f32, sy: f32) -> Item<'_> {
     Item {
         image,
-        placement: Placement {
+        placement: Placement::Legacy(LegacyTransform {
             scale: [sx, sy],
-            ..Placement::IDENTITY
-        },
+            ..LegacyTransform::IDENTITY
+        }),
         crop: Crop::NONE,
         opacity: OPAQUE,
         visible: true,
@@ -973,18 +985,20 @@ pub(crate) mod tests {
         encode_png, fit, is_no_adapter, schedule,
     };
     use jstream_media::FrameSize;
-    use jstream_protocol::{ProtocolError, QueryResult, Rev, SceneId, SourceId};
-    use jstream_render::{Compositor, Crop, OpenOptions, Placement, ResourceCache};
+    use jstream_protocol::{Canvas, ProtocolError, QueryResult, Rev, SceneId, SourceId};
+    use jstream_render::{
+        Compositor, Crop, LegacyTransform, OpenOptions, Placement, ResourceCache,
+    };
     use std::collections::BTreeMap;
     use std::io::Write;
     use std::time::{Duration, Instant};
 
     /// A 16x9 frame, scaled by 120 to cover the 1920x1080 canvas.
-    const FULL: Placement = Placement {
+    const FULL: Placement = Placement::Legacy(LegacyTransform {
         position: [0.0, 0.0],
         scale: [120.0, 120.0],
         rotation_deg: 0.0,
-    };
+    });
 
     const RED: [u8; 4] = [255, 0, 0, 255];
     const GREEN: [u8; 4] = [0, 255, 0, 255];
@@ -1015,6 +1029,7 @@ pub(crate) mod tests {
     fn shot(scenes: Vec<(&str, Vec<Placed>)>) -> Shot {
         let program = scenes.first().map(|(id, _)| SceneId::new(*id));
         let mut shot = Shot {
+            canvas: Canvas::DEFAULT,
             program: program.clone(),
             scenes: scenes
                 .into_iter()
@@ -1080,10 +1095,10 @@ pub(crate) mod tests {
     /// one depth is composited once.
     #[test]
     fn nested_scenes_are_scheduled_inside_out_once_per_depth() {
-        let half = Placement {
+        let half = Placement::Legacy(LegacyTransform {
             scale: [0.5, 0.5],
-            ..Placement::IDENTITY
-        };
+            ..LegacyTransform::IDENTITY
+        });
         let shot = shot(vec![
             (
                 "program",
@@ -1186,10 +1201,12 @@ pub(crate) mod tests {
     /// transparent where they draw nothing, so red shows around the green.
     #[test]
     fn nested_scenes_composite_through_two_levels() {
-        let half = |x: f32, y: f32| Placement {
-            position: [x, y],
-            scale: [0.5, 0.5],
-            rotation_deg: 0.0,
+        let half = |x: f32, y: f32| {
+            Placement::Legacy(LegacyTransform {
+                position: [x, y],
+                scale: [0.5, 0.5],
+                rotation_deg: 0.0,
+            })
         };
         let shot = shot(vec![
             ("program", vec![fill("red"), nest("a", half(0.0, 0.0))]),
@@ -1222,14 +1239,15 @@ pub(crate) mod tests {
     /// A scene placed twice shows in both places, and a cycle still draws.
     #[test]
     fn a_scene_placed_twice_and_a_cycle_both_draw() {
-        let left = Placement {
+        let left = LegacyTransform {
             scale: [0.5, 1.0],
-            ..Placement::IDENTITY
+            ..LegacyTransform::IDENTITY
         };
-        let right = Placement {
+        let right = Placement::Legacy(LegacyTransform {
             position: [960.0, 0.0],
             ..left
-        };
+        });
+        let left = Placement::Legacy(left);
         let shot = shot(vec![
             ("program", vec![nest("a", left), nest("a", right)]),
             (
@@ -1312,10 +1330,10 @@ pub(crate) mod tests {
         }
 
         // The capture (32x18) scaled by 30 covers the canvas's left half at 0.5.
-        let half = Placement {
+        let half = Placement::Legacy(LegacyTransform {
             scale: [30.0, 60.0],
-            ..Placement::IDENTITY
-        };
+            ..LegacyTransform::IDENTITY
+        });
         let display = shot(vec![(
             "program",
             vec![fill("red"), placed(SourceRef::Capture, half)],
@@ -1338,8 +1356,8 @@ pub(crate) mod tests {
         let _gpu = crate::tests::one_gpu_test_at_a_time();
         let Some(mut compositor) = gpu() else { return };
         let mut cache = ResourceCache::new();
-        let canvas = super::canvas().expect("canvas");
         let nested = chain(2);
+        let canvas = nested.canvas().expect("canvas");
         let _ = frame_at(&mut compositor, &mut cache, &nested, None, canvas);
         let layers = [layer("s1", 1), layer("s2", 2)];
         let textures: Vec<_> = layers

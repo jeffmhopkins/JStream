@@ -425,6 +425,7 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
             item_id: ItemId::new(*item),
             source_id: SourceId::new(*source),
             transform: None,
+            geometry: None,
         },
         ("item.remove", [id]) => Edit::ItemRemove {
             item_id: ItemId::new(*id),
@@ -791,6 +792,7 @@ mod tests {
                         item_id: ItemId::new("i1"),
                         source_id: SourceId::new("cam"),
                         transform: None,
+                        geometry: None,
                     },
                     Edit::ItemSetVisible {
                         item_id: ItemId::new("i1"),

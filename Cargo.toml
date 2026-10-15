@@ -14,6 +14,10 @@ anyhow = "1"
 # The render snapshot (ARCH › Threads, "State to RT threads"): the control side swaps an
 # immutable snapshot that the render thread loads without a lock. No dependencies.
 arc-swap = { version = "1.9", default-features = false }
+# Test-only global allocator that flags allocations inside a marked scope (R-RT-001).
+# Warn mode counts violations instead of aborting, so a test can assert on them, in
+# debug and release builds alike.
+assert_no_alloc = { version = "1", default-features = false, features = ["warn_debug", "warn_release"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 # Lock-free bounded queues for the audio mixer's commands and the collector (R-RT-003).
