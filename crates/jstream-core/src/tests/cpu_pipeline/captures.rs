@@ -2,10 +2,10 @@
 //! window its program mix shows, started when a source comes on program, stopped when it
 //! goes, and started again after a failure.
 
-use super::super::{add, batch, connected, create, edits, output_call};
+use super::super::{add, batch, connected, create, edits, output_call, query};
 use super::{Fakes, engine, fakes, pump_until, share, start};
-use crate::RecordingPublish;
 use crate::runtime::{RETRY_MS, cpu_draw};
+use crate::{Engine, RecordingPublish};
 use jstream_control::Control;
 use jstream_media::FrameSize;
 use jstream_platform::fake::FakeCapture;
@@ -13,7 +13,10 @@ use jstream_platform::{
     Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, DeviceId, MediaClock,
     PlatformError, VideoSurface,
 };
-use jstream_protocol::{Edit, ItemId, Settings, SourceId, SourceKind};
+use jstream_protocol::{
+    CaptureTargetKind, Edit, ItemId, PixelSize, ProtocolError, Query, QueryResult, Settings,
+    SourceId, SourceKind,
+};
 use serde_json::json;
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -170,6 +173,56 @@ fn capture_source(source: &str, kind: &str, target: &str) -> Edit {
         duplicated_from: None,
         settings: Settings([("target".to_owned(), json!(target))].into_iter().collect()),
     }
+}
+
+/// `capture.targets` lists what the backend can capture, displays first, with the IDs a
+/// source's `target` takes, whether or not an output runs. With no backend it fails.
+#[test]
+fn capture_targets_lists_the_displays_then_the_windows() {
+    let setup = Setup::new();
+    let engine = engine(
+        share(&setup.fakes.backends),
+        cpu_draw(),
+        Box::new(RecordingPublish::new()),
+    );
+    let control = connected(&engine);
+    let Ok(QueryResult::CaptureTargets { targets }) = query(&control, Query::CaptureTargets) else {
+        panic!("a capture.targets result");
+    };
+    let listed: Vec<_> = targets
+        .iter()
+        .map(|info| {
+            (
+                info.kind,
+                info.target.as_str(),
+                info.name.as_str(),
+                info.primary,
+            )
+        })
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            (CaptureTargetKind::Display, "d2", "Second", false),
+            (CaptureTargetKind::Display, "d1", "Main", true),
+            (CaptureTargetKind::Window, "w1", "Editor", false),
+        ]
+    );
+    assert_eq!(
+        targets[0].size,
+        Some(PixelSize {
+            width: 64,
+            height: 36
+        })
+    );
+    assert!(setup.log().started.is_empty(), "listing starts no capture");
+
+    let bare = Engine::new();
+    let refused = query(&connected(&bare), Query::CaptureTargets).expect_err("no backend");
+    assert!(
+        matches!(refused.protocol(), Some(ProtocolError::ActionFailed { .. })),
+        "{refused:?}"
+    );
 }
 
 /// The output captures each display and window its program scene shows, once however

@@ -88,6 +88,13 @@ pub enum Query {
         /// What to delete.
         target: DeleteTarget,
     },
+    /// Lists the displays and windows the engine can capture now: what a `display` or
+    /// `window` source's `target` setting can name. They are runtime state, not
+    /// collection state, so the result carries no `rev`, and a window closed since may
+    /// still be named by a source. Fails with `action_failed` when the engine has no
+    /// capture backend, or the OS refuses to list them.
+    #[serde(rename = "capture.targets")]
+    CaptureTargets,
 }
 
 /// What a `delete.plan` deletes: a scene or a source.
@@ -123,6 +130,7 @@ impl Query {
             Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
             Query::DeletePlan { .. } => "delete.plan",
+            Query::CaptureTargets => "capture.targets",
         }
     }
 }
@@ -269,6 +277,12 @@ pub enum QueryResult {
         /// delete of the target itself.
         edits: Vec<Edit>,
     },
+    /// The result of `capture.targets`.
+    #[serde(rename = "capture.targets")]
+    CaptureTargets {
+        /// The displays, then the windows, in the order the OS lists them.
+        targets: Vec<CaptureTargetInfo>,
+    },
 }
 
 impl QueryResult {
@@ -287,8 +301,47 @@ impl QueryResult {
             QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::CaptureTargets { .. } => "capture.targets",
         }
     }
+}
+
+/// One display or window in a `capture.targets` result.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CaptureTargetInfo {
+    /// Whether it is a display or a window: the kind of source that captures it.
+    pub kind: CaptureTargetKind,
+    /// Its capture target ID, the value of that source's `target` setting.
+    pub target: String,
+    /// A name to show: the display's name or the window's title.
+    pub name: String,
+    /// Its size in pixels now, when the OS reports it without capturing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PixelSize>,
+    /// Whether it is the primary display, which a `display` source with an empty
+    /// `target` captures. Omitted when `false`, and always `false` for a window.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub primary: bool,
+}
+
+/// What a capture target is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum CaptureTargetKind {
+    /// A whole display, captured by a `display` source.
+    Display,
+    /// One top-level window, captured by a `window` source.
+    Window,
+}
+
+/// A size in whole pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct PixelSize {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
 }
 
 /// One scene in a `scene.list` result.

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f2f2278743d2e4c4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed: the item.move cycle golden now expects the mock's cycle path; error format (error: <message> (<code>)) and exit code 17 unchanged" }
+verified = { hash = "b3:cff8895f0e518d37", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: re-read; purpose unchanged by the new capture targets command, holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:d87d877168335337", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took B6-f's Edits bullet and added scene.create's optional role:group/role:scene; grouping batch now creates the scene as a group" }
+verified = { hash = "b3:105df727f0604496", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: command table gains capture targets → query capture.targets; matches args.rs and run.rs printing" }
 -->
 
 ```sh
@@ -85,6 +85,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `scene list` | query `scene.list` |
 | `scene switch <scene-id>` | action `scene.switch` (a cut to that scene) |
 | `studio get` | query `studio.get` (the scene on program) |
+| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |
@@ -235,7 +236,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1d68cead334d0f0c", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at b3e6be5 (#263 mock cycle reasons name the cycle path); re-read beside this PR's virtual_cam text (mock accepts virtual_cam, set_target refusal unchanged; protocol 0.18); jstream-control/graph/protocol tests pass; holds" }
+verified = { hash = "b3:1ca75a5b789fd5c5", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: re-read; design text (parse, run, print) covers the new query without change, holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

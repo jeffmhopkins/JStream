@@ -377,6 +377,59 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "CaptureTargetInfo": {
+      "description": "One display or window in a `capture.targets` result.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CaptureTargetKind",
+          "description": "Whether it is a display or a window: the kind of source that captures it."
+        },
+        "name": {
+          "description": "A name to show: the display's name or the window's title.",
+          "type": "string"
+        },
+        "primary": {
+          "description": "Whether it is the primary display, which a `display` source with an empty\n`target` captures. Omitted when `false`, and always `false` for a window.",
+          "type": "boolean"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PixelSize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Its size in pixels now, when the OS reports it without capturing."
+        },
+        "target": {
+          "description": "Its capture target ID, the value of that source's `target` setting.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "target",
+        "name"
+      ],
+      "type": "object"
+    },
+    "CaptureTargetKind": {
+      "description": "What a capture target is.",
+      "oneOf": [
+        {
+          "const": "display",
+          "description": "A whole display, captured by a `display` source.",
+          "type": "string"
+        },
+        {
+          "const": "window",
+          "description": "One top-level window, captured by a `window` source.",
+          "type": "string"
+        }
+      ]
+    },
     "ClientId": {
       "description": "A connected client, assigned by the server in `welcome`. Undo history and the\naudit log are keyed by it.",
       "type": "string"
@@ -2398,6 +2451,28 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "PixelSize": {
+      "description": "A size in whole pixels.",
+      "properties": {
+        "height": {
+          "description": "Height in pixels.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "description": "Width in pixels.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
     "PlacementForm": {
       "description": "Which of the two forms an item's stored placement has (ADR-0022 decision 5).\n\nThe two values are the complete set until 1.0, which removes `legacy`.",
       "oneOf": [
@@ -2611,6 +2686,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "target"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists the displays and windows the engine can capture now: what a `display` or\n`window` source's `target` setting can name. They are runtime state, not\ncollection state, so the result carries no `rev`, and a window closed since may\nstill be named by a source. Fails with `action_failed` when the engine has no\ncapture backend, or the OS refuses to list them.",
+          "properties": {
+            "type": {
+              "const": "capture.targets",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         }
@@ -2992,6 +3080,27 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "rev",
             "edits"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `capture.targets`.",
+          "properties": {
+            "targets": {
+              "description": "The displays, then the windows, in the order the OS lists them.",
+              "items": {
+                "$ref": "#/$defs/CaptureTargetInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "capture.targets",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "targets"
           ],
           "type": "object"
         }
@@ -3749,5 +3858,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.18"
+  "title": "JStream protocol 0.19"
 }

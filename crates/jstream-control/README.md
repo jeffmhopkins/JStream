@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:0cee9228843ca676", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; shared-names bullet is main's; mock still accepts virtual_cam" }
+verified = { hash = "b3:5528b44888bcaa41", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: re-read; purpose holds, MOCK_DISPLAY is a mock detail in design" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:dbd065bb673c1ddb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; set_target refusal for a virtual camera unchanged" }
+verified = { hash = "b3:50f1a2fe8b6cfc41", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: mock bullet added, one made-up 1920x1080 primary display MOCK_DISPLAY, matches mock.rs and its test" }
 -->
 
 ### The trait
@@ -191,6 +191,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   (`not_found` for a missing scene, no `rev`), `studio.get`, and `studio.changed` for a
   switch and after a batch, undo or redo that creates the first scene or deletes the
   program scene;
+- `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
+  `MOCK_DISPLAY`;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.

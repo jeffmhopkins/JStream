@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:0911af485ca155fb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:4e5e41574e23ebcc", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: Queries bullet names capture.targets and CaptureTargetInfo; version 0.19 sentence; matches query.rs and version.rs" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -55,9 +55,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `video.snapshot`, `kind.list`, `kind.describe`,
-  `delete.plan` (with its `DeleteTarget`) and `studio.get`, with `QueryResult` and the `SceneSummary`,
-  `SceneInfo`, `SourceInfo` and `ItemInfo`
-  shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
+  `delete.plan` (with its `DeleteTarget`), `studio.get` and `capture.targets`, with
+  `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo` and
+  `CaptureTargetInfo` shapes the reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
   mix as a PNG.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
@@ -86,8 +86,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
-  the `virtual_cam` output kind; 0.17 added `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
+  the `capture.targets` query; 0.18 added the `virtual_cam` output kind, 0.17 `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
@@ -121,7 +121,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:3185940baa7febfa", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:9a61a9ee57269b93", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: query entry (kind, target, name, size, primary omitted when false, no rev, action_failed) matches query.rs and the fixtures" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -413,6 +413,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   has no scene). Runtime state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
+- `capture.targets`: the displays and windows the engine can capture now, displays
+  first, each with its `kind` (`display` or `window`, the source kind that captures
+  it), its `target` (the value for that source's `target` setting), a `name` to show,
+  its `size` in pixels when the OS reports one, and `primary` (omitted when `false`)
+  for the display an empty `display` target captures. Runtime state, so no `rev`; a
+  source can still name a window closed since. `action_failed` when the engine has no
+  capture backend or the OS refuses the list. Added in 0.19.
 - `delete.plan {target}`: the batch that deletes a scene or source (`target` is
   `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
   everything that refers to it, as `edits` and the `rev` it was planned at, or

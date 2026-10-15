@@ -39,6 +39,8 @@ Commands:
   scene switch <scene-id>          put a scene on program, with a cut (action
                                    scene.switch)
   studio get                       print the scene on program (query studio.get)
+  capture targets                  list the displays and windows a source can capture
+                                   (query capture.targets)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   output list                      list the configured outputs (query output.list)
@@ -260,6 +262,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
             scene_id: SceneId::new(*id),
         }),
         ["studio", "get"] => Command::Query(Query::StudioGet),
+        ["capture", "targets"] => Command::Query(Query::CaptureTargets),
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -750,6 +753,10 @@ mod tests {
             Command::Query(Query::StudioGet)
         );
         assert!(err(&["studio"]).starts_with("wrong arguments for `"));
+        assert_eq!(
+            ok(&["capture", "targets"]).command,
+            Command::Query(Query::CaptureTargets)
+        );
     }
 
     #[test]

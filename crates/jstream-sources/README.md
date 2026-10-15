@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:cc0cd9c4f864a61f", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3 on main's text kind: crate doc lists text, display and window; README purpose unchanged by C3 and holds" }
+verified = { hash = "b3:299d3c086b4415ce", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: display/window bullet now points at the engine's capture.targets query for target IDs; param descriptions in capture.rs say the same" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -108,8 +108,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `hwnd:0x` and the window handle). An empty `display` target is the primary display,
   which is what a `display` source showed before it had settings, so the kind keeps
   version 1 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). An
-  empty `window` target captures nothing. A new target needs a new source. No query
-  lists the targets yet.
+  empty `window` target captures nothing. A new target needs a new source. The engine's
+  `capture.targets` query lists the IDs a `target` can take.
 - `media` and `webcam` are described only, with the settings B4 gave them:
   sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.

@@ -26,12 +26,12 @@ use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFr
 use crate::studio::Studio;
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
-use jstream_platform::{Backends, Secret, StreamKeyStore};
+use jstream_platform::{Backends, CaptureTarget, CaptureTargetInfo, Secret, StreamKeyStore};
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
+    Action, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit, EncoderProfile,
     EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
-    OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    SecretString, SourceId,
+    OutputKind, OutputState, PixelSize, ProtocolError, Query, QueryResult, RecordContainer,
+    RequestId, Rev, SecretString, SourceId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -549,6 +549,13 @@ impl Engine {
         } = call
         {
             self.key_action(action)
+        } else if matches!(
+            call,
+            Call::Query {
+                query: Query::CaptureTargets
+            }
+        ) {
+            self.capture_targets()
         } else if self.backends_ready()
             && matches!(
                 call,
@@ -720,6 +727,33 @@ impl Engine {
     fn host(&mut self) -> Arc<MediaHost> {
         let host = self.media.get_or_insert_with(|| Arc::new(MediaHost::new()));
         Arc::clone(host)
+    }
+
+    /// `capture.targets`: what the platform's capture backend can capture now, listed
+    /// with no engine lock held, since listing windows calls the OS.
+    fn capture_targets(&self) -> Result<CallResult, ProtocolError> {
+        let capture = self.media.as_ref().and_then(|host| {
+            lock(&host.backends)
+                .as_ref()
+                .map(|backends| Arc::clone(&backends.capture))
+        });
+        let Some(capture) = capture else {
+            return Err(ProtocolError::ActionFailed {
+                reason: "the engine has no capture backend".into(),
+            });
+        };
+        let mut targets: Vec<_> = capture
+            .targets()
+            .map_err(|err| ProtocolError::ActionFailed {
+                reason: format!("listing capture targets: {err}"),
+            })?
+            .into_iter()
+            .filter_map(capture_target_info)
+            .collect();
+        targets.sort_by_key(|info| info.kind != CaptureTargetKind::Display);
+        Ok(CallResult::Query {
+            result: QueryResult::CaptureTargets { targets },
+        })
     }
 
     fn backends_ready(&self) -> bool {
@@ -1894,6 +1928,26 @@ fn no_key_store() -> ProtocolError {
 }
 
 /// A protocol variant added after this engine was written.
+/// A platform capture target as `capture.targets` reports it, or `None` for a kind of
+/// target no source kind captures.
+fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::CaptureTargetInfo> {
+    let (kind, target) = match info.target {
+        CaptureTarget::Display(id) => (CaptureTargetKind::Display, id),
+        CaptureTarget::Window(id) => (CaptureTargetKind::Window, id),
+        _ => return None,
+    };
+    Some(jstream_protocol::CaptureTargetInfo {
+        kind,
+        target: target.as_str().to_owned(),
+        name: info.name,
+        size: info.size.map(|size| PixelSize {
+            width: size.width(),
+            height: size.height(),
+        }),
+        primary: info.primary,
+    })
+}
+
 fn not_implemented(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the engine does not implement {what} yet"),

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:176869e3d1e875a7", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3 on #219's latest: re-read; purpose text (engine, control plane, GPU capture path, hw test) holds beside RenderCaptures" }
+verified = { hash = "b3:2967266265a717ec", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets hw test: re-read; purpose's hardware-test text holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -125,8 +125,9 @@ state machine. Contents:
   (`src/tests/cpu_pipeline/captures.rs`), which capture path an output takes and each
   fallback, and an output compositing GPU capture frames, on a software device that
   stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
-  the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, behind
-  `hw-tests` and ignored), the
+  the DX12 device of a real Windows machine, with `capture.targets` there naming a
+  display and a window that each start a WGC capture (`src/tests/windows_gpu.rs`,
+  behind `hw-tests` and ignored), the
   pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
   stage-failure, late-tick, teardown, final-tick, link-loss, stalled-stop and
@@ -176,7 +177,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f1a5e0e91bf95a9a", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3 on #219's latest: Live sources bullet names display/window captures plus main's audio-only line; Runtime bullet keeps the shared program stage and adds runtime/captures.rs; Snapshots text on Shot::captures matches snapshot.rs" }
+verified = { hash = "b3:9a651472c05ae394", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets hw test: test list names windows_gpu.rs's capture_targets_name_what_wgc_captures (a display and a window from capture.targets each start a WGC capture)" }
 -->
 
 ### Engine and sessions
@@ -276,13 +277,17 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `output.set_key` and `output.clear_key` (see *Stream keys* below), and
   `scene.switch` (see *Program scene* below).
 - **`studio.get`** reads the program scene under the collection lock.
+- **`capture.targets`** lists the platform capture backend's displays, then its
+  windows, with no engine lock held, since listing windows calls the OS. With no
+  backends it answers `action_failed`, and so it does when the OS refuses the list.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
 The engine's answers are the mock's for the differential script: `tests.rs` runs one
 script of calls against both and compares results, error codes and fields, and events.
 That script does not call `video.snapshot`. The mock has no compositor and answers it
-with `internal`, so the two are not compared. The mock stays the reference clients
+with `internal`, so the two are not compared. Nor does it call `capture.targets`,
+which the mock answers with a made-up display. The mock stays the reference clients
 were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
 
@@ -972,16 +977,15 @@ history, idempotency keys and the program scene are not saved (see *Program scen
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with its
   captured displays and windows, a CPU readback into the encoder, and the platform
   fakes in the test. The output is the primary display's size.
-- A query that lists the capture targets, so a client can fill a capture source's
-  `target`, and keeping a window source on its window across restarts (its target ID
-  names a window handle, which a new session of the app doesn't keep).
+- Keeping a window source on its window across restarts (its target ID names a window
+  handle, which a new session of the app doesn't keep).
 
 <a id="runtime"></a>
 ## Runtime
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:17feac50e96f4d14", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3 on #219's latest: tick text says each capture's mailbox, primary-display output size; Captures paragraph now says opening the program stage starts no capture (captures::spawn in launch_program); drop order matches render_loop" }
+verified = { hash = "b3:f1928b8ba63bb9e6", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets hw test: runtime/mod.rs only re-exports captures::Backends for the Windows hw test; runtime text holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

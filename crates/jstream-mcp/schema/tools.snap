@@ -1385,6 +1385,37 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "canvas"
     },
     {
+      "description": "Runs one `capture` operation: set `op.type` to one of `capture.targets` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `capture` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Lists the displays and windows the engine can capture now: what a `display` or\n`window` source's `target` setting can name. They are runtime state, not\ncollection state, so the result carries no `rev`, and a window closed since may\nstill be named by a source. Fails with `action_failed` when the engine has no\ncapture backend, or the OS refuses to list them.",
+                "properties": {
+                  "type": {
+                    "const": "capture.targets",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "capture"
+    },
+    {
       "description": "Runs one `delete` operation: set `op.type` to one of `delete.plan` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {

@@ -817,6 +817,14 @@ fn program_scene_golden() {
 }
 
 #[test]
+fn capture_targets_prints_each_target() {
+    assert_eq!(
+        run_on(&MockEngine::new(), &["--mock", "capture", "targets"]),
+        ok("display mock:display (Mock display) 1920x1080, primary\n")
+    );
+}
+
+#[test]
 fn events_golden_unknown_skipped_and_an_ended_stream_is_disconnected() {
     let engine = populated();
     let control = session(&engine);

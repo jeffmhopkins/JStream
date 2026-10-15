@@ -56,10 +56,12 @@ impl CaptureKind {
             json!(""),
         );
         target.description = Some(if window {
-            "The capture target ID of the window to capture. Empty captures nothing.".into()
+            "The ID of the window to capture, as `capture.targets` lists it. Empty captures \
+             nothing."
+                .into()
         } else {
-            "The capture target ID of the display to capture. Empty captures the primary \
-             display."
+            "The ID of the display to capture, as `capture.targets` lists it. Empty captures \
+             the primary display."
                 .into()
         });
         Self {

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:8b5981f1d5487f45", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
+verified = { hash = "b3:1d318c6421c82972", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: re-read; tools come from the schema, so the capture tool appears by noun grouping; holds" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:8b856d3325bb3c0d", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server design; same token/Host/Origin checks on /mcp; holds" }
+verified = { hash = "b3:fcbb24888a1136a5", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: tools.snap regenerated with the capture tool; tests count 16 tools; design text names no tool list, holds" }
 -->
 
 ### Tools
