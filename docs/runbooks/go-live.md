@@ -76,7 +76,8 @@ $cli = 'target\release\jstream-cli.exe'
    `& $cli --url ws://127.0.0.1:4460 events`. While the output runs, a `stats.tick` line
    comes about once a second. Its counters are running totals of dropped frames and
    packets since the daemon started, so all zeros is healthy. A counter that keeps
-   climbing is worth an issue.
+   climbing is worth an issue. While the program runs, `meters.tick` lines, the audio
+   levels, come about ten a second as well.
 5. **Go live:** the `output` tool with `{"op": {"type": "output.start", "output_id":
    "live"}}`, or `& $cli --url ws://127.0.0.1:4460 output start live`.
    Check: the events show `output.state_changed` going `starting`, then `active`, and
@@ -99,7 +100,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:516873bfa6a5e5ce", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: daemon/cli usage gained pairing commands; smoke script uses none of them; holds" }
+verified = { hash = "b3:2363e773d506d1ce", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

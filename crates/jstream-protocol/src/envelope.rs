@@ -137,7 +137,7 @@ pub enum CallResult {
     Action {
         /// What the action answered, tagged by the action's name, for the actions that
         /// answer something. Absent for every other action, and from a server older
-        /// than 0.19.
+        /// than 0.20.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         result: Option<ActionResult>,
     },

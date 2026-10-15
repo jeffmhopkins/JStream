@@ -174,8 +174,10 @@ pub enum EntityKind {
     Output,
     /// An encoder profile.
     Encoder,
-    /// A paired device (0.19). Only an error answering `device.revoke` names it, so a
-    /// client older than 0.19, which sends none, never reads it.
+    /// An audio bus.
+    Bus,
+    /// A paired device (0.20). Only an error answering `device.revoke` names it, so a
+    /// client older than 0.20, which sends none, never reads it.
     Device,
 }
 
@@ -187,6 +189,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Source => "source",
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
+            EntityKind::Bus => "bus",
             EntityKind::Device => "device",
         })
     }
