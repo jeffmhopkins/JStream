@@ -423,7 +423,7 @@ tags (`@v4`) and branches are not allowed. Dependabot keeps the pins current
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/**"]
+applies_to = ["crates/**", "apps/**"]
 -->
 Every bug fix includes a test that fails without the fix.
 
