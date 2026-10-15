@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:13765b8bbd86e02d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 merge of C8's N5 (via C8b2): intro keeps the sandboxed-helper wording and takes 'a GPU device the host hands it'; seam paragraph and helper, pipe and frame bullets re-read; holds" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
@@ -141,7 +140,6 @@ folder), and the shutdown time. It runs on Windows only.
 ## Open items
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md", "docs/adr/0048-sandboxed-browser-helper.md"]
-verified = { hash = "b3:ea2b31781484239a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: sandbox item removed (ADR-0048), packaging now names the bootstrap exe and DLL, measurements item added, audio-timestamp item reworded for the pipe" }
 -->
 
 What ADR-0021 asks for that this crate doesn't do yet. The first blocks any host from
