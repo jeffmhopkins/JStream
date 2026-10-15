@@ -27,9 +27,12 @@ There is one open wave per milestone group: `wave/m1` (M1a to M1d), `wave/m2` an
 | Delivers a roadmap item | The open wave for that item's `milestone` in `docs/progress.toml` |
 | Bumps `PROTOCOL_VERSION` | The earliest open wave, whatever its milestone ([Protocol versions](#protocol)) |
 | A fix, docs or tests with no roadmap item | The earliest open wave |
-| Changes `.github/`, `xtask/src/governance.rs`, `REVIEW.md`, `CLAUDE.md` or `docs/RULES.md` | `main` |
+| Exists to change CI, the review gate, governance or the rules themselves (its own subject is `.github/`, `xtask/src/governance.rs`, `REVIEW.md`, `CLAUDE.md` or `docs/RULES.md`) | `main` |
 | Opened by Dependabot | `main` |
 | An urgent fix the maintainer asks to land now | `main` |
+
+A feature PR that also adds its own rule to `docs/RULES.md` or its own CI step still goes to
+its wave: `governance` checks it there, and again on the wave's PR into `main`.
 
 A stacked PR keeps the PR below it as its base. Only the bottom of a stack targets a wave.
 
