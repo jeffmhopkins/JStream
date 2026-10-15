@@ -845,7 +845,7 @@ verified = { hash = "b3:d1beab0a225fcf85", by = "agent:claude@session_01Fuozqmqh
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:435cdce080086191", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main: #190's browser-helper wording and this PR's hardware-run bullet both kept; no conflict in meaning" }
+verified = { hash = "b3:a34329174da15f35", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#193: hardware bullet now says RequestSample is paced to at most 30 a second; rest unchanged" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -888,5 +888,4 @@ Direct3D 12).
     served only the producer's frames, with **no** LOCAL SERVICE grant on the file. So the
     grant matters only for a DLL inside a user profile, which is inferred from S2 rather
     than isolated. Frame Server requested about four samples per producer frame, because
-    the stream doesn't pace `RequestSample` yet
-    (#193).
+    the stream didn't pace `RequestSample`; it now answers at most 30 a second (#193).
