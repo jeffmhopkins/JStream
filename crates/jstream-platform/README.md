@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:03de16cf4b7b6232", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: Capture bullet adds the Capture::on_context default method (None means CPU frames); Not yet notes the engine composites GPU frames; matches capture.rs" }
+verified = { hash = "b3:335720f0efb8e16e", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the enhanced-RTMP ADR link in media README (0034 -> 0041); main's E1 text kept; holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -130,7 +130,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:158ce788cc1a98ba", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: intro says render samples capture frames on the context's device; Frame lifetime still holds: the cache drops a frame's hold at end_frame and the compositor clears staged holds after each submit, so only the newest frame pins a slot" }
+verified = { hash = "b3:3dde89dac49576a2", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the youtube and sources crate-map rows' ADR link (0034 -> 0041); main's E1 GPU lifetime text kept; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
