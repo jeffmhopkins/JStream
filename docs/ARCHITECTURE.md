@@ -165,8 +165,8 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:cd429ed209655eff", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1 (#147 N2): Scenes-as-sources bullet now states the 8-level nesting limit of the program mix for clients (live output and video.snapshot, debug log); matches snapshot::MAX_NESTING and visit(); rest of the section unchanged" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
+verified = { hash = "b3:aca67ac5246228b3", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (ADR-0040 #134): main's hotkey-target sentence and ADR-0040 depends_on sit beside E1's 8-level program-mix limit; both hold" }
 -->
 
 ```
@@ -259,9 +259,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   display order, and a variant sits under its parent, never in a folder. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
-  decision. Deleting the scene, source or output a binding's action names succeeds: the
-  binding stays, is reported as broken, does nothing when pressed, and can be re-pointed
-  (a batch of `hotkey.clear` and `hotkey.set`, as ADR-0024 §5 rebinds); undoing the delete makes it work again. `Scene.background` (absent
+  decision. Deleting the scene, source or output a binding's action names also removes
+  that binding, in the same undoable edit, and undo restores both; `delete.plan` lists
+  the bindings it will remove, and a binding is never a delete blocker
+  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). `Scene.background` (absent
   means transparent) is scene model, not metadata, because the compositor draws it
   wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it

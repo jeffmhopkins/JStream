@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a5e1f468dc01df2f", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Dependency only (E1 added the program mix's 8-level draw limit to ARCH data-model): the graph still accepts any acyclic depth and rejects cycles; model bullets unchanged" }
+verified = { hash = "b3:846bc3df1279ed4a", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#data-model (merge of ADR-0040 with E1's nesting limit): the graph still accepts any acyclic depth (the limit is the program mix's); Purpose holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
