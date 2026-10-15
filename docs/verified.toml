@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:5359a037fc331799", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2: re-read; added the jstream-anim row (layer 0, no dependencies, no unsafe, ADR-0049 keyframe-scene model); summary matches its Cargo.toml; lint-deps passes" }
+stamp = { hash = "b3:d8bb2b388f305f92", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the crate map after merging main: the jstream-outputs row now matches its Cargo.toml summary (RTMP(S) client, recording; vcam output runs in jstream-core's runtime, runtime/vcam.rs); other rows unchanged by this PR." }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -57,7 +57,7 @@ stamp = { hash = "b3:ac31564403d9a839" }
 stamp = { hash = "b3:24f40f915476b541" }
 
 ["ARCH#crate-map"."file:crates/jstream-outputs/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:2bdf736999b99a35" }
+stamp = { hash = "b3:65f39753685d6476", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the crate map after merging main: the jstream-outputs row now matches its Cargo.toml summary (RTMP(S) client, recording; vcam output runs in jstream-core's runtime, runtime/vcam.rs); other rows unchanged by this PR." }
 
 ["ARCH#crate-map"."file:crates/jstream-platform-windows/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:70046124f5cf9949" }
@@ -1572,10 +1572,10 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:20caa632a5d049a6" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:7c902ba9d37e539b", by = "agent:claude", note = "re-read the Tests paragraph against the shutdown_over_tls test now waiting for the server's read timeout before the client shuts down (a test-only ordering fix for macOS EINVAL); the test list and every Transport claim still hold" }
+stamp = { hash = "b3:b5c201f08725c794", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main: rtmp and record modules as lib.rs says; Output trait still later; vcam output is in jstream-core runtime (runtime/vcam.rs), and the jstream-core README#runtime anchor exists; deps unchanged." }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
-stamp = { hash = "b3:2ef270bb1b4e0cc6" }
+stamp = { hash = "b3:230ac9edc35e19b9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main: rtmp and record modules as lib.rs says; Output trait still later; vcam output is in jstream-core runtime (runtime/vcam.rs), and the jstream-core README#runtime anchor exists; deps unchanged." }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:27f72f3f6ef95752" }
@@ -1587,7 +1587,7 @@ stamp = { hash = "b3:04b853b872d31424" }
 stamp = { hash = "b3:acbf94ce5b03cce1" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/lib.rs"]
-stamp = { hash = "b3:0af46734582b0cb9" }
+stamp = { hash = "b3:ec7b0f2e7ed0db4a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main: rtmp and record modules as lib.rs says; Output trait still later; vcam output is in jstream-core runtime (runtime/vcam.rs), and the jstream-core README#runtime anchor exists; deps unchanged." }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/record/error.rs"]
 stamp = { hash = "b3:5576f34b8fef4acc" }
@@ -1641,7 +1641,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:5359a037fc331799" }
+stamp = { hash = "b3:d8bb2b388f305f92", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read GPU frames against the crate-map change: only the jstream-outputs row changed; the jstream-platform row still lists GpuInterop with wgpu types, which this section relies on." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
