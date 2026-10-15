@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:e951e311a535dab7", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Stale only through jstream-platform#purpose, where H1 adds PlatformError::MissingComponent to the errors bullet; re-read this section: it uses jstream-platform for OAuthTokenStore and Secret only, so it holds" }
+verified = { hash = "b3:0509c64ad6522cc0", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main into C4b: section text is main's; stale only via platform#purpose (C4b's Not yet line, main's MissingComponent line); Secret and OAuthTokenStore, which it relies on, unchanged" }
 -->
 
 Layer-2 client for Google sign-in and the

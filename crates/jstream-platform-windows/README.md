@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:d4ca9e3f2c92bf32", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b, #148 MF N editions): stamp-only conflict, main's text taken; F3 wrote nothing here that C1b or #148 changes; holds" }
+verified = { hash = "b3:6bca2dabf15a604d", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (F3 #208) into C4b: stamp-only conflict, main's text unchanged here; stale via ARCH#threading (program-stage collector), which doesn't touch the Windows backends; MfVideoDevices bullet, H1 bullet and Tests re-read and hold" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -196,6 +196,51 @@ The code is ported from spikes S1 to S3. This first cut has:
       size is then read again.
   - **Not yet:** video decoders, which report `Unsupported` until then.
 
+- **`MfVideoDevices`** (`VideoDevices`), webcams and capture cards through Media
+  Foundation's source reader ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)):
+  - **Devices:** the video capture devices Media Foundation enumerates. A device's
+    `DeviceId` is its symbolic link (its device interface path), which stays the same
+    across reboots and replugging into the same port; its name is the friendly name.
+  - **Paired audio:** the first active WASAPI capture endpoint in the same device
+    container (the configuration manager's container ID), so it is an ID `WasapiAudio`
+    opens. Devices built into the computer share one container, which pairs nothing: a
+    laptop's camera is not paired with its microphone array.
+  - **Formats:** the first video stream's native media types that the backend can
+    deliver, in the device's order: NV12 and I420 as they are, YUY2 (converted to NV12),
+    and MJPEG (decoded by the engine's `CaptureDecoder`). RGB, 10-bit and H.264 types are
+    left out. A type that repeats an earlier one's size, frame rate and encoding is
+    listed once, and the first is the one opened. Frame rates become frame periods
+    (`30000/1001` fps is `1001/30000`).
+  - **Streams:** `open` selects the native type with converters disabled, so the reader
+    delivers exactly that type, and reads it synchronously on its own capture thread.
+    `open` waits up to 5 s for the first read, so a device another application holds is
+    `Busy` there. A denied camera privacy setting is an `Os` error that says so. Raw
+    frames are copied (NV12, I420) or converted to NV12 (YUY2, with each chroma sample
+    averaging the two rows of its block) on that thread, into the same single-slot
+    mailbox as display capture. Their colour is what the type declares, else BT.601
+    below 720 lines and BT.709 from there, in limited range.
+  - **Threads:** `devices`, `formats` and `open` join the calling thread to the
+    multithreaded apartment for the call, as `WasapiAudio` does, and the capture thread
+    joins it for its lifetime. Each also starts Media Foundation; the thread releases the
+    reader, source and decoder before shutting it down.
+  - **Times:** a sample's `MFSampleExtension_DeviceReferenceSystemTime` (QPC in 100 ns,
+    `QpcClock`'s time line) when it has one; otherwise the reader's timestamp, anchored
+    to `QpcClock` at the first frame.
+  - **End of a stream:** a removed device, a reader error or end of stream ends the stream
+    with `DeviceLost`, as does a change of the device's format, so the engine reopens it.
+    A panic on the capture thread (the decoder's included) ends it with `InvalidState`.
+    Dropping the stream doesn't wait: the thread stops after its current read and then
+    releases the device and drops the decoder.
+  - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`: the first synchronous
+    MJPEG decoder MFT Media Foundation ranks (Microsoft's, on Windows), created on the
+    capture thread at the first frame and again if the size changes. It takes NV12
+    output when offered, else YUY2 converted to NV12. Decoded frames are BT.601 full
+    range, as JFIF defines, unless the decoder's type says otherwise. A frame it can't
+    decode is dropped and counted; the count is not yet in `CaptureStats`.
+  - **Not yet:** the `Backends` field and the decode-failure count in `CaptureStats`
+    (both change `jstream-platform`). Every MJPEG frame is decoded, including ones the
+    mailbox then replaces before render takes them.
+
 - **`WindowsGpu`** (`GpuInterop`, [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)
   step 2, plus the D3D11 device that steps 1 and 5 will use; ported from spike S1):
   - **`open_device`** opens the DX12 wgpu device on the media adapter. That is the
@@ -308,8 +353,10 @@ AAC helpers (configuration check, PCM conversion, packet timing and padding), th
 helpers (configuration check, NV12 packing, `pts` mapping), the GPU capture ring's slot
 choice (reuse, drop when full, release on resize), the credential helpers (target names
 of both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
-the Media Foundation check's decision (edition kinds and the advice for each) run on
-every platform. The QPC clock test, the start-race test (a destroyed message-only
+the Media Foundation check's decision (edition kinds and the advice for each) and the
+video-device helpers (subtypes and frame rates to formats, repeats left out, colour
+fallbacks, NV12 and I420 copies, YUY2 to NV12, short buffers, audio pairing by container)
+run on every platform. The QPC clock test, the start-race test (a destroyed message-only
 window maps to `NotFound`), the credential limits check, the credential round trip (a
 uniquely named credential written, replaced, read and deleted in the real store, a
 non-UTF-8 one refused on read, deleted again on failure), the same through
@@ -327,9 +374,12 @@ context, and hold every frame until the ring drops new ones, then release them. 
 need screen activity, so move the mouse while they run. The virtual-camera test starts
 `WindowsVcam`, opens the camera's own media source through a source reader (video
 processing on, RGB32 out), and publishes grey until Frame Server serves it back; it also
-checks that a second producer is refused and that the block is stopped after `stop`. Run
-them on a Windows machine with a microphone, speakers, a
-display and a DX12 GPU with a hardware H.264 encoder:
+checks that a second producer is refused and that the block is stopped after `stop`. The
+video-device tests list devices, formats and paired audio, capture an uncompressed format
+and the largest MJPEG format for two seconds each (checking size, format and `pts`), open
+a device twice (shared or `Busy`), and refuse an unknown device or format; an unplug test
+runs only when `JSTREAM_UNPLUG_TEST` is set. Run them on a Windows machine with a
+microphone, speakers, a display, a webcam and a DX12 GPU with a hardware H.264 encoder:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`. The
 virtual-camera test also needs the `jstream-vcam-windows` DLL registered
 ([its Hardware check](../jstream-vcam-windows/README.md#hardware-check)).
