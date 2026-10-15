@@ -44,7 +44,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `████████░░` 83% | 15 | 2 | 1 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 83% | 29 | 3 | 3 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 83% | 29 | 4 | 2 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 32% | 6 | 7 | 6 |
@@ -130,7 +130,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | D4 | No-allocation test | ✅ merged | #191 |
 | D7b | Filter chains in the mixer | ✅ merged | #231 |
 | D5 | Audio in the protocol | 🔍 in review | #240 |
-| D6 | when_shown activity gain | ⏳ planned |  |
+| D6 | when_shown activity gain | 🔍 in review | #299 |
 | E1 | Render snapshots, GPU lifetime | ✅ merged | #172, #215 |
 | F1 | fMP4 muxer | ✅ merged | #151 |
 | F2a | Recording file sink | ✅ merged | #156 |
