@@ -51,7 +51,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8d734eeebe78f203", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for the limits: new Connection limits table (max_connections 32 -> 503 after the gate, header_read_timeout 10 s on the socket via listener.rs, handshake_timeout 10 s -> close 1008), Sessions and Logging bullets, open question 8 incl. the jstream-cli mcp lazy-hello conflict; checked each against config.rs, listener.rs, lib.rs and session.rs" }
+verified = { hash = "b3:9fc66f6965fe6863", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged with main and edited open question 8: the jstream-cli mcp conflict is settled (jstream-mcp says hello at initialize); limits table, Sessions and Logging still match config.rs, listener.rs, lib.rs, session.rs" }
 -->
 
 ### Listening and admission
@@ -236,8 +236,9 @@ for the token digest; `tracing` for the spans and events above. No TLS crate is 
    limit or per-event-kind limits once they exist.
 8. **Limit tuning.** The connection limits (see *Listening and admission*) are a
    conservative first cut. Whether a remote bind wants a per-peer cap as well, or the
-   host app should expose the limits, is open. Not yet reconciled: `jstream-cli mcp`
-   connects when it starts but sends `hello` only before the first tool call that needs
-   the engine ([jstream-mcp › Design](../jstream-mcp/README.md#design)), so an agent
-   that makes no such call within the handshake timeout loses its session and must
-   restart the proxy.
+   host app should expose the limits, is open. Settled: the handshake timeout counts
+   from accept, so a client must say `hello` as soon as it connects. `jstream-cli mcp`
+   connects when it starts, and `jstream-mcp` sends `hello` at the MCP `initialize` (or
+   `server/discover`), not at the first tool call
+   ([jstream-mcp › Design](../jstream-mcp/README.md#design)), so an idle agent keeps its
+   session.

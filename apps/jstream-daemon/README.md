@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:3af53e6cda14a48c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via jstream-server Design: the daemon still uses ServerConfig::new with only the port changed, so it gets the default limits; the Listening bullet (127.0.0.1, checks unchanged, no other-address option) still holds" }
+verified = { hash = "b3:755164534be85664", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via jstream-server Design (open question 8 only): daemon still uses ServerConfig::new with only the port changed; Listening bullet holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

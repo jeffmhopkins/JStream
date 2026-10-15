@@ -49,8 +49,15 @@ fn events_until(
     panic!("the events never arrived");
 }
 
-#[test]
-fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
+/// A `MockEngine` behind a real server configured by `configure`, on its own runtime.
+struct Running {
+    runtime: tokio::runtime::Runtime,
+    engine: MockEngine,
+    url: String,
+    stop: tokio::sync::oneshot::Sender<()>,
+}
+
+fn serve(configure: impl FnOnce(&mut ServerConfig)) -> Running {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -61,7 +68,8 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
         let engine = engine.clone();
         Arc::new(move || Box::new(engine.connect()))
     };
-    let config = ServerConfig::new(Token::new(TOKEN).expect("a valid token"));
+    let mut config = ServerConfig::new(Token::new(TOKEN).expect("a valid token"));
+    configure(&mut config);
     let server = runtime
         .block_on(Server::bind(config, connector))
         .expect("the server binds");
@@ -70,12 +78,28 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
     runtime.spawn(server.serve_with_shutdown(async move {
         let _ = stopped.await;
     }));
+    Running {
+        runtime,
+        engine,
+        url,
+        stop,
+    }
+}
 
+/// The binary's `mcp`, connected to `url` with a token file named after `name`.
+struct Proxy {
+    child: std::process::Child,
+    stdin: std::process::ChildStdin,
+    stdout: BufReader<std::process::ChildStdout>,
+    token: std::path::PathBuf,
+}
+
+fn proxy(url: &str, name: &str) -> Proxy {
     let token = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("mcp-e2e-token-{}", std::process::id()));
+        .join(format!("{name}-{}", std::process::id()));
     std::fs::write(&token, format!("{TOKEN}\n")).expect("the token file is written");
     let mut child = Command::new(env!("CARGO_BIN_EXE_jstream-cli"))
-        .args(["--url", &url, "--token-file"])
+        .args(["--url", url, "--token-file"])
         .arg(&token)
         .arg("mcp")
         .env_remove("JSTREAM_TOKEN_FILE")
@@ -84,12 +108,20 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("the binary runs");
-    let mut stdin = child.stdin.take().expect("piped stdin");
-    let mut stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
+    let stdin = child.stdin.take().expect("piped stdin");
+    let stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
+    Proxy {
+        child,
+        stdin,
+        stdout,
+        token,
+    }
+}
 
+fn initialize(stdin: &mut impl Write, stdout: &mut impl BufRead) {
     let init = exchange(
-        &mut stdin,
-        &mut stdout,
+        stdin,
+        stdout,
         &json!({
             "jsonrpc": "2.0", "id": 1, "method": "initialize",
             "params": {
@@ -103,6 +135,24 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
         init["result"]["serverInfo"]["name"], "jstream-mcp",
         "{init}"
     );
+}
+
+#[test]
+fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
+    let Running {
+        runtime,
+        engine,
+        url,
+        stop,
+    } = serve(|_| {});
+    let Proxy {
+        child,
+        mut stdin,
+        mut stdout,
+        token,
+    } = proxy(&url, "mcp-e2e-token");
+
+    initialize(&mut stdin, &mut stdout);
     let created = exchange(
         &mut stdin,
         &mut stdout,
@@ -171,4 +221,39 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
     let _ = std::fs::remove_file(&token);
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(String::from_utf8_lossy(&output.stderr), "");
+}
+
+/// The server closes a connection that hasn't completed its handshake within its
+/// handshake timeout. The proxy connects when it starts, so it says `hello` at
+/// `initialize`: an agent that initializes and then stays idle past the timeout keeps
+/// its session.
+#[test]
+fn an_idle_agent_keeps_its_session_past_the_handshake_timeout() {
+    let running = serve(|config| config.handshake_timeout = Duration::from_millis(300));
+    let Proxy {
+        child,
+        mut stdin,
+        mut stdout,
+        token,
+    } = proxy(&running.url, "mcp-idle-token");
+    initialize(&mut stdin, &mut stdout);
+    // Idle well past the timeout.
+    std::thread::sleep(Duration::from_millis(900));
+    let created = exchange(
+        &mut stdin,
+        &mut stdout,
+        &call(
+            2,
+            "scene",
+            json!({"op": {"type": "scene.create", "scene_id": "main", "name": "Main"}}),
+        ),
+    );
+    assert_eq!(created["result"]["isError"], false, "{created}");
+    assert_eq!(running.engine.rev(), Rev(1), "the edit reached the engine");
+
+    drop(stdin);
+    let output = child.wait_with_output().expect("the proxy exits");
+    let _ = std::fs::remove_file(&token);
+    assert_eq!(output.status.code(), Some(0));
+    let _ = running.stop.send(());
 }
