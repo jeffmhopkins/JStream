@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:97194c78632a5a55", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via Y2's platform Purpose (#169, new OAuthTokenStore bullet saying jstream-youtube keeps its refresh token there): Secrets paragraph now names OAuthTokenStore as where the host keeps the refresh token, and Not yet drops the credential-store entry (it exists) and keeps saving to it under engine wiring; the crate itself still never writes it" }
+verified = { hash = "b3:e13f76f93a4626c3", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via the platform Purpose after main's E3a/B3 merges (GPU frames: WgcCapture::on_gpu delivers them); its OAuth tokens/OAuthTokenStore and Secret text this section relies on are unchanged, crate-map youtube row unchanged, R-SEC-001/R-DEP-006 text unchanged, so Secrets and Not yet still hold" }
 -->
 
 Layer-2 client for Google sign-in and the

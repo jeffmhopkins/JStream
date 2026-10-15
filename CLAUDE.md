@@ -26,7 +26,7 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "b3:d5323183193d9c30", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against DOCS#notes, whose verify-to-edit sentence now says the sweep doesn't report it yet: the check/verify workflow, no-dates rule and hash bullets here don't rely on it and still hold" }
+verified = { hash = "b3:5ee4dd8447bd0ddc", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Edited: the hash bullet now names docs merge-main as an exception (it keeps main's committed stamp), and a new bullet says to merge main with it and re-verify what it lists; matches merge.rs and DOCS#verification" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one
@@ -37,13 +37,17 @@ verified = { hash = "b3:d5323183193d9c30", by = "agent:claude@session_01BLMb1wRF
 - New external URL → register it in `docs/external.toml`. Repeated value → `docs/facts.toml`.
 - New crate root → add its `//! Docs:` line.
 - Never type a `hash` by hand. Only `docs verify` writes it (apart from the one-time
-  `docs rehash` migration of ADR-0039, which never restamps a stale section).
+  `docs rehash` migration of ADR-0039, which never restamps a stale section, and
+  `docs merge-main`, which only keeps main's committed stamp).
+- To bring `main` into your branch, run `cargo xtask docs merge-main`. It resolves
+  conflicts between two `verified` stamps and leaves every other conflict to you. Then
+  re-read and verify each section it lists as stale.
 
 <a id="pr-loop"></a>
 ## The PR loop (you are a builder)
 <!-- @section
 depends_on = ["REVIEW.md#output", "REVIEW.md#rounds"]
-verified = { hash = "b3:a74acf3f822f102f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: auto-merge commands, verdict markers never posted by builders, Dependabot step 6 (by author), ADR step 7 with proxy decisions all match REVIEW#output/#rounds" }
+verified = { hash = "b3:714ee3aea6bce70e", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read the PR loop against ADR-0043: item 7 now lists the narrowed maintainer tier and says everything else is agent tier, proxy format cited from ADR-0043" }
 -->
 
 1. Open the PR with **auto-merge (squash) enabled**. It merges by itself once every required
@@ -63,11 +67,13 @@ verified = { hash = "b3:a74acf3f822f102f", by = "agent:claude@session_01QBbMRwRu
    and handle CI failures as if they were your own PRs. Action-pin-only bumps are
    pre-approved governance ([ADR-0018](docs/adr/0018-ci-supply-chain-policy.md)).
 7. **Writing an ADR:** set its `tier` per [R-GOV-005](docs/RULES.md#R-GOV-005). For
-   `maintainer` (product and platforms, process and governance, superseding any ADR):
-   open it as `proposed`, add `needs-human`, and wait for the maintainer's `/accept` or
-   `/reject` decision, then set `status` to match. You may post a decision **only** to relay
-   an explicit instruction from the maintainer that names the ADR, using ADR-0017's
+   `maintainer` (product scope, licensing, security and privacy posture, public
+   compatibility promises, spending, or the tier rules themselves): open it as `proposed`,
+   add `needs-human`, and wait for the maintainer's `/accept` or `/reject` decision, then set `status` to match. You may post a decision **only** to relay
+   an explicit instruction from the maintainer that names the ADR, using ADR-0043's
    proxy format with their words quoted. **Never post a decision they didn't give.**
+   Everything else is `agent` tier, including amending or superseding an ADR on another
+   subject: decide it yourself and land it as `accepted` after review.
 
 <a id="limits"></a>
 ## Things you never do
@@ -93,6 +99,7 @@ Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo de
 `cargo xtask docs check`, `cargo xtask docs verify`, `cargo xtask docs for`,
 `cargo xtask docs generate` (rewrites `@generated` blocks, e.g. ADR status banners),
 `cargo xtask docs log <DOC[#anchor]>` (history from git), `cargo xtask docs review <DOC>`
-(doc-level TTL review),
+(doc-level TTL review), `cargo xtask docs merge-main` (merges `origin/main`, resolving
+stamp-only conflicts),
 `cargo xtask lint-deps` and `cargo xtask governance --base origin/main` (lists your
 governance changes).

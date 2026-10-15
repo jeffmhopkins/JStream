@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:7ef650d094893271", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; trait, errors, mock and ws bullets hold for mock.rs with both settings and key_set changes" }
+verified = { hash = "b3:b340c8ccb1e16eef", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; mock contents hold; set_role/item.move unimplemented in the mock as stated" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:2b9df30ab1c1fee4", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read main's kind/0.8 mock text; I1's /mcp wording in ARCH#protocol makes no claim on WsControl" }
+verified = { hash = "b3:3503e916c128a77f", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: mock bullet: every edit but 0.12's set_role/item.move; check list has both B3's geometry/canvas checks and B6's scene_id own-scene check, which set_geometry now also takes" }
 -->
 
 ### The trait
@@ -56,9 +56,9 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
   keys its undo history and audit-log entries
   ([ADR-0013](../../docs/adr/0013-command-model.md)). A second `hello` returns the same
   identity.
-- `call(Call) -> Response`: one batch, action or query. The implementation chooses the
-  request ID and returns it in the `Response`, so the caller can match the
-  `state.changed` event its batch causes. Before `hello` it fails with
+- `call(Call) -> Response`: one batch, action, query or history call (undo, redo). The
+  implementation chooses the request ID and returns it in the `Response`, so the caller
+  can match the `state.changed` event its batch or history call causes. Before `hello` it fails with
   `handshake_required`.
 - `events() -> EventStream`: an independent subscription to every event emitted after
   the call, buffered until read, in emission order. It ends when the session or the
@@ -94,23 +94,33 @@ its own, and is used with default features off.
 ### Mock
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
-`dev-dependencies`) keeps scenes, items, sources and outputs in memory and follows the
-protocol's rules for them:
+`dev-dependencies`) keeps scenes, items, sources and outputs in memory, with an
+in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys. A
   retry with a known key answers first; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but the output ones, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but protocol 0.12's `scene.set_role` and `item.move` (which answer
+  `internal`), with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
   - reorder indices out of range;
+  - a placement edit's `scene_id` naming a scene other than the item's own;
+  - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
+    not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or
     either while a source's settings refer to it;
-  - nesting cycles.
+  - nesting cycles;
+  - RTMP server URLs in `output.create` and `output.set_target` (`jstream-graph`'s
+    checks and reasons, which never repeat the URL), and deleting an output while it
+    runs, which the engine refuses through `Graph::apply_with_running`;
+  - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
+    reasons), `output.set_target` on a recording output, and an `unknown` output kind,
+    RTMP target or container.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind, stores settings as sent without
@@ -119,16 +129,15 @@ protocol's rules for them:
   `kind.list` and `kind.describe` answer `internal`;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
-  `source.list` (ordered by ID) and `item.list` (bottom first; `not_found` for a missing
-  scene), each at the current `rev`, and `output.status`, whose `key_set` is always
-  `false` because the mock has no key store. So it keeps everything an edit sets:
-  source names, kinds and settings, and each item's transform, crop and visibility.
-  `video.snapshot` is not one of those reads: the mock has no compositor and answers
-  it with `internal`, as it does for any protocol variant it does not implement. The
-  0.7 output configuration is not implemented either: `output.create`,
-  `output.set_target`, `output.delete`, `output.list`, `output.set_key` and
-  `output.clear_key` answer `internal`, and `state.get` reports no outputs. Its
-  outputs are the ones `MockEngine::with_output` declares;
+  `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
+  scene) and `output.list` (ordered by ID), each at the current `rev`. So it keeps
+  everything an edit sets: the canvas, source names, kinds and settings, each item's
+  placement (its transform, or its geometry and the transform view of it), crop and
+  visibility, and each output's kind and target. `video.snapshot` is not one of those
+  reads: the mock has no compositor and answers it with `internal`, as it does for any
+  protocol variant it does not implement;
+- outputs as the engine (`jstream-core`) keeps them: a configured output starts
+  `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
 - `state.changed` events carrying the request ID, and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
@@ -136,16 +145,17 @@ protocol's rules for them:
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.
 
-Its futures are always ready. It has no undo, persistence or real outputs, and answers a
-protocol variant it doesn't know with `internal`.
+Its futures are always ready. It has no undo, persistence, credential store or real
+outputs, and answers a protocol variant it doesn't know with `internal`.
 
 The mock re-implements these checks and reads rather than calling
 `jstream_graph::Graph::apply` and `Graph::query`. `jstream-graph` is also layer 2, and
 [R-ARCH-002](../../docs/RULES.md#R-ARCH-002) allows only strictly lower layers, even
 for dev-dependencies, so the dependency would need a layering change. The duplication
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
-dev-dependency with the `fixtures` feature): one batch that builds a collection, the
-exact answer to every read of it, and the exact error for batches rejected against it.
+dev-dependency with the `fixtures` feature): one batch that builds a collection with
+its outputs, the exact answer to every read of it, and the exact error for batches
+rejected against it, RTMP URL and recording path rejections included.
 If the mock and the graph drift apart on any of those, one of the two tests fails. The
 mock's own tests pin the remaining shared error paths.
 

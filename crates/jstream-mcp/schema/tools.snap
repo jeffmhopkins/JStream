@@ -4,7 +4,7 @@ source: crates/jstream-mcp/src/tests.rs
 {
   "tools": [
     {
-      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `item`, `output`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `canvas`, `item`, `output`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Crop": {
@@ -93,7 +93,30 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+                "description": "Changes what a scene is for (ADR-0024 §1): a `scene`, or a `group` placed in\nother scenes through a `scene` source. The role changes no engine behaviour: a\ngroup renders, nests and can be placed more than once like any scene, and clients\nhide groups from the scene list. Inverse: `scene.set_role` with the previous role.",
+                "properties": {
+                  "role": {
+                    "$ref": "#/$defs/SceneRole",
+                    "description": "Its new role."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_role",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "role"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -111,8 +134,19 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.",
+                "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.\n\nThe item's placement is `geometry` when that is sent, else a legacy placement:\n`transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).\nSending both is `invalid_argument`.",
                 "properties": {
+                  "geometry": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ItemGeometry"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The initial placement as a box on the canvas, checked like\n`item.set_geometry`'s."
+                  },
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The new item's ID, chosen by the client. Rejected if it exists."
@@ -134,7 +168,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "Initial transform. Omitted means [`ItemTransform::IDENTITY`]."
+                    "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
                   },
                   "type": {
                     "const": "item.add",
@@ -150,7 +184,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID, source and transform, then `item.reorder` to its old\nstacking position (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
+                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, and its placement in the field matching\nits form (`transform` or `geometry`), then `item.reorder` to its old stacking\nposition (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -168,11 +202,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's transform. Inverse: `item.set_transform` with the previous one.",
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle) or if the index is out of range. Inverse:\n`item.move` back to its previous scene and index.",
+                "properties": {
+                  "index": {
+                    "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to move."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to move it to. Its own scene is allowed, and then the move is an\n`item.reorder`."
+                  },
+                  "type": {
+                    "const": "item.move",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "scene_id",
+                  "index"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to move."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
                   },
                   "transform": {
                     "$ref": "#/$defs/ItemTransform",
@@ -191,11 +266,56 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero, a `perspective_px` that is not greater than zero, and any\nnon-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the\ncompositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "properties": {
+                  "geometry": {
+                    "$ref": "#/$defs/ItemGeometry",
+                    "description": "The new geometry."
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to place."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.set_geometry",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "geometry"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Shows or hides an item. Inverse: `item.set_visible` with the previous value.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.\nAny other scene is `invalid_argument` until keyframe scenes exist, when naming\na keyframe scene of the item's scene will write that scene's override."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -248,6 +368,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to crop."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
                   },
                   "type": {
                     "const": "item.set_crop",
@@ -457,6 +588,33 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Changes the canvas: every scene's coordinate space, in whole pixels (ADR-0022).\nItems keep their canvas-pixel placements; nothing moves or resizes. Zero, or a\nside over the engine's maximum (at least 7680, both ways), is `invalid_argument`.\nInverse: `canvas.set_size` with the previous size.",
+                "properties": {
+                  "height": {
+                    "description": "Canvas height in pixels.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "canvas.set_size",
+                    "type": "string"
+                  },
+                  "width": {
+                    "description": "Canvas width in pixels.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "type",
+                  "width",
+                  "height"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key stays in the credential store, so undoing the delete restores a\nworking output; `output.clear_key` removes it. Inverse: `output.create` with its\nkind.",
                 "properties": {
                   "output_id": {
@@ -481,16 +639,90 @@ source: crates/jstream-mcp/src/tests.rs
             "format": "float",
             "type": "number"
           },
+          "FitMode": {
+            "description": "How the cropped source fills the item's box.\n\nThe three values are the complete set. A new one is a string-enum addition.",
+            "oneOf": [
+              {
+                "const": "stretch",
+                "description": "Fill the box exactly, ignoring the source's aspect ratio.",
+                "type": "string"
+              },
+              {
+                "const": "fit",
+                "description": "The largest rectangle of the source's aspect ratio that fits inside the box,\ncentred. The rest of the box stays transparent.",
+                "type": "string"
+              },
+              {
+                "const": "fill",
+                "description": "The smallest rectangle of the source's aspect ratio that covers the box,\ncentred. The part outside the box is clipped by the compositor.",
+                "type": "string"
+              }
+            ]
+          },
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
+          },
+          "ItemGeometry": {
+            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, and omitted `perspective_px` means orthographic.",
+            "properties": {
+              "center": {
+                "$ref": "#/$defs/Vec2",
+                "description": "Centre of the box, in canvas pixels."
+              },
+              "depth_px": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "Offset along the viewing axis, in pixels. Positive is toward the viewer.\nDefault 0."
+              },
+              "fit_mode": {
+                "$ref": "#/$defs/FitMode",
+                "default": "fit",
+                "description": "How the cropped source fills the box. Default [`FitMode::Fit`]."
+              },
+              "perspective_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Distance from the viewer to the canvas plane, for this item only. Absent means\northographic. When present it must be greater than zero."
+              },
+              "rotation_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "Clockwise rotation in the canvas plane, in degrees, about [`Self::center`].\nDefault 0."
+              },
+              "size": {
+                "$ref": "#/$defs/Size",
+                "description": "Width and height of the box, in canvas pixels. Each must be greater than zero."
+              },
+              "tilt_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "Rotation about the box's horizontal axis through the centre, in degrees.\nPositive moves the top edge away from the viewer. Default 0."
+              },
+              "turn_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "Rotation about the box's vertical axis through the centre, in degrees.\nPositive moves the right edge away from the viewer. Default 0."
+              }
+            },
+            "required": [
+              "center",
+              "size"
+            ],
+            "type": "object"
           },
           "ItemId": {
             "description": "A scene item: one placement of a source inside a scene. Unique across scenes.",
             "type": "string"
           },
           "ItemTransform": {
-            "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
+            "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n**Deprecated** since 0.11 (ADR-0022) and removed in 1.0, with `item.set_transform`,\n`item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning\nbelow.\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
             "properties": {
               "position": {
                 "$ref": "#/$defs/Vec2",
@@ -517,7 +749,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "OutputKind": {
-            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nOnly RTMP(S) to a generic URL is configurable so far. Recording, the virtual camera\nand the YouTube-bound target of the data model come later as new variants.",
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL and recording to a file are configurable so far. The\nvirtual camera and the YouTube-bound target of the data model come later as new\nvariants.",
             "oneOf": [
               {
                 "description": "A stream sent over RTMP or RTMPS.",
@@ -536,6 +768,39 @@ source: crates/jstream-mcp/src/tests.rs
                   "target"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "A recording to a file on the engine's machine.",
+                "properties": {
+                  "container": {
+                    "$ref": "#/$defs/RecordContainer",
+                    "description": "The file format."
+                  },
+                  "path": {
+                    "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one with control\ncharacters or a `..` segment, and one that ends in a separator or names no\nfile. `output.start` also fails when the path is not absolute on the\nengine's own machine.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "record",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path",
+                  "container"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "RecordContainer": {
+            "description": "The file format a recording is written in. Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "mp4",
+                "description": "MP4 with H.264 video and AAC audio, written fragmented (a fragment per video\nkeyframe, each synced to disk), so a crash loses at most the last fragment and\nthe `.part` file it leaves plays up to there.",
+                "type": "string"
               }
             ]
           },
@@ -572,9 +837,42 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "A scene in the collection.",
             "type": "string"
           },
+          "SceneRole": {
+            "description": "What a scene is for (ADR-0024 §1). It changes no engine behaviour; it tells clients,\nagents and switchers how to show the scene.",
+            "oneOf": [
+              {
+                "const": "scene",
+                "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+                "type": "string"
+              },
+              {
+                "const": "group",
+                "description": "A group: a scene placed in other scenes to hold items together. Clients hide it\nfrom the scene list and show it under the items that place it.",
+                "type": "string"
+              }
+            ]
+          },
           "Settings": {
             "additionalProperties": true,
             "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
+            "type": "object"
+          },
+          "Size": {
+            "description": "A width and height, in canvas pixels.\n\nBoth components are [`Finite32`]. A non-positive component is rejected by\n[`ItemGeometry::validate`], not stored as a flip.",
+            "properties": {
+              "height": {
+                "$ref": "#/$defs/Finite32",
+                "description": "Vertical extent. Must be greater than zero for a placement to be valid."
+              },
+              "width": {
+                "$ref": "#/$defs/Finite32",
+                "description": "Horizontal extent. Must be greater than zero for a placement to be valid."
+              }
+            },
+            "required": [
+              "width",
+              "height"
+            ],
             "type": "object"
           },
           "SourceId": {
@@ -682,6 +980,85 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "batch"
     },
     {
+      "description": "Runs one `canvas` operation: set `op.type` to one of `canvas.set_size` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `canvas` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Changes the canvas: every scene's coordinate space, in whole pixels (ADR-0022).\nItems keep their canvas-pixel placements; nothing moves or resizes. Zero, or a\nside over the engine's maximum (at least 7680, both ways), is `invalid_argument`.\nInverse: `canvas.set_size` with the previous size.",
+                "properties": {
+                  "height": {
+                    "description": "Canvas height in pixels.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "canvas.set_size",
+                    "type": "string"
+                  },
+                  "width": {
+                    "description": "Canvas width in pixels.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "type",
+                  "width",
+                  "height"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "canvas"
+    },
+    {
       "description": "Returns the full JSON Schema of the JStream control protocol: every command, query, result, event and error code. Use it for details the other tools' schemas leave out.",
       "inputSchema": {
         "additionalProperties": false,
@@ -705,7 +1082,85 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "events"
     },
     {
-      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.set_transform` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_crop` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `history` operation: set `op.type` to one of `history.undo` (history call), `history.redo` (history call). Undo and redo apply to this session's own edits only, never another client's: each raises the state `rev` by one, and is refused with `undo_conflict` when another client has since changed what the step touched (the step is then dropped), or `history_empty` when there is nothing to undo or redo. They accept `expected_rev` and `idempotency_key`. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `history` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Undoes the client's most recent step that is not undone yet: applies its inverse\nand moves it to the redo stack. Fails with `history_empty` when there is none, and\nwith `undo_conflict` when another client has since changed what the step touched.",
+                "properties": {
+                  "type": {
+                    "const": "history.undo",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Applies the client's most recently undone step again and moves it back to the\nundo stack. The client's next batch clears what can be redone.",
+                "properties": {
+                  "type": {
+                    "const": "history.redo",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "history"
+    },
+    {
+      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_crop` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Crop": {
@@ -749,16 +1204,90 @@ source: crates/jstream-mcp/src/tests.rs
             "format": "float",
             "type": "number"
           },
+          "FitMode": {
+            "description": "How the cropped source fills the item's box.\n\nThe three values are the complete set. A new one is a string-enum addition.",
+            "oneOf": [
+              {
+                "const": "stretch",
+                "description": "Fill the box exactly, ignoring the source's aspect ratio.",
+                "type": "string"
+              },
+              {
+                "const": "fit",
+                "description": "The largest rectangle of the source's aspect ratio that fits inside the box,\ncentred. The rest of the box stays transparent.",
+                "type": "string"
+              },
+              {
+                "const": "fill",
+                "description": "The smallest rectangle of the source's aspect ratio that covers the box,\ncentred. The part outside the box is clipped by the compositor.",
+                "type": "string"
+              }
+            ]
+          },
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
+          },
+          "ItemGeometry": {
+            "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, and omitted `perspective_px` means orthographic.",
+            "properties": {
+              "center": {
+                "$ref": "#/$defs/Vec2",
+                "description": "Centre of the box, in canvas pixels."
+              },
+              "depth_px": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "Offset along the viewing axis, in pixels. Positive is toward the viewer.\nDefault 0."
+              },
+              "fit_mode": {
+                "$ref": "#/$defs/FitMode",
+                "default": "fit",
+                "description": "How the cropped source fills the box. Default [`FitMode::Fit`]."
+              },
+              "perspective_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Distance from the viewer to the canvas plane, for this item only. Absent means\northographic. When present it must be greater than zero."
+              },
+              "rotation_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "Clockwise rotation in the canvas plane, in degrees, about [`Self::center`].\nDefault 0."
+              },
+              "size": {
+                "$ref": "#/$defs/Size",
+                "description": "Width and height of the box, in canvas pixels. Each must be greater than zero."
+              },
+              "tilt_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "Rotation about the box's horizontal axis through the centre, in degrees.\nPositive moves the top edge away from the viewer. Default 0."
+              },
+              "turn_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "Rotation about the box's vertical axis through the centre, in degrees.\nPositive moves the right edge away from the viewer. Default 0."
+              }
+            },
+            "required": [
+              "center",
+              "size"
+            ],
+            "type": "object"
           },
           "ItemId": {
             "description": "A scene item: one placement of a source inside a scene. Unique across scenes.",
             "type": "string"
           },
           "ItemTransform": {
-            "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
+            "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n**Deprecated** since 0.11 (ADR-0022) and removed in 1.0, with `item.set_transform`,\n`item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning\nbelow.\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
             "properties": {
               "position": {
                 "$ref": "#/$defs/Vec2",
@@ -789,6 +1318,24 @@ source: crates/jstream-mcp/src/tests.rs
           "SceneId": {
             "description": "A scene in the collection.",
             "type": "string"
+          },
+          "Size": {
+            "description": "A width and height, in canvas pixels.\n\nBoth components are [`Finite32`]. A non-positive component is rejected by\n[`ItemGeometry::validate`], not stored as a flip.",
+            "properties": {
+              "height": {
+                "$ref": "#/$defs/Finite32",
+                "description": "Vertical extent. Must be greater than zero for a placement to be valid."
+              },
+              "width": {
+                "$ref": "#/$defs/Finite32",
+                "description": "Horizontal extent. Must be greater than zero for a placement to be valid."
+              }
+            },
+            "required": [
+              "width",
+              "height"
+            ],
+            "type": "object"
           },
           "SourceId": {
             "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
@@ -841,8 +1388,19 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `item` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.",
+                "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.\n\nThe item's placement is `geometry` when that is sent, else a legacy placement:\n`transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).\nSending both is `invalid_argument`.",
                 "properties": {
+                  "geometry": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ItemGeometry"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The initial placement as a box on the canvas, checked like\n`item.set_geometry`'s."
+                  },
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The new item's ID, chosen by the client. Rejected if it exists."
@@ -864,7 +1422,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "Initial transform. Omitted means [`ItemTransform::IDENTITY`]."
+                    "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
                   },
                   "type": {
                     "const": "item.add",
@@ -880,7 +1438,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID, source and transform, then `item.reorder` to its old\nstacking position (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
+                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, and its placement in the field matching\nits form (`transform` or `geometry`), then `item.reorder` to its old stacking\nposition (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -898,11 +1456,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces an item's transform. Inverse: `item.set_transform` with the previous one.",
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle) or if the index is out of range. Inverse:\n`item.move` back to its previous scene and index.",
+                "properties": {
+                  "index": {
+                    "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to move."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to move it to. Its own scene is allowed, and then the move is an\n`item.reorder`."
+                  },
+                  "type": {
+                    "const": "item.move",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "scene_id",
+                  "index"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to move."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
                   },
                   "transform": {
                     "$ref": "#/$defs/ItemTransform",
@@ -921,11 +1520,56 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Replaces an item's placement with a box on the canvas (ADR-0022). A size that is\nnot greater than zero, a `perspective_px` that is not greater than zero, and any\nnon-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the\ncompositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous\nplacement, as `item.set_geometry` if it was a geometry and `item.set_transform`\nif it was legacy.",
+                "properties": {
+                  "geometry": {
+                    "$ref": "#/$defs/ItemGeometry",
+                    "description": "The new geometry."
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to place."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.set_geometry",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "geometry"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Shows or hides an item. Inverse: `item.set_visible` with the previous value.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.\nAny other scene is `invalid_argument` until keyframe scenes exist, when naming\na keyframe scene of the item's scene will write that scene's override."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -978,6 +1622,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to crop."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
                   },
                   "type": {
                     "const": "item.set_crop",
@@ -1081,7 +1736,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "OutputKind": {
-            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nOnly RTMP(S) to a generic URL is configurable so far. Recording, the virtual camera\nand the YouTube-bound target of the data model come later as new variants.",
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL and recording to a file are configurable so far. The\nvirtual camera and the YouTube-bound target of the data model come later as new\nvariants.",
             "oneOf": [
               {
                 "description": "A stream sent over RTMP or RTMPS.",
@@ -1100,6 +1755,39 @@ source: crates/jstream-mcp/src/tests.rs
                   "target"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "A recording to a file on the engine's machine.",
+                "properties": {
+                  "container": {
+                    "$ref": "#/$defs/RecordContainer",
+                    "description": "The file format."
+                  },
+                  "path": {
+                    "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one with control\ncharacters or a `..` segment, and one that ends in a separator or names no\nfile. `output.start` also fails when the path is not absolute on the\nengine's own machine.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "record",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path",
+                  "container"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "RecordContainer": {
+            "description": "The file format a recording is written in. Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "mp4",
+                "description": "MP4 with H.264 video and AAC audio, written fragmented (a fragment per video\nkeyframe, each synced to disk), so a crash loses at most the last fragment and\nthe `.part` file it leaves plays up to there.",
+                "type": "string"
               }
             ]
           },
@@ -1347,7 +2035,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "output"
     },
     {
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "IdempotencyKey": {
@@ -1363,6 +2051,21 @@ source: crates/jstream-mcp/src/tests.rs
           "SceneId": {
             "description": "A scene in the collection.",
             "type": "string"
+          },
+          "SceneRole": {
+            "description": "What a scene is for (ADR-0024 §1). It changes no engine behaviour; it tells clients,\nagents and switchers how to show the scene.",
+            "oneOf": [
+              {
+                "const": "scene",
+                "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+                "type": "string"
+              },
+              {
+                "const": "group",
+                "description": "A group: a scene placed in other scenes to hold items together. Clients hide it\nfrom the scene list and show it under the items that place it.",
+                "type": "string"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -1439,7 +2142,30 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+                "description": "Changes what a scene is for (ADR-0024 §1): a `scene`, or a `group` placed in\nother scenes through a `scene` source. The role changes no engine behaviour: a\ngroup renders, nests and can be placed more than once like any scene, and clients\nhide groups from the scene list. Inverse: `scene.set_role` with the previous role.",
+                "properties": {
+                  "role": {
+                    "$ref": "#/$defs/SceneRole",
+                    "description": "Its new role."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_role",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "role"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -1756,7 +2482,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `state` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Reads the whole collection state (every source, every scene with its items, and\nevery output) at one revision: what a client reads on connecting, after a `state.changed` it\ndidn't cause, or before an edit it sends with `expected_rev`.",
+                "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, and every output) at one revision: what a client reads on connecting, after\na `state.changed` it didn't cause, or before an edit it sends with `expected_rev`.",
                 "properties": {
                   "type": {
                     "const": "state.get",
