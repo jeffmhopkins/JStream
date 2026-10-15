@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:f29fd110859207f9", by = "agent:claude", note = "V1b merge of B7's branch: re-read; tests list still accurate (flip snapshot under video.snapshot); vcam, audio routing and activity bullets match src; holds" }
+verified = { hash = "b3:441d323df887e182", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ported #306's test-only change to tests/sources.rs (fake clock for the by-itself animation test); the section says nothing about that test or its clock" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -190,7 +190,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bfb21266484d6818", by = "agent:claude", note = "V1b merge of B7's branch: re-read; fixed the vcam paragraph: serve.rs now wires WindowsVcam (was 'not yet'); geometry still drawn by the shared formula with flips inside; rest holds" }
+verified = { hash = "b3:8d15cff5648bdb91", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ported #306's test-only change; live.rs and the sources thread's re-plan are unchanged, so the Live sources text still holds" }
 -->
 
 ### Engine and sessions
