@@ -14,11 +14,11 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, Crop, Edit, EntityKind, Event, Hello,
-    IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
-    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
-    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, Settings, SourceId,
-    SourceInfo, SourceKind, Welcome,
+    Action, Batch, Call, CallResult, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
+    EncoderProfileInfo, EntityKind, Event, Hello, IdempotencyKey, ItemId, ItemInfo, ItemTransform,
+    OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, ProtocolError, Query,
+    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
+    SceneInfo, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -209,6 +209,10 @@ struct Collection {
     sources: BTreeMap<SourceId, Source>,
     /// The configured outputs, ordered by ID, as `output.list` reports them.
     outputs: BTreeMap<OutputId, OutputKind>,
+    /// The encoder profile each output uses, for those that chose one.
+    output_encoders: BTreeMap<OutputId, EncoderProfileId>,
+    /// The encoder profiles, ordered by ID: name and encoding.
+    encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
 }
 
 /// A source: its name, what it shows, and its settings. The mock describes no kinds, so
@@ -389,10 +393,14 @@ impl State {
                 let Some(&state) = self.outputs.get(&output_id) else {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 };
+                // The mock opens no encoders, so it reports no sessions.
                 QueryResult::OutputStatus {
                     key_set: self.keys.contains_key(&output_id),
                     output_id,
                     state,
+                    encoder: None,
+                    encoder_sessions: 0,
+                    hardware_sessions: 0,
                 }
             }
             Query::SourceList => QueryResult::SourceList {
@@ -421,10 +429,15 @@ impl State {
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
+                encoders: self.collection.encoder_infos(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
                 outputs: self.collection.output_infos(),
+            },
+            Query::EncoderList => QueryResult::EncoderList {
+                rev: self.collection.rev,
+                encoders: self.collection.encoder_infos(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -718,6 +731,70 @@ impl Collection {
                 if self.outputs.remove(&output_id).is_none() {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 }
+                self.output_encoders.remove(&output_id);
+            }
+            Edit::OutputSetEncoder {
+                output_id,
+                profile_id,
+            } => {
+                if !self.outputs.contains_key(&output_id) {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                }
+                match profile_id {
+                    Some(id) => {
+                        if !self.encoders.contains_key(&id) {
+                            return Err(not_found(EntityKind::Encoder, id.as_str()));
+                        }
+                        self.output_encoders.insert(output_id, id);
+                    }
+                    None => {
+                        self.output_encoders.remove(&output_id);
+                    }
+                }
+            }
+            Edit::EncoderCreate {
+                profile_id,
+                name,
+                profile,
+            } => {
+                check_id(profile_id.as_str(), at, "profile_id")?;
+                if self.encoders.contains_key(&profile_id) {
+                    return Err(already_exists(EntityKind::Encoder, profile_id.as_str()));
+                }
+                check_name(&name, at)?;
+                check_profile(&profile, at)?;
+                self.encoders.insert(profile_id, (name, profile));
+            }
+            Edit::EncoderUpdate {
+                profile_id,
+                name,
+                profile,
+            } => {
+                if !self.encoders.contains_key(&profile_id) {
+                    return Err(not_found(EntityKind::Encoder, profile_id.as_str()));
+                }
+                check_name(&name, at)?;
+                check_profile(&profile, at)?;
+                self.encoders.insert(profile_id, (name, profile));
+            }
+            Edit::EncoderDelete { profile_id } => {
+                if !self.encoders.contains_key(&profile_id) {
+                    return Err(not_found(EntityKind::Encoder, profile_id.as_str()));
+                }
+                if let Some((user, _)) = self
+                    .output_encoders
+                    .iter()
+                    .find(|(_, id)| **id == profile_id)
+                {
+                    return Err(invalid(
+                        at,
+                        "profile_id",
+                        format!(
+                            "encoder profile `{profile_id}` is used by output `{user}`; point it elsewhere first"
+                        ),
+                    ));
+                }
+                self.encoders.remove(&profile_id);
             }
             other => return Err(unimplemented_by_mock(other.name())),
         }
@@ -778,6 +855,19 @@ impl Collection {
             .map(|(id, kind)| OutputInfo {
                 output_id: id.clone(),
                 kind: kind.clone(),
+                encoder_profile: self.output_encoders.get(id).cloned(),
+            })
+            .collect()
+    }
+
+    /// Every encoder profile, ordered by ID, as queries report them.
+    fn encoder_infos(&self) -> Vec<EncoderProfileInfo> {
+        self.encoders
+            .iter()
+            .map(|(id, (name, profile))| EncoderProfileInfo {
+                profile_id: id.clone(),
+                name: name.clone(),
+                profile: *profile,
             })
             .collect()
     }
@@ -895,6 +985,14 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
 }
 
 /// Checks an RTMP target; `name` is its field path within the edit (`kind.target`).
+/// Checks an encoder profile as the engine does.
+fn check_profile(profile: &EncoderProfile, at: usize) -> Result<(), ProtocolError> {
+    match profile.problem() {
+        Some((name, reason)) => Err(invalid(at, &format!("profile.{name}"), reason)),
+        None => Ok(()),
+    }
+}
+
 fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), ProtocolError> {
     match target {
         RtmpTarget::Generic { url } => match rtmp_url_problem(url) {
@@ -1714,6 +1812,9 @@ mod tests {
                     output_id: OutputId::new("yt"),
                     state: OutputState::Active,
                     key_set: false,
+                    encoder: None,
+                    encoder_sessions: 0,
+                    hardware_sessions: 0,
                 }
             }
         );
@@ -1771,6 +1872,7 @@ mod tests {
                 outputs: vec![OutputInfo {
                     output_id: OutputId::new("yt"),
                     kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+                    encoder_profile: None,
                 }],
             })
         );

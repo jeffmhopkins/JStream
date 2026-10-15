@@ -8,8 +8,8 @@
 //!
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
-use crate::finite::Finite32;
 use crate::encoder::EncoderProfile;
+use crate::finite::Finite32;
 use crate::id::{EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;

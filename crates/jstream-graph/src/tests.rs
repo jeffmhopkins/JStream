@@ -2,9 +2,10 @@
 
 use crate::Graph;
 use jstream_protocol::{
-    Crop, Edit, EncoderProfile, EncoderProfileId, EntityKind, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId,
-    OutputInfo, OutputKind, ParamDescriptor, ParamType, ProtocolError, QueryResult,
-    RecordContainer, Rev, RtmpTarget, SceneId, Settings, SourceId, SourceKind, Vec2,
+    Crop, Edit, EncoderProfile, EncoderProfileId, EntityKind, ItemId, ItemTransform, KindCategory,
+    KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor, ParamType,
+    ProtocolError, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, Settings, SourceId,
+    SourceKind, Vec2,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -1613,7 +1614,10 @@ fn encoder_edits_invert() {
             profile: faster,
         }],
     );
-    assert_eq!(graph.state().encoding_of(&OutputId::new("yt")), Some(faster));
+    assert_eq!(
+        graph.state().encoding_of(&OutputId::new("yt")),
+        Some(faster)
+    );
     let deleted = apply_ok(
         &mut graph,
         vec![Edit::OutputDelete {

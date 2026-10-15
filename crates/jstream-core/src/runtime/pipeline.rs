@@ -20,15 +20,16 @@
 use std::any::Any;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, RecvTimeoutError, Sender};
-use std::sync::{Arc, Condvar, Mutex, PoisonError};
+use std::collections::BTreeMap;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use jstream_audio::{BusControl, InputControl, Mixer, MixerConfig};
 use jstream_encode::{
-    AudioInput, AudioSession, PushError, SessionOptions, SessionStats, StreamEnd, SubscriberStats,
-    Subscription, VideoInput, VideoSession,
+    AudioInput, AudioSession, PushError, SessionOptions, SessionRegistry, SessionStats, StreamEnd,
+    SubscriberStats, Subscription, VideoInput, VideoSession,
 };
 use jstream_media::{
     AudioBuffer, AudioFormat, ChannelLayout, Codec, ColorInfo, ColorRange, ColorSpace, FrameSize,
@@ -38,7 +39,10 @@ use jstream_platform::{
     AudioEncoderConfig, AudioInputTarget, AudioIo, AudioStream, Backends, Capture, CaptureStream,
     Codecs, HardwarePreference, MediaClock, RateControl, VideoEncoderConfig, VideoSurface,
 };
-use jstream_protocol::OutputId;
+use jstream_protocol::{
+    EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
+    RateControl as ProfileRate,
+};
 use jstream_render::{Color, Compositor, Crop, Item, OpenOptions, Placement, RenderError, Scene};
 
 use crate::drops::{
@@ -53,10 +57,6 @@ use crate::runtime::{LinkState, LivePublish, OpenPublish};
 /// Base frame rate of this cut: one frame every 1/30 s.
 const FRAME_NUM: u32 = 1;
 const FRAME_DEN: u32 = 30;
-/// Two seconds of frames between keyframes.
-const KEYFRAME_INTERVAL: u32 = 60;
-const VIDEO_KBPS: u32 = 2500;
-const AUDIO_KBPS: u32 = 160;
 const SAMPLE_RATE: u32 = 48_000;
 /// How long `output.start` waits for the render thread to open the compositor on the
 /// software adapter, unless the engine was given another bound. It only keeps a stuck
@@ -108,23 +108,23 @@ const PPS: [u8; 4] = [0x68, 0xCE, 0x3C, 0x80];
 /// Counters a caller can read while an output is running.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OutputStats {
-    /// Video frames the encoder session accepted.
+    /// Video frames the output's encoder session accepted. A shared session counts
+    /// for every output that shares it.
     pub video: SessionStats,
-    /// Audio blocks the encoder session accepted.
+    /// Audio blocks the output's encoder session accepted.
     pub audio: SessionStats,
     /// What the output's video subscriber has been given and lost.
     pub video_subscriber: SubscriberStats,
     /// What the output's audio subscriber has been given and lost.
     pub audio_subscriber: SubscriberStats,
-    /// CPU readbacks on the render thread. The fake GPU path has no encode target,
-    /// so every encoded frame is one of these.
+    /// CPU readbacks on the render thread, which every running output shares. The fake
+    /// GPU path has no encode target, so every encoded frame is one of these.
     pub readbacks: u64,
 }
 
 struct PipelineStats {
     video_subscriber: Mutex<SubscriberStats>,
     audio_subscriber: Mutex<SubscriberStats>,
-    readbacks: AtomicU64,
 }
 
 impl PipelineStats {
@@ -132,17 +132,17 @@ impl PipelineStats {
         Arc::new(Self {
             video_subscriber: Mutex::new(SubscriberStats::default()),
             audio_subscriber: Mutex::new(SubscriberStats::default()),
-            readbacks: AtomicU64::new(0),
         })
     }
 }
 
-/// Backends and the publish target for one engine, plus the pipeline if it is up.
+/// Backends and the publish target for one engine, plus the running outputs.
 ///
 /// `gate` is taken after the collection lock when both are held. `output_stats`,
 /// the in-flight wait and `Drop` take `gate` alone. Nothing takes the collection
 /// lock while holding `gate`. `gate_cv` wakes a stop that is waiting for a start,
-/// and a start that is waiting for a failed pipeline to finish joining.
+/// and a start that is waiting for a failed pipeline to finish joining. `starts`
+/// runs one `output.start` at a time, so only one start ever opens the program stage.
 pub(crate) struct MediaHost {
     pub(crate) backends: Mutex<Option<Backends>>,
     /// How the render thread composites. [`gpu_draw`] unless a test replaced it.
@@ -153,19 +153,32 @@ pub(crate) struct MediaHost {
     pub(crate) publish: Mutex<Option<Box<dyn LivePublish>>>,
     /// Opens a target for a start when `publish` holds none.
     pub(crate) open_publish: Mutex<Option<OpenPublish>>,
+    pub(crate) starts: Mutex<()>,
     pub(crate) gate: Mutex<Gate>,
     pub(crate) gate_cv: Condvar,
     pub(crate) next_generation: AtomicU64,
 }
 
-/// The pipeline slot. `pending` is a start that has emitted `starting` and has not
-/// settled yet. `watcher` receives a publish failure and settles `failed`.
+/// The running outputs, and the program stage they share. `pending` is a start that
+/// has emitted `starting` and has not settled yet. Each output's `watcher` receives
+/// its pipeline's failures and settles `failed`.
 pub(crate) struct Gate {
-    pub(crate) running: Option<Running>,
+    /// The program stage, while some running output holds it.
+    pub(crate) program: Weak<Program>,
+    pub(crate) running: BTreeMap<OutputId, Running>,
     pub(crate) pending: Option<Pending>,
-    pub(crate) watcher: Option<JoinHandle<()>>,
-    /// `Running` was taken and is still being joined. A new start waits this out.
-    pub(crate) draining: bool,
+    pub(crate) watchers: BTreeMap<OutputId, JoinHandle<()>>,
+    /// Outputs taken out of `running` that are still being joined. While the program
+    /// stage is gone, a new start waits for this to reach 0 so it doesn't open the
+    /// devices over a teardown.
+    pub(crate) draining: u32,
+}
+
+impl Gate {
+    /// Whether a start has to wait for a teardown before it opens the devices.
+    pub(crate) fn must_wait(&self) -> bool {
+        self.draining > 0 && self.program.strong_count() == 0
+    }
 }
 
 /// One `output.start` between the `starting` event and the settle.
@@ -184,11 +197,13 @@ impl MediaHost {
             open_timeout: Mutex::new(OPEN_TIMEOUT),
             publish: Mutex::new(None),
             open_publish: Mutex::new(None),
+            starts: Mutex::new(()),
             gate: Mutex::new(Gate {
-                running: None,
+                program: Weak::new(),
+                running: BTreeMap::new(),
                 pending: None,
-                watcher: None,
-                draining: false,
+                watchers: BTreeMap::new(),
+                draining: 0,
             }),
             gate_cv: Condvar::new(),
             next_generation: AtomicU64::new(1),
@@ -198,32 +213,57 @@ impl MediaHost {
 
 impl Drop for MediaHost {
     fn drop(&mut self) {
-        let (running, watcher) = {
+        let (running, watchers) = {
             let gate = self.gate.get_mut().unwrap_or_else(PoisonError::into_inner);
-            (gate.running.take(), gate.watcher.take())
+            (
+                std::mem::take(&mut gate.running),
+                std::mem::take(&mut gate.watchers),
+            )
         };
         drop(running);
-        if let Some(watcher) = watcher
-            && watcher.thread().id() != thread::current().id()
-        {
-            join("publish watcher", Some(watcher));
+        for watcher in watchers.into_values() {
+            if watcher.thread().id() != thread::current().id() {
+                join("publish watcher", Some(watcher));
+            }
         }
     }
 }
 
-/// Threads and sessions of one running output. Dropping it stops them.
-pub(crate) struct Running {
-    output_id: OutputId,
-    generation: u64,
+/// The key that decides which outputs share an encoder session: the profile they
+/// name (`None` for the engine's default) and its encoding when the session opened.
+/// Every output consumes the program mix and none has a video chain yet, so the mix
+/// and chain parts of ADR-0027's key are the same for all of them.
+pub(crate) type EncodeKey = (Option<EncoderProfileId>, EncoderProfile);
+
+/// The stage every running output shares: capture, the render thread compositing the
+/// program, the audio devices and the mixer thread. It runs while any output holds it
+/// and stops when the last one lets go.
+///
+/// The render and mixer threads push each frame and block into every encoder session
+/// that is open. A session is handed to them through a channel, never a lock, and
+/// they let go of it once it refuses input because it has finished. Their fatal errors
+/// go to every running output ([`Failures`]).
+pub(crate) struct Program {
     stop: Arc<AtomicBool>,
     render: Option<JoinHandle<()>>,
     mixer: Option<JoinHandle<()>>,
-    output: Option<JoinHandle<()>>,
-    video: Arc<VideoSession>,
-    audio: Arc<AudioSession>,
-    /// Kept alive so the platform keeps calling the mixer producers.
-    _streams: Vec<Box<dyn AudioStream>>,
-    stats: Arc<PipelineStats>,
+    forward: Option<JoinHandle<()>>,
+    clock: Arc<dyn MediaClock>,
+    codecs: Arc<dyn Codecs>,
+    size: FrameSize,
+    format: AudioFormat,
+    /// How far the mixer's blocks run behind the clock; an output's stream origin
+    /// sits that far back.
+    latency: MediaTime,
+    video_taps: Sender<VideoInput>,
+    audio_taps: Sender<AudioInput>,
+    failures: Arc<Failures>,
+    /// Open encoder sessions by key, held weakly: each lives while an output holds it.
+    sessions: Mutex<SessionRegistry<EncodeKey, Encoders>>,
+    readbacks: Arc<AtomicU64>,
+    /// Kept alive so the platform keeps calling the mixer producers. Behind a lock
+    /// only so the program can be shared; nothing takes it.
+    _streams: Mutex<Vec<Box<dyn AudioStream>>>,
     capture_drops: DropSnapshot,
     /// Declared after `_streams` (fields drop in order), so the input rings outlive
     /// both producers and the mixer and are freed here, not on a real-time thread
@@ -231,6 +271,186 @@ pub(crate) struct Running {
     mic: InputControl,
     desktop: InputControl,
     bus: BusControl,
+    drop_guard: Option<DropGuard>,
+    ticker: Option<JoinHandle<()>>,
+    /// Emits one last `stats.tick` once the threads have stopped and the sources are
+    /// latched, so the run's final drops are reported when it ends.
+    final_tick: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+}
+
+impl Program {
+    /// The encoder sessions for `key`: the open ones, or new ones not yet fed. Call
+    /// [`attach`](Self::attach) once the output has subscribed, so a new session's
+    /// first packets go to it.
+    fn encoders(&self, engine: &Engine, key: EncodeKey) -> Result<Arc<Encoders>, String> {
+        lock(&self.sessions).get_or_open(key.clone(), || {
+            let video = Arc::new(open_video(self.codecs.as_ref(), self.size, &key.1)?);
+            let audio = Arc::new(open_audio_encoder(
+                self.codecs.as_ref(),
+                self.format,
+                &key.1,
+            )?);
+            let ids = vec![
+                engine.add_drop_source(VideoEncodeDrops::new(Arc::clone(&video))),
+                engine.add_drop_source(AudioEncodeDrops::new(Arc::clone(&audio))),
+            ];
+            Ok(Encoders {
+                key,
+                video,
+                audio,
+                attached: AtomicBool::new(false),
+                drop_guard: Some(DropGuard::new(engine.drop_ledger(), ids)),
+            })
+        })
+    }
+
+    /// Starts feeding `encoders` from the render and mixer threads, once.
+    fn attach(&self, encoders: &Encoders) {
+        if encoders.attached.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        // The threads hold the receivers until the program stops; a send fails only
+        // after that, when nothing is fed anyway.
+        let _ = self.video_taps.send(encoders.video.input());
+        let _ = self.audio_taps.send(encoders.audio.input());
+    }
+
+    /// Where an output that starts now puts its stream's time zero: the mixer's
+    /// latency before the clock, as the first block it will get is stamped.
+    fn origin(&self) -> Result<MediaTime, String> {
+        self.clock
+            .now()
+            .checked_sub(self.latency)
+            .map_err(|err| format!("stream origin: {err}"))
+    }
+
+    /// Registers the program's stages and starts the once-a-second sampler.
+    fn arm_stats(&mut self, engine: &Engine) {
+        let ids = vec![
+            engine.add_drop_source(self.capture_drops.clone()),
+            engine.add_drop_source(AudioInputDrops::new(self.mic.clone())),
+            engine.add_drop_source(AudioInputDrops::new(self.desktop.clone())),
+            engine.add_drop_source(AudioBusDrops::new(self.bus.clone())),
+        ];
+        self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
+        self.ticker = engine.spawn_stats_ticker(Arc::clone(&self.stop));
+        *lock(&self.final_tick) = Some(engine.stats_emitter());
+    }
+}
+
+impl Drop for Program {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        join("render", self.render.take());
+        join("mixer", self.mixer.take());
+        // Ends once the render and mixer threads have dropped their senders.
+        join("program watch", self.forward.take());
+        join("stats", self.ticker.take());
+        // After the threads stop, so the latch sees their final counters.
+        self.drop_guard.take();
+        let tick = self
+            .final_tick
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(tick) = tick {
+            tick();
+        }
+    }
+}
+
+/// The outputs to tell when the program stage fails. A failure is kept, so an output
+/// that registers after it is told at once.
+#[derive(Default)]
+struct Failures {
+    inner: Mutex<FailState>,
+}
+
+#[derive(Default)]
+struct FailState {
+    reason: Option<String>,
+    outputs: Vec<Sender<PipelineEvent>>,
+}
+
+impl Failures {
+    fn add(&self, output: Sender<PipelineEvent>) {
+        let mut state = lock(&self.inner);
+        if let Some(reason) = &state.reason {
+            let _ = output.send(PipelineEvent::Failed(reason.clone()));
+        }
+        state.outputs.push(output);
+    }
+
+    fn fail(&self, reason: String) {
+        let mut state = lock(&self.inner);
+        state
+            .outputs
+            .retain(|output| output.send(PipelineEvent::Failed(reason.clone())).is_ok());
+        state.reason.get_or_insert(reason);
+    }
+}
+
+/// Passes the program threads' fatal errors on to every output, on its own thread,
+/// so the render and mixer threads never take the [`Failures`] lock.
+fn forward_failures(events: Receiver<PipelineEvent>, failures: &Failures) {
+    for event in events {
+        if let PipelineEvent::Failed(reason) = event {
+            failures.fail(reason);
+        }
+    }
+}
+
+/// One video and one audio encoder session, shared by every running output with the
+/// same [`EncodeKey`]. The output that lets go of it last finishes it.
+pub(crate) struct Encoders {
+    key: EncodeKey,
+    video: Arc<VideoSession>,
+    audio: Arc<AudioSession>,
+    /// Whether the program threads feed it yet.
+    attached: AtomicBool,
+    drop_guard: Option<DropGuard>,
+}
+
+impl Encoders {
+    /// Drains both encoders and ends their subscriptions, so the last output gets
+    /// every packet.
+    fn finish(&self) {
+        if let Err(err) = self.video.finish() {
+            tracing::info!(error = %err, "video session finish failed");
+        }
+        if let Err(err) = self.audio.finish() {
+            tracing::info!(error = %err, "audio session finish failed");
+        }
+    }
+
+    /// The profile the sessions were opened with, or `None` for the default.
+    pub(crate) fn profile_id(&self) -> Option<&EncoderProfileId> {
+        self.key.0.as_ref()
+    }
+
+    /// Whether the video encoder is a hardware one.
+    pub(crate) fn hardware(&self) -> bool {
+        self.video.info().codec.hardware
+    }
+}
+
+impl Drop for Encoders {
+    fn drop(&mut self) {
+        // Latches the sessions' drop counters once they are done.
+        self.drop_guard.take();
+    }
+}
+
+/// The threads and sessions of one running output. Dropping it stops them.
+pub(crate) struct Running {
+    output_id: OutputId,
+    generation: u64,
+    stop: Arc<AtomicBool>,
+    /// Set once the output may leave as soon as nothing is queued for it.
+    cut: Arc<AtomicBool>,
+    output: Option<JoinHandle<()>>,
+    encoders: Option<Arc<Encoders>>,
+    stats: Arc<PipelineStats>,
     /// Packets the output thread dropped itself: the muxer rejected them, or the stop's
     /// drain deadline ([`STOP_DRAIN`]) passed before they were sent. Distinct from the
     /// encode subscriber queues.
@@ -238,10 +458,9 @@ pub(crate) struct Running {
     /// Tags the publish target dropped while its link was down, as it last reported.
     link_drops: Arc<AtomicU64>,
     drop_guard: Option<DropGuard>,
-    ticker: Option<JoinHandle<()>>,
-    /// Emits one last `stats.tick` once the threads have stopped and the sources are
-    /// latched, so the run's final drops are reported when it ends.
-    final_tick: Option<Box<dyn FnOnce() + Send>>,
+    /// Dropped last: when this was the program's last output, that stops the render
+    /// and mixer threads.
+    program: Option<Arc<Program>>,
 }
 
 impl Running {
@@ -253,63 +472,62 @@ impl Running {
         self.generation
     }
 
+    /// The encoder sessions this output uses.
+    pub(crate) fn encoders(&self) -> Option<&Arc<Encoders>> {
+        self.encoders.as_ref()
+    }
+
     pub(crate) fn stats(&self) -> OutputStats {
         OutputStats {
-            video: self.video.stats(),
-            audio: self.audio.stats(),
+            video: self
+                .encoders
+                .as_ref()
+                .map(|e| e.video.stats())
+                .unwrap_or_default(),
+            audio: self
+                .encoders
+                .as_ref()
+                .map(|e| e.audio.stats())
+                .unwrap_or_default(),
             video_subscriber: *lock(&self.stats.video_subscriber),
             audio_subscriber: *lock(&self.stats.audio_subscriber),
-            readbacks: self.stats.readbacks.load(Ordering::Relaxed),
+            readbacks: self
+                .program
+                .as_ref()
+                .map_or(0, |p| p.readbacks.load(Ordering::Relaxed)),
         }
     }
 
-    /// Registers this run's stages and starts the once-a-second sampler.
-    ///
-    /// Dropping the run removes the sources, which latches their totals, and joins
-    /// the sampler.
-    pub(crate) fn arm_stats(&mut self, engine: &Engine) {
+    /// Registers this output's own packet drops.
+    fn arm_stats(&mut self, engine: &Engine) {
         let own = Arc::clone(&self.output_drops);
         let link = Arc::clone(&self.link_drops);
-        let ids = vec![
-            engine.add_drop_source(self.capture_drops.clone()),
-            engine.add_drop_source(VideoEncodeDrops::new(Arc::clone(&self.video))),
-            engine.add_drop_source(AudioEncodeDrops::new(Arc::clone(&self.audio))),
-            engine.add_drop_source(AudioInputDrops::new(self.mic.clone())),
-            engine.add_drop_source(AudioInputDrops::new(self.desktop.clone())),
-            engine.add_drop_source(AudioBusDrops::new(self.bus.clone())),
-            engine.add_drop_source(FnDropSource::new(move || {
-                output_packet_drops(
-                    own.load(Ordering::Relaxed)
-                        .saturating_add(link.load(Ordering::Relaxed)),
-                )
-            })),
-        ];
+        let ids = vec![engine.add_drop_source(FnDropSource::new(move || {
+            output_packet_drops(
+                own.load(Ordering::Relaxed)
+                    .saturating_add(link.load(Ordering::Relaxed)),
+            )
+        }))];
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
-        self.ticker = engine.spawn_stats_ticker(Arc::clone(&self.stop));
-        self.final_tick = Some(engine.stats_emitter());
     }
 }
 
 impl Drop for Running {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
-        join("render", self.render.take());
-        join("mixer", self.mixer.take());
-        // Finish after the producers have stopped pushing, so the output thread
-        // can drain the remaining packets and then see the streams end.
-        if let Err(err) = self.video.finish() {
-            tracing::info!(error = %err, "video session finish failed");
+        // The last output on a session drains it, so the output thread can send the
+        // remaining packets and then see the streams end. An output leaving a session
+        // others still use takes what is queued for it and goes.
+        if let Some(encoders) = self.encoders.take()
+            && let Some(encoders) = Arc::into_inner(encoders)
+        {
+            encoders.finish();
         }
-        if let Err(err) = self.audio.finish() {
-            tracing::info!(error = %err, "audio session finish failed");
-        }
+        self.cut.store(true, Ordering::Release);
         join("output", self.output.take());
-        join("stats", self.ticker.take());
-        // After the threads stop, so the latch sees their final counters.
+        // After the thread stops, so the latch sees its final counters.
         self.drop_guard.take();
-        if let Some(tick) = self.final_tick.take() {
-            tick();
-        }
+        self.program.take();
     }
 }
 
@@ -392,17 +610,10 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
     }
 }
 
-/// Opens the devices and encoders, then the destination, then the threads. On failure
-/// the publish target is dropped: a one-shot target has to be set again, an opener
-/// opens a new one on the next start. A recording opened before the failure is
-/// removed, so its `.part` file doesn't block the next start.
-pub(crate) fn launch(
-    parts: Parts,
-    destination: Destination,
-    output_id: OutputId,
-    generation: u64,
-    fail_tx: Sender<PipelineEvent>,
-) -> Result<Running, String> {
+/// Opens the program stage: the capture and the audio devices, then the render and
+/// mixer threads, and waits for the compositor to open. On failure everything opened
+/// is dropped again.
+pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Program>, String> {
     let (size, capture) = open_capture(&parts)?;
     let format = engine_format()?;
     // Bindings drop in reverse pattern order, so on an early return the streams (and
@@ -419,59 +630,146 @@ pub(crate) fn launch(
     if period.ticks() <= 0 {
         return Err("the media clock is too coarse for the frame rate".into());
     }
-    let video = Arc::new(open_video(&parts, size)?);
-    let audio = Arc::new(open_audio_encoder(&parts, format)?);
-    let capture_drops = DropSnapshot::new();
-    let output_drops = Arc::new(AtomicU64::new(0));
-    let link_drops = Arc::new(AtomicU64::new(0));
-    // The mixer timestamps its first block `latency` before the clock, so the FLV
+    // The mixer timestamps its first block `latency` before the clock, so a stream's
     // origin sits that far back. Later blocks and frames stay at or after it.
-    let origin = stream_origin(parts.clock.as_ref(), &mixer)?;
-    // Set once the start has succeeded; until then a recording is provisional.
-    let keep = Arc::new(AtomicBool::new(false));
-    let sink = Sink::open(destination, &stream_info(size, origin), Arc::clone(&keep))?;
+    let latency = mixer_latency(parts.clock.as_ref(), &mixer)?;
+    let capture_drops = DropSnapshot::new();
     let stop = Arc::new(AtomicBool::new(false));
-    let stats = PipelineStats::new();
+    let readbacks = Arc::new(AtomicU64::new(0));
+    let failures = Arc::new(Failures::default());
     let (ready_tx, ready_rx) = mpsc::channel();
+    let (video_taps, video_inputs) = mpsc::channel();
+    let (audio_taps, audio_inputs) = mpsc::channel();
+    let (fail_tx, fail_rx) = mpsc::channel();
 
-    // Subscribe before any producer starts, so the first packets (the first video
-    // keyframe among them) are not encoded before the output thread is listening.
-    let video_sub = video.subscribe();
-    let audio_sub = audio.subscribe();
+    let forward = spawn("jstream-program-watch", {
+        let failures = Arc::clone(&failures);
+        move || forward_failures(fail_rx, &failures)
+    })?;
     let render = spawn("jstream-render", {
         let job = RenderJob {
             capture,
             open: Arc::clone(&parts.draw),
             clock: Arc::clone(&parts.clock),
-            input: video.input(),
+            inputs: video_inputs,
             size,
             period,
             stop: Arc::clone(&stop),
             ready: ready_tx,
-            stats: Arc::clone(&stats),
+            readbacks: Arc::clone(&readbacks),
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
         };
         move || render_thread(job)
-    })?;
-    let mixer_thread = match spawn("jstream-mixer", {
-        let input = audio.input();
-        let clock = Arc::clone(&parts.clock);
-        let stop = Arc::clone(&stop);
-        let fail = fail_tx.clone();
-        move || mixer_thread(mixer, clock, input, format, stop, fail)
-    }) {
+    });
+    let render = match render {
         Ok(handle) => handle,
         Err(err) => {
-            stop_and_join(&stop, vec![render]);
+            drop(fail_tx);
+            stop_and_join(&stop, vec![forward]);
             return Err(err);
         }
     };
-    let output = match spawn("jstream-output", {
+    let mixer_thread = match spawn("jstream-mixer", {
+        let clock = Arc::clone(&parts.clock);
+        let stop = Arc::clone(&stop);
+        let fail = fail_tx;
+        move || mixer_thread(mixer, clock, audio_inputs, format, stop, fail)
+    }) {
+        Ok(handle) => handle,
+        Err(err) => {
+            stop_and_join(&stop, vec![render, forward]);
+            return Err(err);
+        }
+    };
+
+    let mut program = Program {
+        stop,
+        render: Some(render),
+        mixer: Some(mixer_thread),
+        forward: Some(forward),
+        clock: Arc::clone(&parts.clock),
+        codecs: Arc::clone(&parts.codecs),
+        size,
+        format,
+        latency,
+        video_taps,
+        audio_taps,
+        failures,
+        sessions: Mutex::new(SessionRegistry::new()),
+        readbacks,
+        _streams: Mutex::new(streams),
+        capture_drops,
+        mic,
+        desktop,
+        bus,
+        drop_guard: None,
+        ticker: None,
+        final_tick: Mutex::new(None),
+    };
+    match ready_rx.recv_timeout(parts.open_timeout) {
+        Ok(Ok(())) => {
+            program.arm_stats(engine);
+            Ok(Arc::new(program))
+        }
+        Ok(Err(reason)) => {
+            drop(program);
+            Err(reason)
+        }
+        Err(RecvTimeoutError::Timeout) => {
+            drop(program);
+            Err(format!(
+                "the compositor did not open within {}s",
+                parts.open_timeout.as_secs()
+            ))
+        }
+        Err(RecvTimeoutError::Disconnected) => {
+            drop(program);
+            Err("the render thread stopped before the compositor opened".into())
+        }
+    }
+}
+
+/// Starts one output on `program`: its encoder sessions (shared with the running
+/// outputs that have the same `key`), then the destination, then its output thread.
+/// On failure the publish target is dropped: a one-shot target has to be set again,
+/// an opener opens a new one on the next start. A recording opened before the failure
+/// is removed, so its `.part` file doesn't block the next start.
+pub(crate) fn launch(
+    engine: &Engine,
+    program: Arc<Program>,
+    key: EncodeKey,
+    destination: Destination,
+    output_id: OutputId,
+    generation: u64,
+    fail_tx: Sender<PipelineEvent>,
+) -> Result<Running, String> {
+    program.failures.add(fail_tx.clone());
+    let encoders = program.encoders(engine, key)?;
+    let origin = program.origin()?;
+    // Set once the start has succeeded; until then a recording is provisional.
+    let keep = Arc::new(AtomicBool::new(false));
+    let info = stream_info(program.size, origin, &encoders.key.1);
+    let sink = Sink::open(destination, &info, Arc::clone(&keep))?;
+    let stop = Arc::new(AtomicBool::new(false));
+    let cut = Arc::new(AtomicBool::new(false));
+    let stats = PipelineStats::new();
+    let output_drops = Arc::new(AtomicU64::new(0));
+    let link_drops = Arc::new(AtomicU64::new(0));
+
+    // Subscribe before a new session is fed, so its first packets (the first video
+    // keyframe among them) are not encoded before the output thread is listening. A
+    // session already running gives this output a keyframe on request.
+    let video_sub = encoders.video.subscribe();
+    let audio_sub = encoders.audio.subscribe();
+    program.attach(&encoders);
+    let (started_tx, started_rx) = mpsc::channel();
+    let output = spawn("jstream-output", {
         let stats = Arc::clone(&stats);
         let own = Arc::clone(&output_drops);
         let link = Arc::clone(&link_drops);
         let stop = Arc::clone(&stop);
+        let cut = Arc::clone(&cut);
         move || {
             output_loop(OutputJob {
                 sink,
@@ -481,59 +779,31 @@ pub(crate) fn launch(
                 output_drops: own,
                 link_drops: link,
                 stop,
+                cut,
                 fail: fail_tx,
+                started: started_tx,
             });
         }
-    }) {
-        Ok(handle) => handle,
-        Err(err) => {
-            stop_and_join(&stop, vec![render, mixer_thread]);
-            return Err(err);
-        }
-    };
-
-    let running = Running {
+    })?;
+    // Returns once the destination has taken the stream's header, or refused it: a
+    // refusal is then already on the failure channel, so the start sees it.
+    let _ = started_rx.recv();
+    let mut running = Running {
         output_id,
         generation,
         stop,
-        render: Some(render),
-        mixer: Some(mixer_thread),
+        cut,
         output: Some(output),
-        video,
-        audio,
-        _streams: streams,
+        encoders: Some(encoders),
         stats,
-        capture_drops,
-        mic,
-        desktop,
-        bus,
         output_drops,
         link_drops,
         drop_guard: None,
-        ticker: None,
-        final_tick: None,
+        program: Some(program),
     };
-    match ready_rx.recv_timeout(parts.open_timeout) {
-        Ok(Ok(())) => {
-            keep.store(true, Ordering::Release);
-            Ok(running)
-        }
-        Ok(Err(reason)) => {
-            drop(running);
-            Err(reason)
-        }
-        Err(RecvTimeoutError::Timeout) => {
-            drop(running);
-            Err(format!(
-                "the compositor did not open within {}s",
-                parts.open_timeout.as_secs()
-            ))
-        }
-        Err(RecvTimeoutError::Disconnected) => {
-            drop(running);
-            Err("the render thread stopped before the compositor opened".into())
-        }
-    }
+    running.arm_stats(engine);
+    keep.store(true, Ordering::Release);
+    Ok(running)
 }
 
 fn spawn(name: &str, body: impl FnOnce() + Send + 'static) -> Result<JoinHandle<()>, String> {
@@ -621,54 +891,80 @@ fn open_audio(parts: &Parts, format: AudioFormat) -> Result<OpenedAudio, String>
     })
 }
 
-fn open_video(parts: &Parts, size: FrameSize) -> Result<VideoSession, String> {
+/// The video encoder settings for `profile` at `size` and the base frame rate.
+fn video_config(size: FrameSize, profile: &EncoderProfile) -> Result<VideoEncoderConfig, String> {
     let period =
         Timebase::new(FRAME_NUM, FRAME_DEN).map_err(|err| format!("frame period: {err}"))?;
-    let config = VideoEncoderConfig {
+    let video = &profile.video;
+    let rate_control = match video.rate_control {
+        ProfileRate::Cbr { kbps } => RateControl::Cbr { kbps },
+        ProfileRate::Vbr { kbps, max_kbps } => RateControl::Vbr { kbps, max_kbps },
+        _ => return Err("the encoder profile's rate control is not one this engine knows".into()),
+    };
+    let hardware = match video.hardware {
+        ProfileHardware::Prefer => HardwarePreference::Prefer,
+        ProfileHardware::Require => HardwarePreference::Require,
+        _ => HardwarePreference::Avoid,
+    };
+    Ok(VideoEncoderConfig {
         codec: Codec::H264,
         size,
         input_format: PixelFormat::Rgba8,
         frame_period: period,
-        rate_control: RateControl::Cbr { kbps: VIDEO_KBPS },
-        keyframe_interval: KEYFRAME_INTERVAL,
-        hardware: HardwarePreference::Avoid,
-    };
-    VideoSession::open(parts.codecs.as_ref(), config, SessionOptions::default())
+        rate_control,
+        keyframe_interval: video
+            .keyframe_interval_s
+            .saturating_mul(FRAME_DEN / FRAME_NUM),
+        hardware,
+    })
+}
+
+fn open_video(
+    codecs: &dyn Codecs,
+    size: FrameSize,
+    profile: &EncoderProfile,
+) -> Result<VideoSession, String> {
+    VideoSession::open(codecs, video_config(size, profile)?, SessionOptions::default())
         .map_err(|err| format!("opening the video encoder: {err}"))
 }
 
-fn open_audio_encoder(parts: &Parts, format: AudioFormat) -> Result<AudioSession, String> {
+fn open_audio_encoder(
+    codecs: &dyn Codecs,
+    format: AudioFormat,
+    profile: &EncoderProfile,
+) -> Result<AudioSession, String> {
     let config = AudioEncoderConfig {
         codec: Codec::Aac,
         input_format: format,
-        kbps: AUDIO_KBPS,
+        kbps: profile.audio.kbps,
     };
-    AudioSession::open(parts.codecs.as_ref(), config, SessionOptions::default())
+    AudioSession::open(codecs, config, SessionOptions::default())
         .map_err(|err| format!("opening the audio encoder: {err}"))
 }
 
-fn stream_origin(clock: &dyn MediaClock, mixer: &Mixer) -> Result<MediaTime, String> {
+/// How far behind the clock the mixer stamps its blocks, on the clock's timebase.
+fn mixer_latency(clock: &dyn MediaClock, mixer: &Mixer) -> Result<MediaTime, String> {
     let config = mixer.config();
     let frames = i64::try_from(config.latency_frames)
         .map_err(|_| "mixer latency does not fit a timestamp".to_string())?;
     let sample =
         Timebase::per_second(config.sample_rate).map_err(|err| format!("mixer timebase: {err}"))?;
-    let latency = MediaTime::new(frames, sample)
+    MediaTime::new(frames, sample)
         .rescale(clock.timebase(), Rounding::Up)
-        .map_err(|err| format!("mixer latency: {err}"))?;
-    clock
-        .now()
-        .checked_sub(latency)
-        .map_err(|err| format!("stream origin: {err}"))
+        .map_err(|err| format!("mixer latency: {err}"))
 }
 
-fn stream_info(size: FrameSize, origin: MediaTime) -> StreamInfo {
+fn stream_info(size: FrameSize, origin: MediaTime, profile: &EncoderProfile) -> StreamInfo {
+    let video_kbps = match profile.video.rate_control {
+        ProfileRate::Cbr { kbps } | ProfileRate::Vbr { kbps, .. } => kbps,
+        _ => 0,
+    };
     StreamInfo {
         size,
         origin,
         frame_rate: f64::from(FRAME_DEN) / f64::from(FRAME_NUM),
-        video_kbps: VIDEO_KBPS,
-        audio_kbps: AUDIO_KBPS,
+        video_kbps,
+        audio_kbps: profile.audio.kbps,
         sample_rate: SAMPLE_RATE,
         sps: &SPS,
         pps: &PPS,
@@ -679,12 +975,13 @@ struct RenderJob {
     capture: Box<dyn CaptureStream>,
     open: OpenDraw,
     clock: Arc<dyn MediaClock>,
-    input: VideoInput,
+    /// The sessions to push frames into, as they are opened.
+    inputs: Receiver<VideoInput>,
     size: FrameSize,
     period: MediaTime,
     stop: Arc<AtomicBool>,
     ready: mpsc::Sender<Result<(), String>>,
-    stats: Arc<PipelineStats>,
+    readbacks: Arc<AtomicU64>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
 }
@@ -757,20 +1054,25 @@ impl Frames {
 /// tick that falls a whole period or more behind the clock skips to the current tick
 /// and counts the ticks it skipped in `render_ticks` (R-RT-004), so video pts stay on
 /// the clock that stamps audio.
+///
+/// Each frame goes to every encoder session the program has handed it. A session that
+/// refuses input because it has finished is let go of; the thread runs until the
+/// program stops. While it has no session it draws nothing.
 fn render_loop(job: RenderJob) {
     let RenderJob {
         mut capture,
         open,
         clock,
-        input,
+        inputs,
         size,
         period,
         stop,
         ready,
-        stats,
+        readbacks,
         drops,
         fail,
     } = job;
+    let mut targets: Vec<VideoInput> = Vec::new();
     let mut draw = match open() {
         Ok(draw) => draw,
         Err(err) => {
@@ -795,6 +1097,14 @@ fn render_loop(job: RenderJob) {
     // Set by a fatal error: stop drawing and repeat `shown` until the pipeline stops.
     let mut broken = false;
     while !stop.load(Ordering::Relaxed) {
+        targets.extend(inputs.try_iter());
+        if targets.is_empty() {
+            // No session to draw for, so no tick is due and none counts as skipped;
+            // the first tick after a session arrives is drawn at the clock.
+            next = None;
+            thread::sleep(Duration::from_millis(1));
+            continue;
+        }
         let now = clock.now();
         let due = next.unwrap_or(now);
         if now < due {
@@ -817,7 +1127,7 @@ fn render_loop(job: RenderJob) {
             match tick {
                 Ok(Ok(())) => {
                     draw_errors = 0;
-                    stats.readbacks.fetch_add(1, Ordering::Relaxed);
+                    readbacks.fetch_add(1, Ordering::Relaxed);
                 }
                 Ok(Err(err)) => {
                     draw_errors += 1;
@@ -842,8 +1152,8 @@ fn render_loop(job: RenderJob) {
             }
         }
         drops.publish(capture_drops(frames.capture).saturating_add(render_tick_drops(skipped)));
-        if !frames.shown.is_empty() && !push_frame(&input, size, due, &frames.shown) {
-            break;
+        if !frames.shown.is_empty() {
+            targets.retain(|input| push_frame(input, size, due, &frames.shown));
         }
         next = match due.checked_add(period) {
             Ok(next) => Some(next),
@@ -967,7 +1277,8 @@ fn readback(
 /// Pushes one frame. `false` when the session has closed.
 ///
 /// The encoder session takes ownership of the frame's plane, so this is the one
-/// allocation a tick makes: `VideoInput::push` has no way to hand buffers back.
+/// allocation a tick makes per session: `VideoInput::push` has no way to hand buffers
+/// back.
 fn push_frame(input: &VideoInput, size: FrameSize, pts: MediaTime, rgba: &[u8]) -> bool {
     let stride = size.width() as usize * 4;
     let info = VideoFrameInfo {
@@ -992,18 +1303,18 @@ fn push_frame(input: &VideoInput, size: FrameSize, pts: MediaTime, rgba: &[u8]) 
     }
 }
 
-/// The mixer thread's boundary: a panic is caught and reported as fatal. The encoder
-/// then gets no more audio, so the output cannot keep running.
+/// The mixer thread's boundary: a panic is caught and reported as fatal. The encoders
+/// then get no more audio, so the outputs cannot keep running.
 fn mixer_thread(
     mixer: Mixer,
     clock: Arc<dyn MediaClock>,
-    input: AudioInput,
+    inputs: Receiver<AudioInput>,
     format: AudioFormat,
     stop: Arc<AtomicBool>,
     fail: Sender<PipelineEvent>,
 ) {
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
-        mixer_loop(mixer, clock.as_ref(), &input, format, &stop, &fail);
+        mixer_loop(mixer, clock.as_ref(), &inputs, format, &stop, &fail);
     }));
     if let Err(panic) = result {
         report(
@@ -1013,35 +1324,43 @@ fn mixer_thread(
     }
 }
 
-/// Mixes on the media clock. A rejected block or a poll error is fatal: both mean
-/// the mixer and the encoder disagree about the format, which no retry fixes.
+/// Mixes on the media clock, and pushes each block into every encoder session the
+/// program has handed it, letting go of one that has finished. A rejected block or a
+/// poll error is fatal: both mean the mixer and the encoder disagree about the format,
+/// which no retry fixes.
 fn mixer_loop(
     mut mixer: Mixer,
     clock: &dyn MediaClock,
-    input: &AudioInput,
+    inputs: &Receiver<AudioInput>,
     format: AudioFormat,
     stop: &AtomicBool,
     fail: &Sender<PipelineEvent>,
 ) {
     let samples_len = mixer.config().block_frames.saturating_mul(2);
     let mut samples = vec![0.0f32; samples_len];
-    while !stop.load(Ordering::Relaxed) {
+    let mut targets: Vec<AudioInput> = Vec::new();
+    'mix: while !stop.load(Ordering::Relaxed) {
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
+                targets.extend(inputs.try_iter());
+                let mut rejected = None;
                 // The mix itself does not allocate. `AudioInput::push` takes an owned
-                // buffer and keeps it, so each block needs its own: this clone is
-                // forced by that API.
-                let buffer = match AudioBuffer::new(format, block.pts, samples.clone()) {
-                    Ok(buffer) => buffer,
-                    Err(err) => {
-                        report(fail, format!("mixer block rejected: {err}"));
-                        break;
+                // buffer and keeps it, so each block needs its own per session: this
+                // clone is forced by that API. `Full` is counted by the session.
+                // `Closed` means the session finished; the outputs on it report an
+                // early end themselves.
+                targets.retain(|input| {
+                    match AudioBuffer::new(format, block.pts, samples.clone()) {
+                        Ok(buffer) => !matches!(input.push(buffer), Err(PushError::Closed)),
+                        Err(err) => {
+                            rejected = Some(err);
+                            true
+                        }
                     }
-                };
-                // `Full` is counted by the session. `Closed` means the encoder ended,
-                // which the output thread reports.
-                if matches!(input.push(buffer), Err(PushError::Closed)) {
-                    break;
+                });
+                if let Some(err) = rejected {
+                    report(fail, format!("mixer block rejected: {err}"));
+                    break 'mix;
                 }
             }
             Ok(None) => thread::sleep(Duration::from_millis(1)),
@@ -1061,7 +1380,10 @@ struct OutputJob {
     output_drops: Arc<AtomicU64>,
     link_drops: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
+    cut: Arc<AtomicBool>,
     fail: Sender<PipelineEvent>,
+    /// Told once the sink has started, or has failed to and reported why.
+    started: Sender<()>,
 }
 
 /// Muxes both encoder streams and publishes or records them. A publish or write
@@ -1076,7 +1398,9 @@ struct OutputJob {
 /// passes, or a send fails while stopping, it drops the packets still queued, counts
 /// them in `output_drops`, and finishes the target, which past the deadline closes
 /// without its goodbye. A failure while stopping is logged, not reported: the output
-/// is already on its way to `stopped`.
+/// is already on its way to `stopped`. An output leaving encoder sessions that other
+/// outputs still use is `cut` instead of waiting for the streams to end: it sends what
+/// is queued for it and finishes as soon as a pass finds nothing more.
 fn output_loop(job: OutputJob) {
     let OutputJob {
         mut sink,
@@ -1086,13 +1410,17 @@ fn output_loop(job: OutputJob) {
         output_drops,
         link_drops,
         stop,
+        cut,
         fail: fail_tx,
+        started,
     } = job;
     if let Err(err) = sink.start() {
         report(&fail_tx, err);
+        let _ = started.send(());
         sink.finish();
         return;
     }
+    let _ = started.send(());
     let mut video_done = false;
     let mut audio_done = false;
     let mut failed: Option<String> = None;
@@ -1119,9 +1447,14 @@ fn output_loop(job: OutputJob) {
             abandoned = true;
             break;
         }
+        // Read before this pass's receives, so a pass that finds nothing after the cut
+        // has drained everything queued before it.
+        let leaving = cut.load(Ordering::Acquire);
+        let mut got = false;
         if !video_done {
             match video.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
+                    got = true;
                     if let Err(err) = sink.forward(&packet, &output_drops) {
                         failed = Some(err);
                     }
@@ -1136,6 +1469,7 @@ fn output_loop(job: OutputJob) {
         if failed.is_none() && !audio_done {
             match audio.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
+                    got = true;
                     if let Err(err) = sink.forward(&packet, &output_drops) {
                         failed = Some(err);
                     }
@@ -1158,6 +1492,9 @@ fn output_loop(job: OutputJob) {
             link = report_link(&sink, link, &fail_tx);
         }
         link_drops.store(sink.dropped(), Ordering::Relaxed);
+        if leaving && !got {
+            break;
+        }
     }
     if let Some(err) = failed {
         if stop.load(Ordering::Acquire) {

@@ -7,8 +7,8 @@
 
 use crate::model::{Encoder, Graph, Item, Output, Scene, Source};
 use jstream_protocol::{
-    EncoderProfileInfo, EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query, QueryResult, SceneId,
-    SceneInfo, SceneSummary, SourceInfo,
+    EncoderProfileInfo, EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query,
+    QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
 };
 
 impl Graph {

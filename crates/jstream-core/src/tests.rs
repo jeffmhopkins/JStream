@@ -415,6 +415,9 @@ fn queries_match_the_parity_fixture() {
             output_id: OutputId::new("rec"),
             state: OutputState::Stopped,
             key_set: false,
+            encoder: None,
+            encoder_sessions: 0,
+            hardware_sessions: 0,
         })
     );
     let missing = query(
@@ -2275,11 +2278,9 @@ mod cpu_pipeline {
 
     // --- Item: a failed start's teardown does not overlap the next start.
 
-    /// Fails its first tag. `finish`, which the output thread calls after it has sent
-    /// that failure, opens `sent`.
-    struct FailFirstTag {
-        sent: Arc<Hold>,
-    }
+    /// Fails its first tag, the FLV header the output thread sends before the start
+    /// returns, so the start sees the failure.
+    struct FailFirstTag;
 
     impl LivePublish for FailFirstTag {
         fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
@@ -2291,7 +2292,6 @@ mod cpu_pipeline {
         }
 
         fn finish(&mut self) -> Result<(), PublishError> {
-            self.sent.signal();
             Ok(())
         }
     }
@@ -2383,7 +2383,6 @@ mod cpu_pipeline {
         let tearing_down = Arc::new(AtomicBool::new(false));
         let overlapped = Arc::new(AtomicBool::new(false));
         let release = Arc::new(Hold::default());
-        let sent = Arc::new(Hold::default());
         fakes.backends.audio = Arc::new(SlowTeardownAudio {
             inner: fakes.audio.clone(),
             armed: Arc::new(AtomicBool::new(true)),
@@ -2395,22 +2394,7 @@ mod cpu_pipeline {
             tearing_down: Arc::clone(&tearing_down),
             overlapped: Arc::clone(&overlapped),
         });
-        // The compositor "opens" only once the output thread has reported the publish
-        // failure, so the start sees that failure right after `launch` returns.
-        let draw: OpenDraw = {
-            let sent = Arc::clone(&sent);
-            Arc::new(move || {
-                sent.wait();
-                (cpu_draw())()
-            })
-        };
-        let engine = engine(
-            share(&fakes.backends),
-            draw,
-            Box::new(FailFirstTag {
-                sent: Arc::clone(&sent),
-            }),
-        );
+        let engine = engine(share(&fakes.backends), cpu_draw(), Box::new(FailFirstTag));
         let status = connected(&engine);
         let mut events = status.events();
         let first = connected(&engine);
@@ -3163,6 +3147,7 @@ fn output_edits_configure_the_collection() {
         vec![OutputInfo {
             output_id: OutputId::new("out_yt"),
             kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+            encoder_profile: None,
         }]
     );
     assert_eq!(
@@ -3186,6 +3171,7 @@ fn output_edits_configure_the_collection() {
             vec![OutputInfo {
                 output_id: OutputId::new("out_yt"),
                 kind: rtmp_output("rtmps://a.rtmps.youtube.com:443/live2"),
+                encoder_profile: None,
             }]
         ),
         other => panic!("not a state: {other:?}"),

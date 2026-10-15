@@ -8,18 +8,8 @@
 use crate::apply::{already_exists, check_id, check_name, invalid, not_found};
 use crate::model::{Encoder, State};
 use jstream_protocol::{
-    AudioCodec, Edit, EncoderProfile, EncoderProfileId, EntityKind, HardwarePreference, OutputId,
-    ProtocolError, RateControl, VideoCodec,
+    Edit, EncoderProfile, EncoderProfileId, EntityKind, OutputId, ProtocolError,
 };
-
-/// The video bit rates a profile may ask for, in kbit/s.
-const VIDEO_KBPS: std::ops::RangeInclusive<u32> = 100..=100_000;
-/// The highest VBR peak, in kbit/s.
-const MAX_PEAK_KBPS: u32 = 200_000;
-/// Seconds between keyframes.
-const KEYFRAME_S: std::ops::RangeInclusive<u32> = 1..=10;
-/// The AAC bit rates a profile may ask for, in kbit/s.
-const AUDIO_KBPS: std::ops::RangeInclusive<u32> = 32..=320;
 
 /// Applies `encoder.create`, `encoder.update`, `encoder.delete` and
 /// `output.set_encoder`, and returns the edits that undo it. `None` for any other edit.
@@ -151,77 +141,8 @@ fn set_encoder(
 
 /// Checks that `profile` is an encoding the engine can open.
 fn check_profile(profile: &EncoderProfile, at: usize) -> Result<(), ProtocolError> {
-    let video = &profile.video;
-    match video.codec {
-        VideoCodec::H264 => {}
-        _ => {
-            return Err(invalid(
-                at,
-                "profile.video.codec",
-                "is not a video codec this engine knows",
-            ));
-        }
+    match profile.problem() {
+        Some((name, reason)) => Err(invalid(at, &format!("profile.{name}"), reason)),
+        None => Ok(()),
     }
-    let kbps = match video.rate_control {
-        RateControl::Cbr { kbps } => kbps,
-        RateControl::Vbr { kbps, max_kbps } => {
-            if max_kbps < kbps || max_kbps > MAX_PEAK_KBPS {
-                return Err(invalid(
-                    at,
-                    "profile.video.rate_control.max_kbps",
-                    format!("must be at least `kbps` and at most {MAX_PEAK_KBPS}"),
-                ));
-            }
-            kbps
-        }
-        _ => {
-            return Err(invalid(
-                at,
-                "profile.video.rate_control.type",
-                "is not a rate control this engine knows",
-            ));
-        }
-    };
-    if !VIDEO_KBPS.contains(&kbps) {
-        return Err(invalid(
-            at,
-            "profile.video.rate_control.kbps",
-            format!("must be in {}..={}", VIDEO_KBPS.start(), VIDEO_KBPS.end()),
-        ));
-    }
-    if !KEYFRAME_S.contains(&video.keyframe_interval_s) {
-        return Err(invalid(
-            at,
-            "profile.video.keyframe_interval_s",
-            format!("must be in {}..={}", KEYFRAME_S.start(), KEYFRAME_S.end()),
-        ));
-    }
-    match video.hardware {
-        HardwarePreference::Prefer | HardwarePreference::Require | HardwarePreference::Avoid => {}
-        _ => {
-            return Err(invalid(
-                at,
-                "profile.video.hardware",
-                "is not a hardware preference this engine knows",
-            ));
-        }
-    }
-    match profile.audio.codec {
-        AudioCodec::Aac => {}
-        _ => {
-            return Err(invalid(
-                at,
-                "profile.audio.codec",
-                "is not an audio codec this engine knows",
-            ));
-        }
-    }
-    if !AUDIO_KBPS.contains(&profile.audio.kbps) {
-        return Err(invalid(
-            at,
-            "profile.audio.kbps",
-            format!("must be in {}..={}", AUDIO_KBPS.start(), AUDIO_KBPS.end()),
-        ));
-    }
-    Ok(())
 }

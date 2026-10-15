@@ -40,6 +40,74 @@ impl EncoderProfile {
     };
 }
 
+/// The video bit rates a profile may ask for, in kbit/s.
+const VIDEO_KBPS: std::ops::RangeInclusive<u32> = 100..=100_000;
+/// The highest VBR peak, in kbit/s.
+const MAX_PEAK_KBPS: u32 = 200_000;
+/// Seconds between keyframes.
+const KEYFRAME_S: std::ops::RangeInclusive<u32> = 1..=10;
+/// The AAC bit rates a profile may ask for, in kbit/s.
+const AUDIO_KBPS: std::ops::RangeInclusive<u32> = 32..=320;
+
+impl EncoderProfile {
+    /// Why an engine can't open this encoding, as the field (relative to the profile,
+    /// `video.rate_control.kbps`) and the reason, or `None` when it can. Every engine
+    /// and the mock check a profile with this, so they reject the same ones.
+    pub fn problem(&self) -> Option<(&'static str, String)> {
+        let video = &self.video;
+        if video.codec != VideoCodec::H264 {
+            return Some((
+                "video.codec",
+                "is not a video codec this engine knows".into(),
+            ));
+        }
+        let kbps = match video.rate_control {
+            RateControl::Cbr { kbps } => kbps,
+            RateControl::Vbr { kbps, max_kbps } => {
+                if max_kbps < kbps || max_kbps > MAX_PEAK_KBPS {
+                    return Some((
+                        "video.rate_control.max_kbps",
+                        format!("must be at least `kbps` and at most {MAX_PEAK_KBPS}"),
+                    ));
+                }
+                kbps
+            }
+            RateControl::Unknown => {
+                return Some((
+                    "video.rate_control.type",
+                    "is not a rate control this engine knows".into(),
+                ));
+            }
+        };
+        if !VIDEO_KBPS.contains(&kbps) {
+            return Some(("video.rate_control.kbps", range(&VIDEO_KBPS)));
+        }
+        if !KEYFRAME_S.contains(&video.keyframe_interval_s) {
+            return Some(("video.keyframe_interval_s", range(&KEYFRAME_S)));
+        }
+        if video.hardware == HardwarePreference::Unknown {
+            return Some((
+                "video.hardware",
+                "is not a hardware preference this engine knows".into(),
+            ));
+        }
+        if self.audio.codec != AudioCodec::Aac {
+            return Some((
+                "audio.codec",
+                "is not an audio codec this engine knows".into(),
+            ));
+        }
+        if !AUDIO_KBPS.contains(&self.audio.kbps) {
+            return Some(("audio.kbps", range(&AUDIO_KBPS)));
+        }
+        None
+    }
+}
+
+fn range(range: &std::ops::RangeInclusive<u32>) -> String {
+    format!("must be in {}..={}", range.start(), range.end())
+}
+
 /// How the video is encoded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct VideoEncoding {
@@ -171,6 +239,11 @@ pub struct EncoderSessionInfo {
 mod tests {
     use super::{EncoderProfile, HardwarePreference, RateControl, VideoCodec};
     use serde_json::json;
+
+    #[test]
+    fn the_default_profile_is_valid() {
+        assert_eq!(EncoderProfile::DEFAULT.problem(), None);
+    }
 
     #[test]
     fn default_profile_wire_form() {
