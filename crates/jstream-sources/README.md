@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:bbb1d3b0db84a731", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "merge of the #223 branch (main at 94fb25d, #224 asset walk): re-read; main's text and the chat_message bullet with the round 1 fixes sit side by side; holds" }
+verified = { hash = "b3:bb05e1afd895157c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#363 round 2 B3: re-read the chat_message bullet; create and update now check the settings with no message, then draw the featured one with the blank fallback, so only the settings fail them; frame unchanged; holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -115,8 +115,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   the same font and outline rules apply, and each block counts against the limits as
   a text source's does; stacking them counts the frame and the blocks it is drawn
   from. A message these settings or limits can't draw (too wide with no wrapping, or
-  over the memory cap) shows the one transparent pixel instead: `frame` never fails,
-  as for every built-in kind, and the next message featured is drawn again. The
+  over the memory cap) shows the one transparent pixel instead, and the next message
+  featured is drawn again. `frame` never fails, as for every built-in kind, and
+  `create` and `update` fail only for the settings themselves, never for the featured
+  message. The
   bundled font covers Latin text
   only, so other scripts need a `font`. Every field is a stranger's text and is drawn
   as plain text: line breaks and other control characters become spaces, and text is

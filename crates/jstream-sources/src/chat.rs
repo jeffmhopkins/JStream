@@ -192,7 +192,7 @@ impl SourceKind for ChatKind {
             reason,
         })?;
         let (revision, message) = ctx.chat.read();
-        let frame = draw(&font, message.as_deref(), settings, &ctx.limits)?;
+        let frame = show(&font, message.as_deref(), settings, &ctx.limits)?;
         Ok(Box::new(ChatSource {
             descriptor: self.0.clone(),
             settings: settings.clone(),
@@ -251,16 +251,29 @@ impl Source for ChatSource {
             });
         }
         let (revision, message) = self.feature.read();
-        self.frame = draw(&self.font, message.as_deref(), settings, &self.limits)?;
+        self.frame = show(&self.font, message.as_deref(), settings, &self.limits)?;
         self.revision = revision;
         self.settings = settings.clone();
         Ok(())
     }
 }
 
-/// Draws `message` as `settings` style it: a header line (badge, author, amount) in the
-/// author colour over the text in the text colour. No message draws one transparent
-/// pixel.
+/// Checks `settings`, then draws `message` with them. Only the settings can fail it: a
+/// message they or the limits can't draw shows [`blank`], as [`ChatSource::frame`]
+/// does, since it is a viewer's text and not the settings being applied.
+fn show(
+    font: &[u8],
+    message: Option<&FeaturedMessage>,
+    settings: &Settings,
+    limits: &Limits,
+) -> Result<Arc<VideoFrame>, SourceError> {
+    let empty = draw(font, None, settings, limits)?;
+    if message.is_none() {
+        return Ok(empty);
+    }
+    draw(font, message, settings, limits).or(Ok(empty))
+}
+
 /// One transparent pixel: what a source shows with nothing (drawable) featured.
 fn blank() -> Result<Arc<VideoFrame>, SourceError> {
     let zero = MediaTime::zero(Timebase::MILLIS);
@@ -271,6 +284,9 @@ fn blank() -> Result<Arc<VideoFrame>, SourceError> {
     )?))
 }
 
+/// Draws `message` as `settings` style it: a header line (badge, author, amount) in the
+/// author colour over the text in the text colour. No message draws one transparent
+/// pixel.
 fn draw(
     font: &[u8],
     message: Option<&FeaturedMessage>,
@@ -349,10 +365,13 @@ fn fit(
         wrap_width: None,
         ..*style
     };
-    match render(font, text, &unwrapped, limits) {
-        Ok(drawn) if drawn.0.width() <= wrap => Ok(drawn),
-        _ => render(font, text, style, limits),
+    let first = render(font, text, &unwrapped, limits);
+    if matches!(&first, Ok(drawn) if drawn.0.width() <= wrap) {
+        return first;
     }
+    // Freed before the wrapped draw, so the two never count against memory together.
+    drop(first);
+    render(font, text, style, limits)
 }
 
 /// `text` as one paragraph of plain text: line breaks and other control characters

@@ -210,3 +210,24 @@ fn a_message_too_large_to_draw_shows_nothing_and_never_fails() {
     ctx.chat.set(Some(message("short")));
     assert!(size(&source.frame(ms(200)).expect("a frame")).0 > 1);
 }
+
+#[test]
+fn a_message_too_large_to_draw_never_fails_creating_or_updating() {
+    let ctx = Context::default();
+    ctx.chat.set(Some(message(&"m".repeat(1000))));
+    // The engine rebuilds a source with `create` on every settings change.
+    let wide = settings(&[("max_width", json!(0))]);
+    let mut source = Registry::builtin()
+        .create("chat_message", &wide, &ctx)
+        .expect("created with an undrawable message featured");
+    assert_eq!(size(&source.frame(ms(0)).expect("a frame")), (1, 1));
+    source
+        .update(&wide)
+        .expect("updated with an undrawable message featured");
+    assert_eq!(size(&source.frame(ms(100)).expect("a frame")), (1, 1));
+    // Bad settings still fail, whatever is featured.
+    assert!(source.update(&settings(&[("size", json!(0))])).is_err());
+
+    ctx.chat.set(Some(message("short")));
+    assert!(size(&source.frame(ms(200)).expect("a frame")).0 > 1);
+}
