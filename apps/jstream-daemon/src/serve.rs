@@ -27,7 +27,7 @@ pub type Connect =
 /// The engine the daemon serves: an empty collection, plus the placeholder outputs.
 ///
 /// On Windows it is live (see `live`, which is Windows and test only): the OS backends (WGC capture, WASAPI audio, Media
-/// Foundation codecs, the QPC clock), stream keys in Credential Manager, and a publish
+/// Foundation codecs and webcams, the QPC clock), stream keys in Credential Manager, and a publish
 /// opener that connects RTMP(S) on each `output.start`. Elsewhere there are no
 /// backends yet, so output actions only step the placeholder state machine.
 ///
@@ -56,10 +56,13 @@ pub fn engine(options: &Options) -> anyhow::Result<Arc<Engine>> {
 #[cfg(windows)]
 fn windows_backends() -> anyhow::Result<Backends> {
     use anyhow::Context;
-    use jstream_platform_windows::{MfCodecs, QpcClock, WasapiAudio, WgcCapture, WindowsGpu};
+    use jstream_platform_windows::{
+        MfCodecs, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu,
+    };
     Ok(Backends {
         clock: Arc::new(QpcClock::new().context("could not open the QPC media clock")?),
         capture: Arc::new(WgcCapture::new()),
+        video_devices: Arc::new(MfVideoDevices::new()),
         audio: Arc::new(WasapiAudio::new()),
         codecs: Arc::new(MfCodecs::new()),
         gpu: Arc::new(WindowsGpu::new()),

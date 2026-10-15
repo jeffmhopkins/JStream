@@ -39,8 +39,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
-- **Build script** (`build.rs`): delay-loads `mfplat.dll` on Windows (MSVC), so that
-  check can run at all.
+- **Build script** (`build.rs`): delay-loads the Media Foundation DLLs on Windows
+  (MSVC), so that check can run at all.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
   ([Design](#design)).
 - **Crash reports** (`crash.rs`): the panic hook that writes a redacted report into the
@@ -50,8 +50,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
   SIGINT; `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE
-  headers to check that `mfplat.dll` is delay-loaded and no Media Foundation DLL is a
-  load-time import).
+  headers to check that the backends' Media Foundation DLLs are delay-loaded and none
+  is a load-time import).
 
 Not here yet: serving the web UI (it waits on `jstream-server`,
 [jstream-server › Design](../../crates/jstream-server/README.md#design)),
@@ -161,8 +161,8 @@ verified = { hash = "b3:52cc6e4874faa0db", by = "agent:claude@session_01YKRrREb5
   The daemon never touches the protocol itself. The connector holds the engine in an
   `Arc`; the server, and through it every session, keep it alive.
 - **Live on Windows** (`serve.rs`). Under `cfg(windows)` the engine gets the
-  `jstream-platform-windows` backends (`QpcClock`, `WgcCapture`, `WasapiAudio`,
-  `MfCodecs`, `WindowsGpu`; no virtual camera sink yet), `WindowsCredentials` as its
+  `jstream-platform-windows` backends (`QpcClock`, `WgcCapture`, `MfVideoDevices`,
+  `WasapiAudio`, `MfCodecs`, `WindowsGpu`; no virtual camera sink yet), `WindowsCredentials` as its
   stream key store (`with_key_store`), and a publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
   starts. Elsewhere there are no backends yet, so outputs stay the placeholder state
@@ -178,23 +178,23 @@ verified = { hash = "b3:52cc6e4874faa0db", by = "agent:claude@session_01YKRrREb5
   keeps the engine and its running pipeline alive after the server lets go. The
   opener upgrades it only to read the target. `live` is that wiring over any backends,
   key store and connect function, which is how the tests run it on the platform fakes.
-- **Media Foundation check and delay-load.** The `windows` crate imports
-  `mfplat.dll` as load-time imports, so on a Windows without Media Foundation the
-  loader would refuse to start the binary, naming a DLL, before `main` runs. `build.rs`
-  links the binary (not its test binaries) with `/DELAYLOAD:mfplat.dll` and
-  `delayimp.lib` when the target is MSVC, so the DLL loads on the first call into it.
+- **Media Foundation check and delay-load.** The `windows` crate imports Media
+  Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
+  the loader would refuse to start the binary, naming a DLL, before `main` runs.
+  `build.rs` links the binary (not its test binaries) with `/DELAYLOAD` for each DLL
+  the daemon's backends import from (`mfplat.dll` for `MfCodecs` and
+  `MfVideoDevices`, `mf.dll` and `mfreadwrite.dll` for `MfVideoDevices`) and
+  `delayimp.lib` when the target is MSVC, so each loads on the first call into it.
   `main.rs` runs `jstream_platform_windows::check_media_foundation` right after
   logging starts, before the engine is built or anything else calls Media Foundation,
   then lists `MfCodecs`' codecs and requires an AAC encoder (`components.rs`, plain
   data in and out, tested everywhere), since every stream's audio needs one. Either
-  failure is a `MissingComponent`, mapped to exit code 3 with its advice. Every Media
-  Foundation function the daemon reaches is in `mfplat.dll`, the only DLL `build.rs`
-  delay-loads: the other backends import from `mf.dll`, `mfreadwrite.dll`
-  (`MfVideoDevices`) and `mfsensorgroup.dll` (`WindowsVcam`), which N editions lack
-  too, and each joins the list when the daemon links its backend. Listing one early
-  would make the linker warn (LNK4199), which CI's `-D warnings` turns into an error. `tests/delay_load.rs` checks the built
-  binary's import tables, so CI's Windows job proves `/DELAYLOAD` applies to the
-  `windows` crate's raw-dylib imports.
+  failure is a `MissingComponent`, mapped to exit code 3 with its advice.
+  `mfsensorgroup.dll` (`WindowsVcam`) joins the list when the daemon links the
+  virtual camera, not before: delay-loading a DLL the binary doesn't import from is
+  linker warning LNK4199, which CI's `-D warnings` turns into an error.
+  `tests/delay_load.rs` checks the built binary's import tables, so CI's Windows job
+  proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib imports.
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server
   answers MCP at `/mcp` on the same port, with its default MCP session cap and idle
   timeout. Each MCP session is one more engine client through the same `Connector`, so

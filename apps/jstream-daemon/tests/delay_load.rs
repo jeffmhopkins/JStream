@@ -1,6 +1,6 @@
-//! The built daemon delay-loads the Media Foundation DLLs (MSVC only): `mfplat.dll`,
-//! which it always uses, is in the PE's delay-import table, and none of them is in its
-//! import table, so a Windows without Media Foundation
+//! The built daemon delay-loads the Media Foundation DLLs (MSVC only): the ones its
+//! backends use are in the PE's delay-import table, and none of them is in its import
+//! table, so a Windows without Media Foundation
 //! still starts the daemon and its startup check can explain what is missing
 //! (apps/jstream-daemon/README.md#design). This also confirms that `/DELAYLOAD`
 //! applies to the `windows` crate's raw-dylib imports. It reads the PE headers itself,
@@ -19,10 +19,12 @@ fn mfplat_is_delay_loaded() {
     let pe = Pe::parse(&image);
     let imports = pe.dll_names(IMPORT, 20, 12);
     let delayed = pe.dll_names(DELAY_IMPORT, 32, 4);
-    assert!(
-        delayed.iter().any(|dll| dll == "mfplat.dll"),
-        "mfplat.dll is not delay-loaded; delay-loaded: {delayed:?}"
-    );
+    for dll in ["mfplat.dll", "mf.dll", "mfreadwrite.dll"] {
+        assert!(
+            delayed.iter().any(|name| name == dll),
+            "{dll} is not delay-loaded; delay-loaded: {delayed:?}"
+        );
+    }
     for dll in [
         "mfplat.dll",
         "mf.dll",

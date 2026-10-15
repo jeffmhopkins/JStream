@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:762a0af98b7f4825", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (F3 #208) into C4b: stamp-only conflict; F3 changed ARCH threading/protocol text (encoder profiles, program-stage collector), no platform trait; C4b's Not yet line re-read and holds" }
+verified = { hash = "b3:d971ee7b8e1558a7", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: Backends gains video_devices (fake::backends fills it with FakeVideoDevices); CaptureStats gains frames_undecodable (counted by FakeVideoDevices and MfVideoDevices streams); Injection, Capture and Not yet lines updated to match backends.rs, capture.rs and fake.rs" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -50,7 +50,8 @@ Contents:
   [ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading), and the render
   thread takes from it without blocking; `None` means "repeat the last frame". Spike S1
   drains Windows.Graphics.Capture's pool to the newest frame the same way.
-  `CaptureStats` counts captured and skipped frames.
+  `CaptureStats` counts captured and skipped frames, and the compressed frames a
+  `CaptureDecoder` rejected (`frames_undecodable`, always 0 for display capture).
 - **Video capture devices** (webcams and capture cards,
   [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
@@ -98,8 +99,9 @@ Contents:
   a separate trait from `StreamKeyStore`, so a token and a stream key never share a name.
   Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
   contain a token. `jstream-youtube` keeps its Google refresh token here.
-- **Injection:** `Backends`, a plain struct holding one platform's clock, capture, audio,
-  codec and GPU-interop backends and its optional virtual-camera sink.
+- **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
+  capture device, audio, codec and GPU-interop backends and its optional virtual-camera
+  sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
   (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
@@ -121,9 +123,10 @@ Contents:
 
 **Not yet:** a platform that consumes GPU frames (Windows capture delivers them through
 `WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet),
-`VideoDevices` in `Backends` (Windows implements it as `MfVideoDevices`, with
-`MfMjpegDecoder` as its `CaptureDecoder`), a decode-failure count in `CaptureStats`, an
-MJPEG `Codec` variant, and encoder selection by GPU adapter.
+an engine that opens `Backends::video_devices` (the field is filled, with
+`MfVideoDevices` on Windows and `MfMjpegDecoder` as its `CaptureDecoder`, but no source
+uses it, so `stats.tick` doesn't report `frames_undecodable`), an MJPEG `Codec` variant,
+and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames

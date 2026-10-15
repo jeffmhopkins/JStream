@@ -11,14 +11,13 @@
 
 use std::env;
 
-/// The Media Foundation DLLs the daemon imports from: `mfplat.dll` (`MfCodecs`). N
-/// editions also lack the ones other backends import from: `mf.dll` and
-/// `mfreadwrite.dll` (`MfVideoDevices`) and `mfsensorgroup.dll` (`WindowsVcam`). Add
-/// each here when the daemon links its backend, not before: delay-loading a DLL the
-/// binary doesn't import from is linker warning LNK4199, which CI's `-D warnings`
-/// turns into an error (`linker_messages`). `tests/delay_load.rs` fails if any of
-/// them is a load-time import.
-const MEDIA_FOUNDATION: [&str; 1] = ["mfplat.dll"];
+/// The Media Foundation DLLs the daemon imports from: `mfplat.dll` (`MfCodecs`,
+/// `MfVideoDevices`), `mf.dll` and `mfreadwrite.dll` (`MfVideoDevices`). N editions
+/// also lack `mfsensorgroup.dll`, which `WindowsVcam` imports from; add it when the
+/// daemon links the virtual camera, not before: delay-loading a DLL the binary doesn't
+/// import from is linker warning LNK4199, which CI's `-D warnings` turns into an error
+/// (`linker_messages`). `tests/delay_load.rs` checks the built binary.
+const MEDIA_FOUNDATION: [&str; 3] = ["mfplat.dll", "mf.dll", "mfreadwrite.dll"];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");

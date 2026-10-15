@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:8cb414ec9546f5e3", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: PublishError::new is now public so a host's opener can fail a start; the purpose's Engine and runtime bullets are unchanged and still hold" }
+verified = { hash = "b3:341de0452f28bef3", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: only core tests change (each Backends literal gains video_devices from FakeVideoDevices; CaptureStats literals gain frames_undecodable: 0); with_backends/injection text unchanged and holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:355ec349e1f106e6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: Outputs paragraph now says jstream-daemon reads output_kind in its opener on Windows (merged with main's Record sentence); Pipeline paragraph says an opener builds its errors with PublishError::new and they must not carry a key" }
+verified = { hash = "b3:f96e761c279c4f3b", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: tests-only edits in core (Backends.video_devices, CaptureStats.frames_undecodable literals); drops table still reads frames_skipped only for capture_frames, which is what drops.rs does (decode failures are not reported in stats.tick yet)" }
 -->
 
 ### Engine and sessions

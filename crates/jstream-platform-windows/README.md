@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:f428fd7007e60c8f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: the H1 check bullet now says jstream-daemon's startup calls check_media_foundation; delay-loading sub-bullet (mfplat.dll for MfCodecs) holds, the daemon delay-loads it via build.rs" }
+verified = { hash = "b3:19d3b89e942da78d", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: MJPEG bullet now names CaptureStats::frames_undecodable (stream.rs stats); Not yet trimmed to the decode-every-frame gap; Delay-loading bullet lists each backend's DLLs, checked against the windows crate's link attributes (MFEnumDeviceSources mf.dll, MFCreateSourceReaderFromMediaSource mfreadwrite.dll, MFCreateVirtualCamera mfsensorgroup.dll, the rest mfplat.dll; vcam's source reader is test-only); review N8" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -236,10 +236,9 @@ The code is ported from spikes S1 to S3. This first cut has:
     capture thread at the first frame and again if the size changes. It takes NV12
     output when offered, else YUY2 converted to NV12. Decoded frames are BT.601 full
     range, as JFIF defines, unless the decoder's type says otherwise. A frame it can't
-    decode is dropped and counted; the count is not yet in `CaptureStats`.
-  - **Not yet:** the `Backends` field and the decode-failure count in `CaptureStats`
-    (both change `jstream-platform`). Every MJPEG frame is decoded, including ones the
-    mailbox then replaces before render takes them.
+    decode is dropped and counted in `CaptureStats::frames_undecodable`.
+  - **Not yet:** every MJPEG frame is decoded, including ones the mailbox then replaces
+    before render takes them.
 
 - **`WindowsGpu`** (`GpuInterop`, [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)
   step 2, plus the D3D11 device that steps 1 and 5 will use; ported from spike S1):
@@ -335,11 +334,13 @@ The code is ported from spikes S1 to S3. This first cut has:
   advice: the Media Feature Pack for an N edition (an ID ending in a capital `N`), the
   server feature for an ID starting with `Server`, and both otherwise. The host must
   call it before creating the backends, as `jstream-daemon`'s startup does.
-  - **Delay-loading:** the `windows` crate imports `mfplat.dll` when the process
-    loads, so on such a machine Windows refuses to start a binary that links `MfCodecs`
-    before any check can run. That binary must delay-load the DLL (MSVC
-    `/DELAYLOAD:mfplat.dll` with `delayimp.lib`) for the check to report anything. The
-    check itself never imports Media Foundation.
+  - **Delay-loading:** the `windows` crate imports Media Foundation's DLLs when the
+    process loads, so on such a machine Windows refuses to start a binary that links a
+    Media Foundation backend before any check can run. That binary must delay-load each
+    DLL its backends import (MSVC `/DELAYLOAD:<dll>` with `delayimp.lib`) for the check
+    to report anything: `mfplat.dll` for `MfCodecs`; `mfplat.dll`, `mf.dll` and
+    `mfreadwrite.dll` for `MfVideoDevices`; `mfplat.dll` for `MfMjpegDecoder`;
+    `mfplat.dll` and `mfsensorgroup.dll` for `WindowsVcam`. The check itself never imports Media Foundation.
 
 **Not yet:** Media Foundation video decoders, encoders and the virtual camera taking
 `VideoSurface::Gpu`, and
