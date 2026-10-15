@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:1b18413b70c1f1e2", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: Contents gains browser.rs (Windows + cef only); not-yet list says browser sources are off in a default build; checked against lib.rs and browser.rs" }
+verified = { hash = "b3:9730f6ddac52575c", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4 CI doc fix: engine()'s rustdoc names browser::backend in code, not as a link (the module is cfg'd out of docs); section holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -101,7 +101,7 @@ folder, and its log `logs\cef.log`.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:65ee8c04f8a14f61", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: new browser bullet matches host.rs (backend after with_backends, on backends.clock) and browser.rs (WindowsGpu::open_device, failures logged, CEF starts on first page)" }
+verified = { hash = "b3:5b0e61da128a4083", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4 CI doc fix: engine()'s rustdoc names browser::backend in code, not as a link (the module is cfg'd out of docs); section holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS

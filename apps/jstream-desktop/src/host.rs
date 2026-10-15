@@ -128,7 +128,7 @@ fn new_token() -> anyhow::Result<String> {
 /// On Windows it is live, as the daemon's is: the OS backends, stream keys in
 /// Credential Manager, and RTMP(S) publishing on `output.start`. With the `cef` feature
 /// it also opens browser sources' pages, keeping CEF's cache and log under `data`
-/// ([`browser::backend`](crate::browser)). Elsewhere there are no backends yet.
+/// (`browser::backend`). Elsewhere there are no backends yet.
 ///
 /// # Errors
 /// When the collection file can't be read, loaded or created, and on Windows when a
