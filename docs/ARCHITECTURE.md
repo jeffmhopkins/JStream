@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:b1fa4484ef1c0a26", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: stamp-only; E1's text taken as is; C1a's kinds sentence holds" }
+verified = { hash = "b3:66483cc6ac38c365", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#179 C1a jstream-sources) into B5: re-read; C1a's 'descriptors come from jstream-sources' sentence beside B5's set_source/duplicated_from text; Not yet names settings migrations, consistent with C1a" }
 -->
 
 ```
