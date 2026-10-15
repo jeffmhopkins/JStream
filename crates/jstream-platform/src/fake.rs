@@ -22,9 +22,9 @@ use crate::{
     AudioPacketFlags, AudioRenderBuffer, AudioStream, Backends, Capture, CaptureDecoder,
     CaptureEncoding, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo,
     CodecRole, Codecs, CompressedFrame, DeviceId, GpuContext, GpuFrame, GpuInterop,
-    HardwarePreference, MediaClock, PlatformError, Secret, StreamKeyStore, VcamFormat, VcamSink,
-    VideoDecoder, VideoDecoderConfig, VideoDeviceFormat, VideoDeviceInfo, VideoDevices,
-    VideoEncoder, VideoEncoderConfig, VideoSurface,
+    HardwarePreference, MediaClock, OAuthTokenStore, PlatformError, Secret, StreamKeyStore,
+    VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat, VideoDeviceInfo,
+    VideoDevices, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 
 /// A full set of fake backends on `clock`: a 320x180 display, a stereo 48 kHz
@@ -1195,6 +1195,67 @@ impl StreamKeyStore for MemoryKeyStore {
         let mut state = lock(&self.state);
         Self::check(&state, "MemoryKeyStore::clear")?;
         state.keys.remove(output_id);
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// OAuth tokens
+
+/// An in-memory [`OAuthTokenStore`], for tests: one refresh token per account, kept apart
+/// from any [`MemoryKeyStore`]. Clones share the same tokens, and
+/// [`set_failing`](Self::set_failing) makes every call fail; the error names the call,
+/// never a token.
+#[derive(Clone, Debug, Default)]
+pub struct MemoryTokenStore {
+    state: Arc<Mutex<KeyState>>,
+}
+
+impl MemoryTokenStore {
+    /// An empty store.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Makes every later call fail (`true`) or work again (`false`).
+    pub fn set_failing(&self, failing: bool) {
+        lock(&self.state).failing = failing;
+    }
+
+    /// How many tokens are stored.
+    pub fn len(&self) -> usize {
+        lock(&self.state).keys.len()
+    }
+
+    /// Whether no token is stored.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl OAuthTokenStore for MemoryTokenStore {
+    fn set(&self, account: &str, token: &Secret) -> Result<(), PlatformError> {
+        let mut state = lock(&self.state);
+        MemoryKeyStore::check(&state, "MemoryTokenStore::set")?;
+        state
+            .keys
+            .insert(account.to_owned(), Secret::new(token.expose()));
+        Ok(())
+    }
+
+    fn get(&self, account: &str) -> Result<Option<Secret>, PlatformError> {
+        let state = lock(&self.state);
+        MemoryKeyStore::check(&state, "MemoryTokenStore::get")?;
+        Ok(state
+            .keys
+            .get(account)
+            .map(|token| Secret::new(token.expose())))
+    }
+
+    fn clear(&self, account: &str) -> Result<(), PlatformError> {
+        let mut state = lock(&self.state);
+        MemoryKeyStore::check(&state, "MemoryTokenStore::clear")?;
+        state.keys.remove(account);
         Ok(())
     }
 }

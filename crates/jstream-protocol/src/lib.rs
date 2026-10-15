@@ -3,7 +3,7 @@
 //! (side effects); queries read; events push changes; errors carry stable codes. The JSON
 //! Schema is generated from these types. Layer 1: plain data, WASM-safe, no I/O.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#design, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#design, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md
 
 #![forbid(unsafe_code)]
 
@@ -14,11 +14,13 @@ mod event;
 mod finite;
 mod geometry;
 mod id;
+mod kind;
 mod output;
 #[cfg(feature = "fixtures")]
 pub mod parity;
 mod query;
 mod schema;
+mod settings;
 mod version;
 
 pub use command::{
@@ -36,9 +38,14 @@ pub use geometry::{
     ProjectedQuad, Size, legacy_quad,
 };
 pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};
+pub use kind::{
+    EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
+    VisibleIf, check_asset_path,
+};
 pub use output::{OutputInfo, OutputKind, RtmpTarget, SecretString};
 pub use query::{ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
 pub use schema::json_schema;
+pub use settings::{AssetRoot, Reference, Settings};
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};
 
 #[cfg(test)]

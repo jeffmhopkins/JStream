@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 jstream-protocol.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 jstream-protocol = { workspace = true, features = ["fixtures"] }

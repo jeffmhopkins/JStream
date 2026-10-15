@@ -73,7 +73,11 @@ impl Default for Engine {
     fn default() -> Self {
         Self {
             shared: Arc::new(Shared {
-                state: Mutex::new(State::default()),
+                state: Mutex::new({
+                    let mut state = State::default();
+                    state.graph = Graph::new().with_kinds(crate::kinds::builtin());
+                    state
+                }),
                 snapshots: SnapshotWorker::default(),
                 keys: Mutex::new(None),
             }),
