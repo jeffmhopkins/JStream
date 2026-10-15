@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:548e864cb0868064", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: B1's Tests and Collection file bullets are main's beside E1's bullets; the Not-yet line drops persistence and keeps the audio/outputs snapshots" }
+verified = { hash = "b3:b2c3d54a2f0e7ddc", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: Runtime bullet now names the GPU capture path and CPU fallbacks; Tests bullet lists src/tests/gpu_capture.rs (path selection and GPU output on a software stand-in), the ignored windows_gpu.rs, and the GPU capture snapshot test; checked against pipeline.rs and the test files" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -60,7 +60,10 @@ state machine. Contents:
   compositor.
 - **Runtime** (`runtime/`): the `output.start` pipeline. The render thread reads the
   platform capture mailbox, composites the program mix from the render snapshot the
-  control side publishes (`runtime/render.rs`) and reads the frame back. The mixer
+  control side publishes (`runtime/render.rs`) and reads the frame back. It composites
+  on the platform's GPU context when the interop opens one, and samples the captured
+  textures there with no CPU copy when the capture backend can deliver them; otherwise
+  it uses CPU frames, and its own device without a context (see *Runtime*). The mixer
   thread polls the media clock. Encode threads live in the encoder sessions. The
   output thread muxes FLV and publishes it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
@@ -92,10 +95,15 @@ state machine. Contents:
   `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
   thread's output size (the capture filling it with no scene, the program scaled from
-  the canvas, a `display` source showing the capture) and nested-scene layers reused
+  the canvas, a `display` source showing the capture, the same for a GPU capture of
+  another size) and nested-scene layers reused
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
-  published snapshot (CPU stand-in), the pipeline against the platform fakes
+  published snapshot (CPU stand-in), which capture path an output takes and each
+  fallback, and an output compositing GPU capture frames, on a software device that
+  stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
+  the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, ignored), the
+  pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
   stage-failure, late-tick, teardown, final-tick, link-loss and stalled-stop tests run
   without one),
@@ -132,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bf611e7fa88cc5aa", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: the render-snapshot paragraph now names undo/redo and a collection file's load among the re-plans (with_collection_file publishes after replacing the graph; tests/collection.rs checks the loaded program scene); B1's Collection file subsection is main's; Not-yet line keeps both sides (persistence built, audio/outputs snapshots not)" }
+verified = { hash = "b3:25d184759f6f1eee", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: Snapshots names the capture's upload or import (ResourceCache::import) and the capture scaled to fill; render-thread paragraph keeps the newest GpuFrame and the cache's per-frame hold; allocation list adds the per-texture import; matches snapshot::compose and Frames in pipeline.rs" }
 -->
 
 ### Engine and sessions
@@ -328,14 +336,16 @@ changed. `video.snapshot` reads `rev` and the published snapshot together under 
 lock and hands both to the snapshot thread.
 
 `snapshot::compose` draws a `Shot` for both threads through a `jstream-render`
-`ResourceCache` keyed by `GpuKey`: a source's upload, the capture's, a nested scene's
-layer at its depth, and the program at the canvas size. An unchanged frame is not
+`ResourceCache` keyed by `GpuKey`: a source's upload, the capture's (an upload of a
+CPU frame, or an import of the platform's texture, `ResourceCache::import`), a nested
+scene's layer at its depth, and the program at the canvas size. An unchanged frame is not
 uploaded again, and each nested scene is redrawn into the layer it had
 (`render_into`), so a steady frame allocates no texture. Images no frame references
 are retired and freed after the GPU has finished with them. The program scene is drawn
 at the canvas: straight to the output when that is the canvas size (`video.snapshot`),
 else into a layer that a last pass scales to the output (the render thread draws at the
-encoder size). Without a program scene the output is the capture filling it, or black.
+encoder size). Without a program scene the output is the capture scaled to fill it, or
+black.
 A `display` source with no stored frame shows the pipeline's capture on the render
 thread and nothing in `video.snapshot`, which has no capture; a stored frame wins.
 That mapping holds until per-source capture exists.
@@ -545,7 +555,11 @@ emits `stopping` and `stopped` as from `active`.
 The render thread reads the platform capture mailbox, composites the program mix of
 the render snapshot (see *Snapshots*) at 30 frames per second, repeats the last
 capture when the mailbox is empty, and reads the composite back as RGBA8 because this
-cut has no GPU encode target. Each tick first calls `RenderReader::adopt`, which
+cut has no GPU encode target. Which device it composites on, and how the capture
+reaches it, is chosen at `output.start` (see [Runtime](#runtime)). On the GPU path it
+keeps the newest `GpuFrame` until a newer one replaces it, and the cache attaches the
+frame's hold only to the frame that draws it, so a held capture slot is the frame on
+screen and nothing more. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
 the snapshot it held to the output's `jstream-collector` thread. The GPU images the
@@ -573,8 +587,9 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 The render thread reuses its capture, composite and readback buffers, and its GPU
 textures through the cache. Each tick allocates one frame-sized buffer, the frame the
 encoder session takes ownership of (`VideoInput::push` cannot hand buffers back), the
-item list `compose` fills once per tick, the frame-fence callback, and the
-premultiplied copy of a capture that changed; the mixer likewise copies each block
+item list `compose` fills once per tick, the frame-fence callback, the premultiplied
+copy of a CPU capture that changed, and on the GPU path an import (a bind group) the
+first time each of the platform's capture textures is shown; the mixer likewise copies each block
 into the buffer `AudioInput::push` keeps. Not measured. The mixer thread
 polls microphone and desktop-loopback input into 48 kHz stereo blocks. Encode
 sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
@@ -734,7 +749,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:87fed6ac34327e35", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: carried E1's output-pipeline paragraph over (program mix from the render snapshot, capture fallback, render collector) with main's recording and stats text; matches pipeline.rs and runtime/render.rs" }
+verified = { hash = "b3:329f07c453b3dee5", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: new Capture path paragraph matches open_capture/gpu_capture (open_device, Capture::on_context, start fallback, each fallback logged), OutputStats::gpu_captures and readbacks, and render_loop's drop order (frames, draw, capture, context)" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -747,7 +762,21 @@ Design) at the encoder size: the program scene and the scenes it nests, with eve
 `display` source that has no stored frame showing the captured display. With no scene
 it draws the capture filling the frame. It repeats the last capture when the mailbox
 is empty, and reads the frame back. This cut encodes that CPU readback, and the
-readback is counted. The mixer thread polls the media clock and pushes 48 kHz stereo
+readback is counted (`OutputStats::readbacks`).
+
+**Capture path** (ARCH › GPU pipeline, step 6). `output.start` asks the platform's
+`GpuInterop` for its device. With one, the render thread's compositor opens on that
+`GpuContext`, and the capture backend is asked for a copy of itself on the context
+(`Capture::on_context`); a capture started from that copy delivers `GpuFrame`s, which
+the render thread samples where they are, with no CPU copy, and counts
+(`OutputStats::gpu_captures`). Each fallback is logged and keeps the output running on
+CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
+opens its own device, software adapter first), a backend with no GPU path or one that
+refuses the context, and a GPU capture that does not start. The render loop drops the
+held frame, the compositor and the capture stream before the context, so the
+platform's state goes first as `GpuContext` requires.
+
+The mixer thread polls the media clock and pushes 48 kHz stereo
 blocks from the microphone and the desktop loopback. Encode threads are the ones
 inside the encoder sessions. The output thread muxes FLV and sends tags to the
 publish target, or, for a recording output, muxes fragmented MP4 and writes it to the

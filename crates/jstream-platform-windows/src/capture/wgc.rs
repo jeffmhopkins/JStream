@@ -134,6 +134,11 @@ impl Capture for WgcCapture {
             mta,
         )?))
     }
+
+    /// [`WgcCapture::on_gpu`], whichever path this backend is on.
+    fn on_context(&self, context: &GpuContext) -> Result<Option<Arc<dyn Capture>>, PlatformError> {
+        Ok(Some(Arc::new(Self::on_gpu(context)?)))
+    }
 }
 
 /// Keeps the process's multithreaded apartment until the process exits, from the first

@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:5b48abe79d036210", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (#182 ADR-0042: covers now the manifests' jstream-meta view) into Y1: took main's stamp, re-read the map; the view changes only by jstream-youtube's manifest (layer 2, unsafe no, summary equal to its row, only JStream dependency jstream-platform L1, strictly lower); main's rows untouched" }
+verified = { hash = "b3:73aec3cddafe1334", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: jstream-core's manifest gains a cfg(windows) dev-dependency on jstream-platform-windows (L2, strictly below L5) for the ignored hardware test; no layer, summary or unsafe change; table rows hold" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -654,7 +654,7 @@ verified = { hash = "b3:3520026dd573c7fb", by = "agent:claude@session_01Vy4KuKBC
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:dc199b6560c865f5", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
+verified = { hash = "b3:2b01c95ee7bafc72", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: one-scene compositor paragraph adds the built GPU path (context compositor, Capture::on_context, cached import with per-frame hold, PRESENT hand-back) and the CPU fallback with readback for encode; steps 1-6 unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -697,7 +697,14 @@ a layer the caller keeps, so a frame allocates no texture for it. The caller wal
 nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see
-[Threads › State to RT threads](#threading)). Still outside this crate: the render
+[Threads › State to RT threads](#threading)). On the GPU path the engine's render
+thread composites on the platform's `GpuContext`, and capture moves onto it through
+`Capture::on_context`: each captured texture is imported once into the cache and
+sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
+and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
+Without a context, or a capture that can deliver on it, the engine keeps CPU frames
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
+composite is still read back to the CPU for the encoder. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
 the output path below.
 

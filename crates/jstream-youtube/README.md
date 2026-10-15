@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:e13f76f93a4626c3", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via the platform Purpose after main's E3a/B3 merges (GPU frames: WgcCapture::on_gpu delivers them); its OAuth tokens/OAuthTokenStore and Secret text this section relies on are unchanged, crate-map youtube row unchanged, R-SEC-001/R-DEP-006 text unchanged, so Secrets and Not yet still hold" }
+verified = { hash = "b3:5706920869e59850", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Stale via platform Purpose after E3b (Capture::on_context added): its OAuthTokenStore and Secret text is unchanged; holds" }
 -->
 
 Layer-2 client for Google sign-in and the

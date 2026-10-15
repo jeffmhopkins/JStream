@@ -46,3 +46,9 @@ jstream-platform = { workspace = true, features = ["fake"] }
 jstream-mcp.workspace = true
 # The shared parity fixture that `jstream-graph` and the mock are held to.
 jstream-protocol = { workspace = true, features = ["fixtures"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+# The ignored hardware test of the GPU capture path (`src/tests/windows_gpu.rs`): the
+# engine on WGC capture and the platform's DX12 device. Tests only; the engine itself
+# never names a platform crate.
+jstream-platform-windows.workspace = true

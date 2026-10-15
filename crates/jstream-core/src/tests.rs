@@ -4,7 +4,10 @@
 //! `jstream-control`'s mock engine.
 
 mod collection;
+mod gpu_capture;
 mod history;
+#[cfg(windows)]
+mod windows_gpu;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
@@ -1898,9 +1901,9 @@ mod cpu_pipeline {
         let seen: Arc<Mutex<Vec<Option<SceneId>>>> = Arc::default();
         let draw: OpenDraw = {
             let seen = Arc::clone(&seen);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, capture, out| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -2343,9 +2346,9 @@ mod cpu_pipeline {
         let armed = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let armed = Arc::clone(&armed);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
                     inner(shot, size, rgba, out)
@@ -2604,9 +2607,9 @@ mod cpu_pipeline {
         // failure, so the start sees that failure right after `launch` returns.
         let draw: OpenDraw = {
             let sent = Arc::clone(&sent);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 sent.wait();
-                (cpu_draw())()
+                (cpu_draw())(context)
             })
         };
         let engine = engine(
@@ -3261,9 +3264,9 @@ mod cpu_pipeline {
         let working = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let working = Arc::clone(&working);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 if working.load(Ordering::Acquire) {
-                    cpu_draw()()
+                    cpu_draw()(context)
                 } else {
                     Err("no adapter".to_owned())
                 }

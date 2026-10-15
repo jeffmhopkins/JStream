@@ -14,7 +14,7 @@ mod sink;
 
 pub use pipeline::OutputStats;
 #[cfg(test)]
-pub(crate) use pipeline::{DrawFn, STOP_DRAIN};
+pub(crate) use pipeline::{DrawFn, STOP_DRAIN, gpu_draw, open_capture};
 pub(crate) use pipeline::{
     Gate, MediaHost, OpenDraw, Pending, PipelineEvent, Running, cpu_draw, launch, parts_from,
 };
