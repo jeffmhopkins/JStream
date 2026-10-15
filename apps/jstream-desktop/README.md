@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:8b167989c29de613", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "G3d: re-read; host bullet names the virtual camera and vcam_status, bootstrap hands its status, tests list the command line and status values; Not-here-yet's register mode still holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -54,7 +53,6 @@ folder.
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:8c167af622f8c230", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "G3d: re-read; --no-vcam row and Virtual camera bullet match app.rs parse and host.rs; registration stays the daemon's" }
 -->
 
 On Windows, with the UI built first:
@@ -101,7 +99,6 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:224941af669931c8", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B1/N2 round: re-read; delay-load note now says WindowsVcam::start probes for MFCreateVirtualCamera first (from #297, merged in), so a Windows 10 start fails with a reason; rest holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
