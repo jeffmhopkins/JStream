@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 
 use jstream_graph::{Graph, Placement as GraphPlacement, State};
 use jstream_media::{FrameSize, MediaTime, PixelFormat, VideoFrame};
-use jstream_platform::GpuFrame;
+use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     Canvas, Crop as ProtocolCrop, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind,
 };
@@ -81,8 +81,9 @@ pub enum SourceFrameError {
     },
 }
 
-/// The latest straight-alpha sRGB RGBA8 frame of one source: one `set_source_frame`
-/// stored, or one its live source produced.
+/// The latest frame of one source: straight-alpha sRGB RGBA8 that `set_source_frame`
+/// stored or its live source produced, or a live source's texture on the program stage's
+/// GPU device (a browser page).
 #[derive(Clone, Debug)]
 pub(crate) struct Frame {
     width: u32,
@@ -101,6 +102,13 @@ enum Pixels {
     Copied(Arc<[u8]>),
     /// A live source's frame, packed `Rgba8` in its first plane.
     Video(Arc<VideoFrame>),
+    /// A live source's texture, premultiplied sRGB code values, on the GPU context
+    /// `context`. Only a compositor on that context imports it ([`compose`]); others draw
+    /// nothing for it.
+    Gpu {
+        frame: GpuFrame,
+        context: ContextKey,
+    },
 }
 
 impl PartialEq for Frame {
@@ -162,12 +170,25 @@ impl Frame {
         })
     }
 
+    /// A live source's texture on `context`, the program stage's GPU context: sRGB code
+    /// values already multiplied by alpha, as a browser page paints (ADR-0021).
+    pub(crate) fn from_gpu(frame: GpuFrame, context: ContextKey, version: u64) -> Self {
+        let size = frame.info().size;
+        Self {
+            width: size.width(),
+            height: size.height(),
+            pixels: Pixels::Gpu { frame, context },
+            version,
+        }
+    }
+
     /// The same bytes, as the frame `set_source_frame` stored under `version`.
     pub(crate) fn with_version(self, version: u64) -> Self {
         Self { version, ..self }
     }
 
-    /// The tightly packed RGBA8 bytes, `width * height * 4` of them.
+    /// The tightly packed RGBA8 bytes, `width * height * 4` of them. Empty for a GPU
+    /// frame, which has none on the CPU.
     fn rgba(&self) -> &[u8] {
         let len = self.width as usize * self.height as usize * 4;
         match &self.pixels {
@@ -176,6 +197,7 @@ impl Frame {
                 .plane(0)
                 .and_then(|plane| plane.data().get(..len))
                 .unwrap_or_default(),
+            Pixels::Gpu { .. } => &[],
         }
     }
 
@@ -852,15 +874,27 @@ pub(crate) fn compose(
 ) -> Result<Output, RenderError> {
     let canvas = shot.canvas()?;
     for (key, source) in &shot.uploads {
-        if let Some(frame) = shot.frames.get(source) {
-            cache.upload(
-                compositor,
-                key,
-                frame.version,
-                frame.width,
-                frame.height,
-                frame.rgba(),
-            )?;
+        let Some(frame) = shot.frames.get(source) else {
+            continue;
+        };
+        match &frame.pixels {
+            // Sampled where it is, on the context it was painted on. Another compositor
+            // (`video.snapshot`'s, or a program stage opened since) can't read it.
+            Pixels::Gpu { frame, context } => {
+                if compositor.context() == Some(context) {
+                    cache.import_premultiplied(compositor, key, frame)?;
+                }
+            }
+            Pixels::Copied(_) | Pixels::Video(_) => {
+                cache.upload(
+                    compositor,
+                    key,
+                    frame.version,
+                    frame.width,
+                    frame.height,
+                    frame.rgba(),
+                )?;
+            }
         }
     }
     let capture = match capture {
@@ -1465,6 +1499,15 @@ pub(crate) mod tests {
     }
 
     /// One frame of `shot` at `size`, read back, as the render thread draws it.
+    /// IEC 61966-2-1 encode, as the output applies it.
+    fn linear_to_srgb(c: f32) -> f32 {
+        if c <= 0.003_130_8 {
+            12.92 * c
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        }
+    }
+
     fn frame_at(
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
@@ -1632,6 +1675,109 @@ pub(crate) mod tests {
             "the capture on the left"
         );
         assert_eq!(out.pixel(28, 9), Some(RED), "red on the right");
+    }
+
+    /// A live source's GPU frame (a browser page) is sampled as premultiplied sRGB by a
+    /// compositor on its context, and draws nothing in one with a device of its own, such
+    /// as `video.snapshot`'s, even where wgpu's device IDs coincide.
+    #[test]
+    fn a_gpu_source_frame_draws_only_on_its_own_context() {
+        use jstream_media::{ColorInfo, MediaTime, PixelFormat, Timebase, VideoFrameInfo};
+        use jstream_platform::{AdapterId, FrameSync, GpuContext, GpuFrame, PlatformError, wgpu};
+        use std::sync::Arc;
+
+        #[derive(Debug)]
+        struct Ready;
+        impl FrameSync for Ready {
+            fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
+                Ok(())
+            }
+        }
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(device) = gpu() else { return };
+        let Some(mut other) = gpu() else { return };
+        let context = GpuContext::new(
+            device.adapter().clone(),
+            device.device().clone(),
+            device.queue().clone(),
+            AdapterId {
+                luid: None,
+                vendor: 0,
+            },
+            None,
+        );
+        let mut own = Compositor::on_context(&context);
+        let extent = wgpu::Extent3d {
+            width: 16,
+            height: 9,
+            depth_or_array_layers: 1,
+        };
+        let texture = own.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-core-test-page"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        // Red at alpha 128, premultiplied in code values, in BGRA order.
+        let page: Vec<u8> = std::iter::repeat_n([0, 0, 128, 128], 16 * 9)
+            .flatten()
+            .collect();
+        own.queue().write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &page,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(16 * 4),
+                rows_per_image: Some(9),
+            },
+            extent,
+        );
+        let frame = GpuFrame::new(
+            texture,
+            VideoFrameInfo {
+                size: FrameSize::new(16, 9).expect("invariant: non-zero"),
+                format: PixelFormat::Bgra8,
+                color: ColorInfo::default(),
+                pts: MediaTime::zero(Timebase::NANOS),
+            },
+            Arc::new(Ready),
+        );
+        let mut page_shot = shot(vec![("program", vec![fill("green"), fill("page")])]);
+        let page_id = SourceId::new("page");
+        page_shot
+            .frames
+            .insert(page_id.clone(), Frame::from_gpu(frame, context.key(), 7));
+        page_shot
+            .uploads
+            .push((GpuKey::Frame(page_id.clone()), page_id));
+        let canvas = page_shot.canvas().expect("canvas");
+
+        // Half the page's red over half the green, in linear light.
+        let mut cache = ResourceCache::new();
+        let out = frame_at(&mut own, &mut cache, &page_shot, None, canvas);
+        let half = (linear_to_srgb(128.0 / 255.0) * 255.0).round() as u8;
+        let rest = (linear_to_srgb(1.0 - 128.0 / 255.0) * 255.0).round() as u8;
+        let [r, g, b, a] = out.pixel(960, 540).expect("inside");
+        assert!(
+            r.abs_diff(half) <= 2 && g.abs_diff(rest) <= 2 && b == 0 && a == 255,
+            "{:?}, expected about {:?}",
+            [r, g, b, a],
+            [half, rest, 0, 255]
+        );
+
+        let mut cache = ResourceCache::new();
+        let out = frame_at(&mut other, &mut cache, &page_shot, None, canvas);
+        assert_eq!(out.pixel(960, 540), Some(GREEN), "the page draws nothing");
     }
 
     /// Frame after frame of the same shot reuses every texture: the nested-scene layers

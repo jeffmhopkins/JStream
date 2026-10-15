@@ -101,7 +101,36 @@ impl Compositor {
         texture: wgpu::Texture,
         sync: Option<Arc<dyn FrameSync>>,
     ) -> Result<Image, RenderError> {
-        image::import(&self.maker(), texture, sync)
+        self.import_as(texture, sync, Alpha::Straight)
+    }
+
+    /// Samples `texture`, as [`Self::import`] does, but holding sRGB code values already
+    /// multiplied by alpha, as a browser page paints (CEF's layout). It must be
+    /// `Rgba8Unorm` or `Bgra8Unorm`, so sampling does not decode it.
+    ///
+    /// The texels are filtered premultiplied, so transparent edges keep no fringe, then
+    /// divided by alpha, decoded from sRGB and multiplied by alpha again in linear light.
+    /// Filtering the code values rather than linear light differs from an upload only
+    /// where the filter mixes texels of different colour.
+    ///
+    /// # Errors
+    /// As for [`Self::import`].
+    pub fn import_premultiplied(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+    ) -> Result<Image, RenderError> {
+        self.import_as(texture, sync, Alpha::PremultipliedSrgb)
+    }
+
+    /// [`Self::import`] or [`Self::import_premultiplied`], by `alpha`.
+    pub(crate) fn import_as(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+        alpha: Alpha,
+    ) -> Result<Image, RenderError> {
+        image::import(&self.maker(), texture, sync, alpha)
     }
 
     /// [`Self::import`] of a [`jstream_platform::GpuFrame`], keeping its [`FrameSync`] hold.
@@ -298,6 +327,13 @@ impl Compositor {
         &self.gpu.adapter
     }
 
+    /// The platform context this compositor was opened on ([`Self::on_context`]), or
+    /// `None` when it opened a device of its own. A texture made on that context can be
+    /// imported here; one from another context or device can't.
+    pub fn context(&self) -> Option<&jstream_platform::ContextKey> {
+        self.gpu.context.as_ref()
+    }
+
     /// A one-line description of the adapter, for logs and test output.
     pub fn adapter_description(&self) -> String {
         self.gpu.description()
@@ -313,6 +349,7 @@ impl Compositor {
             adapter: self.gpu.adapter.clone(),
             max_texture_dimension_2d: self.gpu.max_texture_dimension_2d,
             max_buffer_size: self.gpu.max_buffer_size,
+            context: self.gpu.context.clone(),
         })
     }
 
@@ -647,9 +684,11 @@ fn push_quad(
     opacity: f32,
     alpha: Alpha,
 ) {
-    let straight = match alpha {
+    // The shader's `mode`: how it turns a filtered sample into premultiplied linear.
+    let mode = match alpha {
         Alpha::Premultiplied => 0.0,
         Alpha::Straight => 1.0,
+        Alpha::PremultipliedSrgb => 2.0,
     };
     let corner = |i: usize| {
         let [x, y] = quad.corners[i];
@@ -664,7 +703,7 @@ fn push_quad(
         push_f32(buf, u);
         push_f32(buf, v);
         push_f32(buf, opacity);
-        push_f32(buf, straight);
+        push_f32(buf, mode);
     }
 }
 

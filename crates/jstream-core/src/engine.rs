@@ -29,7 +29,7 @@ use crate::studio::Studio;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
-use jstream_platform::{Backends, Secret, StreamKeyStore};
+use jstream_platform::{Backends, GpuContext, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
     EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
@@ -512,6 +512,15 @@ impl Engine {
 
     /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
     /// Holds the collection and the ledger, not the [`MediaHost`], like the ticker.
+    /// Lets live sources that paint on the GPU (`browser`) paint on `context`, the
+    /// program stage's platform GPU context, and re-plans the program mix. The returned
+    /// call takes the context away again; the stage makes it before it stops.
+    pub(crate) fn use_gpu(&self, context: &GpuContext) -> Box<dyn FnOnce() + Send + Sync> {
+        set_gpu(&self.shared, Some(context));
+        let shared = Arc::clone(&self.shared);
+        Box::new(move || set_gpu(&shared, None))
+    }
+
     pub(crate) fn stats_emitter(&self) -> Box<dyn FnOnce() + Send> {
         let shared = Arc::clone(&self.shared);
         let ledger = Arc::clone(&self.drops);
@@ -1836,6 +1845,13 @@ fn emit_output(state: &mut State, output_id: &OutputId, step: OutputState, wake:
         },
         wake,
     );
+}
+
+/// [`Engine::use_gpu`] and its undo.
+fn set_gpu(shared: &Shared, context: Option<&GpuContext>) {
+    let mut state = lock(&shared.state);
+    state.live.use_gpu(context);
+    state.publish_render();
 }
 
 fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {

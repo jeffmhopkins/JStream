@@ -825,7 +825,9 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
-(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
+browser source's page paints on the same context and is imported the same way, read
+as premultiplied sRGB (`import_premultiplied`), CEF's layout. The
 composite is still read back to the CPU for the encoder. Step 5's encoder side is built:
 on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
 on D3D11 into a texture of their own, fence-synchronized both ways, and

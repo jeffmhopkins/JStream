@@ -1,6 +1,7 @@
 //! The render thread's GPU capture path and its fallbacks (ARCH › GPU pipeline, step 6),
-//! on a software device: which path `open_capture` takes for each kind of platform, and
-//! an output whose capture frames are textures composited with no CPU copy.
+//! on a software device: which path `open_capture` takes for each kind of platform, an
+//! output whose capture frames are textures composited with no CPU copy, and a browser
+//! source whose page paints on the stage's device.
 //!
 //! A software adapter stands in for the platform's media adapter, and a fake capture
 //! backend delivers `GpuFrame`s on it. A machine with no adapter skips; CI, which
@@ -25,10 +26,14 @@ use jstream_platform::{
     AdapterId, Backends, Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
     FrameSync, GpuContext, GpuFrame, GpuInterop, MediaClock, PlatformError, VideoSurface,
 };
-use jstream_protocol::OutputId;
+use jstream_protocol::{Batch, Edit, OutputId, Settings, SourceId, SourceKind};
 use jstream_render::{Compositor, OpenOptions};
+use serde_json::json;
 
-use super::{GPU_OPEN_TIMEOUT, block_on, connected, one_gpu_test_at_a_time, output_call};
+use super::{
+    GPU_OPEN_TIMEOUT, add, batch, block_on, connected, create, one_gpu_test_at_a_time, output_call,
+    switch_call,
+};
 use crate::audio_sources::Wanted;
 use crate::runtime::{DrawFn, OpenDraw, RenderHub, gpu_draw, open_capture, parts_from};
 use crate::{Engine, RecordingPublish};
@@ -153,6 +158,23 @@ impl Capture for GpuCapture {
 
 /// A [`RED`] `Rgba8UnormSrgb` texture of `size`, as a capture ring's slot would be.
 fn red_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: FrameSize) -> wgpu::Texture {
+    filled_texture(
+        device,
+        queue,
+        size,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        RED,
+    )
+}
+
+/// A texture of `size` and `format` with every texel `texel`.
+fn filled_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    size: FrameSize,
+    format: wgpu::TextureFormat,
+    texel: [u8; 4],
+) -> wgpu::Texture {
     let extent = wgpu::Extent3d {
         width: size.width(),
         height: size.height(),
@@ -164,11 +186,11 @@ fn red_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: FrameSize) -> w
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        format,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-    let pixels: Vec<u8> = std::iter::repeat_n(RED, (size.width() * size.height()) as usize)
+    let pixels: Vec<u8> = std::iter::repeat_n(texel, (size.width() * size.height()) as usize)
         .flatten()
         .collect();
     queue.write_texture(
@@ -416,4 +438,186 @@ fn an_output_composites_gpu_capture_frames() {
     );
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(engine.output_stats().is_none());
+}
+
+/// A browser engine whose pages paint one colour on the device the engine gives it:
+/// half-transparent red, premultiplied sRGB code values in BGRA, as CEF paints.
+#[derive(Clone, Default)]
+struct PaintingBrowser(Arc<Painter>);
+
+/// What [`PaintingBrowser`]'s pages share.
+#[derive(Default)]
+struct Painter {
+    /// The device and queue pages paint on, while the engine gives one.
+    device: Mutex<Option<(wgpu::Device, wgpu::Queue)>>,
+    /// Each `use_device` call: whether it gave a device.
+    given: Mutex<Vec<bool>>,
+}
+
+/// Red at alpha 128, premultiplied in code values (128 * 255 / 255), in BGRA order.
+const PAGE_TEXEL: [u8; 4] = [0, 0, 128, 128];
+
+impl jstream_browser::BrowserBackend for PaintingBrowser {
+    fn open(
+        &self,
+        spec: &jstream_browser::PageSpec,
+    ) -> Result<Box<dyn jstream_browser::BrowserPage>, jstream_browser::BrowserError> {
+        Ok(Box::new(PaintedPage {
+            painter: Arc::clone(&self.0),
+            size: spec.size,
+            painted: Mutex::new(None),
+            audio: jstream_browser::PageAudio::new(),
+        }))
+    }
+
+    fn use_device(&self, gpu: Option<&GpuContext>) {
+        *self.0.device.lock().unwrap_or_else(PoisonError::into_inner) =
+            gpu.map(|gpu| (gpu.device().clone(), gpu.queue().clone()));
+        self.0
+            .given
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(gpu.is_some());
+    }
+}
+
+struct PaintedPage {
+    painter: Arc<Painter>,
+    size: FrameSize,
+    /// The frame painted on the current device, kept so a page that hasn't changed
+    /// hands out the same texture.
+    painted: Mutex<Option<GpuFrame>>,
+    audio: Arc<jstream_browser::PageAudio>,
+}
+
+impl jstream_browser::BrowserPage for PaintedPage {
+    fn frame(&self) -> Option<GpuFrame> {
+        let device = self
+            .painter
+            .device
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let (device, queue) = device.as_ref()?;
+        let mut painted = self.painted.lock().unwrap_or_else(PoisonError::into_inner);
+        if painted.is_none() {
+            let texture = filled_texture(
+                device,
+                queue,
+                self.size,
+                wgpu::TextureFormat::Bgra8Unorm,
+                PAGE_TEXEL,
+            );
+            let info = VideoFrameInfo {
+                size: self.size,
+                format: PixelFormat::Bgra8,
+                color: ColorInfo {
+                    range: ColorRange::Full,
+                    ..ColorInfo::default()
+                },
+                pts: MediaTime::zero(Timebase::MICROS),
+            };
+            let sync = Arc::new(CountSync(Arc::new(AtomicU64::new(0))));
+            *painted = Some(GpuFrame::new(texture, info, sync));
+        }
+        painted.clone()
+    }
+
+    fn set_css(&mut self, _css: &str) {}
+
+    fn audio(&self) -> &Arc<jstream_browser::PageAudio> {
+        &self.audio
+    }
+}
+
+/// On the GPU path a browser page paints on the program stage's device, and the render
+/// thread samples its texture there as premultiplied sRGB: half-transparent red over
+/// the black canvas reads back as linear red one half, not the darker red reading it
+/// as straight alpha would give. The stage takes the device away when it stops.
+#[test]
+fn a_browser_page_is_composited_from_its_gpu_frames() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let backends = backends(&clock, Arc::new(SoftwareGpu), GpuMode::None);
+    let browser = PaintingBrowser::default();
+    let seen = Arc::new(Mutex::new(Seen::default()));
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_browser(Arc::new(browser.clone()))
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(watched_draw(Arc::clone(&seen)))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                create("main"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("page"),
+                    name: "Page".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "browser".into(),
+                    },
+                    settings: Settings(
+                        [("url".to_owned(), json!("https://example.com/"))]
+                            .into_iter()
+                            .collect(),
+                    ),
+                    duplicated_from: None,
+                },
+                add("main", "item", "page"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        },
+    )
+    .expect("a scene showing the page");
+    block_on(control.call(switch_call("main"))).expect("scene.switch");
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+
+    // Linear red 128/255, premultiplied over black, encoded back to sRGB.
+    let half = 128.0_f32 / 255.0;
+    let red = (1.055 * half.powf(1.0 / 2.4) - 0.055) * 255.0;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut pixel = None;
+    while Instant::now() < deadline {
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(20));
+        pixel = seen.lock().unwrap_or_else(PoisonError::into_inner).pixel;
+        if pixel.is_some_and(|[r, g, b, a]| {
+            (f32::from(r) - red).abs() <= 3.0 && g == 0 && b == 0 && a == 255
+        }) {
+            break;
+        }
+    }
+    let got = pixel.map(|[r, g, b, a]| (f32::from(r), g, b, a));
+    assert!(
+        got.is_some_and(|(r, g, b, a)| (r - red).abs() <= 3.0 && g == 0 && b == 0 && a == 255),
+        "the page was not composited as premultiplied red: {pixel:?}, expected red {red:.0}"
+    );
+    assert_eq!(
+        *browser
+            .0
+            .given
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner),
+        [true],
+        "the browser got the stage's device"
+    );
+
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(engine.output_stats().is_none());
+    assert_eq!(
+        *browser
+            .0
+            .given
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner),
+        [true, false],
+        "the stage took the device away when it stopped"
+    );
 }
