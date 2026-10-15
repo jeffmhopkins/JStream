@@ -16,7 +16,6 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:11901433da1b7bf2", by = "agent:claude", note = "re-read after the down.wgsl partial-block fix and the harness/doc wording edits; Purpose states none of it; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +112,6 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:e71590d197886671", by = "agent:claude", note = "re-read after the down.wgsl per-axis sample count change: no new pass, thread or steady-path allocation (apply_filter still has no steady-path caller); the resources table's video delay row unchanged; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -281,7 +279,6 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:d52b8b91576190db", by = "agent:claude", note = "B1: harness bullet now says multi-pass kinds also create up to three output-size scratch layers per call (gauss.rs down/across/both, outline.rs) and that V0 pools them, the video delay ring being the only kept state; N1: pixelate's 'exact up to 8 px' now covers partial edge blocks, matching down.wgsl's per-axis sample count; N2: output_size list names shadow/outline/glow; rest re-read, holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -380,7 +377,6 @@ Assets and references (V3): not yet.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:74b89963f404a5db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Added the filter harness paragraph; the tests.rs helpers became pub(crate) for it, nothing else changed" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The

@@ -34,7 +34,6 @@ and how to take outside contributions.
 ## How changes land
 <!-- @section
 depends_on = ["docs/RULES.md#R-GIT-001", "docs/RULES.md#R-GIT-002", "docs/RULES.md#R-GOV-003", "docs/RULES.md#R-GOV-005"]
-verified = { hash = "b3:97ce4842c1b3fce3", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read against R-GIT-001/002, R-GOV-003 and the narrowed R-GOV-005 (ADR-0043); the decisions bullet now names the five maintainer areas" }
 -->
 
 This is how the maintainer and the agents work. It also tells an issue reporter what
