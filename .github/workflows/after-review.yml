@@ -158,8 +158,8 @@ jobs:
         run: bash .github/after-review-status.sh
 
   # The portable Windows zip (ADR-0020). `dist-ui` builds the web UI for release, with
-  # trunk, the wasm-bindgen CLI and binaryen (the `wasm-opt` a release build runs) pinned
-  # and checked as in ci.yml's `wasm`; `dist` runs `cargo xtask dist` with it on Windows.
+  # trunk and the wasm-bindgen CLI pinned and checked as in ci.yml's `wasm`, plus binaryen
+  # (the `wasm-opt` a release build runs); `dist` runs `cargo xtask dist` with it on Windows.
   # The zip is uploaded as is (`archive: false`), so the download is the zip a user
   # unzips. Not required (R-GIT-003).
   dist-ui:
@@ -173,6 +173,14 @@ jobs:
       BINARYEN_SHA256: 195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report pending to the PR
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: dist-ui
+          RESULT: pending
+        run: bash .github/after-review-status.sh
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install trunk, the wasm-bindgen CLI and wasm-opt
@@ -206,12 +214,28 @@ jobs:
           path: crates/jstream-ui/dist
           if-no-files-found: error
           retention-days: 1
+      - name: Report the result to the PR
+        if: always() && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: dist-ui
+          RESULT: ${{ job.status }}
+        run: bash .github/after-review-status.sh
 
   dist:
     needs: dist-ui
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report pending to the PR
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: dist
+          RESULT: pending
+        run: bash .github/after-review-status.sh
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -230,6 +254,14 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 30
+      - name: Report the result to the PR
+        if: always() && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: dist
+          RESULT: ${{ job.status }}
+        run: bash .github/after-review-status.sh
 
   # Not required until M3 (R-GIT-003).
   macos:
