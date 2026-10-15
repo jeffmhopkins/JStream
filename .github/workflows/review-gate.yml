@@ -55,6 +55,8 @@ jobs:
             // failed or was cancelled is dispatched again. A failed dispatch (e.g. a branch
             // without after-review.yml) is logged; merging main fixes it.
             const dispatchAfterReview = async () => {
+              // ADR-0055: a PR into a wave branch gets no platform run; the wave's PR into main does.
+              if (pr.base.ref.startsWith('wave/')) return core.info('PR into a wave branch: after-review jobs not dispatched');
               const { data: runs } = await github.rest.checks.listForRef({
                 owner, repo, ref: head, check_name: 'test (windows-latest)',
               });
