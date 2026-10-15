@@ -252,6 +252,53 @@ fn the_final_move_never_replaces_a_destination_created_just_before_it() {
     }
 }
 
+// #355, deterministically: a dangling symlink at the destination is invisible to an
+// existence check (`try_exists` follows it and finds nothing), just like a file that
+// appears right after the check, but it is still an entry a rename would replace.
+// `finish` must refuse it, and so must the placeholder fallback.
+#[cfg(unix)]
+#[test]
+fn finish_never_replaces_a_destination_an_existence_check_misses() {
+    use std::os::unix::fs::symlink;
+
+    let dir = TempDir::new("dangling");
+    let path = dir.join("show.mp4");
+    let temp = dir.join("show.mp4.part");
+    let packets = packets();
+    let mut recorder = Recorder::create(&path, config(true)).unwrap();
+    for p in &packets {
+        recorder.write_packet(p).unwrap();
+    }
+    symlink(dir.join("nowhere"), &path).unwrap();
+    assert!(!path.try_exists().unwrap());
+
+    let err = recorder.finish().unwrap_err();
+    assert!(
+        matches!(&err, RecordError::Exists { path: p } if *p == path),
+        "{err}"
+    );
+    assert!(
+        fs::symlink_metadata(&path)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(fs::read(&temp).unwrap(), expected(config(true), &packets));
+
+    let err = reserve_then_rename(&temp, &path).unwrap_err();
+    assert!(
+        matches!(&err, RecordError::Exists { path: p } if *p == path),
+        "{err}"
+    );
+    assert!(
+        fs::symlink_metadata(&path)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(fs::read(&temp).unwrap(), expected(config(true), &packets));
+}
+
 #[test]
 fn a_path_without_a_file_name_is_refused() {
     let err = Recorder::create("..", config(true)).unwrap_err();

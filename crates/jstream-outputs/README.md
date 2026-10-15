@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:3bfb1c14434e16e3", by = "agent:claude", note = "re-read the Tests paragraph against the shutdown_over_tls test now waiting for the server's read timeout before the client shuts down (a test-only ordering fix for macOS EINVAL); the test list and every Transport claim still hold" }
+verified = { hash = "b3:e24e1c05c8b2211e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main and the #355 review fixes: recorder bullet now says the file is moved (hard link, then .part unlinked) with the exclusive-placeholder fallback; test list names the Unix dangling-symlink test that makes the finish race deterministic; main's shutdown_over_tls test paragraph, error list (Finish/Exists/Rename keep .part) and dependency list still hold" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -135,8 +135,8 @@ path builds its FLV tags from) and writes fragmented MP4 with `jstream-mux`'s
 `Fmp4Muxer`, which starts a fragment at every video keyframe (every second for
 audio-only).
 
-- **Temporary name, renamed on finish:** a recording to `show.mp4` is written to
-  `show.mp4.part` in the same directory (so the rename stays on one file system), and
+- **Temporary name, moved on finish:** a recording to `show.mp4` is written to
+  `show.mp4.part` in the same directory (so the move stays on one file system), and
   `finish` writes the last fragment, syncs, closes the file and moves it there. A file at
   the destination is therefore a finished recording (or, after a crash during the
   fallback below, an empty placeholder). Nothing is overwritten: an
@@ -216,9 +216,10 @@ configuration given or taken from the stream; after every packet the `.part` fil
 exactly the segments completed so far, and stays so when the recorder is dropped; an
 existing destination or `.part` file is refused, also at finish, where both the
 hard-link move and its placeholder fallback leave a destination created just before
-them untouched; a rejected packet
-leaves the recording going. A writer that fails on demand checks that a full disk is
-`DiskFull` and other write or sync failures `Write`, that each ends the recording, and
+them untouched (on Unix, a dangling symlink at the destination, which an existence
+check misses, stands in for a file that appears after the check, so the race is
+tested deterministically); a rejected packet leaves the recording going. A writer
+that fails on demand checks that a full disk is `DiskFull` and other write or sync failures `Write`, that each ends the recording, and
 that every fragment is synced.
 
 <a id="open-questions"></a>

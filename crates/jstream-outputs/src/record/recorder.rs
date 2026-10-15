@@ -1,4 +1,5 @@
-//! [`Recorder`]: fMP4 to a temporary file, synced per fragment, renamed on finish.
+//! [`Recorder`]: fMP4 to a temporary file, synced per fragment, moved into place on
+//! finish without replacing anything.
 
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
@@ -35,7 +36,8 @@ pub fn temp_path_for(path: &Path) -> Option<PathBuf> {
 /// completes (one per video keyframe, or per second of audio-only) is written and then
 /// synced with `sync_data`, so a crash or power loss keeps every completed fragment and
 /// loses at most the one being built. [`Recorder::finish`] writes the last fragment,
-/// syncs, closes, and renames the file to `path`.
+/// syncs, closes, and moves the file to `path`: it hard links it there, then unlinks the
+/// `.part` name.
 ///
 /// Nothing is ever overwritten: an existing file at `path` or at its `.part` name is
 /// [`RecordError::Exists`], checked on create and enforced atomically by the final
@@ -97,8 +99,8 @@ impl Recorder {
         self.sink.write_packet(packet)
     }
 
-    /// Writes the last fragment, syncs, closes the file and renames it to the
-    /// destination, which it returns.
+    /// Writes the last fragment, syncs, closes the file and moves it to the destination
+    /// (hard linked there, then the `.part` name unlinked), which it returns.
     ///
     /// # Errors
     /// [`RecordError::Ended`] after an earlier failure, [`RecordError::Finish`] when the
@@ -110,13 +112,13 @@ impl Recorder {
         let Self { path, mut sink } = self;
         sink.finish()?;
         let temp = sink.path.clone();
-        // Close before renaming: Windows can't rename a file that is open.
+        // Close before moving: the fallback renames, and Windows can't rename an open file.
         drop(sink);
         move_no_replace(&temp, &path)?;
         Ok(path)
     }
 
-    /// The destination the finished file is renamed to.
+    /// The destination the finished file is moved to.
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -197,8 +199,9 @@ fn move_no_replace(from: &Path, to: &Path) -> Result<(), RecordError> {
 
 /// The fallback of [`move_no_replace`] for file systems without hard links: creates
 /// `to` exclusively (`create_new`, atomic on every platform) as an empty placeholder,
-/// then renames `from` over that placeholder. The rename only ever replaces the file
-/// this call just created, so another file at `to` is never overwritten. A crash
+/// then renames `from` over that placeholder. The rename replaces only the placeholder,
+/// unless something else removes it and puts a file at `to` in the moment between the
+/// two steps; a file at `to` before the call is never overwritten. A crash
 /// between the two steps leaves an empty `to` beside the complete `.part` file. A
 /// failed rename removes the placeholder.
 ///
