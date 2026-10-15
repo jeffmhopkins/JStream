@@ -8,7 +8,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use jstream_media::{ColorInfo, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrameInfo};
 use jstream_platform::{FrameSync, GpuFrame, PlatformError};
 
-use crate::{Color, Compositor, Crop, Item, OpenOptions, Placement, RenderError, Scene, Snapshot};
+use crate::{
+    Color, Compositor, Crop, Image, Item, OpenOptions, Placement, RenderError, Scene, Snapshot,
+};
 
 /// A compositor whose device drops before the WARP lock.
 ///
@@ -275,6 +277,144 @@ fn transparent_edges_filter_without_a_dark_fringe() {
     near(&snapshot, 1, 0, [255, 0, 0, 191], 2);
     near(&snapshot, 2, 0, [255, 0, 0, 64], 2);
     near(&snapshot, 3, 0, [0, 0, 0, 0], 1);
+}
+
+fn layer(compositor: &mut Compositor, width: u32, height: u32, items: &[Item<'_>]) -> Image {
+    let scene = Scene {
+        canvas: FrameSize::new(width, height).expect("invariant: the test canvas is non-zero"),
+        background: Color::TRANSPARENT,
+        items,
+    };
+    compositor.render_image(&scene).expect("render_image")
+}
+
+/// A nested scene: a transparent 4x4 scene with a red 2x2 square at (1, 1), rendered to
+/// an image and placed at (2, 2) in a black 8x8 scene. The square lands at (3, 3) and
+/// the inner scene's transparent pixels show the outer background.
+#[test]
+fn a_rendered_image_places_like_its_scene() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = solid(&opened.compositor, 2, 2, [255, 0, 0, 255]);
+    let at_one = Placement {
+        position: [1.0, 1.0],
+        ..Placement::IDENTITY
+    };
+    let inner = layer(
+        &mut opened.compositor,
+        4,
+        4,
+        &[item(&red, at_one, Crop::NONE, 1.0)],
+    );
+    assert_eq!((inner.width(), inner.height()), (4, 4));
+    assert_eq!(inner.texture().format(), wgpu::TextureFormat::Rgba16Float);
+
+    // Another render in between must not touch the image's texels.
+    let white = solid(&opened.compositor, 1, 1, [255, 255, 255, 255]);
+    let _ = draw(
+        &mut opened.compositor,
+        8,
+        8,
+        Color::WHITE,
+        &[item(&white, Placement::IDENTITY, Crop::NONE, 1.0)],
+    );
+
+    let placed = [item(
+        &inner,
+        Placement {
+            position: [2.0, 2.0],
+            ..Placement::IDENTITY
+        },
+        Crop::NONE,
+        1.0,
+    )];
+    let snapshot = draw(&mut opened.compositor, 8, 8, Color::BLACK, &placed);
+    for (x, y) in [(3, 3), (4, 3), (3, 4), (4, 4)] {
+        near(&snapshot, x, y, [255, 0, 0, 255], 0);
+    }
+    for (x, y) in [(0, 0), (2, 2), (5, 5), (5, 3), (7, 7)] {
+        near(&snapshot, x, y, [0, 0, 0, 255], 0);
+    }
+}
+
+/// A rendered image is premultiplied linear light: half-opaque black inside the nested
+/// scene, placed over white, blends exactly as the same item drawn directly would.
+#[test]
+fn a_rendered_image_keeps_partial_alpha_in_linear_light() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let black = solid(&opened.compositor, 2, 2, [0, 0, 0, 255]);
+    let inner = layer(
+        &mut opened.compositor,
+        2,
+        2,
+        &[item(&black, Placement::IDENTITY, Crop::NONE, 0.5)],
+    );
+    let placed = [item(&inner, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::WHITE, &placed);
+    let encoded = (linear_to_srgb(0.5) * 255.0).round() as u8;
+    near(&snapshot, 1, 1, [encoded, encoded, encoded, 255], 2);
+}
+
+/// Nesting twice: a rendered image placed in a scene that is itself rendered to an
+/// image, scaled by 2 at each level.
+#[test]
+fn rendered_images_nest() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let green = solid(&opened.compositor, 1, 1, [0, 255, 0, 255]);
+    let double = Placement {
+        scale: [2.0, 2.0],
+        ..Placement::IDENTITY
+    };
+    let deepest = layer(
+        &mut opened.compositor,
+        1,
+        1,
+        &[item(&green, Placement::IDENTITY, Crop::NONE, 1.0)],
+    );
+    let middle = layer(
+        &mut opened.compositor,
+        2,
+        2,
+        &[item(&deepest, double, Crop::NONE, 1.0)],
+    );
+    let placed = [item(&middle, double, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 6, 6, Color::BLACK, &placed);
+    for (x, y) in [(0, 0), (1, 2), (3, 3)] {
+        near(&snapshot, x, y, [0, 255, 0, 255], 0);
+    }
+    for (x, y) in [(4, 4), (5, 0), (0, 5)] {
+        near(&snapshot, x, y, [0, 0, 0, 255], 0);
+    }
+}
+
+/// A rendered image belongs to its compositor like an upload does.
+#[test]
+fn a_rendered_image_is_refused_by_another_compositor() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = solid(&opened.compositor, 1, 1, [255, 0, 0, 255]);
+    let inner = layer(
+        &mut opened.compositor,
+        1,
+        1,
+        &[item(&red, Placement::IDENTITY, Crop::NONE, 1.0)],
+    );
+    let mut other = opened.compositor.sibling();
+    let scene = Scene {
+        canvas: FrameSize::new(1, 1).expect("invariant: non-zero"),
+        background: Color::BLACK,
+        items: &[item(&inner, Placement::IDENTITY, Crop::NONE, 1.0)],
+    };
+    assert!(matches!(
+        other.render_image(&scene),
+        Err(RenderError::Invalid { what: "image", .. })
+    ));
 }
 
 /// An imported sRGB texture is straight alpha, so at a texel centre half-transparent red

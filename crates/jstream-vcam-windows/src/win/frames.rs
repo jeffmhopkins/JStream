@@ -59,6 +59,17 @@ enum Origin {
     Pattern,
 }
 
+/// What [`FrameSource::try_shared`] found.
+enum Shared {
+    /// `bgra` now holds a frame copied from the producer.
+    Copied,
+    /// The producer is live and fresh, but no frame was safe to copy this time (its GPU is
+    /// behind, or the objects are between open attempts): keep serving the last one.
+    Hold,
+    /// No live producer: serve the test pattern.
+    Absent,
+}
+
 /// The control block, and the name it was opened by.
 struct Link {
     mapping: Mapping,
@@ -67,6 +78,9 @@ struct Link {
 
 pub(crate) struct FrameSource {
     bgra: Vec<u8>,
+    /// Whether `bgra` holds the producer's frame (rather than the test pattern), so a
+    /// [`Shared::Hold`] can re-serve it.
+    bgra_shared: bool,
     served: u64,
     link: Option<Link>,
     link_last_live: Instant,
@@ -86,6 +100,7 @@ impl FrameSource {
         let now = Instant::now();
         let mut frames = Self {
             bgra: vec![0; WIDTH as usize * HEIGHT as usize * 4],
+            bgra_shared: false,
             served: 0,
             link: None,
             link_last_live: now,
@@ -169,8 +184,15 @@ impl FrameSource {
 
     fn fill_bgra(&mut self) -> Origin {
         match self.try_shared() {
-            Ok(true) => Origin::Shared,
-            Ok(false) => {
+            Ok(Shared::Copied) => {
+                self.bgra_shared = true;
+                Origin::Shared
+            }
+            // A live producer whose GPU is a little behind: repeat its last frame rather
+            // than flash the colour bars.
+            Ok(Shared::Hold) if self.bgra_shared => Origin::Shared,
+            Ok(Shared::Hold | Shared::Absent) => {
+                self.bgra_shared = false;
                 test_pattern(&mut self.bgra, WIDTH as usize, HEIGHT as usize, self.served);
                 Origin::Pattern
             }
@@ -188,14 +210,15 @@ impl FrameSource {
                 }
                 self.gpu = None;
                 self.next_gpu_try = Instant::now() + RETRY;
+                self.bgra_shared = false;
                 test_pattern(&mut self.bgra, WIDTH as usize, HEIGHT as usize, self.served);
                 Origin::Pattern
             }
         }
     }
 
-    /// `Ok(true)` if `bgra` now holds one of the producer's frames.
-    fn try_shared(&mut self) -> Result<bool> {
+    /// Copies the producer's newest safe frame into `bgra`, if there is one.
+    fn try_shared(&mut self) -> Result<Shared> {
         let now = Instant::now();
         if self.link.is_none() && now >= self.next_link_try {
             self.next_link_try = now + RETRY;
@@ -203,16 +226,21 @@ impl FrameSource {
             self.link_last_live = now;
         }
         let Some(link) = &self.link else {
-            return Ok(false);
+            return Ok(Shared::Absent);
         };
         let c = link.mapping.control();
+        if !c.is_live() {
+            // A stopped producer's objects are dropped at once: one that restarts in the
+            // same process keeps its pid, so the pid check below wouldn't catch it.
+            self.gpu = None;
+        }
         if !c.is_live() || !c.heartbeat_fresh(qpc(), self.qpc_freq) {
             if now.duration_since(self.link_last_live) > STALE_LINK {
                 log("frames: producer silent; dropping the control block");
                 self.link = None;
                 self.gpu = None;
             }
-            return Ok(false);
+            return Ok(Shared::Absent);
         }
         self.link_last_live = now;
 
@@ -223,22 +251,22 @@ impl FrameSource {
         }
         if self.gpu.is_none() {
             if now < self.next_gpu_try {
-                return Ok(false);
+                return Ok(Shared::Hold);
             }
             self.next_gpu_try = now + RETRY;
             let gpu = Gpu::open(c, &link.name)?;
             // The producer may have restarted while the objects were being opened.
             if !c.is_live() || c.producer_pid.load(Ordering::Acquire) != gpu.producer_pid {
                 log("frames: producer changed while opening its objects; retrying");
-                return Ok(false);
+                return Ok(Shared::Hold);
             }
             c.gpu_opens.fetch_add(1, Ordering::AcqRel);
             self.gpu = Some(gpu);
         }
         let latest = c.latest_frame.load(Ordering::Acquire);
         match &self.gpu {
-            Some(gpu) => gpu.read(latest, &mut self.bgra),
-            None => Ok(false),
+            Some(gpu) if gpu.read(latest, &mut self.bgra)? => Ok(Shared::Copied),
+            _ => Ok(Shared::Hold),
         }
     }
 

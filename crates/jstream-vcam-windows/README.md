@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:2f323fe6437ea458", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "New crate: re-read against src/ after fmt (dll, activate, source, stream, frames, shared, log, reg, pixels): COM object set, frame choice via choose_frame, trust checks, panic guard, log location and HKLM regsvr32 registration match the code" }
+verified = { hash = "b3:abf65baa6c0ede4a", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Review round 1 B2/N2: re-read against frames.rs: a live, fresh producer with no safe frame repeats the last copied frame (Shared::Hold), colour bars only without a live producer or after a shared-path error, and a non-live block drops the opened objects at once; rest unchanged" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -35,8 +35,11 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
   sessions 1 to 4, as the contract orders them), opens the ring textures and the fence by
   name on the producer's adapter, and per sample copies the newest frame whose fence
   signal already completed (the contract's `choose_frame`), so it never waits on a
-  producer that died. Samples are system memory. With no live producer it serves its own
-  colour bars. It writes its identity and counters into the block's consumer half.
+  producer that died. Samples are system memory. When no frame is safe to copy but the
+  producer is still live and fresh, it repeats the last frame it copied; with no live
+  producer, or after an error on the shared path, it serves its own colour bars. A
+  producer that stops drops the opened objects at once, so one that restarts in the same
+  process is reopened. It writes its identity and counters into the block's consumer half.
 - **Trust.** The block is written by another process: the DLL requires the contract's
   format (`format_matches`), requires the scope and session the block names to be the
   namespace it was found in, and after opening the shared objects re-checks that the

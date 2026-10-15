@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:d8d8be3bd6a0c3ef", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Mock section merged: output.status key_set false, sources keep names, kinds and settings; settings checks, settings-reference delete rejection and 0.7 output fallthroughs (internal) all match mock.rs" }
+verified = { hash = "b3:2b9df30ab1c1fee4", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read main's kind/0.8 mock text; I1's /mcp wording in ARCH#protocol makes no claim on WsControl" }
 -->
 
 ### The trait
