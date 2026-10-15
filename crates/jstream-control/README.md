@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:93ba8331b08319a8", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: re-read; bullets hold" }
+verified = { hash = "b3:de16a5604c93ab73", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read; contents list holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:66e5d7c217a903b9", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#214 ADR-0041): #214 only repoints ADR-0034 links to ADR-0041 here; re-read against F3's merged text (encoder profiles, protocol 0.13, shared program stage), both hold" }
+verified = { hash = "b3:b56d64fcc22337ac", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read the merged Mock section; undo bullet now also says a deleted output comes back with its encoder profile and encoder edits undo to the old profile, matching jstream-graph's encoder.rs and OutputDelete inverses; F3's encoder bullets kept" }
 -->
 
 ### The trait

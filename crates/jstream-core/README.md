@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0a1d6d40d7cae6a3", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
+verified = { hash = "b3:b2074d50e810e4b1", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read the mock references (differential script, internal for unimplemented calls) against the control Mock change; hold" }
 -->
 
 ### Engine and sessions

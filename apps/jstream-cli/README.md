@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:a3db2c72a9fa1c29", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: re-read; contents hold" }
+verified = { hash = "b3:ac0cfad6d298e0be", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read; contents list holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:0ec9d9e6a5f7f132", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: Edits bullet now names both 0.11/0.12 edits and encoder edits as not in the CLI; output status line keeps the encoder suffix after main's geometry text" }
+verified = { hash = "b3:079207a109799dd6", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read; Edits and No undo or redo command bullets hold" }
 -->
 
 ```sh
@@ -221,7 +221,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:cb1dabf06c3c3056", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: re-read; design bullets hold" }
+verified = { hash = "b3:b0ca54f78240dfe3", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

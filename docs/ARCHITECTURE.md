@@ -512,7 +512,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:0ace1d479994c64d", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#217 asset paths): #217 adds ':' to the rejected asset-path forms and changes no text F3 wrote here; F3's encoder profile, protocol 0.13 and program-stage text hold beside it" }
+verified = { hash = "b3:4b0208ef86628a70", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read; history kind and undo_conflict wording hold; the mock change is internal to jstream-control" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
