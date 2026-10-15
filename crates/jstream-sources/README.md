@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:ac15a26828d08135", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Assets paragraph now states hard links inside the root are part of the trusted-root assumption (issue 220); checked against AssetRoots::read's dev/ino check in source.rs, which can't distinguish a hard link from its target" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -155,7 +154,12 @@ features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmainta
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
-distance transform and reading an audio target from settings. `tests/sources.rs` checks
+distance transform and reading an audio target from settings, and in `source.rs` the
+asset checks refuse a file swapped in from outside the root (Unix) and a junction or
+symbolic link inside the root that leads outside it (Windows, both when the path is
+resolved and in the walk on its own, as a link swapped in after resolving would meet
+it; a symbolic link is skipped, with a note, where the test may not create one).
+`tests/sources.rs` checks
 the registry and runs the colour and image kinds through the public API on files in a
 temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as

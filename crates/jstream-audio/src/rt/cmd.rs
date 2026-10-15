@@ -115,8 +115,15 @@ pub(crate) struct ControlPlane {
     retirer: Retirer,
     sample_rate: u32,
     ring_frames: usize,
+    /// This mixer's tag, unique in the process and never 0, carried by its
+    /// [`BusId`](crate::BusId)s so another mixer's id is refused (#228 N2).
+    tag: u64,
     block_frames: usize,
 }
+
+/// The next mixer's tag. 0 is [`BusId::MASTER`](crate::BusId::MASTER)'s, which names
+/// every mixer's master.
+static NEXT_TAG: AtomicU64 = AtomicU64::new(1);
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
@@ -152,8 +159,14 @@ impl ControlPlane {
             retirer,
             sample_rate,
             ring_frames,
+            tag: NEXT_TAG.fetch_add(1, Ordering::Relaxed),
             block_frames,
         }
+    }
+
+    /// This mixer's tag.
+    pub(crate) fn tag(&self) -> u64 {
+        self.tag
     }
 
     /// Allocates an input and queues it for the mixer. The producer may push audio
