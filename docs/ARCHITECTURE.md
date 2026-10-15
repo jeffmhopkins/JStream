@@ -717,7 +717,7 @@ verified = { hash = "b3:d7965698ca1720f8", by = "agent:claude@session_01BL6HM3DJ
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:37db78d6f1fdabbf", by = "agent:claude", note = "re-read the filter sentence after the shared-hold staging check; apply_filter unchanged; holds" }
+verified = { hash = "b3:c8425d2cbe7ae486", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Filter summary untouched by a test-only change" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

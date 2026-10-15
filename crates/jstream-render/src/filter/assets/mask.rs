@@ -264,6 +264,44 @@ mod tests {
     }
 
     #[test]
+    fn a_reference_that_is_the_input_stages_its_hold_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        use jstream_media::{
+            ColorInfo, ColorRange, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrameInfo,
+        };
+        use jstream_platform::GpuFrame;
+
+        use crate::tests::{CountSync, srgb_texture};
+
+        let Some(mut opened) = open() else {
+            return;
+        };
+        let count = Arc::new(AtomicUsize::new(0));
+        let info = VideoFrameInfo {
+            size: FrameSize::new(2, 2).unwrap(),
+            format: PixelFormat::Rgba8,
+            color: ColorInfo {
+                range: ColorRange::Full,
+                ..ColorInfo::default()
+            },
+            pts: MediaTime::zero(Timebase::NANOS),
+        };
+        let texture = srgb_texture(&opened.compositor, 2, 2, IN);
+        let frame = GpuFrame::new(texture, info, Arc::new(CountSync(Arc::clone(&count))));
+        let image = Arc::new(opened.compositor.import_frame(&frame).unwrap());
+        let mut f = filter("image_mask", json!({ "image": asset(), "mode": "alpha" }));
+        f.set_reference(Some(Arc::clone(&image)));
+        let out = run(&mut opened, &mut f, &image, 0.0);
+        near(&out, 0, 0, IN, 1);
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            1,
+            "a hold shared by the input and the reference is staged once per submit"
+        );
+    }
+
+    #[test]
     fn without_a_mask_the_input_passes_through() {
         let Some(mut opened) = open() else {
             return;

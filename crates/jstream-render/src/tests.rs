@@ -579,7 +579,12 @@ fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
 }
 
 /// A straight-alpha `Rgba8UnormSrgb` texture, the kind `import` takes, filled with one colour.
-fn srgb_texture(compositor: &Compositor, width: u32, height: u32, rgba: [u8; 4]) -> wgpu::Texture {
+pub(crate) fn srgb_texture(
+    compositor: &Compositor,
+    width: u32,
+    height: u32,
+    rgba: [u8; 4],
+) -> wgpu::Texture {
     let size = wgpu::Extent3d {
         width,
         height,
@@ -618,7 +623,8 @@ fn srgb_texture(compositor: &Compositor, width: u32, height: u32, rgba: [u8; 4])
     texture
 }
 
-struct CountSync(Arc<AtomicUsize>);
+/// A [`FrameSync`] that counts how many times it is staged.
+pub(crate) struct CountSync(pub(crate) Arc<AtomicUsize>);
 
 impl std::fmt::Debug for CountSync {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

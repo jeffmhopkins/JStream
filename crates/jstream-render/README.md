@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:740ae7bbe164de9b", by = "agent:claude", note = "re-read after Reference::get skips staging a hold shared with the input and the set_reference doc path fix; Purpose states neither; holds" }
+verified = { hash = "b3:11ac0b0033c320c6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read: says nothing about staging or tests; only tests.rs helpers became pub(crate)" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:d379d722aa0bbf7d", by = "agent:claude", note = "re-read after Reference::get's shared-hold check: one stage per distinct hold per submit, as render does; no new pass, thread or allocation; holds" }
+verified = { hash = "b3:28da60325cb2e8b0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read: no code path changed, only a test and test-helper visibility" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:b629397ef457acb2", by = "agent:claude", note = "V3 N2: added that a reference's FrameSync is staged with the pass unless it shares the input's hold (Reference::get's Arc::ptr_eq check against input.sync()); re-read the rest of the V3 paragraph and the harness bullets, unchanged, holds" }
+verified = { hash = "b3:3059f876515a4182", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V3 paragraph now names the shared-hold test (mask.rs a_reference_that_is_the_input_stages_its_hold_once), which fails with 2 stages without the ptr_eq check" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -336,7 +336,8 @@ underneath): render opens no files (R-RT-002), so V0 resolves the asset or scene
 reference and decodes it. A kind passes its input through unchanged until both its
 reference setting is non-`null` and an image is set, and refuses an image from another
 compositor. A reference's `FrameSync` is staged with the pass, unless it is the input's
-own hold, which `apply_filter` already stages.
+own hold, which `apply_filter` already stages; a mask test passes one imported frame
+as both and counts one stage.
 
 - `apply_lut` (`lut`: asset, `cube` or `png`; `amount` 0 to 1, default 1). The table
   maps sRGB-encoded straight colour, the `.cube` convention: the shader unpremultiplies,
@@ -367,7 +368,7 @@ own hold, which `apply_filter` already stages.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:74b89963f404a5db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Added the filter harness paragraph; the tests.rs helpers became pub(crate) for it, nothing else changed" }
+verified = { hash = "b3:e2e91de571e00f38", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "CountSync and srgb_texture became pub(crate) for the V3 mask test; the FrameSync stage-once line still holds for render" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
