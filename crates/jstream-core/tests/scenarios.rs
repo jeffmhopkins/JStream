@@ -27,7 +27,8 @@ use jstream_core::{
 };
 use jstream_encode::{SessionOptions, VideoSession};
 use jstream_platform::fake::{
-    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+    FakeVideoDevices,
 };
 use jstream_platform::media::{
     AudioFormat, ChannelLayout, Codec, ColorInfo, FrameSize, MediaTime, PixelFormat, SampleFormat,
@@ -353,6 +354,7 @@ fn rt_panic_is_reported() {
         audio: Arc::new(audio.clone()),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()

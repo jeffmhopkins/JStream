@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:1c40303f85b0c103", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B2-f2 #239 touched sets moved to jstream-graph) into C2: re-read; B2-f2's Applied/Touched sets bullet and Tests line kept as main has them; C2 changes no graph code (text kind is data from jstream-sources); holds" }
+verified = { hash = "b3:8df47028ed50e664", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Stale only via ARCH data-model (media added to built kinds); graph text untouched, re-read, holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

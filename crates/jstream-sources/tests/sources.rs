@@ -32,6 +32,7 @@ fn ctx(collection: &Path) -> Context {
             app: None,
         },
         limits: Limits::default(),
+        media: None,
     }
 }
 

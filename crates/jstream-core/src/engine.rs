@@ -264,10 +264,13 @@ impl Engine {
     /// output needs neither: its start records to the file the collection names.
     #[must_use]
     pub fn with_backends(mut self, backends: Backends) -> Self {
-        // Animated sources run on the platform's media clock from here on.
-        lock(&self.shared.state)
-            .live
-            .set_clock(Arc::clone(&backends.clock));
+        // Animated sources run on the platform's media clock from here on, and media
+        // files play through the platform's decoders.
+        {
+            let mut state = lock(&self.shared.state);
+            state.live.set_clock(Arc::clone(&backends.clock));
+            state.live.set_media(Arc::clone(&backends.media));
+        }
         let host = self.host();
         *lock(&host.backends) = Some(backends);
         self
@@ -1080,6 +1083,12 @@ impl Engine {
         lock(&self.shared.state).live.set_clock(clock);
     }
 
+    /// Plays `media` sources through `media`, for tests that give no full backends.
+    #[cfg(test)]
+    pub(crate) fn set_source_media(&self, media: Arc<dyn jstream_platform::MediaDecoders>) {
+        lock(&self.shared.state).live.set_media(media);
+    }
+
     /// Re-plans the program mix now, as the live sources' thread does when a frame is
     /// due, for tests that move time by hand.
     #[cfg(test)]
@@ -1711,6 +1720,7 @@ impl State {
             ..
         } = self;
         let now = live.now();
+        live.begin_plan();
         let (shot, wake) = snapshot::plan_with(graph, &mut |id| match frames.get(id) {
             Some(frame) => Some((frame.clone(), None)),
             None => live.frame(id, now, frame_versions),

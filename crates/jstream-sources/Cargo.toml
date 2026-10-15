@@ -22,6 +22,9 @@ ab_glyph_rasterizer.workspace = true
 gif.workspace = true
 image-webp.workspace = true
 jstream-media.workspace = true
+# The media-file backend trait: the `media` kind's demuxer and decoders are injected
+# (ADR-0031).
+jstream-platform.workspace = true
 jstream-protocol.workspace = true
 png.workspace = true
 # Settings values and the kind descriptors' defaults (ADR-0025).
@@ -31,3 +34,7 @@ skrifa.workspace = true
 thiserror.workspace = true
 zune-core.workspace = true
 zune-jpeg.workspace = true
+
+[dev-dependencies]
+# Fake media files for the `media` kind's tests (R-TEST-004).
+jstream-platform = { workspace = true, features = ["fake"] }

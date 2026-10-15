@@ -1006,6 +1006,7 @@ dependencies = [
  "gif",
  "image-webp",
  "jstream-media",
+ "jstream-platform",
  "jstream-protocol",
  "png",
  "serde_json",

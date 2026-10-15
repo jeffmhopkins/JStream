@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:d971ee7b8e1558a7", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: Backends gains video_devices (fake::backends fills it with FakeVideoDevices); CaptureStats gains frames_undecodable (counted by FakeVideoDevices and MfVideoDevices streams); Injection, Capture and Not yet lines updated to match backends.rs, capture.rs and fake.rs" }
+verified = { hash = "b3:1f348d4dff8ffc33", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: Media files bullet (MediaDecoders/MediaDecoder/MediaInfo), Backends media field, FakeMediaDecoders in Fakes; re-read against media_file.rs and fake.rs" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -82,6 +82,19 @@ Contents:
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
   `HardwarePreference` defaults to hardware first with the software codec as fallback,
   as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) says.
+- **Media files** (`media_file.rs`,
+  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `MediaDecoders`
+  (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the
+  video pixel format and a `HardwarePreference`) as a `MediaDecoder` (`Send`), which
+  owns the whole file: the platform demuxes and decodes it with its own APIs, unlike
+  the packet-level `VideoDecoder`. `info()` gives a `MediaInfo`: the first video stream
+  (`MediaVideoInfo`: frame size and nominal frame period) or `None`, whether there is
+  audio, and the duration when the container says. `next_video()` blocks while it
+  decodes the next frame, in presentation order, and is `Ok(None)` at the end;
+  `seek(to)` restarts decoding at the key frame at or before `to`, so the frames up to
+  it may come out first. Frame times are on the file's own timeline from its start, not
+  the media clock; the `media` source maps them onto the clock. Audio decoding comes
+  with the media source's audio.
 - **Virtual camera:** `VcamSink` (`Send`): `start` with a `VcamFormat`, `publish`
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
@@ -100,8 +113,8 @@ Contents:
   Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
   contain a token. `jstream-youtube` keeps its Google refresh token here.
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
-  capture device, audio, codec and GPU-interop backends and its optional virtual-camera
-  sink.
+  capture device, audio, codec, GPU-interop and media-file backends and its optional
+  virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
   (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
@@ -115,6 +128,10 @@ Contents:
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
   MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
+  `FakeMediaDecoders` (a path registered with `add` plays a `FakeClip`, synthetic RGBA
+  frames whose colour tells them apart, seeking to the key frame before as a real
+  decoder does; any other path is `Unsupported`, and nothing is read from disk; its
+  `stats` count opens, seeks and frames),
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
   `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,
@@ -132,7 +149,7 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:6b6ae4d9b5d54f13", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH crate-map apps row only (A3: daemon links its OS platform crate); GPU frame design untouched" }
+verified = { hash = "b3:8bed5efbaa524f4d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Stale via ARCH crate-map platform row only (MediaDecoders listed); GPU frame design untouched" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

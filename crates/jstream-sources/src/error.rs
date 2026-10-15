@@ -85,6 +85,13 @@ pub enum SourceError {
         /// Which limit it passed.
         what: String,
     },
+    /// The kind plays through a platform backend the engine wasn't given, such as media
+    /// files on a platform without a media backend.
+    #[error("this engine has no {backend} backend")]
+    NoBackend {
+        /// The backend, such as "media file".
+        backend: &'static str,
+    },
     /// A frame could not be built.
     #[error(transparent)]
     Media(#[from] jstream_media::MediaError),

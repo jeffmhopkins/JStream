@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:fe6c01ebd0f4cee6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2 N6: Serving bullet rewrapped; main.rs crate doc now says the audit log records batches, undos, redos and actions (not queries); purpose text holds" }
+verified = { hash = "b3:2f67940722f3b3fd", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: serve.rs injects MfMediaDecoders; purpose text (startup, serving, delay-load check) re-read, holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -168,7 +168,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:75b211af635fd696", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2 merge of main (#232 A6): re-read; A6's collection file and audit log bullets hold (atomic save after each batch/undo/redo, undo history unsaved); core's change is undo-internal and #212 wording" }
+verified = { hash = "b3:0b9240658510fcd2", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: Live on Windows lists MfMediaDecoders; delay-load list names it for mfplat and mfreadwrite; re-read" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -179,7 +179,7 @@ verified = { hash = "b3:75b211af635fd696", by = "agent:claude@session_01WG1uLVaz
   `Arc`; the server, and through it every session, keep it alive.
 - **Live on Windows** (`serve.rs`). Under `cfg(windows)` the engine gets the
   `jstream-platform-windows` backends (`QpcClock`, `WgcCapture`, `MfVideoDevices`,
-  `WasapiAudio`, `MfCodecs`, `WindowsGpu`; no virtual camera sink yet), `WindowsCredentials` as its
+  `WasapiAudio`, `MfCodecs`, `WindowsGpu`, `MfMediaDecoders`; no virtual camera sink yet), `WindowsCredentials` as its
   stream key store (`with_key_store`), and a publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
   starts. Elsewhere there are no backends yet, so outputs stay the placeholder state
@@ -199,8 +199,9 @@ verified = { hash = "b3:75b211af635fd696", by = "agent:claude@session_01WG1uLVaz
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
   `build.rs` links the binary (not its test binaries) with `/DELAYLOAD` for each DLL
-  the daemon's backends import from (`mfplat.dll` for `MfCodecs` and
-  `MfVideoDevices`, `mf.dll` and `mfreadwrite.dll` for `MfVideoDevices`) and
+  the daemon's backends import from (`mfplat.dll` for `MfCodecs`, `MfVideoDevices`
+  and `MfMediaDecoders`, `mf.dll` for `MfVideoDevices`, `mfreadwrite.dll` for
+  `MfVideoDevices` and `MfMediaDecoders`) and
   `delayimp.lib` when the target is MSVC, so each loads on the first call into it.
   `main.rs` runs `jstream_platform_windows::check_media_foundation` right after
   logging starts, before the engine is built or anything else calls Media Foundation,

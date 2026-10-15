@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:9834f6266df6591f", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B2-f2 #239 touched sets moved to jstream-graph) into C2: re-read; B2-f2's History bullet (graph's Touched set) and Tests list kept as main has them; C2 adds only the live text-source test in src/tests/sources.rs, covered by the Tests list; holds" }
+verified = { hash = "b3:5fecff8a820e0cd0", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: Live sources bullet now says videos advance on the clock, show is called on re-reach, media plays through the injected backends; re-read" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -54,7 +54,9 @@ state machine. Contents:
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
-  mix shows their frames and advances animations on the media clock. A frame stored
+  mix shows their frames and advances animations and videos on the media clock, and
+  tells a source when it shows it again. `media` sources play through the injected
+  backends' media files. A frame stored
   with `set_source_frame` wins over the live one, and a kind that is only described
   draws nothing, except that a `display` source shows the output pipeline's capture
   on the render thread (see *Live sources* and *Snapshots* in [Design](#design)).
@@ -141,7 +143,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:009884b53e67a92d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B2-f2 #239 touched sets moved to jstream-graph) into C2: re-read; B2-f2's Conflicts paragraph (Touched from jstream-graph, encoder objects/props) and A6 audit/collection prose kept as main has them; C2 adds only a source test this section doesn't describe; holds" }
+verified = { hash = "b3:4a6450936aaec973", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: Live sources paragraph covers begin_plan/planned and Source::show, set_media via with_backends (rebuilds sources), NoBackend before injection; re-read against live.rs and engine.rs" }
 -->
 
 ### Engine and sessions
@@ -376,9 +378,15 @@ current time, counted from when the source was built. A live frame is shared wit
 the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version only when
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
-thread re-plans then, so an animated image advances on the clock and a still one is
-never re-planned. Sources run on the media clock of the backends the host injects
-(`with_backends`), else on a monotonic clock of the engine's own. `collection` asset
+thread re-plans then, so an animated image or a video advances on the clock and a
+still one is never re-planned. Each plan is numbered (`begin_plan`), and each source
+remembers the last plan that reached it: one that a plan reaches after plans that
+didn't (its item was hidden, or its scene left the program) is told so first
+(`Source::show`), so a media file can restart. Sources run on the media clock of the
+backends the host injects (`with_backends`), else on a monotonic clock of the engine's
+own, and `media` sources play through those backends' media files
+(`Backends::media`); before any are injected a `media` source fails to build
+(`NoBackend`), and injecting them rebuilds every source. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
 for every `app` reference, the asset is unreadable and the source draws nothing.
 

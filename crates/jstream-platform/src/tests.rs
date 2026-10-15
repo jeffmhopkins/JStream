@@ -8,13 +8,14 @@ use jstream_media::{
     PixelFormat, SampleFormat, Timebase, VideoFrame, VideoFrameInfo,
 };
 
-use crate::fake::{self, FakeAudioIo, FakeClock, FakeVcamSink};
+use crate::fake::{self, FakeAudioIo, FakeClip, FakeClock, FakeMediaDecoders, FakeVcamSink};
 use crate::{
     AudioEncoder, AudioEncoderConfig, AudioInputHandler, AudioInputTarget, AudioIo,
     AudioOutputHandler, AudioOutputTarget, AudioPacket, AudioRenderBuffer, AudioStream, Backends,
     Capture, CaptureStream, CaptureTarget, Codecs, DeviceId, FrameSync, GpuContext, GpuFrame,
-    GpuInterop, HardwarePreference, MediaClock, PlatformError, RateControl, VcamFormat, VcamSink,
-    VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    GpuInterop, HardwarePreference, MediaClock, MediaDecoder, MediaDecoderConfig, MediaDecoders,
+    PlatformError, RateControl, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig,
+    VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 
 fn assert_send<T: Send + ?Sized>() {}
@@ -28,6 +29,7 @@ fn traits_are_dyn_compatible_with_their_thread_bounds() {
     assert_send_sync::<dyn AudioIo>();
     assert_send_sync::<dyn Codecs>();
     assert_send_sync::<dyn GpuInterop>();
+    assert_send_sync::<dyn MediaDecoders>();
     assert_send_sync::<dyn FrameSync>();
     // Frames cross threads: capture to render to encode.
     assert_send_sync::<GpuFrame>();
@@ -41,6 +43,7 @@ fn traits_are_dyn_compatible_with_their_thread_bounds() {
     assert_send::<dyn VideoEncoder>();
     assert_send::<dyn AudioEncoder>();
     assert_send::<dyn VideoDecoder>();
+    assert_send::<dyn MediaDecoder>();
     assert_send::<dyn VcamSink>();
     assert_send::<Backends>();
     assert_send_sync::<PlatformError>();
@@ -515,4 +518,95 @@ fn adapter_ids_compare_by_luid_and_vendor() {
             vendor: 0x1002
         }
     );
+}
+
+fn clip() -> FakeClip {
+    FakeClip {
+        size: FrameSize::new(4, 2).unwrap(),
+        frame_period: Timebase::new(1, 25).unwrap(),
+        frames: 10,
+        key_every: 4,
+        audio: true,
+    }
+}
+
+const RGBA: MediaDecoderConfig = MediaDecoderConfig {
+    video_format: PixelFormat::Rgba8,
+    hardware: HardwarePreference::Prefer,
+};
+
+#[test]
+fn media_files_play_their_clip_in_order_and_end() {
+    let fake = FakeMediaDecoders::new();
+    fake.add("/media/clip.mp4", clip());
+    let backend: Arc<dyn MediaDecoders> = Arc::new(fake.clone());
+    let mut file = backend
+        .open(std::path::Path::new("/media/clip.mp4"), &RGBA)
+        .unwrap();
+    let info = *file.info();
+    let video = info.video.expect("a video stream");
+    assert_eq!(video.size, FrameSize::new(4, 2).unwrap());
+    assert!(info.audio);
+    assert_eq!(info.duration, Some(MediaTime::new(400, Timebase::MILLIS)));
+
+    for index in 0..10 {
+        let frame = file.next_video().unwrap().expect("a frame");
+        assert_eq!(
+            frame.info().pts,
+            MediaTime::new(i64::from(index) * 40, Timebase::MILLIS)
+        );
+        assert_eq!(frame.info().format, PixelFormat::Rgba8);
+        assert_eq!(frame.row(0, 1).unwrap()[..4], FakeClip::pixel(index));
+    }
+    assert_eq!(file.next_video().unwrap(), None, "the end of the stream");
+    assert_eq!(file.next_video().unwrap(), None, "and it stays there");
+    assert_eq!(fake.stats().frames, 10);
+}
+
+#[test]
+fn media_files_seek_to_the_key_frame_before() {
+    let fake = FakeMediaDecoders::new();
+    fake.add("/media/clip.mp4", clip());
+    let mut file = fake
+        .open(std::path::Path::new("/media/clip.mp4"), &RGBA)
+        .unwrap();
+    while file.next_video().unwrap().is_some() {}
+    // 260 ms is frame 6; the key frame before it is frame 4.
+    file.seek(MediaTime::new(260, Timebase::MILLIS)).unwrap();
+    let frame = file.next_video().unwrap().expect("a frame after the seek");
+    assert_eq!(frame.info().pts, MediaTime::new(160, Timebase::MILLIS));
+    // Past the end is the end of the stream.
+    file.seek(MediaTime::new(5, Timebase::new(1, 1).unwrap()))
+        .unwrap();
+    assert_eq!(file.next_video().unwrap(), None);
+    assert_eq!(fake.stats().seeks, 2);
+}
+
+#[test]
+fn media_files_refuse_unknown_paths_and_other_formats() {
+    let fake = FakeMediaDecoders::new();
+    fake.add("/media/clip.mp4", clip());
+    let path = std::path::Path::new("/media/clip.mp4");
+    let bgra = MediaDecoderConfig {
+        video_format: PixelFormat::Bgra8,
+        ..RGBA
+    };
+    assert!(matches!(
+        fake.open(path, &bgra),
+        Err(PlatformError::Unsupported { .. })
+    ));
+    assert!(matches!(
+        fake.open(std::path::Path::new("/media/other.mp4"), &RGBA),
+        Err(PlatformError::Unsupported { .. })
+    ));
+    let none = FakeClip {
+        frames: 0,
+        ..clip()
+    };
+    fake.add("/media/audio.wav", none);
+    let mut audio = fake
+        .open(std::path::Path::new("/media/audio.wav"), &RGBA)
+        .unwrap();
+    assert_eq!(audio.info().video, None);
+    assert_eq!(audio.next_video().unwrap(), None);
 }

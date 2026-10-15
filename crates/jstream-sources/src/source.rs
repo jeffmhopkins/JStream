@@ -2,6 +2,7 @@
 
 use crate::SourceError;
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_platform::MediaDecoders;
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
 use std::fs::File;
 use std::io::Read;
@@ -29,6 +30,14 @@ pub trait Source: Send {
     /// [`frame`](Self::frame). `None` means it never changes again (a still image, a
     /// colour, or an animation that has finished its loops).
     fn next_change(&self, at: MediaTime) -> Option<MediaTime>;
+
+    /// The program mix shows the source again at `at`, on the same clock as
+    /// [`frame`](Self::frame): it reaches the source after plans that didn't. A kind that
+    /// restarts when it is shown (a media file's `restart_on_show`) restarts here; the
+    /// default does nothing.
+    fn show(&mut self, at: MediaTime) {
+        let _ = at;
+    }
 
     /// Applies a new settings map. Only parameters marked `live` in the kind's
     /// descriptor may differ from the ones the source runs with; check
@@ -58,14 +67,28 @@ pub trait SourceKind: Send + Sync {
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError>;
 }
 
-/// What sources are created with: where asset references point, and how much a
-/// decoded asset may take.
-#[derive(Clone, Debug, Default)]
+/// What sources are created with: where asset references point, how much a decoded
+/// asset may take, and the platform backends the kinds that need one play through.
+#[derive(Clone, Default)]
 pub struct Context {
     /// The folders behind asset roots.
     pub assets: AssetRoots,
     /// Size limits for decoded assets.
     pub limits: Limits,
+    /// The platform's media files (ADR-0031): what the `media` kind demuxes and decodes
+    /// with. `None` until the host injects the platform's backends; `media` sources
+    /// then fail with [`SourceError::NoBackend`].
+    pub media: Option<Arc<dyn MediaDecoders>>,
+}
+
+impl std::fmt::Debug for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Context")
+            .field("assets", &self.assets)
+            .field("limits", &self.limits)
+            .field("media", &self.media.as_ref().map(|_| "MediaDecoders"))
+            .finish()
+    }
 }
 
 /// The folders behind the `collection` and `app` asset roots. `absolute` paths need
@@ -121,10 +144,14 @@ impl AssetRoots {
     ) -> Result<Vec<u8>, SourceError> {
         let read_err = read_err(path);
         let file = match self.base(root, path)? {
-            Some(base) => open_inside(&base, path).map_err(|e| match e {
-                Opened::Escapes => escapes(root, path),
-                Opened::Io(e) => read_err(e),
-            })?,
+            Some(base) => {
+                open_inside(&base, path)
+                    .map_err(|e| match e {
+                        Opened::Escapes => escapes(root, path),
+                        Opened::Io(e) => read_err(e),
+                    })?
+                    .0
+            }
             None => File::open(path).map_err(&read_err)?,
         };
         let mut bytes = Vec::new();
@@ -140,6 +167,33 @@ impl AssetRoots {
             });
         }
         Ok(bytes)
+    }
+
+    /// Opens the file an asset reference names, for a reader that opens it again by its
+    /// path (a platform decoder streaming a large file), and returns it with that host
+    /// path, resolved through symlinks. Under `collection` and `app` the file is checked
+    /// as [`read`](Self::read) checks it.
+    ///
+    /// The returned file is the caller's hold on the path. On Windows it is opened without
+    /// `FILE_SHARE_DELETE`, and Windows refuses to rename or delete a file open that way,
+    /// or a folder that holds one, so a reader that opens the path while the hold is kept
+    /// opens this file. Unix has no such hold: there the path is only checked.
+    ///
+    /// # Errors
+    /// Those of [`read`](Self::read), apart from [`SourceError::TooLarge`].
+    pub fn open(&self, root: AssetRoot, path: &str) -> Result<(File, PathBuf), SourceError> {
+        let read_err = read_err(path);
+        match self.base(root, path)? {
+            Some(base) => open_inside(&base, path).map_err(|e| match e {
+                Opened::Escapes => escapes(root, path),
+                Opened::Io(e) => read_err(e),
+            }),
+            None => {
+                let file = open_held(Path::new(path)).map_err(&read_err)?;
+                let host = Path::new(path).canonicalize().map_err(read_err)?;
+                Ok((file, host))
+            }
+        }
     }
 
     /// The canonical folder behind `root`; `None` for `absolute`, which has none. A
@@ -195,17 +249,17 @@ impl From<std::io::Error> for Opened {
 /// its path resolves to afterwards: a file swapped in from outside the root is a
 /// different file.
 #[cfg(unix)]
-fn open_inside(base: &Path, rel: &str) -> Result<File, Opened> {
+fn open_inside(base: &Path, rel: &str) -> Result<(File, PathBuf), Opened> {
     let joined = base.join(rel);
     let file = File::open(&joined)?;
-    check_opened(&file, base, &joined)?;
-    Ok(file)
+    let canonical = check_opened(&file, base, &joined)?;
+    Ok((file, canonical))
 }
 
 /// Whether `file`, opened through `joined`, is the file `joined` now resolves to inside
-/// `base`.
+/// `base`. Returns that resolved path.
 #[cfg(unix)]
-fn check_opened(file: &File, base: &Path, joined: &Path) -> Result<(), Opened> {
+fn check_opened(file: &File, base: &Path, joined: &Path) -> Result<PathBuf, Opened> {
     use std::os::unix::fs::MetadataExt;
     let canonical = joined.canonicalize()?;
     if !canonical.starts_with(base) {
@@ -213,9 +267,29 @@ fn check_opened(file: &File, base: &Path, joined: &Path) -> Result<(), Opened> {
     }
     let (opened, named) = (file.metadata()?, std::fs::metadata(&canonical)?);
     if (opened.dev(), opened.ino()) == (named.dev(), named.ino()) {
-        Ok(())
+        Ok(canonical)
     } else {
         Err(Opened::Escapes)
+    }
+}
+
+/// Opens `path` for reading as a hold on it ([`AssetRoots::open`]): on Windows without
+/// `FILE_SHARE_DELETE`, which std's `File::open` grants.
+fn open_held(path: &Path) -> std::io::Result<File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Win32 values (winnt.h).
+        const FILE_SHARE_READ: u32 = 0x1;
+        const FILE_SHARE_WRITE: u32 = 0x2;
+        std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(path)
+    }
+    #[cfg(not(windows))]
+    {
+        File::open(path)
     }
 }
 
@@ -230,7 +304,7 @@ fn check_opened(file: &File, base: &Path, joined: &Path) -> Result<(), Opened> {
 /// resolving, and is refused. Other reparse points, such as OneDrive placeholders and
 /// dedup files, are files `canonicalize` left in place, and are read.
 #[cfg(windows)]
-fn open_inside(base: &Path, rel: &str) -> Result<File, Opened> {
+fn open_inside(base: &Path, rel: &str) -> Result<(File, PathBuf), Opened> {
     use std::fs::OpenOptions;
     use std::os::windows::fs::OpenOptionsExt;
     // Win32 values (winnt.h, winbase.h).
@@ -262,7 +336,7 @@ fn open_inside(base: &Path, rel: &str) -> Result<File, Opened> {
             return Err(Opened::Escapes);
         }
         if last {
-            return Ok(handle);
+            return Ok((handle, canonical.clone()));
         }
         held.push(handle);
     }
