@@ -135,7 +135,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:bf2c6b63414f2f9f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376 ledger, #350): filters row and bullet, built-so-far and not-yet lists match graph model; holds" }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:3f1236036bae4856", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:3f1236036bae4856", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -150,7 +150,7 @@ stamp = { hash = "b3:74636e2565276acc" }
 stamp = { hash = "b3:1f10a420e9f6a9bc" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/Cargo.toml"]
-stamp = { hash = "b3:42604b9f922a7f66", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:42604b9f922a7f66", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
 stamp = { hash = "b3:3922a050f5b7ff9f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the V3 kinds (render assets/*, image.rs's internal upload, set_reference) and their README text. Each keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; references are resolved by V0, not render; holds" }
@@ -165,13 +165,13 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:96a4560d010d62b0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:96a4560d010d62b0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/cube.rs"]
 stamp = { hash = "b3:4fbf0fc27f382ab8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the V3 kinds (render assets/*, image.rs's internal upload, set_reference) and their README text. Each keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; references are resolved by V0, not render; holds" }
@@ -195,22 +195,22 @@ stamp = { hash = "b3:f7b7defe2ff1d080", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:fbca0ef344cd2b3b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the V3 kinds (render assets/*, image.rs's internal upload, set_reference) and their README text. Each keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; references are resolved by V0, not render; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
-stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/params.rs"]
-stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pass.rs"]
 stamp = { hash = "b3:8fb80602e8c7465e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the V3 kinds (render assets/*, image.rs's internal upload, set_reference) and their README text. Each keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; references are resolved by V0, not render; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/prelude.wgsl"]
-stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/testing.rs"]
-stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/gpu.rs"]
 stamp = { hash = "b3:f1de9efc6510e1ea" }
@@ -219,7 +219,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:9903f99e9df0e620", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the V3 kinds (render assets/*, image.rs's internal upload, set_reference) and their README text. Each keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; references are resolved by V0, not render; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -1713,7 +1713,7 @@ stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU
 stamp = { hash = "b3:5359a037fc331799" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:3f1236036bae4856", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:3f1236036bae4856", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Stale only through ARCH#gpu-pipeline, whose one edit in this PR is the filter sentence. GPU frame import and FrameSync staging rules are unchanged; apply_filter stages an imported input's hold right before its submit, as this section requires; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:9074e32b08b81d5b" }
@@ -2121,13 +2121,13 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:96a4560d010d62b0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:96a4560d010d62b0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/cube.rs"]
 stamp = { hash = "b3:4fbf0fc27f382ab8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the V3 kinds (assets/*), set_reference on VideoFilter and Pass, image.rs's internal f16 upload and pub(crate) test helpers. Passes item 1 still describes the RGBA8 upload correctly; the f16 upload is used only by lut_image. A reference's hold is staged once per submit with the input's, as render does; no new thread or steady-path allocation; holds" }
@@ -2151,22 +2151,22 @@ stamp = { hash = "b3:f7b7defe2ff1d080", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:fbca0ef344cd2b3b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the V3 kinds (assets/*), set_reference on VideoFilter and Pass, image.rs's internal f16 upload and pub(crate) test helpers. Passes item 1 still describes the RGBA8 upload correctly; the f16 upload is used only by lut_image. A reference's hold is staged once per submit with the input's, as render does; no new thread or steady-path allocation; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
-stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/params.rs"]
-stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pass.rs"]
 stamp = { hash = "b3:8fb80602e8c7465e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the V3 kinds (assets/*), set_reference on VideoFilter and Pass, image.rs's internal f16 upload and pub(crate) test helpers. Passes item 1 still describes the RGBA8 upload correctly; the f16 upload is used only by lut_image. A reference's hold is staged once per submit with the input's, as render does; no new thread or steady-path allocation; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/prelude.wgsl"]
-stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/testing.rs"]
-stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/gpu.rs"]
 stamp = { hash = "b3:f1de9efc6510e1ea" }
@@ -2175,7 +2175,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:9903f99e9df0e620", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the V3 kinds (assets/*), set_reference on VideoFilter and Pass, image.rs's internal f16 upload and pub(crate) test helpers. Passes item 1 still describes the RGBA8 upload correctly; the f16 upload is used only by lut_image. A reference's hold is staged once per submit with the input's, as render does; no new thread or steady-path allocation; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -2193,13 +2193,13 @@ stamp = { hash = "b3:210b5d2344b89e5b", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:6659ef7ab6b21719", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: "Assets and references (V3): not yet" becomes the V3 paragraph. Checked against assets/mod.rs (Reference: pass-through until the setting is non-null and an image is set, foreign compositor refused, hold staged unless it is the input's, by Arc::ptr_eq), cube.rs (parse_cube sizes 2..64, domain keywords and resampling, LutError cases; from_tiled_rgba8 k*k tiles), lut.rs and lut.wgsl (near-square Rgba16Float tiles via image.rs's data upload, clamp 0..1, two-tap trilinear, non-layout passes through; crate-internal until V0), mask.rs and mask.wgsl (alpha, luma, clip, invert; premultiplied scale). pass.rs adds the defaulted Pass::set_reference; the shared-hold test is in mask.rs; holds""" }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
-stamp = { hash = "b3:b655210653447199" }
+stamp = { hash = "b3:b655210653447199", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0026-source-filter-chains.md"]
-stamp = { hash = "b3:10fc5503702046a4" }
+stamp = { hash = "b3:10fc5503702046a4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:9beac28bc6ebea4c" }
+stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/cube.rs"]
 stamp = { hash = "b3:4fbf0fc27f382ab8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: "Assets and references (V3): not yet" becomes the V3 paragraph. Checked against assets/mod.rs (Reference: pass-through until the setting is non-null and an image is set, foreign compositor refused, hold staged unless it is the input's, by Arc::ptr_eq), cube.rs (parse_cube sizes 2..64, domain keywords and resampling, LutError cases; from_tiled_rgba8 k*k tiles), lut.rs and lut.wgsl (near-square Rgba16Float tiles via image.rs's data upload, clamp 0..1, two-tap trilinear, non-layout passes through; crate-internal until V0), mask.rs and mask.wgsl (alpha, luma, clip, invert; premultiplied scale). pass.rs adds the defaulted Pass::set_reference; the shared-hold test is in mask.rs; holds""" }
@@ -2223,25 +2223,25 @@ stamp = { hash = "b3:f7b7defe2ff1d080", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:fbca0ef344cd2b3b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: "Assets and references (V3): not yet" becomes the V3 paragraph. Checked against assets/mod.rs (Reference: pass-through until the setting is non-null and an image is set, foreign compositor refused, hold staged unless it is the input's, by Arc::ptr_eq), cube.rs (parse_cube sizes 2..64, domain keywords and resampling, LutError cases; from_tiled_rgba8 k*k tiles), lut.rs and lut.wgsl (near-square Rgba16Float tiles via image.rs's data upload, clamp 0..1, two-tap trilinear, non-layout passes through; crate-internal until V0), mask.rs and mask.wgsl (alpha, luma, clip, invert; premultiplied scale). pass.rs adds the defaulted Pass::set_reference; the shared-hold test is in mask.rs; holds""" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
-stamp = { hash = "b3:de0f98158fb04e4e" }
+stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:0f2d37ae9ca699fd" }
+stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/params.rs"]
-stamp = { hash = "b3:b3aefcc2353c922c" }
+stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pass.rs"]
 stamp = { hash = "b3:8fb80602e8c7465e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: "Assets and references (V3): not yet" becomes the V3 paragraph. Checked against assets/mod.rs (Reference: pass-through until the setting is non-null and an image is set, foreign compositor refused, hold staged unless it is the input's, by Arc::ptr_eq), cube.rs (parse_cube sizes 2..64, domain keywords and resampling, LutError cases; from_tiled_rgba8 k*k tiles), lut.rs and lut.wgsl (near-square Rgba16Float tiles via image.rs's data upload, clamp 0..1, two-tap trilinear, non-layout passes through; crate-internal until V0), mask.rs and mask.wgsl (alpha, luma, clip, invert; premultiplied scale). pass.rs adds the defaulted Pass::set_reference; the shared-hold test is in mask.rs; holds""" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/prelude.wgsl"]
-stamp = { hash = "b3:a12814fa76dae1f4" }
+stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/testing.rs"]
-stamp = { hash = "b3:69b0b81a0701d9e3" }
+stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:5de34575b1cc64ef", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:5de34575b1cc64ef", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:3c3b2d799f3dc3f1" }
@@ -2250,7 +2250,7 @@ stamp = { hash = "b3:3c3b2d799f3dc3f1" }
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:3f1236036bae4856", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:3f1236036bae4856", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2259,7 +2259,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:af178dd41ff64ab0" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/Cargo.toml"]
-stamp = { hash = "b3:42604b9f922a7f66", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:42604b9f922a7f66", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:071eeba73136670c" }
@@ -2271,13 +2271,13 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:96a4560d010d62b0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:96a4560d010d62b0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/cube.rs"]
 stamp = { hash = "b3:4fbf0fc27f382ab8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds assets/ (cube.rs, lut.rs, lut.wgsl, mask.rs, mask.wgsl, mod.rs), VideoFilter::set_reference and Pass::set_reference, image.rs's crate-internal f16 data upload and two tests.rs helpers made pub(crate). Purpose's source-image text still describes the public upload and import paths (the data upload is internal and returns no Image), and filters are referred to Filters; holds" }
@@ -2301,22 +2301,22 @@ stamp = { hash = "b3:f7b7defe2ff1d080", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:fbca0ef344cd2b3b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds assets/ (cube.rs, lut.rs, lut.wgsl, mask.rs, mask.wgsl, mod.rs), VideoFilter::set_reference and Pass::set_reference, image.rs's crate-internal f16 data upload and two tests.rs helpers made pub(crate). Purpose's source-image text still describes the public upload and import paths (the data upload is internal and returns no Image), and filters are referred to Filters; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
-stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/params.rs"]
-stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pass.rs"]
 stamp = { hash = "b3:8fb80602e8c7465e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds assets/ (cube.rs, lut.rs, lut.wgsl, mask.rs, mask.wgsl, mod.rs), VideoFilter::set_reference and Pass::set_reference, image.rs's crate-internal f16 data upload and two tests.rs helpers made pub(crate). Purpose's source-image text still describes the public upload and import paths (the data upload is internal and returns no Image), and filters are referred to Filters; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/prelude.wgsl"]
-stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/testing.rs"]
-stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/gpu.rs"]
 stamp = { hash = "b3:f1de9efc6510e1ea" }
@@ -2325,7 +2325,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:9903f99e9df0e620", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds assets/ (cube.rs, lut.rs, lut.wgsl, mask.rs, mask.wgsl, mod.rs), VideoFilter::set_reference and Pass::set_reference, image.rs's crate-internal f16 data upload and two tests.rs helpers made pub(crate). Purpose's source-image text still describes the public upload and import paths (the data upload is internal and returns no Image), and filters are referred to Filters; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -2340,7 +2340,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:210b5d2344b89e5b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds assets/ (cube.rs, lut.rs, lut.wgsl, mask.rs, mask.wgsl, mod.rs), VideoFilter::set_reference and Pass::set_reference, image.rs's crate-internal f16 data upload and two tests.rs helpers made pub(crate). Purpose's source-image text still describes the public upload and import paths (the data upload is internal and returns no Image), and filters are referred to Filters; holds" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:03454b8447e1be4f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:03454b8447e1be4f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters paragraph (filter::testing runs one filter over a small upload and reads back through a 1:1 scene; a two-pass copy covers the harness incl. a half-transparent texel) and makes tests.rs helpers pub(crate) for it; checked against testing.rs and its tests; the rest is unchanged; holds" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
