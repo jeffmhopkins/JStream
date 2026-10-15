@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:5d629f5d13b581d8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (cefb683): main's purpose text with the virtual-camera additions (VcamSink needs no publish target, runtime/vcam.rs thread, vcam test list) beside this PR's live.rs set_clock fix; Live sources bullet still says animations advance on the media clock; holds" }
+verified = { hash = "b3:de801bc5855b5714", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286 differential groups/roles, #297): re-read main's purpose text incl. Tests bullet's differential run; this PR's live.rs set_clock fix and tests/sources.rs clock-swap test fit the Live sources and Tests bullets; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -162,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c65f5241bb0ac149", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (cefb683): main's Virtual camera paragraph, collector and render-thread allocation text beside this PR's clock-swap sentence in the live-sources paragraph; the two touch different paragraphs and the swap sentence still matches LiveSources::set_clock; holds" }
+verified = { hash = "b3:67ca169f728f9e96", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286, #297): re-read main's design text (differential script paragraph) beside this PR's clock-swap sentence in the live-sources paragraph; different paragraphs; swap sentence still matches LiveSources::set_clock; holds" }
 -->
 
 ### Engine and sessions
