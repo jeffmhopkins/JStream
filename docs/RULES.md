@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:06f448f54a6ebbd3", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main into ADR-0042 edit of ARCH#threading: the output-pipeline paragraph moved to core README#runtime and the audio 'In the engine' paragraph became a short link; the thread roster, clock, snapshot and parameter-channel text this section relies on is unchanged, so it holds" }
+verified = { hash = "b3:892f22ab2f9a07aa", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: R-RT rules unchanged; render and mixer collectors still satisfy R-RT-003" }
 -->
 
 <a id="R-RT-001"></a>

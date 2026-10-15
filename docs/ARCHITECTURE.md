@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:1aa5e2eaae409b85", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the youtube and sources rows' ADR link (0034 -> 0041) and jstream-youtube's manifest summary to match; ADR-0041 restates ADR-0034's scope (chat send, chat message source, stats), so both rows still hold" }
+verified = { hash = "b3:02c4efbe3c5ca2ea", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#167 jstream-youtube) into C1a, stamp-only conflict: re-read; main's jstream-youtube row taken as is; jstream-sources L4 row still matches its jstream-meta summary and layer" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:1a3374260c93e175", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Built so far keeps B3's placement/canvas and adds B6's role, item.move and scene_id (0.12); Not yet keeps scene.create role, variants, 3D geometry" }
+verified = { hash = "b3:b1fa4484ef1c0a26", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: stamp-only; E1's text taken as is; C1a's kinds sentence holds" }
 -->
 
 ```
@@ -222,7 +222,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   a geometry.
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
   scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
-  that would close a cycle (`item.add`, and `item.set_source`).
+  that would close a cycle (`item.add`, and `item.set_source`). The graph accepts any
+  acyclic depth, but the program mix (the live output and `video.snapshot` alike) draws
+  at most **8 levels** of scene sources below the program scene: a scene source deeper
+  than that draws nothing, and the engine logs it at `debug`.
 - **Groups and keyframe scenes** ([ADR-0024](adr/0024-scene-structure.md)):
   - A **group** is a scene with `role = group`. The role changes no engine behaviour: a
     group renders, nests and takes filters like any scene, and clients hide groups from
@@ -351,7 +354,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
-  built-in kinds are stubs in `jstream-core` until `jstream-sources` exists.
+  built-in kinds' descriptors come from `jstream-sources`, whose `color` and `image`
+  kinds produce frames; the engine doesn't render from them yet.
   Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
   the URL checked to carry no credential, or `Record { path, container: mp4 }`, the path
   checked to be absolute and to end in a file name. A stream key is never collection state: it
@@ -368,7 +372,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:1ef01f3d3f4dfbbf", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main into ADR-0042: no code covers; output-pipeline paragraph stays in core README#runtime (now with main's recording text); 'In the engine' keeps main's new add/remove-inputs and collector sentence beside the link to audio #realtime; roster, clock, snapshots, handover, privacy, CLAP, S3 unchanged" }
+verified = { hash = "b3:b53354403aab317a", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: took main's pointer paragraph in place of the output-pipeline detail; E1's model text (render snapshot through arc-swap, generation stamp, Collector row naming both collectors) stays as the engine-wide model and doesn't contradict core #runtime" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -386,7 +390,7 @@ every mix runs at the base rate divided by an integer.
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003) |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One per running output for its render thread, and the mixer's own for the mixer and audio threads. |
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
 next to its code, which that section covers: the output pipeline in
@@ -445,7 +449,25 @@ lock-free parameter channels. On the wire they are live values, committed by one
 at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
-**Live-value handover** (decided, not built yet): the engine learns that a real-time
+The **render snapshot** is built. After every applied batch and every stored source
+frame, the control side re-plans the program mix under the collection lock: the
+reachable scenes, the frames they show and the passes that draw them. It publishes
+that as the next render generation only when it draws something new, so a batch that
+touches nothing on program publishes nothing. The render thread and `video.snapshot`'s
+thread load it without the lock, and the render thread draws through a `jstream-render`
+resource cache keyed by source and by nested scene and depth. A frame that shows what
+the last one showed allocates no texture: an unchanged frame is not uploaded again and
+each nested scene is redrawn into the layer it had. An image no frame references is
+retired, then freed once the GPU has finished the last frame that used it (a
+`Queue::on_submitted_work_done` fence the cache polls without blocking). The render
+thread hands those images, and each render snapshot it replaces, to the output's
+collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
+reader slot as the handover below says. When a fatal error stops its drawing it
+publishes the stopped marker too: it adopts nothing more and only repeats the frame it
+last drew until teardown. The audio and outputs snapshots are not built.
+
+**Live-value handover** (decided; the render generation and its reader slot are built,
+the parameter channels and the gesture release are not): the engine learns that a real-time
 thread holds a committed snapshot through a **generation counter per subsystem**. Each
 time the control side publishes a subsystem's snapshot it bumps that subsystem's
 generation and stores it in the snapshot. Each real-time thread that reads the snapshot
@@ -633,7 +655,7 @@ verified = { hash = "b3:3520026dd573c7fb", by = "agent:claude@session_01Vy4KuKBC
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c39815529eedb369", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: E3a's capture steps (shared NT-handle textures, fence) from main and B3's one-scene compositor placement forms both present and accurate" }
+verified = { hash = "b3:dc199b6560c865f5", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -670,10 +692,15 @@ src-over. The composite pass writes premultiplied linear light into `Rgba16Float
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a software adapter
-first. A nested scene is composited with `render_image` into an `Rgba16Float` image
-that stays on the GPU and is placed in its parent; the caller walks the nesting,
-bounded in depth. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
-3D, effect packs, and the output path below.
+first. A nested scene is composited into an `Rgba16Float` layer that stays on the GPU
+and is placed in its parent: `render_image` makes a new one, and `render_into` redraws
+a layer the caller keeps, so a frame allocates no texture for it. The caller walks the
+nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads and layers from
+frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
+after the GPU has finished the last frame that used it (see
+[Threads › State to RT threads](#threading)). Still outside this crate: the render
+thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
+the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
 texture blend: during it, the program mix is a synthetic item list whose transforms and

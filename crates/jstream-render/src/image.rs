@@ -63,6 +63,9 @@ pub struct Image {
     alpha: Alpha,
     owner: Owner,
     sync: Option<Arc<dyn FrameSync>>,
+    /// The render-target view of a layer, kept so drawing into it again allocates no
+    /// view. `None` for uploads and imports, which are never drawn into.
+    target: Option<wgpu::TextureView>,
 }
 
 impl Image {
@@ -97,6 +100,19 @@ impl Image {
     pub(crate) fn sync(&self) -> Option<&Arc<dyn FrameSync>> {
         self.sync.as_ref()
     }
+
+    /// The view a layer is drawn into; `None` unless the image is a layer.
+    pub(crate) fn target(&self) -> Option<&wgpu::TextureView> {
+        self.target.as_ref()
+    }
+
+    /// Whether this is an upload, which [`rewrite`] can refill in place.
+    fn is_upload(&self) -> bool {
+        self.alpha == Alpha::Premultiplied
+            && self.target.is_none()
+            && self.texture.format() == UPLOAD_FORMAT
+            && self.texture.usage().contains(wgpu::TextureUsages::COPY_DST)
+    }
 }
 
 impl std::fmt::Debug for Image {
@@ -117,6 +133,44 @@ pub(crate) fn upload(
     height: u32,
     rgba: &[u8],
 ) -> Result<Image, RenderError> {
+    check_bytes(width, height, rgba)?;
+    check_dimension(maker.gpu, width, height)?;
+    let texture = maker.gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("jstream-render-image"),
+        size: extent(width, height),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: UPLOAD_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    write_texels(maker.gpu, &texture, width, height, rgba)?;
+    Ok(finish(
+        maker,
+        texture,
+        width,
+        height,
+        Alpha::Premultiplied,
+        None,
+    ))
+}
+
+/// Refills an uploaded `image` with new bytes of the same size, in place. The write is
+/// ordered after every submit already on the queue, so frames that sampled the old
+/// contents still see them.
+pub(crate) fn rewrite(maker: &Maker<'_>, image: &Image, rgba: &[u8]) -> Result<(), RenderError> {
+    if !image.owner.is(maker.owner) || !image.is_upload() {
+        return Err(RenderError::Invalid {
+            what: "image",
+            detail: "only an upload made by this compositor can be rewritten".into(),
+        });
+    }
+    check_bytes(image.width, image.height, rgba)?;
+    write_texels(maker.gpu, &image.texture, image.width, image.height, rgba)
+}
+
+fn check_bytes(width: u32, height: u32, rgba: &[u8]) -> Result<(), RenderError> {
     if width == 0 || height == 0 {
         return Err(RenderError::Invalid {
             what: "image",
@@ -140,28 +194,27 @@ pub(crate) fn upload(
             expected,
         });
     }
-    check_dimension(maker.gpu, width, height)?;
-    let texture = maker.gpu.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("jstream-render-image"),
-        size: extent(width, height),
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: UPLOAD_FORMAT,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
+    Ok(())
+}
+
+fn write_texels(
+    gpu: &Gpu,
+    texture: &wgpu::Texture,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> Result<(), RenderError> {
     let row_bytes = width.checked_mul(8).ok_or(RenderError::TooLarge {
         what: "image",
         width,
         height,
-        limit: maker.gpu.max_texture_dimension_2d,
+        limit: gpu.max_texture_dimension_2d,
     })?;
     let texels = premultiply_to_f16(rgba);
     // `write_texture`, unlike a buffer-to-texture copy, does not need 256-byte rows.
-    maker.gpu.queue.write_texture(
+    gpu.queue.write_texture(
         wgpu::TexelCopyTextureInfo {
-            texture: &texture,
+            texture,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
@@ -174,14 +227,7 @@ pub(crate) fn upload(
         },
         extent(width, height),
     );
-    Ok(finish(
-        maker,
-        texture,
-        width,
-        height,
-        Alpha::Premultiplied,
-        None,
-    ))
+    Ok(())
 }
 
 pub(crate) fn import(
@@ -226,9 +272,30 @@ pub(crate) fn import_frame(maker: &Maker<'_>, frame: &GpuFrame) -> Result<Image,
     )
 }
 
-/// A texture [`crate::Compositor::render_image`] composited into, as an image.
-pub(crate) fn layer(maker: &Maker<'_>, texture: wgpu::Texture, width: u32, height: u32) -> Image {
-    finish(maker, texture, width, height, Alpha::Premultiplied, None)
+/// A new layer: a texture [`crate::Compositor::render_into`] composites into, placed as
+/// an image. Its contents are undefined until the first composite.
+pub(crate) fn layer(maker: &Maker<'_>, width: u32, height: u32) -> Result<Image, RenderError> {
+    if width == 0 || height == 0 {
+        return Err(RenderError::Invalid {
+            what: "layer",
+            detail: format!("size is {width}x{height}; both dimensions must be non-zero"),
+        });
+    }
+    check_dimension(maker.gpu, width, height)?;
+    let texture = maker.gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("jstream-render-layer"),
+        size: extent(width, height),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: LAYER_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let target = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let mut image = finish(maker, texture, width, height, Alpha::Premultiplied, None);
+    image.target = Some(target);
+    Ok(image)
 }
 
 fn finish(
@@ -265,6 +332,7 @@ fn finish(
         alpha,
         owner: maker.owner.clone(),
         sync,
+        target: None,
     }
 }
 
