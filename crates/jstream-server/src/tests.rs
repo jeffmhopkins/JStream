@@ -237,6 +237,7 @@ fn create_scene(id: &str) -> Call {
     Call::Batch(Batch::single(Edit::SceneCreate {
         scene_id: SceneId::new(id),
         name: id.to_uppercase(),
+        role: None,
     }))
 }
 
