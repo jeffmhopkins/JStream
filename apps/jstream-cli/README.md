@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:20be40c1aafa66d7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; contents hold, the CLI gains no YouTube commands" }
+verified = { hash = "b3:c972a7760ebb97e9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: re-read; contents hold, the CLI gains no YouTube commands" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:2021efcee40f5e0f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: says the CLI has none of 0.13's YouTube commands or the youtube target, and that other output kinds list as JSON (run.rs other arm); Action with result None still prints accepted" }
+verified = { hash = "b3:e892a8977268ae2b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: says the CLI has none of 0.14's YouTube commands or the youtube target; other output kinds list as JSON" }
 -->
 
 ```sh
@@ -101,9 +101,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings. `source.set_settings`, and `source.create`
-  with settings, need a JSON argument form the CLI doesn't have yet, so a source it
-  creates gets its kind's defaults. Protocol 0.11's `canvas.set_size`,
+  protocol is supported except settings and encoder profiles. `source.set_settings`,
+  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
+  and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
+  source it creates gets its kind's defaults and an output it creates the engine's
+  default encoder (MCP and the WebSocket API take them). Protocol 0.11's `canvas.set_size`,
   `item.set_geometry` and `item.add`'s `geometry`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
   yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
@@ -112,7 +114,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
   which is the whole target of a generic RTMP output. The CLI has no form for a
-  recording output or a YouTube-bound one yet, and none of protocol 0.13's YouTube
+  recording output or a YouTube-bound one yet, and none of protocol 0.14's YouTube
   actions and queries. An argument without an `rtmp` or `rtmps` scheme is a usage
   error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
@@ -144,7 +146,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   server URL, as `output.create` takes it; for any other output, its kind as JSON).
   `state get` prints the sources, then each
   scene in display order with its items, then the outputs. `output status` prints
-  `<id>: <state>, stream key set` (or `not set`). An empty list prints `no scenes`,
+  `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
+  `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
@@ -215,7 +218,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c6c1ef0a7f57fb01", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; only change is CallResult::Action { result: None } in write_response, parsing and writers hold" }
+verified = { hash = "b3:fecef8962b788b33", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: re-read; Y3 changes only CallResult::Action { result: None } here" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -201,6 +201,12 @@ impl Youtube {
         *lock(&self.connect) = connect;
     }
 
+    /// Holds the client's mutex, as a Live API call in flight does, for tests.
+    #[cfg(test)]
+    pub(crate) fn hold_client(&self) -> std::sync::MutexGuard<'_, Option<LiveClient>> {
+        lock(&self.client)
+    }
+
     /// What `youtube.status` reports.
     pub(crate) fn status(&self) -> QueryResult {
         QueryResult::YoutubeStatus {
@@ -236,7 +242,12 @@ impl Youtube {
         thread::Builder::new()
             .name("jstream-youtube-sign-in".into())
             .spawn(move || {
-                let outcome = redirect.wait(&pending, timeout).and_then(|code| {
+                let code = redirect.wait(&pending, timeout);
+                // A sign-out abandoned this sign-in: don't trade its code for a token.
+                if code.is_ok() && !this.waiting_for(generation) {
+                    return;
+                }
+                let outcome = code.and_then(|code| {
                     this.setup
                         .oauth()
                         .exchange(&*this.setup.transport, pending, code)
@@ -259,6 +270,11 @@ impl Youtube {
         Ok(ActionResult::YoutubeSignIn { url })
     }
 
+    /// Whether sign-in `generation` is the one waiting, not abandoned or replaced.
+    fn waiting_for(&self, generation: u64) -> bool {
+        lock(&self.auth).pending.as_ref().map(|p| p.generation) == Some(generation)
+    }
+
     /// Ends sign-in `generation`: keeps the refresh token and the new client, or goes
     /// back to the state before it. Does nothing if a sign-out abandoned it.
     fn finish_sign_in(
@@ -268,6 +284,16 @@ impl Youtube {
     ) {
         let mut auth = lock(&self.auth);
         if auth.pending.as_ref().map(|p| p.generation) != Some(generation) {
+            drop(auth);
+            // Abandoned while the code was exchanged: the token it got is unwanted.
+            if let Ok(grant) = outcome
+                && let Err(err) = self
+                    .setup
+                    .oauth()
+                    .revoke(&*self.setup.transport, &grant.refresh)
+            {
+                tracing::warn!(error = %err, "revoking an abandoned YouTube sign-in's token");
+            }
             return;
         }
         auth.pending = None;
@@ -573,6 +599,10 @@ impl Youtube {
                     let Some(youtube) = this.upgrade() else {
                         return;
                     };
+                    // Signed out while the output runs: wait quietly for a sign-in.
+                    if !youtube.signed_in() {
+                        continue;
+                    }
                     match youtube.with_client(|client| client.stream_health(&stream_id)) {
                         Ok(health) => {
                             let event = health_event(&watched, &broadcast_id, &stream_id, health);

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:10b7393038b15bb3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; list_broadcasts_of_type documented, Not yet trimmed to chat, stats and quota, engine wiring noted" }
+verified = { hash = "b3:258179f5b57f547c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: re-read; list_broadcasts_of_type and the engine wiring paragraph hold" }
 -->
 
 Layer-2 client for Google sign-in and the

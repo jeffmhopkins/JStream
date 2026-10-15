@@ -20,7 +20,7 @@ use jstream_protocol::{
 use jstream_youtube::fake::FakeTransport;
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 const REFRESH: &str = include_str!("../../../jstream-youtube/fixtures/token_refresh.json");
@@ -635,6 +635,47 @@ fn a_youtube_output_publishes_to_its_broadcasts_ingest() {
         requests[2].query("id").as_deref(),
         Some("UCfixturechannel000000000fixturestream1")
     );
+}
+
+/// `output.start` on a `youtube` output waits for a YouTube call in flight without
+/// holding the collection lock, so the engine's other calls still answer meanwhile.
+#[test]
+fn a_youtube_start_waits_for_youtube_without_the_collection_lock() {
+    let transport = FakeTransport::new();
+    let engine = Engine::new()
+        .with_backends(backends())
+        .with_draw(cpu_draw())
+        .with_youtube(setup(&transport, &signed_in_store()));
+    let control = connected(&engine);
+    batch(&control, edits(vec![youtube_output("jNQXAC9IVRw")])).expect("creates");
+    let youtube = engine.youtube().expect("youtube");
+    let in_flight = youtube.hold_client();
+    let starter = {
+        let engine = engine.clone();
+        std::thread::spawn(move || {
+            let control = connected(&engine);
+            block_on(control.call(output_call("live", true))).is_ok()
+        })
+    };
+    // Long enough for the start to reach the client's mutex.
+    std::thread::sleep(Duration::from_millis(200));
+    let (tx, rx) = mpsc::channel();
+    {
+        let engine = engine.clone();
+        std::thread::spawn(move || {
+            let control = connected(&engine);
+            let _ = tx.send(query(&control, Query::OutputList).is_ok());
+        });
+    }
+    let answered = rx.recv_timeout(Duration::from_secs(5));
+    drop(in_flight);
+    assert_eq!(
+        answered,
+        Ok(true),
+        "output.list waited for the YouTube client"
+    );
+    // Nothing is scripted for the ingest lookup, so the start fails once let through.
+    let _ = starter.join().expect("start thread");
 }
 
 /// A `youtube` output can't start signed out (refused before `starting`), and fails

@@ -182,8 +182,11 @@ impl Decoder<'_> {
         let mut reader = decoder.read_info().map_err(|e| self.err(e))?;
         let (width, height) = (reader.info().width, reader.info().height);
         let out_len = self.canvas(width, height)?;
-        self.working(reader.output_buffer_size())?;
-        let mut buf = vec![0; reader.output_buffer_size()];
+        let buf_len = reader
+            .output_buffer_size()
+            .ok_or_else(|| self.err("frame size overflows usize"))?;
+        self.working(buf_len)?;
+        let mut buf = vec![0; buf_len];
         let info = reader.next_frame(&mut buf).map_err(|e| self.err(e))?;
         let channels = match info.color_type {
             png::ColorType::Grayscale => 1,

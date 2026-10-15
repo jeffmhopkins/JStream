@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:a88c38c6d821e7b0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; tool table lists youtube, which the noun grouping adds with no code change" }
+verified = { hash = "b3:b9219dc62aa9da1b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: re-read; tool table lists encoder and youtube (14 tools in tests.rs)" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:fcbe1a2c0322a115", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; grouping holds with the youtube tool, tools.snap regenerated" }
+verified = { hash = "b3:28be3135a85114b6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: re-read; grouping holds, tools.snap regenerated" }
 -->
 
 ### Tools
@@ -60,7 +60,7 @@ below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`canvas`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `video`, `youtube` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`canvas`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `video`, `youtube` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |

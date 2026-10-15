@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:d3b5e16187a401ed", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; transport and auth text unaffected" }
+verified = { hash = "b3:2c757e1bccd2df9b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: re-read; transport and auth text unaffected" }
 -->
 
 ### Listening and admission

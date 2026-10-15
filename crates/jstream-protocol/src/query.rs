@@ -1,6 +1,7 @@
 //! Queries: reads with no effect on state, and their results.
 
 use crate::command::{Crop, ItemTransform, SceneRole, SourceKind};
+use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
@@ -40,8 +41,9 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
-    /// items, and every output) at one revision: what a client reads on connecting, after
-    /// a `state.changed` it didn't cause, or before an edit it sends with `expected_rev`.
+    /// items, every output and every encoder profile) at one revision: what a client
+    /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
+    /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
     StateGet,
     /// The current program mix, as a PNG.
@@ -67,6 +69,9 @@ pub enum Query {
     /// sends. Outputs have no display order of their own.
     #[serde(rename = "output.list")]
     OutputList,
+    /// Lists the collection's encoder profiles, ordered by ID.
+    #[serde(rename = "encoder.list")]
+    EncoderList,
     /// Whether the engine is signed in to YouTube. Never calls YouTube.
     #[serde(rename = "youtube.status")]
     YoutubeStatus,
@@ -109,6 +114,7 @@ impl Query {
             Query::KindList => "kind.list",
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
+            Query::EncoderList => "encoder.list",
             Query::YoutubeStatus => "youtube.status",
             Query::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
             Query::YoutubeListStreams { .. } => "youtube.list_streams",
@@ -141,6 +147,20 @@ pub enum QueryResult {
         /// never reported. Missing (from a server older than 0.7) parses as `false`.
         #[serde(default)]
         key_set: bool,
+        /// The encoder session the output uses while it runs: which profile, and which
+        /// other running outputs share it. Absent while it isn't running, and from a
+        /// server older than 0.13.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        encoder: Option<EncoderSessionInfo>,
+        /// How many video encoder sessions the engine has open now, for every output,
+        /// and how many of them are hardware ones. Hardware encoders cap their
+        /// concurrent sessions per GPU vendor and driver, and the engine doesn't guess
+        /// the cap. Missing (from a server older than 0.13) parses as 0.
+        #[serde(default)]
+        encoder_sessions: u32,
+        /// Of `encoder_sessions`, the hardware ones. Missing parses as 0.
+        #[serde(default)]
+        hardware_sessions: u32,
     },
     /// The result of `source.list`.
     #[serde(rename = "source.list")]
@@ -177,6 +197,10 @@ pub enum QueryResult {
         /// as empty.
         #[serde(default)]
         outputs: Vec<OutputInfo>,
+        /// Every encoder profile, ordered by ID. Missing (from a server older than
+        /// 0.13) parses as empty.
+        #[serde(default)]
+        encoders: Vec<EncoderProfileInfo>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -212,6 +236,14 @@ pub enum QueryResult {
         rev: Rev,
         /// The outputs, ordered by ID.
         outputs: Vec<OutputInfo>,
+    },
+    /// The result of `encoder.list`.
+    #[serde(rename = "encoder.list")]
+    EncoderList {
+        /// The revision the list was read at.
+        rev: Rev,
+        /// The profiles, ordered by ID.
+        encoders: Vec<EncoderProfileInfo>,
     },
     /// The result of `youtube.status`. Runtime state, so it carries no `rev`.
     #[serde(rename = "youtube.status")]
@@ -252,6 +284,7 @@ impl QueryResult {
             QueryResult::KindList { .. } => "kind.list",
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
+            QueryResult::EncoderList { .. } => "encoder.list",
             QueryResult::YoutubeStatus { .. } => "youtube.status",
             QueryResult::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
             QueryResult::YoutubeListStreams { .. } => "youtube.list_streams",

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:335720f0efb8e16e", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the enhanced-RTMP ADR link in media README (0034 -> 0041); main's E1 text kept; holds" }
+verified = { hash = "b3:762a0af98b7f4825", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (F3 #208) into C4b: stamp-only conflict; F3 changed ARCH threading/protocol text (encoder profiles, program-stage collector), no platform trait; C4b's Not yet line re-read and holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -102,7 +102,8 @@ Contents:
   codec and GPU-interop backends and its optional virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
-  (`HRESULT`, `OSStatus`, `errno`).
+  (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
+  as Media Foundation on a Windows N edition) says what the user must install.
 - **Fakes** (`fake.rs`, feature `fake`): deterministic in-memory backends for engine and
   scenario tests ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): `FakeClock` (time moves
   only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and
@@ -119,15 +120,16 @@ Contents:
   `Send`/`Sync` bounds above.
 
 **Not yet:** a platform that consumes GPU frames (Windows capture delivers them through
-`WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet), a platform implementation of `VideoDevices` (Media Foundation's source reader is
-C4b) and its place in `Backends`, an MJPEG `Codec` variant with a `CaptureDecoder` built
-from the platform's decoder, and encoder selection by GPU adapter.
+`WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet),
+`VideoDevices` in `Backends` (Windows implements it as `MfVideoDevices`, with
+`MfMjpegDecoder` as its `CaptureDecoder`), a decode-failure count in `CaptureStats`, an
+MJPEG `Codec` variant, and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:3dde89dac49576a2", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the youtube and sources crate-map rows' ADR link (0034 -> 0041); main's E1 GPU lifetime text kept; holds" }
+verified = { hash = "b3:02b6ead9e4c7cecc", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (E1 arc-swap render snapshots) into C4b: section text is main's, untouched by C4b; stale only via platform purpose's C4b Not yet line; design unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

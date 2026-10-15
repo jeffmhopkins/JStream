@@ -491,6 +491,15 @@ fn assets_resolve_inside_their_root_only() {
         .resolve(AssetRoot::Collection, "img/a.png")
         .expect("inside");
     assert!(found.ends_with("img/a.png"));
+    let bytes = std::fs::read(root.join("img/a.png")).expect("the file");
+    let read = roots
+        .read(AssetRoot::Collection, "img/a.png", 1 << 20)
+        .expect("read inside");
+    assert_eq!(read, bytes);
+    assert!(matches!(
+        roots.read(AssetRoot::Collection, "img", 1 << 20),
+        Err(SourceError::AssetRead { .. })
+    ));
     assert!(matches!(
         roots.resolve(AssetRoot::App, "a.png"),
         Err(SourceError::NoAssetRoot {
@@ -512,6 +521,18 @@ fn assets_resolve_inside_their_root_only() {
                 ..
             })
         ));
+        assert!(matches!(
+            roots.read(AssetRoot::Collection, "link.png", 1 << 20),
+            Err(SourceError::AssetEscapesRoot { .. })
+        ));
+        // A symlink that stays inside the root is followed.
+        std::os::unix::fs::symlink(root.join("img"), root.join("pics")).expect("a symlink");
+        assert_eq!(
+            roots
+                .read(AssetRoot::Collection, "pics/a.png", 1 << 20)
+                .expect("read through a link inside the root"),
+            bytes
+        );
         let err = open(&root, "link.png").err().expect("an error").to_string();
         assert!(
             !err.contains(absolute),

@@ -2,10 +2,11 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    Canvas, Crop, Edit, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform,
-    KindCategory, KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor,
-    ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget,
-    SceneId, SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
+    Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, EntityKind, Finite32, FitMode,
+    ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputInfo,
+    OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query, QueryResult,
+    RecordContainer, Rev, RtmpTarget, SceneId, SceneRole, Settings, Size, SourceId, SourceKind,
+    Vec2,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -588,6 +589,7 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
                 kind: OutputKind::Rtmp {
                     target: target("rtmps://a.rtmps.youtube.com:443/live2"),
                 },
+                encoder_profile: None,
             }],
         }
     );
@@ -692,6 +694,7 @@ fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
                     path: path.clone(),
                     container: RecordContainer::Mp4,
                 },
+                encoder_profile: None,
             }],
         }
     );
@@ -1032,8 +1035,8 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        Crop, Edit, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, OutputId, Rev, SceneId,
-        SceneRole, Size, SourceId, Vec2,
+        Crop, Edit, EncoderProfile, EncoderProfileId, Finite32, FitMode, ItemGeometry, ItemId,
+        ItemTransform, OutputId, RateControl, Rev, SceneId, SceneRole, Size, SourceId, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1070,6 +1073,7 @@ mod property {
             .collect();
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
+        let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
         let urls = [
             "rtmp://a.example/live",
             "rtmps://b.example:443/live",
@@ -1082,6 +1086,15 @@ mod property {
         let source = |rng: &mut Rng| rng.pick(&sources).unwrap_or_else(|| pool(rng, "src"));
         let output = |rng: &mut Rng| rng.pick(&outputs).unwrap_or_else(|| pool(rng, "out"));
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
+        let encoder = |rng: &mut Rng| rng.pick(&encoders).unwrap_or_else(|| pool(rng, "enc"));
+        // Out of range one time in eight.
+        let profile = |rng: &mut Rng| {
+            let mut profile = EncoderProfile::DEFAULT;
+            profile.video.rate_control = RateControl::Cbr {
+                kbps: [50, 2500, 6000, 9000, 12_000, 20_000, 40_000, 80_000][rng.below(8)],
+            };
+            profile
+        };
         let index = |rng: &mut Rng| u32::try_from(rng.below(6)).expect("fits");
         // Usually no addressing; sometimes the item's own scene; sometimes another.
         let address = |rng: &mut Rng, item: &str| match rng.below(4) {
@@ -1111,7 +1124,7 @@ mod property {
                 ..ItemGeometry::covering_canvas(1, 1).expect("positive")
             }
         };
-        match rng.below(26) {
+        match rng.below(29) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1236,6 +1249,31 @@ mod property {
                 transform: None,
                 geometry: Some(geometry(rng)),
             },
+            24 => {
+                let profile_id = EncoderProfileId::new(pool(rng, "enc"));
+                let name = pool(rng, "name ");
+                let profile = profile(rng);
+                if rng.below(2) == 0 {
+                    Edit::EncoderCreate {
+                        profile_id,
+                        name,
+                        profile,
+                    }
+                } else {
+                    Edit::EncoderUpdate {
+                        profile_id: EncoderProfileId::new(encoder(rng)),
+                        name,
+                        profile,
+                    }
+                }
+            }
+            25 => Edit::OutputSetEncoder {
+                output_id: OutputId::new(output(rng)),
+                profile_id: (rng.below(3) != 0).then(|| EncoderProfileId::new(encoder(rng))),
+            },
+            26 => Edit::EncoderDelete {
+                profile_id: EncoderProfileId::new(encoder(rng)),
+            },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1316,7 +1354,11 @@ mod property {
             "source.set_settings",
             "output.create",
             "output.set_target",
+            "output.set_encoder",
             "output.delete",
+            "encoder.create",
+            "encoder.update",
+            "encoder.delete",
             "canvas.set_size",
         ]
         .into();
@@ -1691,6 +1733,105 @@ fn every_edge_adding_edit_is_cycle_checked() {
     apply_ok(
         &mut g,
         vec![set_settings("cam", &[("mask", scene_ref("c"))])],
+    );
+}
+
+fn encoder_create(id: &str) -> Edit {
+    Edit::EncoderCreate {
+        profile_id: EncoderProfileId::new(id),
+        name: format!("Profile {id}"),
+        profile: EncoderProfile::DEFAULT,
+    }
+}
+
+fn set_encoder(output: &str, profile: Option<&str>) -> Edit {
+    Edit::OutputSetEncoder {
+        output_id: OutputId::new(output),
+        profile_id: profile.map(EncoderProfileId::new),
+    }
+}
+
+/// Every encoder edit undoes exactly, and deleting an output that uses a profile
+/// restores its choice on undo.
+#[test]
+fn encoder_edits_invert() {
+    let mut graph = graph();
+    apply_ok(
+        &mut graph,
+        vec![
+            output_create("yt", "rtmp://a.rtmp.youtube.com/live2"),
+            encoder_create("hq"),
+        ],
+    );
+    apply_ok(&mut graph, vec![set_encoder("yt", Some("hq"))]);
+    assert_eq!(
+        graph
+            .state()
+            .output(&OutputId::new("yt"))
+            .and_then(|o| o.encoder_profile())
+            .map(EncoderProfileId::as_str),
+        Some("hq")
+    );
+    let mut faster = EncoderProfile::DEFAULT;
+    faster.video.keyframe_interval_s = 1;
+    apply_ok(
+        &mut graph,
+        vec![Edit::EncoderUpdate {
+            profile_id: EncoderProfileId::new("hq"),
+            name: "Fast keyframes".into(),
+            profile: faster,
+        }],
+    );
+    assert_eq!(
+        graph.state().encoding_of(&OutputId::new("yt")),
+        Some(faster)
+    );
+    let deleted = apply_ok(
+        &mut graph,
+        vec![Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        }],
+    );
+    assert_eq!(deleted.inverse.edits.len(), 2, "{:?}", deleted.inverse);
+    apply_ok(
+        &mut graph,
+        vec![Edit::EncoderDelete {
+            profile_id: EncoderProfileId::new("hq"),
+        }],
+    );
+}
+
+/// A profile in use can be deleted in the batch that moves its last user off it.
+#[test]
+fn a_profile_is_freed_within_one_batch() {
+    let mut graph = graph();
+    apply_ok(
+        &mut graph,
+        vec![
+            output_create("yt", "rtmp://a.rtmp.youtube.com/live2"),
+            encoder_create("hq"),
+            set_encoder("yt", Some("hq")),
+        ],
+    );
+    let (field, _) = invalid_reason(apply_err(
+        &mut graph,
+        vec![Edit::EncoderDelete {
+            profile_id: EncoderProfileId::new("hq"),
+        }],
+    ));
+    assert_eq!(field, "edits.0.profile_id");
+    apply_ok(
+        &mut graph,
+        vec![
+            set_encoder("yt", None),
+            Edit::EncoderDelete {
+                profile_id: EncoderProfileId::new("hq"),
+            },
+        ],
+    );
+    assert_eq!(
+        graph.state().encoding_of(&OutputId::new("yt")),
+        Some(EncoderProfile::DEFAULT)
     );
 }
 

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:090f00774c2e20dd", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#crate-map/jstream-sources, whose only change on this branch is the YouTube chat message ADR link (0034 -> 0041, same source kind restated in ADR-0041 §2); C1a's color and image text holds" }
+verified = { hash = "b3:03c7f285c58c489f", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#222 C1b) into png 0.18: kept main's C1b seams text; png 0.18 maps a usize-overflowing frame size to a decode error, not described here; holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -36,9 +36,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
   needs a new source instead.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
-  `create(id, settings, ctx)`. Rendering sources from the registry on the engine's
-  render thread comes later; that work calls `create` off the render thread and hands
-  the frames over.
+  `create(id, settings, ctx)`. The engine creates its sources through it on its own
+  `jstream-sources` thread, never under its collection lock or on the render thread,
+  and its program mix asks each source for `frame` and `next_change` (see
+  `jstream-core`'s *Live sources*).
 - `Context`: the folders behind the `collection` and `app` asset roots
   (`AssetRoots`), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
   sides and 1 GiB of decoded memory by default. The image's size is checked before
@@ -79,6 +80,15 @@ Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
 
 **Assets.** `AssetRoots::resolve` resolves a `collection` or `app` path through
 symlinks and rejects one that leaves its root; an `absolute` path is used as it is.
+`AssetRoots::read` checks the file it opens, not only the path it resolved, so swapping
+a folder inside the root for a symlink meanwhile can't make it read a file outside. On
+Unix the opened file must be, by device and inode, the file its path resolves to inside
+the root afterwards. Stable Rust has no file IDs on Windows, so there the resolved path
+is walked from the root and each folder on it is held open without delete sharing,
+which stops it being renamed or replaced until the file is open; one that has become a
+link (a symlink, junction or other name-surrogate reparse point) is refused, while a
+OneDrive placeholder or dedup file, also a reparse point, is read. The root folder
+itself is the host's configuration and is trusted.
 Errors name an asset by the root and path its setting holds, never by the host path
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). A missing or
 undecodable file is an error from `create`, never from the edit that set it.

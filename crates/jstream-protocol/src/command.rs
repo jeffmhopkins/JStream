@@ -8,9 +8,10 @@
 //!
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
+use crate::encoder::EncoderProfile;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
-use crate::id::{IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
@@ -298,6 +299,49 @@ pub enum Edit {
         /// The output to delete.
         output_id: OutputId,
     },
+    /// Chooses the encoder profile an output uses, or the engine's default. A running
+    /// output keeps its encoder session; the profile applies from its next
+    /// `output.start`. Inverse: `output.set_encoder` with the previous profile.
+    #[serde(rename = "output.set_encoder")]
+    OutputSetEncoder {
+        /// The output to change.
+        output_id: OutputId,
+        /// The profile, which must exist, else `not_found`. Absent or `null` means the
+        /// engine's default.
+        #[serde(default)]
+        profile_id: Option<EncoderProfileId>,
+    },
+    /// Adds an encoder profile. Inverse: `encoder.delete`.
+    #[serde(rename = "encoder.create")]
+    EncoderCreate {
+        /// The new profile's ID, chosen by the client. Rejected if it exists.
+        profile_id: EncoderProfileId,
+        /// Display name.
+        name: String,
+        /// The encoding. Out-of-range values, and codecs or rate controls the engine
+        /// doesn't know, are rejected with `invalid_argument`.
+        profile: EncoderProfile,
+    },
+    /// Replaces an encoder profile's name and encoding. Running outputs keep their
+    /// encoder sessions; the new encoding applies from each output's next
+    /// `output.start`. Inverse: `encoder.update` with the previous name and encoding.
+    #[serde(rename = "encoder.update")]
+    EncoderUpdate {
+        /// The profile to change.
+        profile_id: EncoderProfileId,
+        /// The new display name.
+        name: String,
+        /// The new encoding, validated as in `encoder.create`.
+        profile: EncoderProfile,
+    },
+    /// Deletes an encoder profile. Rejected with `invalid_argument` while an output
+    /// uses it: point those outputs elsewhere with `output.set_encoder` first (in the
+    /// same batch if needed). Inverse: `encoder.create` with its name and encoding.
+    #[serde(rename = "encoder.delete")]
+    EncoderDelete {
+        /// The profile to delete.
+        profile_id: EncoderProfileId,
+    },
 }
 
 impl Edit {
@@ -325,6 +369,10 @@ impl Edit {
             Edit::OutputCreate { .. } => "output.create",
             Edit::OutputSetTarget { .. } => "output.set_target",
             Edit::OutputDelete { .. } => "output.delete",
+            Edit::OutputSetEncoder { .. } => "output.set_encoder",
+            Edit::EncoderCreate { .. } => "encoder.create",
+            Edit::EncoderUpdate { .. } => "encoder.update",
+            Edit::EncoderDelete { .. } => "encoder.delete",
             Edit::CanvasSetSize { .. } => "canvas.set_size",
         }
     }
@@ -388,8 +436,9 @@ pub enum Action {
     /// `action_failed` when the engine has no YouTube client.
     #[serde(rename = "youtube.sign_in")]
     YoutubeSignIn,
-    /// Signs out of YouTube: revokes the account's token at Google (best effort),
-    /// removes it from the credential store, and abandons a sign-in that is waiting.
+    /// Signs out of YouTube: removes the account's token from the credential store,
+    /// abandons a sign-in that is waiting, then revokes the token at Google (best
+    /// effort).
     /// Emits `youtube.status_changed` `signed_out`. Succeeds when already signed out.
     /// A running `youtube` output keeps its connection. Fails with `action_failed` when
     /// the engine has no YouTube client or the credential store refuses.
