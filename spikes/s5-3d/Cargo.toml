@@ -1,0 +1,27 @@
+# Spike S5 (3D1, ROADMAP M3). Throwaway; not a member of the root workspace.
+[package]
+name = "s5-3d"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Its own workspace, so the root workspace (crates/*, xtask) never builds or lints it.
+[workspace]
+
+[dependencies]
+# The shared ADR-0022 formula, so the spike's homogeneous placement is checked against
+# what the engine and the UI already use.
+jstream-protocol = { path = "../../crates/jstream-protocol" }
+# Pinned exactly, as in the workspace (ADR-0004). Vulkan runs on lavapipe here and on
+# Linux CI machines; DX12 on Windows.
+wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "vulkan", "dx12", "metal", "wgsl"] }
+pollster = "=0.4.0"
+png = "=0.18.1"
+
+[profile.release]
+debug = "line-tables-only"
+
+# The CPU reference renderer supersamples every pixel; unoptimised it takes minutes.
+[profile.dev]
+opt-level = 2

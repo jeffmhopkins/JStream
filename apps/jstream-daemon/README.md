@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:f37aab862f0078e2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294 merge of main at 94fb25d (D5 audio): Signals bullet still holds, serve_with_shutdown closes with 1001 and now returns once connections finish closing" }
+verified = { hash = "b3:4ab3235e8b780749", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#360, #299 D6, #381) into #301: took main's stamp; re-read; main's text unchanged in this section; Signals bullet still holds against this PR's server#design shutdown text (serve_with_shutdown closes with 1001 and returns once connections finish closing); holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
