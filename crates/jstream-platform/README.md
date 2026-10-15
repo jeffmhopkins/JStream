@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:b153c125af53c8bb", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (F5 #163 media codecs, C6 #147): platform purpose names encoder/decoder traits, not codec lists; HEVC/AV1 in media changes nothing here; E1 note still holds" }
+verified = { hash = "b3:37abd40a1fe32e46", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after the merge: platform traits untouched by E1 and D1; holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -128,7 +128,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:2f38de1025c02db7", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#153 crate-map mcp/server rows): nothing here relies on those rows; E1's ResourceCache doesn't change the interop design" }
+verified = { hash = "b3:9a16d45636568bbf", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH crate-map/gpu-pipeline after the merge: render composites on the platform device or its own; the cache doesn't change the interop design" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

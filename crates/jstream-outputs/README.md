@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:d49fc0cc4f90a70b", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Dependency only (E1 changed ARCH threading): the RTMP client and record sink are untouched; nothing here describes render threads or snapshots" }
+verified = { hash = "b3:ebbc09327667435c", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after the merge: outputs' RTMP/recording description matches F2b's sink; the render snapshot doesn't touch it" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -146,8 +146,9 @@ audio-only).
   its AVC configuration), `Exists` or `Rename`, keeping the `.part` file in each case.
 - **Threading:** the recorder blocks on the disk, so like the RTMP client it runs on its
   output's own thread, fed through a bounded queue that drops and counts packets under
-  overload ([R-RT-004](../../docs/RULES.md#R-RT-004)). The `Record { path, container }`
-  output kind and its engine wiring come with the `Output` layer.
+  overload ([R-RT-004](../../docs/RULES.md#R-RT-004)). The protocol's
+  `Record { path, container }` output kind drives it from `jstream-core`'s output
+  thread, which opens it on `output.start` and finishes it on `output.stop`.
 
 **Why blocking I/O over `Read + Write`.** [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)
 puts network outputs on the control plane, whose rules allow allocating and waiting.

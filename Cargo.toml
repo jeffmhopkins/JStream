@@ -16,6 +16,9 @@ anyhow = "1"
 arc-swap = { version = "1.9", default-features = false }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
+# Lock-free bounded queues for the audio mixer's commands and the collector (R-RT-003).
+# A send on a bounded channel does not allocate. `std` is the only feature.
+crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
 futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 # OS randomness (the daemon's control token). Already in the tree through tungstenite's
@@ -36,6 +39,7 @@ jstream-platform = { path = "crates/jstream-platform" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }
+jstream-vcam-proto = { path = "crates/jstream-vcam-proto" }
 # PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.

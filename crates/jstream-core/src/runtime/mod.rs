@@ -1,5 +1,5 @@
 //! The media pipeline behind `output.start`: capture, one-scene composite, encode,
-//! mix and publish. Each stage runs on the thread
+//! mix, and publish or record. Each stage runs on the thread
 //! [ARCH › Threads](../../../docs/ARCHITECTURE.md#threading) assigns.
 //!
 //! The control thread only starts and stops the pipeline. It does not hold the
@@ -10,6 +10,7 @@
 mod pipeline;
 mod publish;
 mod render;
+mod sink;
 
 pub use pipeline::OutputStats;
 #[cfg(test)]
@@ -23,3 +24,4 @@ pub use publish::{
     LinkState, LivePublish, OpenPublish, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
 };
 pub(crate) use render::{Collector, RenderHub, RenderReader, RenderSnapshot};
+pub(crate) use sink::Destination;

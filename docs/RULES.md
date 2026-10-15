@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:aeba068b8f953fa9", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: re-read R-RT-001..006 against the threading changes: render-snapshot adoption is an arc-swap load, a pointer compare and a SeqCst store; freed objects go to a collector; rules unchanged" }
+verified = { hash = "b3:f4b2fb05dcdac1cb", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after the merge: R-RT rules unchanged; the render collector and the mixer's collector both satisfy R-RT-003 as written" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d1aae25b710240dd", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read R-API-001..004 against 0.8 (main, additive) and I1 (transport only, no protocol change)" }
+verified = { hash = "b3:8856d9130337d3e9", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): 0.10 adds the history call kind, two error codes and optional cause, all additive; no rule text changed" }
 -->
 
 <a id="R-API-001"></a>
