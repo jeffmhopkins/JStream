@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 /// The browser backend for an engine on `clock`, with CEF's cache under `data` (`cef`)
 /// and its log in `data`'s `logs` folder (`cef.log`). CEF itself starts when the first
-/// page opens, so a missing helper exe or runtime fails that source, not the app.
+/// page opens, so a missing helper exe or missing resource files fail that source, not
+/// the app. (`libcef.dll` is linked at load time: without it the exe doesn't start.)
 ///
 /// `None`, logged, when the helper's folder (the exe's) is unknown: the engine then runs
 /// without one and `browser` sources draw nothing. Without a GPU device pages still play

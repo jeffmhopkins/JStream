@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:9730f6ddac52575c", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4 CI doc fix: engine()'s rustdoc names browser::backend in code, not as a link (the module is cfg'd out of docs); section holds" }
+verified = { hash = "b3:91df253fd96c8f0f", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Round 1 B1: only browser.rs's rustdoc changed (libcef.dll load-time note); contents bullet still matches" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -53,7 +53,7 @@ folder, and browser sources in a default build (the `cef` feature is off).
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:a616400bf75a10cd", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: browser sources need --features cef, the helper and runtime beside jstream.exe; cache <data>/cef and logs/cef.log match browser.rs; off by default per Cargo.toml" }
+verified = { hash = "b3:351c3aa73f116b8a", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Round 1 B1: browser paragraph says a cef build doesn't start without libcef.dll; rest re-read, holds" }
 -->
 
 On Windows, with the UI built first:
@@ -75,7 +75,8 @@ Closing the window stops the engine.
 
 **Browser sources** need the `cef` feature (`cargo run -p jstream-desktop --features
 cef`), whose build downloads and builds CEF, and `jstream-browser-helper.exe` and the CEF
-runtime beside `jstream.exe`. It is off by default until CEF's sandbox and file-access
+runtime beside `jstream.exe` (a `cef` build doesn't start without `libcef.dll`). It is
+off by default until CEF's sandbox and file-access
 limits land ([the browser crate's open items](../../crates/jstream-browser/README.md#open-items)).
 Without it, a `browser` source draws nothing. CEF's cache is the data folder's `cef`
 folder, and its log `logs\cef.log`.
@@ -101,7 +102,7 @@ folder, and its log `logs\cef.log`.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:5b0e61da128a4083", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4 CI doc fix: engine()'s rustdoc names browser::backend in code, not as a link (the module is cfg'd out of docs); section holds" }
+verified = { hash = "b3:4da71bbce505bfdf", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Round 1 B1: the browser bullet now says libcef.dll is a load-time import (cef-dll-sys links it; build.rs delay-loads only Media Foundation), so a cef build without it doesn't start; only a missing helper or resource files fail the source (start() checks the helper, initialize errors). Rest re-read, holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
@@ -149,7 +150,10 @@ verified = { hash = "b3:5b0e61da128a4083", by = "agent:claude@session_01D6iWjpMk
   clock the mixer runs on. Its pages paint onto a device of the media adapter the app
   opens for them (`WindowsGpu::open_device`), since the engine doesn't hand out its own
   device yet. The backend is added after the OS backends, so sources open on the media
-  clock. CEF starts on the first page, so a missing helper or runtime fails that source,
-  not the app; with no device, pages play audio but show no frames.
+  clock. A `cef` build links `libcef.dll` at load time, so without it beside
+  `jstream.exe` the exe doesn't start at all: Windows refuses it before the app can show
+  a page. CEF itself starts on the first page, so a missing helper or missing resource
+  files fail that source, not the app. With no device, pages play audio but show no
+  frames.
 - **Logs and the token.** The token reaches only the bootstrap script. It is never
   logged, written to disk, or put in a URL (R-SEC-001).
