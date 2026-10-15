@@ -358,6 +358,7 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             sources,
             scenes,
             outputs,
+            ..
         } => {
             writeln!(out, "rev {rev}")?;
             writeln!(out, "sources:")?;

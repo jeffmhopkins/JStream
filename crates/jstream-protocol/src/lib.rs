@@ -25,7 +25,7 @@ mod settings;
 mod version;
 
 pub use command::{
-    Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SourceKind, Vec2,
+    Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole, SourceKind, Vec2,
 };
 pub use envelope::{
     Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request, Response,
@@ -35,8 +35,8 @@ pub use error::{EntityKind, ProtocolError, WireError};
 pub use event::{DropCounts, Event, OutputState};
 pub use finite::Finite32;
 pub use geometry::{
-    CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, Placed,
-    ProjectedQuad, Size, legacy_quad,
+    Canvas, CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad,
+    Placed, PlacementForm, ProjectedQuad, Size, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};

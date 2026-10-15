@@ -210,6 +210,7 @@ fn handshake_list_and_call_round_trip() {
         names,
         [
             "batch",
+            "canvas",
             "describe_api",
             "events",
             "history",
@@ -251,7 +252,7 @@ fn handshake_list_and_call_round_trip() {
     // The protocol 0.3 reads, each under its noun's tool.
     let cam = json!({"source_id": "src_cam", "name": "Camera",
                      "kind": {"type": "builtin", "kind": "webcam"}});
-    let item = json!({"item_id": "itm_1", "source_id": "src_cam",
+    let item = json!({"item_id": "itm_1", "source_id": "src_cam", "placement": "legacy",
                       "transform": {"position": {"x": 0.0, "y": 0.0},
                                     "scale": {"x": 1.0, "y": 1.0}, "rotation_deg": 0.0},
                       "crop": {"left": 0, "top": 0, "right": 0, "bottom": 0},
@@ -272,7 +273,8 @@ fn handshake_list_and_call_round_trip() {
     let state = f.call_tool("state", json!({"op": {"type": "state.get"}}));
     assert_eq!(
         ok(&state)["result"]["result"],
-        json!({"type": "state.get", "rev": 2, "sources": [cam],
+        json!({"type": "state.get", "rev": 2,
+               "canvas": {"width": 1920, "height": 1080}, "sources": [cam],
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
                "outputs": []})
     );
@@ -325,7 +327,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(11));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(12));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(

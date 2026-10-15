@@ -6,12 +6,13 @@
 //! naming and classification checks see every variant.
 
 use crate::{
-    Action, Batch, Call, CallResult, ClientId, ClientMessage, Command, CommandClass, Crop,
-    DropCounts, Edit, EntityKind, ErrorResponse, Event, EventMessage, Finite32, Hello,
-    IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
-    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId,
-    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, ServerMessage,
-    Settings, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    Action, Batch, Call, CallResult, Canvas, ClientId, ClientMessage, Command, CommandClass, Crop,
+    DropCounts, Edit, EntityKind, ErrorResponse, Event, EventMessage, Finite32, FitMode, Hello,
+    IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo,
+    OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
+    RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
+    SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
+    Vec2, Welcome, json_schema,
 };
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
@@ -34,32 +35,70 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::SceneDelete {
             scene_id: SceneId::new("scn_1"),
         },
+        Edit::SceneSetRole {
+            scene_id: SceneId::new("scn_grp"),
+            role: SceneRole::Group,
+        },
+        Edit::ItemMove {
+            item_id: ItemId::new("itm_2"),
+            scene_id: SceneId::new("scn_grp"),
+            index: 0,
+        },
         Edit::ItemAdd {
             scene_id: SceneId::new("scn_1"),
             item_id: ItemId::new("itm_1"),
             source_id: SourceId::new("src_cam"),
             transform: None,
+            geometry: None,
         },
         Edit::ItemAdd {
             scene_id: SceneId::new("scn_1"),
             item_id: ItemId::new("itm_2"),
             source_id: SourceId::new("src_cam"),
             transform: Some(ItemTransform::IDENTITY),
+            geometry: None,
+        },
+        Edit::ItemAdd {
+            scene_id: SceneId::new("scn_1"),
+            item_id: ItemId::new("itm_3"),
+            source_id: SourceId::new("src_cam"),
+            transform: None,
+            geometry: Some(corner_box()),
         },
         Edit::ItemRemove {
             item_id: ItemId::new("itm_1"),
         },
         Edit::ItemSetTransform {
             item_id: ItemId::new("itm_2"),
+            scene_id: None,
             transform: ItemTransform {
                 position: Vec2::new(1280.0, 0.5).expect("finite"),
                 scale: Vec2::new(0.25, f32::MAX).expect("finite"),
                 rotation_deg: Finite32::new(-90.0).expect("finite"),
             },
         },
+        Edit::ItemSetGeometry {
+            item_id: ItemId::new("itm_2"),
+            scene_id: None,
+            geometry: ItemGeometry {
+                fit_mode: FitMode::Fill,
+                rotation_deg: Finite32::new(12.5).expect("finite"),
+                ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+            },
+        },
+        Edit::CanvasSetSize {
+            width: 3840,
+            height: 2160,
+        },
         Edit::ItemSetVisible {
             item_id: ItemId::new("itm_2"),
+            scene_id: None,
             visible: false,
+        },
+        Edit::ItemSetVisible {
+            item_id: ItemId::new("itm_2"),
+            scene_id: Some(SceneId::new("scn_1")),
+            visible: true,
         },
         Edit::ItemReorder {
             item_id: ItemId::new("itm_2"),
@@ -71,6 +110,7 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::ItemSetCrop {
             item_id: ItemId::new("itm_2"),
+            scene_id: None,
             crop: Crop {
                 left: 8,
                 top: 0,
@@ -351,18 +391,34 @@ fn source_infos() -> Vec<SourceInfo> {
     ]
 }
 
+/// A 480×270 box in the bottom-right quarter of a 1920×1080 canvas.
+fn corner_box() -> ItemGeometry {
+    ItemGeometry::try_new(
+        Vec2::new(1600.0, 900.0).expect("finite"),
+        Size::try_new(480.0, 270.0).expect("positive"),
+    )
+    .expect("positive")
+}
+
 fn item_infos() -> Vec<ItemInfo> {
     vec![
         ItemInfo {
             item_id: ItemId::new("itm_1"),
             source_id: SourceId::new("src_intro"),
-            transform: ItemTransform::IDENTITY,
+            placement: PlacementForm::Geometry,
+            transform: corner_box().transform_view().expect("finite"),
+            geometry: Some(ItemGeometry {
+                fit_mode: FitMode::Stretch,
+                ..corner_box()
+            }),
             crop: Crop::NONE,
             visible: true,
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
             source_id: SourceId::new("src_cam"),
+            placement: PlacementForm::Legacy,
+            geometry: None,
             transform: ItemTransform {
                 position: Vec2::new(1280.0, 720.0).expect("finite"),
                 scale: Vec2::new(0.25, 0.25).expect("finite"),
@@ -386,6 +442,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             scenes: vec![SceneSummary {
                 scene_id: SceneId::new("scn_1"),
                 name: "Main".into(),
+                role: SceneRole::Scene,
                 item_count: 2,
             }],
         },
@@ -405,16 +462,19 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         },
         QueryResult::StateGet {
             rev: Rev(12),
+            canvas: Canvas::DEFAULT,
             sources: source_infos(),
             scenes: vec![
                 SceneInfo {
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
+                    role: SceneRole::Scene,
                     items: item_infos(),
                 },
                 SceneInfo {
                     scene_id: SceneId::new("scn_intro"),
                     name: "Intro".into(),
+                    role: SceneRole::Group,
                     items: vec![],
                 },
             ],

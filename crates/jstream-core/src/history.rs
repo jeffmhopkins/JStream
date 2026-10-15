@@ -35,7 +35,11 @@ enum Object {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Prop {
     Name,
-    Transform,
+    /// A scene's role.
+    Role,
+    /// An item's placement: its legacy transform or its geometry (ADR-0022), which
+    /// replace each other.
+    Placement,
     Crop,
     Visible,
     /// An item's stacking position.
@@ -58,6 +62,8 @@ pub(crate) struct Touched {
     props: BTreeSet<(Object, Prop)>,
     /// Whether the scenes' display order was set.
     scene_order: bool,
+    /// Whether the canvas size was set.
+    canvas: bool,
     /// An edit this module doesn't know: it conflicts with everything.
     unknown: bool,
 }
@@ -80,7 +86,11 @@ impl Touched {
             Edit::SceneRename { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Name);
             }
+            Edit::SceneSetRole { scene_id, .. } => {
+                self.prop(Object::Scene(scene_id.clone()), Prop::Role);
+            }
             Edit::SceneReorder { .. } => self.scene_order = true,
+            Edit::CanvasSetSize { .. } => self.canvas = true,
             Edit::ItemAdd {
                 scene_id,
                 item_id,
@@ -94,8 +104,8 @@ impl Touched {
             Edit::ItemRemove { item_id } => {
                 self.exists.insert(Object::Item(item_id.clone()));
             }
-            Edit::ItemSetTransform { item_id, .. } => {
-                self.prop(Object::Item(item_id.clone()), Prop::Transform);
+            Edit::ItemSetTransform { item_id, .. } | Edit::ItemSetGeometry { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Placement);
             }
             Edit::ItemSetCrop { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Crop);
@@ -105,6 +115,14 @@ impl Touched {
             }
             Edit::ItemReorder { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Index);
+            }
+            // A move sets the item's position, in the scene it names; its inverse names
+            // the scene it left.
+            Edit::ItemMove {
+                item_id, scene_id, ..
+            } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Index);
+                self.uses.insert(Object::Scene(scene_id.clone()));
             }
             Edit::SourceCreate {
                 source_id, kind, ..
@@ -152,6 +170,7 @@ impl Touched {
         self.uses.extend(other.uses.iter().cloned());
         self.props.extend(other.props.iter().cloned());
         self.scene_order |= other.scene_order;
+        self.canvas |= other.canvas;
         self.unknown |= other.unknown;
     }
 
@@ -169,11 +188,12 @@ impl Touched {
 
     /// Whether undoing or redoing one of these would overwrite the other: one creates or
     /// deletes an object the other touches at all, both set the same property, or both
-    /// set the scenes' order.
+    /// set the scenes' order, or both set the canvas size.
     pub(crate) fn conflicts_with(&self, other: &Touched) -> bool {
         self.unknown
             || other.unknown
             || (self.scene_order && other.scene_order)
+            || (self.canvas && other.canvas)
             || other.objects().any(|o| self.exists.contains(o))
             || self.objects().any(|o| other.exists.contains(o))
             || !self.props.is_disjoint(&other.props)
@@ -421,7 +441,7 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::Touched;
-    use jstream_protocol::{Edit, ItemId, ItemTransform, SceneId, SourceId};
+    use jstream_protocol::{Edit, ItemGeometry, ItemId, ItemTransform, SceneId, SourceId};
 
     fn add(scene: &str, item: &str, source: &str) -> Edit {
         Edit::ItemAdd {
@@ -429,6 +449,7 @@ mod tests {
             item_id: ItemId::new(item),
             source_id: SourceId::new(source),
             transform: None,
+            geometry: None,
         }
     }
 
@@ -441,15 +462,76 @@ mod tests {
     fn transform(item: &str) -> Edit {
         Edit::ItemSetTransform {
             item_id: ItemId::new(item),
+            scene_id: None,
             transform: ItemTransform::IDENTITY,
+        }
+    }
+
+    fn geometry(item: &str) -> Edit {
+        Edit::ItemSetGeometry {
+            item_id: ItemId::new(item),
+            scene_id: None,
+            geometry: ItemGeometry::covering_canvas(1920, 1080).expect("invariant: a valid canvas"),
+        }
+    }
+
+    fn canvas() -> Edit {
+        Edit::CanvasSetSize {
+            width: 1280,
+            height: 720,
         }
     }
 
     fn visible(item: &str) -> Edit {
         Edit::ItemSetVisible {
             item_id: ItemId::new(item),
+            scene_id: None,
             visible: false,
         }
+    }
+
+    fn item_move(item: &str, scene: &str) -> Edit {
+        Edit::ItemMove {
+            item_id: ItemId::new(item),
+            scene_id: SceneId::new(scene),
+            index: 0,
+        }
+    }
+
+    #[test]
+    fn moves_and_roles_are_known_edits() {
+        let moved = Touched::of(&[item_move("a", "g")], &[item_move("a", "s")]);
+        assert!(!moved.unknown);
+        // Another item's transform, elsewhere, doesn't conflict with the move.
+        let other = Touched::of(&[transform("b")], &[transform("b")]);
+        assert!(!moved.conflicts_with(&other));
+        // Reordering the same item does, and so does deleting either scene.
+        let reorder = Touched::of(
+            &[Edit::ItemReorder {
+                item_id: ItemId::new("a"),
+                index: 1,
+            }],
+            &[],
+        );
+        assert!(moved.conflicts_with(&reorder));
+        let delete = Touched::of(
+            &[Edit::SceneDelete {
+                scene_id: SceneId::new("g"),
+            }],
+            &[],
+        );
+        assert!(moved.conflicts_with(&delete));
+        let role = |r| Edit::SceneSetRole {
+            scene_id: SceneId::new("g"),
+            role: r,
+        };
+        let grouped = Touched::of(
+            &[role(jstream_protocol::SceneRole::Group)],
+            &[role(jstream_protocol::SceneRole::Scene)],
+        );
+        assert!(!grouped.unknown);
+        assert!(!grouped.conflicts_with(&other));
+        assert!(grouped.conflicts_with(&grouped.clone()));
     }
 
     #[test]
@@ -485,5 +567,18 @@ mod tests {
         );
         let placed = Touched::of(&[add("s", "j", "cam")], &[remove("j")]);
         assert!(created.conflicts_with(&placed));
+    }
+
+    /// `item.set_geometry` and `item.set_transform` replace the same placement, and two
+    /// canvas sizes conflict; neither is an unknown edit that conflicts with everything.
+    #[test]
+    fn placements_and_canvas_sizes_conflict_only_with_their_own_kind() {
+        let boxed = Touched::of(&[geometry("i")], &[transform("i")]);
+        assert!(boxed.conflicts_with(&Touched::of(&[transform("i")], &[transform("i")])));
+        assert!(!boxed.conflicts_with(&Touched::of(&[visible("i")], &[visible("i")])));
+        assert!(!boxed.conflicts_with(&Touched::of(&[geometry("j")], &[geometry("j")])));
+        let sized = Touched::of(&[canvas()], &[canvas()]);
+        assert!(sized.conflicts_with(&Touched::of(&[canvas()], &[canvas()])));
+        assert!(!sized.conflicts_with(&boxed));
     }
 }

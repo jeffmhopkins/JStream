@@ -78,7 +78,7 @@ impl Crop {
 /// The same fields as the protocol's `ItemTransform`. `place` maps them onto that type
 /// and calls `legacy_quad`, every frame, against the image's size (ADR-0022 decision 5).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Placement {
+pub struct LegacyTransform {
     /// Top-left corner, in canvas pixels. x right, y down.
     pub position: [f32; 2],
     /// Scale of the cropped source. `1.0` is one source pixel per canvas pixel.
@@ -88,13 +88,35 @@ pub struct Placement {
     pub rotation_deg: f32,
 }
 
-impl Placement {
+impl LegacyTransform {
     /// Top-left at the origin, native size, no rotation.
     pub const IDENTITY: Self = Self {
         position: [0.0, 0.0],
         scale: [1.0, 1.0],
         rotation_deg: 0.0,
     };
+}
+
+impl Default for LegacyTransform {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
+}
+
+/// Where an item sits on the canvas: one of ADR-0022's two placement forms.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Placement {
+    /// A 0.3 transform, evaluated against the image's size on every render.
+    Legacy(LegacyTransform),
+    /// A box on the canvas, with the protocol's own type. The cropped image is fitted
+    /// into the box by its fit mode, and `fill` is clipped to the box. Non-neutral 3D is
+    /// [`crate::RenderError::Invalid`] until M3 draws it.
+    Geometry(jstream_protocol::ItemGeometry),
+}
+
+impl Placement {
+    /// The legacy identity: top-left at the origin, native size, no rotation.
+    pub const IDENTITY: Self = Self::Legacy(LegacyTransform::IDENTITY);
 }
 
 impl Default for Placement {
