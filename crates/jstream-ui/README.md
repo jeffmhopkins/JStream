@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:08b55219268cede9", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of U1's branch (Q3 e2e, protocol 0.20) plus round 2: Canvas bullet (boxes over the live program preview) replaces U1's 'not hooked up yet' line, which this PR makes false; rest holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -50,7 +49,6 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:071102f46a7e3721", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of U1's branch plus round 2: the JPEG settle closure holds only Jpegs/Painter (no Control), so disconnecting still closes the socket; no new styles; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -117,7 +115,6 @@ verified = { hash = "b3:071102f46a7e3721", by = "agent:claude@session_01PE5Ejidr
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:b036630977cd2e9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Round 2: intro now says preview.rs also decides when each JPEG decodes (JpegSlot, tested); Preview bullet's one-at-a-time, newest-waits wording matches screen.rs show_jpeg/decode_jpeg; rest re-checked" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
@@ -185,7 +182,6 @@ is the component.
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:5a04a748741bf41a", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: added the pointer to CI's ui-e2e job and tests/e2e/README.md; trunk build steps unchanged and still what CI runs" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for

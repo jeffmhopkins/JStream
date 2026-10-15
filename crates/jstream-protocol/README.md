@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:e02ecc0b74097550", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: Action list has audio.reset_loudness then preview actions; Events is main's (meters.tick) plus the Preview streams bullet; version line 0.20 preview, 0.19 audio, 0.18 virtual_cam" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -141,7 +140,6 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:3c0e623c12f62fa5", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: envelope example minor 20; Binary streams says 0.20 and that meters travel in the meters.tick event (a binary meter stream would be another kind); main's audio and meters text kept" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
