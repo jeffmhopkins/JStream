@@ -164,6 +164,7 @@ mod tests {
     }
 
     fn same(got: &[[u8; 4]], want: &[[u8; 4]]) {
+        assert_eq!(got.len(), want.len(), "{got:?} vs {want:?}");
         for (i, (g, w)) in got.iter().zip(want).enumerate() {
             assert!(
                 (0..4).all(|c| g[c].abs_diff(w[c]) <= 1),

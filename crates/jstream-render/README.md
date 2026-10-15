@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:2a7c3014cde3b90d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1: re-read Purpose; the merge only moves FrameSync staging and narrows an allow in filter/; Purpose still points filters at #filters and the chain runtime at V0; holds" }
+verified = { hash = "b3:6ee3720aa1c40e01", by = "agent:claude", note = "re-read after dropping the now-unneeded unused_imports allow on filter's pass re-export and fixing the pack module doc; no text here touches either; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:98367bd423d426dc", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1: re-read Design against compositor.rs apply_filter (staging now after encode) and the V1 pack; no new thread, I/O or steady-path allocation; holds" }
+verified = { hash = "b3:12218755451ab64f", by = "agent:claude", note = "re-read after the allow removal, the pack module doc fix and a test-helper length check; no pass, thread or allocation changed; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:b530c6057cc98420", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1: harness bullets now say FrameSync staged after recording and frame.time wraps daily, matching compositor.rs and prelude.wgsl; consistent with the pack's scroll, which computes its offset in f64 on the CPU (pack/scroll.rs); V1 kind text unchanged; holds" }
+verified = { hash = "b3:1501fae24d9df096", by = "agent:claude", note = "B1: re-read the V1 lead against pack/*.wgsl; it now says the colour kinds work on straight sRGB-encoded colour and sharpen on premultiplied encoded colour, matching sharpen.wgsl and the sharpen bullet; rest of the section unchanged and holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -324,8 +324,9 @@ kinds.
 **The kinds.** Each group documents its kinds here as it lands.
 
 The single-pass pack (V1, `src/filter/pack/`): one draw each, keeping the input's
-size. The colour kinds and sharpen work on straight sRGB-encoded colour, as OBS does, so
-OBS's numbers carry over; each decodes back to premultiplied linear light on the way out.
+size. The colour kinds work on straight sRGB-encoded colour, as OBS does, so OBS's
+numbers carry over; sharpen works on premultiplied encoded colour. Each decodes back to
+premultiplied linear light on the way out.
 
 - `color_correction`: `gamma` (−3..3; above 0 brightens, OBS's exponent mapping),
   `contrast` (−4..4), `brightness` (−1..1), `saturation` (−1..5; −1 is greyscale,

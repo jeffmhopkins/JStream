@@ -1,9 +1,9 @@
 //! The single-pass pack (roadmap V1): colour correction, the chroma, colour and luma keys, sharpen, rounded corners with a border, and scroll.
 //!
 //! Every kind here is one fullscreen draw of the input's size. The colour kinds
-//! (colour correction and the keys) and sharpen work on straight sRGB-encoded colour,
-//! as OBS does, so OBS's numbers carry over; their WGSL decodes back to premultiplied
-//! linear light on the way out.
+//! (colour correction and the keys) work on straight sRGB-encoded colour, as OBS does,
+//! so OBS's numbers carry over; sharpen works on premultiplied encoded colour. Their
+//! WGSL decodes back to premultiplied linear light on the way out.
 
 use jstream_protocol::{KindDescriptor, Settings};
 
