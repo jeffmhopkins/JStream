@@ -694,6 +694,8 @@ impl State {
                         name: scene.name.clone(),
                         role: scene.role,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
+                        folder: None,
+                        meta: Default::default(),
                     })
                     .collect(),
             },
@@ -736,10 +738,14 @@ impl State {
                         name: scene.name.clone(),
                         role: scene.role,
                         items: self.collection.item_infos(scene),
+                        folder: None,
+                        meta: Default::default(),
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
                 encoders: self.collection.encoder_infos(),
+                folders: Vec::new(),
+                labels: Vec::new(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
@@ -1393,6 +1399,7 @@ impl Collection {
                     .duplicated_from
                     .clone()
                     .filter(|original| self.sources.contains_key(original)),
+                meta: Default::default(),
             })
             .collect()
     }
@@ -2288,6 +2295,8 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                folders: Vec::new(),
+                labels: Vec::new(),
             },
             other => panic!("not a state: {other:?}"),
         }
@@ -2413,6 +2422,8 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                folders: Vec::new(),
+                labels: Vec::new(),
             }
         );
         drain(&mut events);

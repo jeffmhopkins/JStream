@@ -3,9 +3,9 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId, OutputKind,
-    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId, SourceKind,
-    parity,
+    Edit, EncoderProfile, EncoderProfileId, FolderId, KindCategory, KindDescriptor, LabelId,
+    OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneMeta,
+    SceneRole, SourceId, SourceKind, SourceMeta, parity,
 };
 use serde_json::{Value, json};
 
@@ -475,4 +475,101 @@ fn parse_errors_quote_nothing_from_the_file() {
         load(&missing),
         Err(LoadError::Parse("missing field `canvas`".into()))
     );
+}
+
+/// Folders, labels and organisation metadata survive a save and load (ADR-0024 §3 and
+/// §4), also with a folder ahead of its parent in folder order, and a collection without
+/// them saves none of their fields.
+#[test]
+fn folders_labels_and_metadata_round_trip() {
+    let mut graph = fixture_graph();
+    let plain = graph.to_collection_json();
+    for field in [
+        "folders",
+        "labels",
+        "folder",
+        "favourite",
+        "show_in_multiview",
+    ] {
+        assert!(
+            !plain.contains(&format!("\"{field}\"")),
+            "{field} in {plain}"
+        );
+    }
+    let applied = graph.apply(
+        &[
+            Edit::FolderCreate {
+                folder_id: FolderId::new("shows"),
+                name: "Shows".into(),
+                parent: None,
+            },
+            Edit::FolderCreate {
+                folder_id: FolderId::new("intros"),
+                name: "Intros".into(),
+                parent: Some(FolderId::new("shows")),
+            },
+            Edit::FolderReorder {
+                folder_id: FolderId::new("intros"),
+                index: 0,
+            },
+            Edit::SceneSetFolder {
+                scene_id: SceneId::new("a"),
+                folder_id: Some(FolderId::new("intros")),
+            },
+            Edit::SceneSetMeta {
+                scene_id: SceneId::new("a"),
+                meta: SceneMeta {
+                    icon: Some("star".into()),
+                    color: Some("#1e1e2e".into()),
+                    favourite: true,
+                    show_in_multiview: false,
+                },
+            },
+            Edit::LabelCreate {
+                label_id: LabelId::new("sponsor"),
+                name: "Sponsor".into(),
+                color: "#ff8800".into(),
+                icon: Some("megaphone".into()),
+            },
+            Edit::SourceSetMeta {
+                source_id: SourceId::new("cam"),
+                meta: SourceMeta {
+                    labels: vec![LabelId::new("sponsor")],
+                    favourite: true,
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        saved["folders"],
+        json!([
+            {"id": "intros", "name": "Intros", "parent": "shows"},
+            {"id": "shows", "name": "Shows"}
+        ])
+    );
+    assert_eq!(
+        saved["labels"],
+        json!([{"id": "sponsor", "name": "Sponsor", "color": "#ff8800", "icon": "megaphone"}])
+    );
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// A scene filed in a folder the file doesn't have is refused, naming the scene.
+#[test]
+fn a_scene_in_a_missing_folder_is_refused() {
+    let json = edit_file(|file| file["scenes"][0]["folder"] = json!("nope"));
+    match load(&json) {
+        Err(LoadError::Invalid { object, error }) => {
+            assert!(object.starts_with("scene `"), "{object}");
+            assert!(
+                matches!(*error, ProtocolError::NotFound { .. }),
+                "{error:?}"
+            );
+        }
+        other => panic!("expected a refusal, got {other:?}"),
+    }
 }

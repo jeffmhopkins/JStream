@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:0cee9228843ca676", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; shared-names bullet is main's; mock still accepts virtual_cam" }
+verified = { hash = "b3:cc608f6ab5d01933", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: re-read; mock contents bullet unchanged (organisation edits answer internal, stated in Design); holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:dbd065bb673c1ddb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; set_target refusal for a virtual camera unchanged" }
+verified = { hash = "b3:2f00e21eeb54a18e", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: edited: the mock implements every edit but ADR-0024's folder/label/metadata edits, which answer internal, so its reads report none" }
 -->
 
 ### The trait
@@ -103,7 +103,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but the organisation ones (see below), with the checks
+  `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
@@ -136,7 +137,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   checking them or filling in defaults (a `null` in a `source.set_settings` patch
   removes the entry), and doesn't follow settings references when it looks for cycles.
   `kind.list`, `kind.describe` and `delete.plan` answer `internal`, and its refused
-  deletes carry no `blockers`;
+  deletes carry no `blockers`. The folder, label and metadata edits
+  ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4: `folder.*`,
+  `label.*`, `scene.set_folder`, `scene.set_meta` and `source.set_meta`) answer
+  `internal` too, so its reads report no folders, labels or metadata;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing

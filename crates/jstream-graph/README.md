@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:82526774ecb1ce02", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:849a526df40f41d6", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: edited: organise.rs bullet (folders tree, labels, metadata, blockers, delete.plan, inverses), reads, file fields omitted at default and load order, tests; checked against organise.rs, persist/mod.rs, plan.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -141,6 +141,23 @@ the batch **touched**.
   addressing. No keyframe overrides exist yet, so no edit drops any
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
   §1 applies once they do).
+- **Folders, labels and metadata** (`organise.rs`,
+  [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): folders and labels are
+  ordered lists with unique, non-empty IDs and non-empty names. `folder.create` takes an
+  optional `parent` that must exist, and `folder.set_parent` refuses a parent that would
+  put the folder inside itself (`invalid_argument`, field `parent`, naming the chain).
+  `scene.set_folder` names an existing folder or none. `label.create` and
+  `label.update` check the colour (`#rrggbb`) and icon (1 to 64 bytes, no whitespace)
+  with the protocol's `check_color` and `check_icon`, and `scene.set_meta` checks the
+  same through `SceneMeta::problem`. `source.set_meta` replaces a source's labels (each
+  must exist and appear once; stored ordered by ID) and favourite flag, and
+  `source.duplicate` copies both to the copy. `folder.delete` is refused while a scene
+  (`folder`) or folder (`parent`) sits in the folder, and `label.delete` while a source
+  (`labels`) carries the label, listing them as `blockers`; their `delete.plan` moves
+  what the folder holds up to its parent, or takes the label off those sources. Every
+  edit is undone by the previous value; a delete by the create, then a reorder back
+  unless it was last. `scene.delete` and `source.delete` undo the folder and metadata
+  too. None of it is a dependency edge.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
   scenes and sources its settings refer to. Asset references are not edges. Every edit
@@ -151,8 +168,8 @@ the batch **touched**.
   (for example scene `a` -> source `sa` -> scene `a`).
 
 **Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
-collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list` and
-`encoder.list`)
+collection (`state.get`, with the folders and labels in their orders, `scene.list`,
+`source.list`, `item.list`, `output.list` and `encoder.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
 unknown kind), and `delete.plan` (`plan.rs`,
@@ -169,7 +186,8 @@ canvas. A geometry item reads its `geometry`, and the deprecated `transform` vie
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
 stored transform and no geometry. `Source::to_info` (given the `State`, to omit a
 `duplicated_from` whose source is gone),
-`Scene::to_info`, `Item::to_info` and `Output::to_info` convert single objects. Reads change nothing.
+`Scene::to_info`, `Item::to_info`, `Output::to_info`, `Folder::to_info` and
+`Label::to_info` convert single objects. Reads change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
@@ -179,8 +197,14 @@ its own form, a legacy `transform` or a `geometry`, exactly one of them, then it
 and `visible`), sources ordered by ID (with `kind_version`, the descriptor version a
 `builtin` source's settings follow, ADR-0025, and `duplicated_from` as stored, even
 when it names a deleted source), outputs ordered by ID (each with its
-`encoder_profile`, omitted for the default), and encoder profiles (`encoders`) ordered by
-ID, omitted when there are none. Kinds, undo history and runtime state are not in it, and
+`encoder_profile`, omitted for the default), encoder profiles (`encoders`) ordered by
+ID, omitted when there are none, and `folders` and `labels` in their orders, each
+omitted when empty. A scene's `folder`, `icon`, `color`, `favourite` and
+`show_in_multiview`, and a source's `labels` and `favourite`, are each omitted while
+they have their default, so a collection without them saves as it did before they
+existed and needs no schema bump. Loading creates the folders top level first, then
+sets each nested one's parent, so a folder may come before its parent in the file;
+labels come before the sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -191,8 +215,9 @@ the engine's; this crate does no I/O.
   own objects, so a newer field is never silently dropped by the next save.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
-  graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
-  sources its settings refer to), then items in their placement form with their crop
+  graph with the caller's kinds: the canvas size, folders and labels, scenes with their
+  roles, folders and metadata, then sources (each after the sources its settings refer
+  to, then its labels and favourite), then items in their placement form with their crop
   and visibility, then encoder profiles, then outputs with their profiles. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
@@ -206,7 +231,7 @@ the engine's; this crate does no I/O.
   name, a fixed reason, and the line and column of a syntax error.
 
 **Tests** (`tests.rs`; the reads' own in `read.rs`, the touched sets' conflict rule in
-`touched.rs`): validation and error codes per
+`touched.rs`, folders and labels in `organise.rs`): validation and error codes per
 edit, shared sources, references and clones (`item.set_source` keeping the item, the
 `duplicated_from` link through deletes and undo, and both conversions as one batch),
 cycles (self, 2- and 3-cycles, legal diamonds, and through settings references, one
@@ -220,10 +245,10 @@ what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
-batches of every edit, including moves, role changes, source switches and addressed placement edits. After each successful one, the state must hold no cycle, applying its
+batches of every edit, including moves, role changes, source switches, addressed placement edits, folders, labels and metadata. After each successful one, the state must hold no cycle and its folders must form a tree, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged. And
-after every batch, for each scene and source: a plain delete is refused exactly when
+after every batch, for each scene, source, folder and label: a plain delete is refused exactly when
 it has blockers, the error lists them, and the `delete.plan` batch applies at the
 planned `rev`, removes the target, and undoes exactly.
 The proptest suites (`tests/properties.rs`, public API only, shrinking failures to a

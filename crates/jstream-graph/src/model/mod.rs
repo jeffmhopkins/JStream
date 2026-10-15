@@ -26,16 +26,19 @@
 //!   credential store, outside the collection.
 //! - Every output's encoder profile exists, and every profile holds an encoding the
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
+//! - Folder and label IDs are non-empty and unique within their kind. Every scene's
+//!   folder and every folder's parent exists, and no folder sits inside itself. Every
+//!   label a source carries exists (ADR-0024 §3 and §4).
 //!
 //! The structs have private fields so that later additions (source `filters[]`, item
 //! `effects[]`, the full 3D transform) don't break callers.
 
 use jstream_protocol::{
-    Canvas, Crop, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
-    KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole, Settings,
-    SourceId, SourceKind,
+    Canvas, Crop, EncoderProfile, EncoderProfileId, FolderId, ItemGeometry, ItemId, ItemTransform,
+    KindDescriptor, LabelId, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneMeta,
+    SceneRole, Settings, SourceId, SourceKind,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The scene graph of one collection, its revision, and the kinds it can create.
 ///
@@ -98,6 +101,10 @@ pub struct State {
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
     pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
+    /// In folder order.
+    pub(crate) folders: Vec<Folder>,
+    /// In label order.
+    pub(crate) labels: Vec<Label>,
 }
 
 impl State {
@@ -171,6 +178,26 @@ impl State {
         })
     }
 
+    /// Every folder of the scene list, in folder order.
+    pub fn folders(&self) -> &[Folder] {
+        &self.folders
+    }
+
+    /// The folder with this ID.
+    pub fn folder(&self, id: &FolderId) -> Option<&Folder> {
+        self.folders.iter().find(|f| &f.id == id)
+    }
+
+    /// Every label, in label order.
+    pub fn labels(&self) -> &[Label] {
+        &self.labels
+    }
+
+    /// The label with this ID.
+    pub fn label(&self, id: &LabelId) -> Option<&Label> {
+        self.labels.iter().find(|l| &l.id == id)
+    }
+
     pub(crate) fn scene_index(&self, id: &SceneId) -> Option<usize> {
         self.scenes.iter().position(|s| &s.id == id)
     }
@@ -192,6 +219,8 @@ pub struct Source {
     pub(crate) kind: SourceKind,
     pub(crate) settings: Settings,
     pub(crate) duplicated_from: Option<SourceId>,
+    pub(crate) labels: BTreeSet<LabelId>,
+    pub(crate) favourite: bool,
 }
 
 impl Source {
@@ -221,6 +250,17 @@ impl Source {
     pub fn duplicated_from(&self) -> Option<&SourceId> {
         self.duplicated_from.as_ref()
     }
+
+    /// The labels it carries, ordered by ID (ADR-0024 §4). Every item placing it shares
+    /// them.
+    pub fn labels(&self) -> &BTreeSet<LabelId> {
+        &self.labels
+    }
+
+    /// Whether it is a favourite.
+    pub fn favourite(&self) -> bool {
+        self.favourite
+    }
 }
 
 /// A scene: a stack of items. A group is a scene too, with the role `group`.
@@ -229,6 +269,8 @@ pub struct Scene {
     pub(crate) id: SceneId,
     pub(crate) name: String,
     pub(crate) role: SceneRole,
+    pub(crate) folder: Option<FolderId>,
+    pub(crate) meta: SceneMeta,
     pub(crate) items: Vec<Item>,
 }
 
@@ -248,9 +290,75 @@ impl Scene {
         self.role
     }
 
+    /// The folder it is filed in, if any. Folders change no engine behaviour.
+    pub fn folder(&self) -> Option<&FolderId> {
+        self.folder.as_ref()
+    }
+
+    /// Its organisation metadata: icon, colour, favourite and multiview flag.
+    pub fn meta(&self) -> &SceneMeta {
+        &self.meta
+    }
+
     /// Its items in stacking order: the first is at the bottom.
     pub fn items(&self) -> &[Item] {
         &self.items
+    }
+}
+
+/// One folder of the scene list (ADR-0024 §3): for organising only.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Folder {
+    pub(crate) id: FolderId,
+    pub(crate) name: String,
+    pub(crate) parent: Option<FolderId>,
+}
+
+impl Folder {
+    /// Its ID.
+    pub fn id(&self) -> &FolderId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The folder it sits in, or `None` at the top level.
+    pub fn parent(&self) -> Option<&FolderId> {
+        self.parent.as_ref()
+    }
+}
+
+/// One label that sources carry (ADR-0024 §4).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Label {
+    pub(crate) id: LabelId,
+    pub(crate) name: String,
+    pub(crate) color: String,
+    pub(crate) icon: Option<String>,
+}
+
+impl Label {
+    /// Its ID.
+    pub fn id(&self) -> &LabelId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Its colour, as `#rrggbb`.
+    pub fn color(&self) -> &str {
+        &self.color
+    }
+
+    /// Its icon name, if any.
+    pub fn icon(&self) -> Option<&str> {
+        self.icon.as_deref()
     }
 }
 

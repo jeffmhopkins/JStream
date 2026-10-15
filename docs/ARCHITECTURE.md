@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:bddcc7ef355104c7", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: Outputs list now includes VirtualCam (no settings, ignores its profile); Not-yet list drops VirtualCam, keeps YouTube; master/output chain note holds" }
+verified = { hash = "b3:41ab0b0884d4b9b8", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: edited: Folder gains parent? (a tree, ADR-0024 leaves room), organisation bullet says no self-nesting, in-use deletes refused with delete.plan, Not-yet list drops folders/labels/metadata" }
 -->
 
 ```
@@ -178,7 +178,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                          items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (reserved, empty in v1), transition }
-├── folders        Folder { id, name }   ordered, one level; organising only
+├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
 ├── transitions    { presets: [TransitionPreset], default }
@@ -258,7 +258,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   and saved with the collection, so every client and agent sees the same thing
   ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not per
   person). Folders change no rendering, switching or nesting; scenes keep their flat
-  display order, and a variant sits under its parent, never in a folder. Labels and
+  display order, and a variant sits under its parent, never in a folder. A folder sits in
+  at most one other (`parent`, which ADR-0024 leaves room for), never inside itself, and
+  the folders in one parent show in folder order. A folder that holds anything, or a
+  label a source carries, can't be deleted; `delete.plan` moves what the folder holds up
+  to its parent, or takes the label off its sources. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
   decision. Deleting the scene, source or output a binding's action names also removes
@@ -378,11 +382,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   version is refused on load), filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, the transition fields, 3D
   geometry, variants and overrides (so no edit drops
-  any yet), folders, labels, favourites and other organisation metadata,
-  `background`, hotkeys, an output's mix, buses and chains, the
+  any yet), `background`, hotkeys, an output's mix, buses and chains, the
   `YouTube` kind, and everything outside `sources`, `scenes`,
-  `outputs` and `encoders`. The collection file saves everything built so
-  far, encoder profiles, each output's profile and `duplicated_from` included
+  `outputs`, `encoders`, `folders` and `labels`. The collection file saves everything
+  built so far, encoder profiles, each output's profile, `duplicated_from`, folders,
+  labels and organisation metadata included
   ([Persistence](#persistence)).
   The program scene is built in `jstream-core` as runtime state, so the file doesn't
   hold it (no preview scene yet).
@@ -528,7 +532,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5e763b793debc8fe", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:c668801faeed0fa7", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: re-read after the inverse doc-comment edits; edit bullet holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -553,6 +557,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
+  `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
+  `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
+  `source.set_meta` edit labels and organisation metadata
+  ([ADR-0024](adr/0024-scene-structure.md)).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -655,7 +664,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:55a0e0a9c09649f1", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+verified = { hash = "b3:e562ab46abebe905", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: re-read; tools.snap regenerated for the doc-comment edits, still about 185 KB; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -669,7 +678,7 @@ verified = { hash = "b3:55a0e0a9c09649f1", by = "agent:claude@session_01Wfrx1wPt
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 145 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 185 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -856,7 +865,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:adc7282f515bad14", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: re-read; collection file saves a virtual_cam output as its bare kind (a_virtual_camera_round_trips); schema version unchanged; holds" }
+verified = { hash = "b3:388f9076e61b6c01", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: re-read; collection file gains optional folders/labels/metadata fields, omitted at default, no schema_version bump (additive, like encoders); holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

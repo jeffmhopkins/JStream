@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:0911af485ca155fb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:d442655530730d35", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: re-read after doc-comment edits on scene.delete/source.delete/source.duplicate inverses; contents list holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -38,7 +38,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `item.set_visible`, `item.set_source`, `canvas.set_size`, `source.create`,
   `source.rename`, `source.set_settings`, `source.duplicate`, `source.delete`,
   `output.create`, `output.set_target`, `output.set_encoder`, `output.delete`,
-  `encoder.create`, `encoder.update`, `encoder.delete`), with `ItemTransform`
+  `encoder.create`, `encoder.update`, `encoder.delete`, `folder.create`,
+  `folder.rename`, `folder.set_parent`, `folder.reorder`, `folder.delete`,
+  `scene.set_folder`, `scene.set_meta`, `label.create`, `label.update`,
+  `label.reorder`, `label.delete`, `source.set_meta`), with `ItemTransform`
   (deprecated), `Crop`, `SourceKind` and `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch`);
@@ -53,6 +56,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
   and `EncoderSessionInfo`, the per-output sharing `output.status` reports
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+- **Organisation** (`organise.rs`,
+  [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): `FolderInfo`,
+  `LabelInfo`, `SceneMeta` and `SourceMeta`, and the colour and icon checks every
+  implementation shares (`check_color`, `check_icon`, `SceneMeta::problem`).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `video.snapshot`, `kind.list`, `kind.describe`,
   `delete.plan` (with its `DeleteTarget`) and `studio.get`, with `QueryResult` and the `SceneSummary`,
@@ -121,7 +128,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:3185940baa7febfa", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:1a9c2e7de80b74b1", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: re-read after the inverse doc-comment edits; folders/labels paragraph already says duplicate copies labels; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -357,6 +364,27 @@ no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe 
 2 s, software, AAC 160 kbit/s). Both apply from the output's next `output.start`.
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
+
+Folders, labels and organisation metadata are collection state too
+([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4). They change no
+rendering, switching or nesting. Folders organise the scene list as a tree: an ordered
+list of `{ folder_id, name, parent? }`, where a folder's children show in folder order,
+and a scene names at most one folder (`scene.set_folder`) while keeping its place in the
+flat display order. `folder.set_parent` refuses a parent that would put the folder
+inside itself. Labels are an ordered list of `{ label_id, name, color, icon? }`, and a
+source carries a set of them, with a favourite flag (`source.set_meta`); they belong to
+the source, so every item placing it shares them, and `source.duplicate` copies them.
+A scene's `SceneMeta` (`scene.set_meta`) is its `icon`, `color`, `favourite` and
+`show_in_multiview` (default `true`). `scene.set_meta` and `source.set_meta` replace
+the whole metadata, so a field left out takes its default. Colours are sRGB `#rrggbb`;
+an icon is an opaque name from the UI's icon set, 1 to 64 bytes with no whitespace. A
+folder that holds a scene or folder, and a label a source carries, can't be deleted:
+the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`), and
+`delete.plan` with a `folder` or `label` target returns the batch that moves what the
+folder holds up to its parent, or takes the label off its sources, then deletes it.
+`state.get` reports `folders` and `labels`, each omitted when empty, and `scene.list`,
+`state.get` and `source.list` report each scene's and source's fields, each omitted
+while it has its default, so an older client reads the collection as before.
 
 ### Batches, revisions and `expected_rev`
 

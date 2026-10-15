@@ -989,9 +989,9 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId, Finite32, FitMode,
-        ItemGeometry, ItemId, ItemTransform, OutputId, RateControl, Rev, SceneId, SceneRole,
-        Settings, Size, SourceId, SourceKind, Vec2,
+        Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId, Finite32, FitMode, FolderId,
+        ItemGeometry, ItemId, ItemTransform, LabelId, OutputId, RateControl, Rev, SceneId,
+        SceneMeta, SceneRole, Settings, Size, SourceId, SourceKind, SourceMeta, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1029,6 +1029,8 @@ mod property {
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
+        let folders: Vec<String> = state.folders().iter().map(|f| f.id().to_string()).collect();
+        let labels: Vec<String> = state.labels().iter().map(|l| l.id().to_string()).collect();
         let urls = [
             "rtmp://a.example/live",
             "rtmps://b.example:443/live",
@@ -1042,6 +1044,12 @@ mod property {
         let output = |rng: &mut Rng| rng.pick(&outputs).unwrap_or_else(|| pool(rng, "out"));
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let encoder = |rng: &mut Rng| rng.pick(&encoders).unwrap_or_else(|| pool(rng, "enc"));
+        let folder = |rng: &mut Rng| rng.pick(&folders).unwrap_or_else(|| pool(rng, "f"));
+        let label = |rng: &mut Rng| rng.pick(&labels).unwrap_or_else(|| pool(rng, "l"));
+        // A folder one time in two, else none.
+        let maybe_folder = |rng: &mut Rng| (rng.below(2) == 0).then(|| FolderId::new(folder(rng)));
+        // Valid one time in six only when the colour isn't.
+        let color = |rng: &mut Rng| ["#ff8800", "#1E1E2E", "#00aa00", "red"][rng.below(4)];
         // Out of range one time in eight.
         let profile = |rng: &mut Rng| {
             let mut profile = EncoderProfile::DEFAULT;
@@ -1079,7 +1087,7 @@ mod property {
                 ..ItemGeometry::covering_canvas(1, 1).expect("positive")
             }
         };
-        match rng.below(31) {
+        match rng.below(43) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1242,6 +1250,67 @@ mod property {
                 settings: Settings::new(),
                 duplicated_from: Some(SourceId::new(source(rng))),
             },
+            29 => Edit::FolderCreate {
+                folder_id: FolderId::new(pool(rng, "f")),
+                name: pool(rng, "folder "),
+                parent: maybe_folder(rng),
+            },
+            30 => Edit::FolderRename {
+                folder_id: FolderId::new(folder(rng)),
+                name: pool(rng, "folder "),
+            },
+            31 => Edit::FolderSetParent {
+                folder_id: FolderId::new(folder(rng)),
+                parent: maybe_folder(rng),
+            },
+            32 => Edit::FolderReorder {
+                folder_id: FolderId::new(folder(rng)),
+                index: index(rng),
+            },
+            33 => Edit::FolderDelete {
+                folder_id: FolderId::new(folder(rng)),
+            },
+            34 => Edit::SceneSetFolder {
+                scene_id: SceneId::new(scene(rng)),
+                folder_id: maybe_folder(rng),
+            },
+            35 => Edit::SceneSetMeta {
+                scene_id: SceneId::new(scene(rng)),
+                meta: SceneMeta {
+                    icon: (rng.below(2) == 0).then(|| "star".to_owned()),
+                    color: (rng.below(2) == 0).then(|| color(rng).to_owned()),
+                    favourite: rng.below(2) == 0,
+                    show_in_multiview: rng.below(3) != 0,
+                },
+            },
+            36 => Edit::LabelCreate {
+                label_id: LabelId::new(pool(rng, "l")),
+                name: pool(rng, "label "),
+                color: color(rng).into(),
+                icon: (rng.below(2) == 0).then(|| "tag".to_owned()),
+            },
+            37 => Edit::LabelUpdate {
+                label_id: LabelId::new(label(rng)),
+                name: pool(rng, "label "),
+                color: color(rng).into(),
+                icon: None,
+            },
+            38 => Edit::LabelReorder {
+                label_id: LabelId::new(label(rng)),
+                index: index(rng),
+            },
+            39 => Edit::LabelDelete {
+                label_id: LabelId::new(label(rng)),
+            },
+            40 | 41 => Edit::SourceSetMeta {
+                source_id: SourceId::new(source(rng)),
+                meta: SourceMeta {
+                    labels: (0..rng.below(3))
+                        .map(|_| LabelId::new(label(rng)))
+                        .collect(),
+                    favourite: rng.below(2) == 0,
+                },
+            },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1284,6 +1353,7 @@ mod property {
                         // Every edge-adding edit is cycle checked, so no batch, whatever
                         // its edits, leaves a cycle behind.
                         assert_eq!(crate::deps::any_cycle(graph.state()), None, "{edits:?}");
+                        assert_folders_are_a_tree(graph.state());
                         let after = graph.clone();
 
                         let undo = graph
@@ -1334,6 +1404,18 @@ mod property {
             "encoder.update",
             "encoder.delete",
             "canvas.set_size",
+            "folder.create",
+            "folder.rename",
+            "folder.set_parent",
+            "folder.reorder",
+            "folder.delete",
+            "scene.set_folder",
+            "scene.set_meta",
+            "label.create",
+            "label.update",
+            "label.reorder",
+            "label.delete",
+            "source.set_meta",
         ]
         .into();
         assert_eq!(applied_names, all);
@@ -1342,6 +1424,26 @@ mod property {
             "{successes} ok, {failures} failed"
         );
         assert!(plans > 1000, "only {plans} delete plans had blockers");
+    }
+
+    /// Every folder's parent exists, and walking up from any folder reaches the top level.
+    fn assert_folders_are_a_tree(state: &crate::State) {
+        for folder in state.folders() {
+            let mut at = folder.parent().cloned();
+            let mut steps = 0;
+            while let Some(id) = at {
+                let parent = state
+                    .folder(&id)
+                    .unwrap_or_else(|| panic!("folder `{}` has a missing parent", folder.id()));
+                at = parent.parent().cloned();
+                steps += 1;
+                assert!(
+                    steps <= state.folders().len(),
+                    "folder `{}` loops",
+                    folder.id()
+                );
+            }
+        }
     }
 
     /// ADR-0025: for every scene and source, a plain delete is refused exactly when it
@@ -1368,8 +1470,27 @@ mod property {
                 Edit::SourceDelete { source_id: id },
             )
         });
+        let folders = state.folders().iter().map(|f| {
+            let id = f.id().clone();
+            (
+                DeleteTarget::Folder {
+                    folder_id: id.clone(),
+                },
+                Edit::FolderDelete { folder_id: id },
+            )
+        });
+        let labels = state.labels().iter().map(|l| {
+            let id = l.id().clone();
+            (
+                DeleteTarget::Label {
+                    label_id: id.clone(),
+                },
+                Edit::LabelDelete { label_id: id },
+            )
+        });
         let mut blocked = 0;
-        for (target, delete) in scenes.chain(sources).collect::<Vec<_>>() {
+        let targets = scenes.chain(sources).chain(folders).chain(labels);
+        for (target, delete) in targets.collect::<Vec<_>>() {
             let edits = plan(graph, target);
             let mut alone = graph.clone();
             match alone.apply(std::slice::from_ref(&delete), None) {
@@ -1388,6 +1509,8 @@ mod property {
             let gone = match &delete {
                 Edit::SceneDelete { scene_id } => planned.state().scene(scene_id).is_none(),
                 Edit::SourceDelete { source_id } => planned.state().source(source_id).is_none(),
+                Edit::FolderDelete { folder_id } => planned.state().folder(folder_id).is_none(),
+                Edit::LabelDelete { label_id } => planned.state().label(label_id).is_none(),
                 _ => false,
             };
             assert!(gone, "plan {edits:?} left its target");

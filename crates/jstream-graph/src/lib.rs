@@ -13,6 +13,7 @@ mod apply;
 mod deps;
 mod encoder;
 mod model;
+mod organise;
 mod persist;
 mod plan;
 mod read;
@@ -20,7 +21,9 @@ mod target;
 mod touched;
 
 pub use apply::Applied;
-pub use model::{Encoder, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
+pub use model::{
+    Encoder, Folder, Graph, Item, Label, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State,
+};
 pub use persist::{LoadError, SCHEMA_VERSION};
 pub use touched::Touched;
 

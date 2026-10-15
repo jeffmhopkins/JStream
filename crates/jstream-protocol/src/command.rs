@@ -12,7 +12,10 @@
 use crate::encoder::EncoderProfile;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
-use crate::id::{EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{
+    EncoderProfileId, FolderId, IdempotencyKey, ItemId, LabelId, OutputId, Rev, SceneId, SourceId,
+};
+use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
 use schemars::JsonSchema;
@@ -65,8 +68,9 @@ pub enum Edit {
     /// `invalid_argument` while a `scene` source shows it or any source's settings refer
     /// to it: delete those sources, or clear those references, first (in the same batch
     /// if needed). Inverse: `scene.create` with its role (omitted for `scene`), then
-    /// `scene.reorder` to its old display position (unless it was last), then each
-    /// deleted item's `item.remove` inverse, from bottom to top.
+    /// `scene.reorder` to its old display position (unless it was last), `scene.set_folder`
+    /// and `scene.set_meta` if it had a folder or metadata, then each deleted item's
+    /// `item.remove` inverse, from bottom to top.
     #[serde(rename = "scene.delete")]
     SceneDelete {
         /// The scene to delete.
@@ -253,8 +257,8 @@ pub enum Edit {
         patch: Settings,
     },
     /// Copies a source under a new ID: a separate instance with the same kind and
-    /// settings, which changes independently from then on. The copy's `duplicated_from`
-    /// names the source it was copied from. Placing the *same* source again is `item.add`
+    /// settings, labels and favourite flag, which changes independently from then on.
+    /// The copy's `duplicated_from` names the source it was copied from. Placing the *same* source again is `item.add`
     /// with its existing `source_id`. Inverse: `source.delete` of the copy.
     #[serde(rename = "source.duplicate")]
     SourceDuplicate {
@@ -269,7 +273,8 @@ pub enum Edit {
     /// or any source's settings refer to it: remove those items, or clear those
     /// references, first (in the same batch if needed). Deleting a source that others were
     /// copied from is allowed: their `duplicated_from` then reads as absent. Inverse:
-    /// `source.create` with its name, kind, settings and `duplicated_from`.
+    /// `source.create` with its name, kind, settings and `duplicated_from`, then
+    /// `source.set_meta` if it carried labels or was a favourite.
     #[serde(rename = "source.delete")]
     SourceDelete {
         /// The source to delete.
@@ -369,6 +374,144 @@ pub enum Edit {
         /// The profile to delete.
         profile_id: EncoderProfileId,
     },
+    /// Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders
+    /// organise only: they change no rendering, switching or nesting. Inverse:
+    /// `folder.delete`.
+    #[serde(rename = "folder.create")]
+    FolderCreate {
+        /// The new folder's ID, chosen by the client. Rejected if it exists.
+        folder_id: FolderId,
+        /// Display name.
+        name: String,
+        /// The folder it sits in, which must exist, else `not_found`. Omitted means top
+        /// level.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent: Option<FolderId>,
+    },
+    /// Renames a folder. Inverse: `folder.rename` back to the previous name.
+    #[serde(rename = "folder.rename")]
+    FolderRename {
+        /// The folder to rename.
+        folder_id: FolderId,
+        /// The new display name.
+        name: String,
+    },
+    /// Moves a folder into another folder, or to the top level. A parent that would put
+    /// the folder inside itself is `invalid_argument` (field `parent`), and a parent that
+    /// doesn't exist `not_found`. Inverse: `folder.set_parent` with the previous parent.
+    #[serde(rename = "folder.set_parent")]
+    FolderSetParent {
+        /// The folder to move.
+        folder_id: FolderId,
+        /// Its new parent. Absent or `null` means top level.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent: Option<FolderId>,
+    },
+    /// Moves a folder to another position in folder order. The folders in one parent
+    /// show in that order. Inverse: `folder.reorder` back to its previous index.
+    #[serde(rename = "folder.reorder")]
+    FolderReorder {
+        /// The folder to move.
+        folder_id: FolderId,
+        /// The new position, counted from the first folder (0). Must be less than the
+        /// number of folders, else `invalid_argument`.
+        index: u32,
+    },
+    /// Deletes an empty folder. Rejected with `invalid_argument` while a scene or another
+    /// folder sits in it, listing them as `blockers`: move them out first, or send the
+    /// batch `delete.plan` returns, which moves them up to the folder's parent. Inverse:
+    /// `folder.create` with its name and parent, then `folder.reorder` to its old
+    /// position (unless it was last).
+    #[serde(rename = "folder.delete")]
+    FolderDelete {
+        /// The folder to delete.
+        folder_id: FolderId,
+    },
+    /// Puts a scene in a folder, or takes it out of one. The scene keeps its position in
+    /// the flat display order. Inverse: `scene.set_folder` with the previous folder.
+    #[serde(rename = "scene.set_folder")]
+    SceneSetFolder {
+        /// The scene to file.
+        scene_id: SceneId,
+        /// The folder, which must exist, else `not_found`. Absent or `null` means none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        folder_id: Option<FolderId>,
+    },
+    /// Replaces a scene's organisation metadata: its icon, colour, favourite flag and
+    /// whether a multiview shows it. Every field left out takes its default. An icon
+    /// that is empty, longer than 64 bytes or holds whitespace, or a colour that isn't
+    /// `#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous
+    /// metadata.
+    #[serde(rename = "scene.set_meta")]
+    SceneSetMeta {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new metadata.
+        #[serde(flatten)]
+        meta: SceneMeta,
+    },
+    /// Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`
+    /// for an empty name, a colour that isn't `#rrggbb`, or an icon checked as
+    /// `scene.set_meta`'s. Inverse: `label.delete`.
+    #[serde(rename = "label.create")]
+    LabelCreate {
+        /// The new label's ID, chosen by the client. Rejected if it exists.
+        label_id: LabelId,
+        /// Display name.
+        name: String,
+        /// Its colour, sRGB as `#rrggbb`.
+        color: String,
+        /// An icon name from the UI's icon set. Omitted means none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        icon: Option<String>,
+    },
+    /// Replaces a label's name, colour and icon, validated as in `label.create`. Every
+    /// source carrying it shows the change. Inverse: `label.update` with the previous
+    /// values.
+    #[serde(rename = "label.update")]
+    LabelUpdate {
+        /// The label to change.
+        label_id: LabelId,
+        /// The new display name.
+        name: String,
+        /// The new colour.
+        color: String,
+        /// The new icon. Omitted means none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        icon: Option<String>,
+    },
+    /// Moves a label to another position in label order. Inverse: `label.reorder` back
+    /// to its previous index.
+    #[serde(rename = "label.reorder")]
+    LabelReorder {
+        /// The label to move.
+        label_id: LabelId,
+        /// The new position, counted from the first label (0). Must be less than the
+        /// number of labels, else `invalid_argument`.
+        index: u32,
+    },
+    /// Deletes a label. Rejected with `invalid_argument` while a source carries it,
+    /// listing them as `blockers`: take it off those sources first, or send the batch
+    /// `delete.plan` returns. Inverse: `label.create` with its name, colour and icon,
+    /// then `label.reorder` to its old position (unless it was last).
+    #[serde(rename = "label.delete")]
+    LabelDelete {
+        /// The label to delete.
+        label_id: LabelId,
+    },
+    /// Replaces a source's organisation metadata: the labels it carries and its
+    /// favourite flag. Every field left out takes its default, so `labels` omitted
+    /// removes them all. A label that doesn't exist is `not_found`, and one listed twice
+    /// `invalid_argument`; the engine stores them ordered by ID. Inverse:
+    /// `source.set_meta` with the previous metadata.
+    #[serde(rename = "source.set_meta")]
+    SourceSetMeta {
+        /// The source to change.
+        source_id: SourceId,
+        /// The new metadata.
+        #[serde(flatten)]
+        meta: SourceMeta,
+    },
 }
 
 impl Edit {
@@ -402,6 +545,18 @@ impl Edit {
             Edit::EncoderUpdate { .. } => "encoder.update",
             Edit::EncoderDelete { .. } => "encoder.delete",
             Edit::CanvasSetSize { .. } => "canvas.set_size",
+            Edit::FolderCreate { .. } => "folder.create",
+            Edit::FolderRename { .. } => "folder.rename",
+            Edit::FolderSetParent { .. } => "folder.set_parent",
+            Edit::FolderReorder { .. } => "folder.reorder",
+            Edit::FolderDelete { .. } => "folder.delete",
+            Edit::SceneSetFolder { .. } => "scene.set_folder",
+            Edit::SceneSetMeta { .. } => "scene.set_meta",
+            Edit::LabelCreate { .. } => "label.create",
+            Edit::LabelUpdate { .. } => "label.update",
+            Edit::LabelReorder { .. } => "label.reorder",
+            Edit::LabelDelete { .. } => "label.delete",
+            Edit::SourceSetMeta { .. } => "source.set_meta",
         }
     }
 }

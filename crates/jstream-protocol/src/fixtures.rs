@@ -22,6 +22,7 @@ use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
+use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
 use crate::{HistoryCall, HistoryDirection, HistoryOp};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -240,7 +241,76 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::EncoderDelete {
             profile_id: EncoderProfileId::new("enc_old"),
         },
+        Edit::FolderCreate {
+            folder_id: FolderId::new("fld_shows"),
+            name: "Shows".into(),
+            parent: None,
+        },
+        Edit::FolderCreate {
+            folder_id: FolderId::new("fld_intro"),
+            name: "Intros".into(),
+            parent: Some(FolderId::new("fld_shows")),
+        },
+        Edit::FolderRename {
+            folder_id: FolderId::new("fld_intro"),
+            name: "Openers".into(),
+        },
+        Edit::FolderSetParent {
+            folder_id: FolderId::new("fld_intro"),
+            parent: None,
+        },
+        Edit::FolderReorder {
+            folder_id: FolderId::new("fld_intro"),
+            index: 0,
+        },
+        Edit::FolderDelete {
+            folder_id: FolderId::new("fld_old"),
+        },
+        Edit::SceneSetFolder {
+            scene_id: SceneId::new("scn_1"),
+            folder_id: Some(FolderId::new("fld_shows")),
+        },
+        Edit::SceneSetMeta {
+            scene_id: SceneId::new("scn_1"),
+            meta: scene_meta(),
+        },
+        Edit::LabelCreate {
+            label_id: LabelId::new("lbl_sponsor"),
+            name: "Sponsor".into(),
+            color: "#ff8800".into(),
+            icon: Some("megaphone".into()),
+        },
+        Edit::LabelUpdate {
+            label_id: LabelId::new("lbl_sponsor"),
+            name: "Sponsors".into(),
+            color: "#ffaa00".into(),
+            icon: None,
+        },
+        Edit::LabelReorder {
+            label_id: LabelId::new("lbl_sponsor"),
+            index: 0,
+        },
+        Edit::LabelDelete {
+            label_id: LabelId::new("lbl_old"),
+        },
+        Edit::SourceSetMeta {
+            source_id: SourceId::new("src_cam"),
+            meta: SourceMeta {
+                labels: vec![LabelId::new("lbl_sponsor")],
+                favourite: true,
+            },
+        },
     ]
+}
+
+/// A scene's metadata with every field away from its default.
+fn scene_meta() -> SceneMeta {
+    SceneMeta {
+        icon: Some("star".into()),
+        color: Some("#1e1e2e".into()),
+        favourite: true,
+        show_in_multiview: false,
+    }
 }
 
 /// A recording profile: 12000 kbit/s VBR peaking at 20000, hardware preferred.
@@ -350,6 +420,16 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::DeletePlan {
             target: DeleteTarget::Source {
                 source_id: SourceId::new("src_cam"),
+            },
+        },
+        Query::DeletePlan {
+            target: DeleteTarget::Folder {
+                folder_id: FolderId::new("fld_shows"),
+            },
+        },
+        Query::DeletePlan {
+            target: DeleteTarget::Label {
+                label_id: LabelId::new("lbl_sponsor"),
             },
         },
     ]
@@ -485,6 +565,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: color_settings(),
             duplicated_from: None,
+            meta: Default::default(),
         },
         SourceInfo {
             source_id: SourceId::new("src_cam"),
@@ -494,6 +575,10 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: None,
+            meta: SourceMeta {
+                labels: vec![LabelId::new("lbl_sponsor")],
+                favourite: true,
+            },
         },
         SourceInfo {
             source_id: SourceId::new("src_cam_2"),
@@ -503,6 +588,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: Some(SourceId::new("src_cam")),
+            meta: Default::default(),
         },
         SourceInfo {
             source_id: SourceId::new("src_intro"),
@@ -512,6 +598,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: None,
+            meta: Default::default(),
         },
     ]
 }
@@ -569,6 +656,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 name: "Main".into(),
                 role: SceneRole::Scene,
                 item_count: 2,
+                folder: None,
+                meta: Default::default(),
             }],
         },
         QueryResult::OutputStatus {
@@ -602,16 +691,38 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     name: "Main".into(),
                     role: SceneRole::Scene,
                     items: item_infos(),
+                    folder: Some(FolderId::new("fld_shows")),
+                    meta: scene_meta(),
                 },
                 SceneInfo {
                     scene_id: SceneId::new("scn_intro"),
                     name: "Intro".into(),
                     role: SceneRole::Group,
                     items: vec![],
+                    folder: None,
+                    meta: Default::default(),
                 },
             ],
             outputs: output_infos(),
             encoders: encoder_infos(),
+            folders: vec![
+                FolderInfo {
+                    folder_id: FolderId::new("fld_shows"),
+                    name: "Shows".into(),
+                    parent: None,
+                },
+                FolderInfo {
+                    folder_id: FolderId::new("fld_intro"),
+                    name: "Intros".into(),
+                    parent: Some(FolderId::new("fld_shows")),
+                },
+            ],
+            labels: vec![LabelInfo {
+                label_id: LabelId::new("lbl_sponsor"),
+                name: "Sponsor".into(),
+                color: "#ff8800".into(),
+                icon: Some("megaphone".into()),
+            }],
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.

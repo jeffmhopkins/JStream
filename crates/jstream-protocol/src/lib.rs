@@ -17,6 +17,7 @@ mod geometry;
 mod history;
 mod id;
 mod kind;
+mod organise;
 mod output;
 #[cfg(feature = "fixtures")]
 pub mod parity;
@@ -45,11 +46,15 @@ pub use geometry::{
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{
-    ClientId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId,
+    ClientId, EncoderProfileId, FolderId, IdempotencyKey, ItemId, LabelId, OutputId, RequestId,
+    Rev, SceneId, SourceId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
+};
+pub use organise::{
+    FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon,
 };
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
 pub use query::{DeleteTarget, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};

@@ -6,10 +6,10 @@
 //! Reads never change the graph. Each collection result carries the revision it was
 //! read at; kinds are not collection state, so their results carry none.
 
-use crate::model::{Encoder, Graph, Item, Output, Placement, Scene, Source, State};
+use crate::model::{Encoder, Folder, Graph, Item, Label, Output, Placement, Scene, Source, State};
 use jstream_protocol::{
-    EncoderProfileInfo, EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query,
-    QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
+    EncoderProfileInfo, EntityKind, FolderInfo, ItemInfo, KindDescriptor, LabelInfo, OutputInfo,
+    ProtocolError, Query, QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
 };
 
 impl Graph {
@@ -70,6 +70,8 @@ impl Graph {
                     name: scene.name.clone(),
                     role: scene.role,
                     item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
+                    folder: scene.folder.clone(),
+                    meta: scene.meta.clone(),
                 })
                 .collect(),
         }
@@ -121,7 +123,8 @@ impl Graph {
     }
 
     /// The `state.get` result: the canvas, every source by ID, every scene with its items
-    /// in display order, and every output and encoder profile by ID.
+    /// in display order, every output and encoder profile by ID, and the folders and
+    /// labels in their own orders.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
@@ -134,6 +137,8 @@ impl Graph {
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
             encoders: self.state.encoders().map(Encoder::to_info).collect(),
+            folders: self.state.folders().iter().map(Folder::to_info).collect(),
+            labels: self.state.labels().iter().map(Label::to_info).collect(),
         }
     }
 }
@@ -151,6 +156,7 @@ impl Source {
                 .duplicated_from
                 .clone()
                 .filter(|original| state.source(original).is_some()),
+            meta: crate::organise::source_meta(self),
         }
     }
 }
@@ -177,6 +183,29 @@ impl Encoder {
     }
 }
 
+impl Folder {
+    /// This folder as `state.get` reports it.
+    pub fn to_info(&self) -> FolderInfo {
+        FolderInfo {
+            folder_id: self.id.clone(),
+            name: self.name.clone(),
+            parent: self.parent.clone(),
+        }
+    }
+}
+
+impl Label {
+    /// This label as `state.get` reports it.
+    pub fn to_info(&self) -> LabelInfo {
+        LabelInfo {
+            label_id: self.id.clone(),
+            name: self.name.clone(),
+            color: self.color.clone(),
+            icon: self.icon.clone(),
+        }
+    }
+}
+
 impl Scene {
     /// This scene and its items as `state.get` reports them.
     pub fn to_info(&self) -> SceneInfo {
@@ -184,6 +213,8 @@ impl Scene {
             scene_id: self.id.clone(),
             name: self.name.clone(),
             role: self.role,
+            folder: self.folder.clone(),
+            meta: self.meta.clone(),
             items: self.items.iter().map(Item::to_info).collect(),
         }
     }
@@ -290,6 +321,8 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                folders: Vec::new(),
+                labels: Vec::new(),
             }
         );
         assert_eq!(

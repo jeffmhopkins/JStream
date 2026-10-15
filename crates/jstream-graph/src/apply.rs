@@ -12,8 +12,8 @@ use crate::touched::Touched;
 use jstream_protocol::{
     Batch, Blocker, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId,
     ItemTransform, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
-    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, Settings, SourceId,
-    SourceKind,
+    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, Settings,
+    SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -118,7 +118,12 @@ pub(crate) fn invalid(at: usize, name: &str, reason: impl Into<String>) -> Proto
 }
 
 /// The `invalid_argument` that refuses deleting `target` while `blockers` refer to it.
-fn blocked(at: usize, name: &str, target: &Node, blockers: Vec<Blocker>) -> ProtocolError {
+pub(crate) fn blocked(
+    at: usize,
+    name: &str,
+    target: &impl std::fmt::Display,
+    blockers: Vec<Blocker>,
+) -> ProtocolError {
     let list: Vec<String> = blockers
         .iter()
         .map(|b| format!("{} `{}` ({})", b.entity, b.id, b.field))
@@ -163,7 +168,12 @@ pub(crate) fn check_name(value: &str, at: usize) -> Result<(), ProtocolError> {
 }
 
 /// Converts a wire index into a position below `len`.
-fn check_index(index: u32, len: usize, at: usize, what: &str) -> Result<usize, ProtocolError> {
+pub(crate) fn check_index(
+    index: u32,
+    len: usize,
+    at: usize,
+    what: &str,
+) -> Result<usize, ProtocolError> {
     match usize::try_from(index) {
         Ok(i) if i < len => Ok(i),
         _ => Err(invalid(
@@ -174,7 +184,7 @@ fn check_index(index: u32, len: usize, at: usize, what: &str) -> Result<usize, P
     }
 }
 
-fn wire_index(index: usize) -> Result<u32, ProtocolError> {
+pub(crate) fn wire_index(index: usize) -> Result<u32, ProtocolError> {
     u32::try_from(index).map_err(|_| ProtocolError::Internal {
         reason: format!("position {index} does not fit the protocol's u32 index"),
     })
@@ -283,6 +293,9 @@ fn apply_edit(
     if let Some(applied) = crate::encoder::apply(state, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::organise::apply(state, edit, at) {
+        return applied;
+    }
     match edit {
         Edit::SceneCreate {
             scene_id,
@@ -298,6 +311,8 @@ fn apply_edit(
                 id: scene_id.clone(),
                 name: name.clone(),
                 role: role.unwrap_or_default(),
+                folder: None,
+                meta: SceneMeta::default(),
                 items: Vec::new(),
             });
             Ok(vec![Edit::SceneDelete {
@@ -342,6 +357,18 @@ fn apply_edit(
                 inverse.push(Edit::SceneReorder {
                     scene_id: scene.id.clone(),
                     index: wire_index(si)?,
+                });
+            }
+            if scene.folder.is_some() {
+                inverse.push(Edit::SceneSetFolder {
+                    scene_id: scene.id.clone(),
+                    folder_id: scene.folder.clone(),
+                });
+            }
+            if !scene.meta.is_default() {
+                inverse.push(Edit::SceneSetMeta {
+                    scene_id: scene.id.clone(),
+                    meta: scene.meta.clone(),
                 });
             }
             // Re-adding bottom to top puts each item back at its own index.
@@ -565,18 +592,25 @@ fn apply_edit(
                 .source(source_id)
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
             let (kind, settings) = (original.kind.clone(), original.settings.clone());
+            // The copy carries the original's labels and favourite flag (ADR-0024 §4).
+            let (labels, favourite) = (original.labels.clone(), original.favourite);
             check_id(new_source_id.as_str(), at, "new_source_id")?;
             check_name(name, at)?;
             // The copy has the original's outgoing edges and none coming in, so it can't
             // close a cycle.
-            create_source(
+            let inverse = create_source(
                 state,
                 new_source_id,
                 name,
                 &kind,
                 settings,
                 Some(source_id.clone()),
-            )
+            )?;
+            if let Some(copy) = state.sources.get_mut(new_source_id) {
+                copy.labels = labels;
+                copy.favourite = favourite;
+            }
+            Ok(inverse)
         }
         Edit::SourceRename { source_id, name } => {
             check_name(name, at)?;
@@ -606,13 +640,21 @@ fn apply_edit(
                 .sources
                 .remove(source_id)
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
-            Ok(vec![Edit::SourceCreate {
-                source_id: source.id,
+            let meta = crate::organise::source_meta(&source);
+            let mut inverse = vec![Edit::SourceCreate {
+                source_id: source.id.clone(),
                 name: source.name,
                 kind: source.kind,
                 settings: source.settings,
                 duplicated_from: source.duplicated_from,
-            }])
+            }];
+            if !meta.is_default() {
+                inverse.push(Edit::SourceSetMeta {
+                    source_id: source.id,
+                    meta,
+                });
+            }
+            Ok(inverse)
         }
         Edit::OutputCreate { output_id, kind } => {
             check_id(output_id.as_str(), at, "output_id")?;
@@ -813,6 +855,8 @@ fn create_source(
             kind: kind.clone(),
             settings,
             duplicated_from,
+            labels: BTreeSet::new(),
+            favourite: false,
         },
     );
     Ok(vec![Edit::SourceDelete {

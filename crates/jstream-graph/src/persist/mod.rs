@@ -15,8 +15,9 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
-    OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneRole, Settings, SourceId, SourceKind,
+    Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, FolderId, ItemGeometry, ItemId,
+    ItemTransform, LabelId, OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneMeta,
+    SceneRole, Settings, SourceId, SourceKind, SourceMeta,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -108,6 +109,13 @@ struct File {
     /// without profiles saves as it did before they existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     encoders: Vec<FileEncoder>,
+    /// Folders of the scene list, in folder order; omitted when there are none, like
+    /// `labels` (ADR-0024 §3 and §4).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    folders: Vec<FileFolder>,
+    /// Labels, in label order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    labels: Vec<FileLabel>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -118,8 +126,52 @@ struct FileScene {
     /// `group` for a group (ADR-0024); omitted for the default, `scene`.
     #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
     role: SceneRole,
+    /// The folder it is filed in; omitted for none. The metadata fields below are each
+    /// omitted while they have their default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    folder: Option<FolderId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    icon: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    color: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    favourite: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    show_in_multiview: bool,
     /// Bottom first.
     items: Vec<FileItem>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileFolder {
+    id: FolderId,
+    name: String,
+    /// Omitted at the top level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent: Option<FolderId>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileLabel {
+    id: LabelId,
+    name: String,
+    color: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    icon: Option<String>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+fn yes() -> bool {
+    true
 }
 
 #[derive(Serialize, Deserialize)]
@@ -153,6 +205,11 @@ struct FileSource {
     /// that may name a source since deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     duplicated_from: Option<SourceId>,
+    /// The labels it carries, ordered by ID; omitted for none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    labels: Vec<LabelId>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    favourite: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -191,6 +248,11 @@ impl Graph {
                     id: scene.id.clone(),
                     name: scene.name.clone(),
                     role: scene.role,
+                    folder: scene.folder.clone(),
+                    icon: scene.meta.icon.clone(),
+                    color: scene.meta.color.clone(),
+                    favourite: scene.meta.favourite,
+                    show_in_multiview: scene.meta.show_in_multiview,
                     items: scene
                         .items
                         .iter()
@@ -224,6 +286,8 @@ impl Graph {
                     },
                     settings: source.settings.clone(),
                     duplicated_from: source.duplicated_from.clone(),
+                    labels: source.labels.iter().cloned().collect(),
+                    favourite: source.favourite,
                 })
                 .collect(),
             outputs: state
@@ -242,6 +306,25 @@ impl Graph {
                     id: encoder.id.clone(),
                     name: encoder.name.clone(),
                     profile: encoder.profile,
+                })
+                .collect(),
+            folders: state
+                .folders
+                .iter()
+                .map(|folder| FileFolder {
+                    id: folder.id.clone(),
+                    name: folder.name.clone(),
+                    parent: folder.parent.clone(),
+                })
+                .collect(),
+            labels: state
+                .labels
+                .iter()
+                .map(|label| FileLabel {
+                    id: label.id.clone(),
+                    name: label.name.clone(),
+                    color: label.color.clone(),
+                    icon: label.icon.clone(),
                 })
                 .collect(),
         };
@@ -334,7 +417,8 @@ fn migrate_with(value: &mut Value, migrations: &[Migration]) -> Result<(), LoadE
 
 /// The edits that build `file`'s collection from an empty one, each with the object it
 /// creates for the error message. The canvas comes first (when not the default), then
-/// scenes, empty, in display order and with their roles; then sources, each after the
+/// folders (top level first, then nested) and labels, then scenes, empty, in display
+/// order and with their roles, folders and metadata; then sources, each after the
 /// sources its settings refer to; then items, encoder profiles, and outputs, each with
 /// its profile.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
@@ -348,15 +432,72 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             },
         ));
     }
-    for scene in &file.scenes {
+    // Folders are created top level in folder order, then nested, so a parent may come
+    // after its child in the file.
+    for folder in &file.folders {
         edits.push((
-            format!("scene `{}`", scene.id),
+            format!("folder `{}`", folder.id),
+            Edit::FolderCreate {
+                folder_id: folder.id.clone(),
+                name: folder.name.clone(),
+                parent: None,
+            },
+        ));
+    }
+    for folder in file.folders.iter().filter(|f| f.parent.is_some()) {
+        edits.push((
+            format!("folder `{}`", folder.id),
+            Edit::FolderSetParent {
+                folder_id: folder.id.clone(),
+                parent: folder.parent.clone(),
+            },
+        ));
+    }
+    for label in &file.labels {
+        edits.push((
+            format!("label `{}`", label.id),
+            Edit::LabelCreate {
+                label_id: label.id.clone(),
+                name: label.name.clone(),
+                color: label.color.clone(),
+                icon: label.icon.clone(),
+            },
+        ));
+    }
+    for scene in &file.scenes {
+        let object = format!("scene `{}`", scene.id);
+        edits.push((
+            object.clone(),
             Edit::SceneCreate {
                 scene_id: scene.id.clone(),
                 name: scene.name.clone(),
                 role: (!scene.role.is_scene()).then_some(scene.role),
             },
         ));
+        if scene.folder.is_some() {
+            edits.push((
+                object.clone(),
+                Edit::SceneSetFolder {
+                    scene_id: scene.id.clone(),
+                    folder_id: scene.folder.clone(),
+                },
+            ));
+        }
+        let meta = SceneMeta {
+            icon: scene.icon.clone(),
+            color: scene.color.clone(),
+            favourite: scene.favourite,
+            show_in_multiview: scene.show_in_multiview,
+        };
+        if !meta.is_default() {
+            edits.push((
+                object,
+                Edit::SceneSetMeta {
+                    scene_id: scene.id.clone(),
+                    meta,
+                },
+            ));
+        }
     }
     let sources: BTreeMap<&SourceId, &FileSource> =
         file.sources.iter().map(|s| (&s.id, s)).collect();
@@ -471,7 +612,7 @@ fn order_source<'a>(
         }
     }
     edits.push((
-        object,
+        object.clone(),
         Edit::SourceCreate {
             source_id: source.id.clone(),
             name: source.name.clone(),
@@ -480,5 +621,18 @@ fn order_source<'a>(
             duplicated_from: source.duplicated_from.clone(),
         },
     ));
+    let meta = SourceMeta {
+        labels: source.labels.clone(),
+        favourite: source.favourite,
+    };
+    if !meta.is_default() {
+        edits.push((
+            object,
+            Edit::SourceSetMeta {
+                source_id: source.id.clone(),
+                meta,
+            },
+        ));
+    }
     Ok(())
 }

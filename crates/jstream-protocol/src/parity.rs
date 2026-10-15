@@ -206,12 +206,16 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         name: "B".into(),
                         role: SceneRole::Group,
                         item_count: 1,
+                        folder: None,
+                        meta: Default::default(),
                     },
                     SceneSummary {
                         scene_id: scene("a"),
                         name: "A".into(),
                         role: SceneRole::Scene,
                         item_count: 3,
+                        folder: None,
+                        meta: Default::default(),
                     },
                 ],
             }),
@@ -265,16 +269,22 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         name: "B".into(),
                         role: SceneRole::Group,
                         items: items_of_b(),
+                        folder: None,
+                        meta: Default::default(),
                     },
                     SceneInfo {
                         scene_id: scene("a"),
                         name: "A".into(),
                         role: SceneRole::Scene,
                         items: items_of_a(),
+                        folder: None,
+                        meta: Default::default(),
                     },
                 ],
                 outputs: outputs(),
                 encoders: encoders(),
+                folders: Vec::new(),
+                labels: Vec::new(),
             }),
         ),
         // Outputs by ID, whatever order they were created in.
@@ -911,6 +921,7 @@ fn cam() -> SourceInfo {
         },
         settings: crate::Settings::new(),
         duplicated_from: None,
+        meta: Default::default(),
     }
 }
 
@@ -923,6 +934,7 @@ fn nested_b() -> SourceInfo {
         },
         settings: crate::Settings::new(),
         duplicated_from: None,
+        meta: Default::default(),
     }
 }
 

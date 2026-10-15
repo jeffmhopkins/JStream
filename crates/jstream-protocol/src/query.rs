@@ -4,8 +4,9 @@ use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
-use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{FolderId, ItemId, LabelId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
+use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::settings::Settings;
 use schemars::JsonSchema;
@@ -40,7 +41,8 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
-    /// items, every output and every encoder profile) at one revision: what a client
+    /// items, every output, every encoder profile, and the folders and labels) at one
+    /// revision: what a client
     /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
     /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
@@ -75,11 +77,14 @@ pub enum Query {
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
-    /// The batch that deletes a scene or source together with everything that refers to
-    /// it, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`
-    /// lists those `blockers`). The plan removes the items that place a deleted source,
-    /// deletes the `scene` sources that show a deleted scene (and their items), and sets
-    /// settings references to the target to `null`, keeping the sources that hold them.
+    /// The batch that deletes a scene, source, folder or label together with everything
+    /// that refers to it, which `scene.delete`, `source.delete`, `folder.delete` and
+    /// `label.delete` alone refuse (their `invalid_argument` lists those `blockers`). The
+    /// plan removes the items that place a deleted source, deletes the `scene` sources
+    /// that show a deleted scene (and their items), and sets settings references to the
+    /// target to `null`, keeping the sources that hold them. For a folder it moves what
+    /// sits in it up to the folder's parent; for a label it takes the label off the
+    /// sources carrying it.
     /// The client shows it, then sends its `edits` as an ordinary batch with
     /// `expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with
     /// `not_found` if the target doesn't exist.
@@ -90,7 +95,7 @@ pub enum Query {
     },
 }
 
-/// What a `delete.plan` deletes: a scene or a source.
+/// What a `delete.plan` deletes: a scene, a source, a folder or a label.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -104,6 +109,17 @@ pub enum DeleteTarget {
     Source {
         /// The source to delete.
         source_id: SourceId,
+    },
+    /// A folder. The plan moves the scenes and folders in it up to its parent (to the
+    /// top level for a top-level folder), then deletes it.
+    Folder {
+        /// The folder to delete.
+        folder_id: FolderId,
+    },
+    /// A label. The plan takes it off every source that carries it, then deletes it.
+    Label {
+        /// The label to delete.
+        label_id: LabelId,
     },
 }
 
@@ -206,6 +222,14 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
+        /// Every folder of the scene list, in folder order (ADR-0024 §3). Omitted when
+        /// there are none; missing (from an older server) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        folders: Vec<FolderInfo>,
+        /// Every label, in label order (ADR-0024 §4). Omitted when there are none;
+        /// missing (from an older server) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        labels: Vec<LabelInfo>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -304,6 +328,12 @@ pub struct SceneSummary {
     pub role: SceneRole,
     /// How many items it has.
     pub item_count: u32,
+    /// The folder it is filed in (ADR-0024 §3). Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<FolderId>,
+    /// Its organisation metadata, each field omitted while it has its default.
+    #[serde(flatten)]
+    pub meta: SceneMeta,
 }
 
 /// One source, as `source.list` and `state.get` report it.
@@ -324,6 +354,10 @@ pub struct SourceInfo {
     /// placing this source can go back to placing the original with `item.set_source`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicated_from: Option<SourceId>,
+    /// Its labels and favourite flag (ADR-0024 §4), each omitted while it has its
+    /// default.
+    #[serde(flatten)]
+    pub meta: SourceMeta,
 }
 
 /// One scene with its items, as `state.get` reports it.
@@ -337,6 +371,12 @@ pub struct SceneInfo {
     /// Omitted for a `scene`.
     #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
     pub role: SceneRole,
+    /// The folder it is filed in (ADR-0024 §3). Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<FolderId>,
+    /// Its organisation metadata, each field omitted while it has its default.
+    #[serde(flatten)]
+    pub meta: SceneMeta,
     /// Its items, in stacking order: the first is at the bottom.
     pub items: Vec<ItemInfo>,
 }

@@ -72,6 +72,14 @@ opaque_id!(
     EncoderProfileId
 );
 opaque_id!(
+    /// A folder of the scene list (ADR-0024 §3). Folders organise only.
+    FolderId
+);
+opaque_id!(
+    /// A label that sources carry (ADR-0024 §4).
+    LabelId
+);
+opaque_id!(
     /// A connected client, assigned by the server in `welcome`. Undo history and the
     /// audit log are keyed by it.
     ClientId

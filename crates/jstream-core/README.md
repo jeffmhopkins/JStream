@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:31c122b1b6d18d9c", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+verified = { hash = "b3:b7d8a68e7067c10e", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: tests bullet now names folders and labels undo (history.rs folders_and_labels_are_undoable_collection_state); rest holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -105,7 +105,7 @@ state machine. Contents:
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
-  end), the shared parity fixture, a differential run against
+  end, folders and labels), the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
@@ -162,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:976f16cf7c1baa87", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:c8d7eb1f78a314d5", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: batches still go to Graph::apply_batch with every edit rule; differential paragraph now says the script skips the organisation edits the mock lacks" }
 -->
 
 ### Engine and sessions
@@ -266,7 +266,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 The engine's answers are the mock's for the differential script: `tests.rs` runs one
 script of calls against both and compares results, error codes and fields, and events.
 That script does not call `video.snapshot`. The mock has no compositor and answers it
-with `internal`, so the two are not compared. The mock stays the reference clients
+with `internal`, so the two are not compared. Nor does it send the folder, label and
+metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4), which
+the mock doesn't implement yet; `history.rs` checks the engine's undo of them. The mock stays the reference clients
 were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
 

@@ -3,7 +3,9 @@
 //! [`Graph::apply`](crate::Graph::apply) returns it with every batch. The engine's undo
 //! history logs it and checks a step's touched set against other clients' later ones.
 
-use jstream_protocol::{Edit, EncoderProfileId, ItemId, OutputId, SceneId, SourceId, SourceKind};
+use jstream_protocol::{
+    Edit, EncoderProfileId, FolderId, ItemId, LabelId, OutputId, SceneId, SourceId, SourceKind,
+};
 use std::collections::BTreeSet;
 
 /// An object of the collection, named by its ID.
@@ -14,6 +16,8 @@ enum Object {
     Source(SourceId),
     Output(OutputId),
     Encoder(EncoderProfileId),
+    Folder(FolderId),
+    Label(LabelId),
 }
 
 /// A property an edit sets, on its object.
@@ -39,6 +43,12 @@ enum Prop {
     EncoderChoice,
     /// An encoder profile's encoding.
     Encoding,
+    /// The folder a scene is filed in, or the parent of a folder.
+    Folder,
+    /// A scene's or source's organisation metadata (ADR-0024 §4).
+    Meta,
+    /// A label's colour and icon.
+    Look,
 }
 
 /// What a batch touched: computed from its edits and its inverse's, so a delete also
@@ -55,6 +65,10 @@ pub struct Touched {
     scene_order: bool,
     /// Whether the canvas size was set.
     canvas: bool,
+    /// Whether the folders' order was set.
+    folder_order: bool,
+    /// Whether the labels' order was set.
+    label_order: bool,
     /// An edit this module doesn't know: it conflicts with everything.
     unknown: bool,
 }
@@ -172,6 +186,54 @@ impl Touched {
                 self.prop(encoder.clone(), Prop::Name);
                 self.prop(encoder, Prop::Encoding);
             }
+            Edit::FolderCreate {
+                folder_id, parent, ..
+            } => {
+                self.exists.insert(Object::Folder(folder_id.clone()));
+                if let Some(parent) = parent {
+                    self.uses.insert(Object::Folder(parent.clone()));
+                }
+            }
+            Edit::FolderDelete { folder_id } => {
+                self.exists.insert(Object::Folder(folder_id.clone()));
+            }
+            Edit::FolderRename { folder_id, .. } => {
+                self.prop(Object::Folder(folder_id.clone()), Prop::Name);
+            }
+            Edit::FolderSetParent { folder_id, parent } => {
+                self.prop(Object::Folder(folder_id.clone()), Prop::Folder);
+                if let Some(parent) = parent {
+                    self.uses.insert(Object::Folder(parent.clone()));
+                }
+            }
+            Edit::FolderReorder { .. } => self.folder_order = true,
+            Edit::SceneSetFolder {
+                scene_id,
+                folder_id,
+            } => {
+                self.prop(Object::Scene(scene_id.clone()), Prop::Folder);
+                if let Some(folder_id) = folder_id {
+                    self.uses.insert(Object::Folder(folder_id.clone()));
+                }
+            }
+            Edit::SceneSetMeta { scene_id, .. } => {
+                self.prop(Object::Scene(scene_id.clone()), Prop::Meta);
+            }
+            Edit::LabelCreate { label_id, .. } | Edit::LabelDelete { label_id } => {
+                self.exists.insert(Object::Label(label_id.clone()));
+            }
+            Edit::LabelUpdate { label_id, .. } => {
+                let label = Object::Label(label_id.clone());
+                self.prop(label.clone(), Prop::Name);
+                self.prop(label, Prop::Look);
+            }
+            Edit::LabelReorder { .. } => self.label_order = true,
+            Edit::SourceSetMeta { source_id, meta } => {
+                self.prop(Object::Source(source_id.clone()), Prop::Meta);
+                for label in &meta.labels {
+                    self.uses.insert(Object::Label(label.clone()));
+                }
+            }
             _ => self.unknown = true,
         }
     }
@@ -183,6 +245,8 @@ impl Touched {
         self.props.extend(other.props.iter().cloned());
         self.scene_order |= other.scene_order;
         self.canvas |= other.canvas;
+        self.folder_order |= other.folder_order;
+        self.label_order |= other.label_order;
         self.unknown |= other.unknown;
     }
 
@@ -200,12 +264,14 @@ impl Touched {
 
     /// Whether undoing or redoing one of these would overwrite the other: one creates or
     /// deletes an object the other touches at all, both set the same property, or both
-    /// set the scenes' order, or both set the canvas size.
+    /// set the scenes', folders' or labels' order, or both set the canvas size.
     pub fn conflicts_with(&self, other: &Touched) -> bool {
         self.unknown
             || other.unknown
             || (self.scene_order && other.scene_order)
             || (self.canvas && other.canvas)
+            || (self.folder_order && other.folder_order)
+            || (self.label_order && other.label_order)
             || other.objects().any(|o| self.exists.contains(o))
             || self.objects().any(|o| other.exists.contains(o))
             || !self.props.is_disjoint(&other.props)
@@ -377,6 +443,44 @@ mod tests {
             &[point("yt", Some("hq"))]
         )));
         assert!(!pointed.conflicts_with(&Touched::of(&[point("tw", None)], &[point("tw", None)])));
+    }
+
+    /// Organisation edits are known: tagging a source uses its labels, so deleting one
+    /// of them conflicts, while filing a scene doesn't conflict with tagging a source.
+    #[test]
+    fn organisation_edits_conflict_on_their_own_objects() {
+        use jstream_protocol::{FolderId, LabelId, SourceMeta};
+        let tag = |labels: &[&str]| Edit::SourceSetMeta {
+            source_id: SourceId::new("cam"),
+            meta: SourceMeta {
+                labels: labels.iter().map(|l| LabelId::new(*l)).collect(),
+                favourite: false,
+            },
+        };
+        let tagged = Touched::of(&[tag(&["sponsor"])], &[tag(&[])]);
+        assert!(!tagged.unknown);
+        let unlabel = Touched::of(
+            &[Edit::LabelDelete {
+                label_id: LabelId::new("sponsor"),
+            }],
+            &[],
+        );
+        assert!(tagged.conflicts_with(&unlabel));
+        let file = |folder: Option<&str>| Edit::SceneSetFolder {
+            scene_id: SceneId::new("s"),
+            folder_id: folder.map(FolderId::new),
+        };
+        let filed = Touched::of(&[file(Some("f"))], &[file(None)]);
+        assert!(!filed.unknown);
+        assert!(!filed.conflicts_with(&tagged));
+        assert!(filed.conflicts_with(&filed.clone()));
+        let reorder = |id: &str| Edit::FolderReorder {
+            folder_id: FolderId::new(id),
+            index: 0,
+        };
+        let moved = Touched::of(&[reorder("a")], &[reorder("a")]);
+        assert!(moved.conflicts_with(&Touched::of(&[reorder("b")], &[reorder("b")])));
+        assert!(!moved.conflicts_with(&filed));
     }
 
     #[test]
