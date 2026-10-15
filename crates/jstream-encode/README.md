@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:792a15a8115d9e12", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge-only round: merged main at e1e2a94 (#213/#297 virtual_cam output, #309 UI e2e harness, #295, #286, #237, #275, #292); re-read; unchanged by D8; holds" }
+verified = { hash = "b3:1e2c5aa35304650a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; text identical to main's (diffed); stale only because covered code took B7's changes, none of which this section describes; holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

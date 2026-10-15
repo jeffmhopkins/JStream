@@ -19,7 +19,7 @@ input on the canvas.
 ## Harness
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests/e2e/*.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:0d91f4584a8077aa", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge-only round: merged main at e1e2a94 (#213/#297 virtual_cam output, #309 UI e2e harness, #295, #286, #237, #275, #292); re-read; mock daemon's seeded ItemAdd gained opacity/blend None (B7's item fields this branch carries); seeded studio unchanged; holds" }
+verified = { hash = "b3:0d91f4584a8077aa", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge-only round: re-read; the seed's item.add only gains opacity and blend as None (defaults), so the seeded studio is unchanged; holds" }
 -->
 
 - **The mock daemon** (`mock-daemon/`, the test-only crate `jstream-ui-e2e`) puts

@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ede371b0ce2cfd3f", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge-only round: merged main at e1e2a94 (#213/#297 virtual_cam output, #309 UI e2e harness, #295, #286, #237, #275, #292); re-read; main's text, no D8 change; holds" }
+verified = { hash = "b3:a6ec4892857288d2", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; text identical to main's (diffed); stale only because covered code took B7's changes, none of which this section describes; holds" }
 -->
 
 ### Listening and admission
@@ -374,8 +374,10 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    event buffer, and on overflow the server drops the queued events and sends one
    `events.dropped` notice, so the engine is never slowed down by one client. What is
    left open is tuning: whether 1024 events suits `stats.tick` (about once a second
-   while a pipeline runs) and the high-rate meters still to come, or wants a byte
-   limit or per-event-kind limits once they exist.
+   while a pipeline runs) and `meters.tick` (about ten a second while the mixer runs,
+   so 1024 events are under two minutes of them), or wants a byte limit or
+   per-event-kind limits, such as keeping only the newest meter reading as
+   `jstream-mcp` does.
 8. **Limit tuning.** The connection limits (see *Listening and admission*) are a
    conservative first cut. Whether a remote bind wants a per-peer cap as well, or the
    host app should expose the limits, is open. Settled: the handshake timeout counts

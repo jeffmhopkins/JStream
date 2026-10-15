@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d4f5fe41915453e3", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge-only round: merged main at e1e2a94 (#213/#297 virtual_cam output, #309 UI e2e harness, #295, #286, #237, #275, #292); re-read; main's virtual camera text, no D8 change to the daemon; holds" }
+verified = { hash = "b3:5c840f19827c77b4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; text identical to main's (diffed); stale only because covered code took B7's changes, none of which this section describes; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

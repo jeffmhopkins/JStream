@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:06d7c2e782e61b2d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge-only round: merged main at e1e2a94 (#213/#297 virtual_cam output, #309 UI e2e harness, #295, #286, #237, #275, #292); re-read; main's virtual_cam text beside D8's master/output chains in the mock; holds" }
+verified = { hash = "b3:797416891cf0e44b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; mock checks list now has B7's opacity/blend and filter bullets and D5's audio bullet; kinds sentence combines with_kinds (audio defaults) and any filter kind; reads include bus.list and filter chains; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:ed45764389e7cab5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge-only round: merged main at e1e2a94 (#213/#297 virtual_cam output, #309 UI e2e harness, #295, #286, #237, #275, #292); re-read; mock accepts virtual_cam and refuses an audio chain on it (no audio); D8 check list holds" }
+verified = { hash = "b3:773cf46405b1ae0d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; inverses list both deleted filters and audio/sends; parity sentence names filter and audio rejections; holds against mock.rs" }
 -->
 
 ### The trait
@@ -96,7 +96,8 @@ its own, and is used with default features off.
 ### Mock
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
-`dev-dependencies`) keeps scenes, items, sources, outputs and encoder profiles in memory, with an
+`dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, buses and
+sends in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
@@ -139,10 +140,18 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     audio filters only, an output only if it carries audio, and their filters no scene
     or source reference. `source.duplicate` copies the chains, and `source.delete`'s
     and `output.delete`'s inverses re-add them; a reference in a filter's settings
-    blocks deleting its target, as a source's own does.
+    blocks deleting its target, as a source's own does;
+  - audio (`mock/audio.rs`, ADR-0028): each audio source's `SourceAudio` with its kind's
+    defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
+    `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
+    or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
+    deleting the master, an empty `bus.set_fader`, sends from a `scene` source or a
+    source with no audio, removing a missing send, and gains outside −100 to +24 dB.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
-  kinds, so it accepts any non-empty builtin kind and any filter kind, doesn't check
+  kinds, so it accepts any non-empty builtin kind and any filter kind;
+  `MockEngine::with_kinds` only tells it which kinds have audio, and whether video too,
+  for their audio defaults (a kind it wasn't told about has no audio). It doesn't check
   whether a builtin source has the chain a filter names, stores settings (a source's
   and a filter's) as sent without checking them or filling in defaults (a `null` in a
   patch removes the entry), and doesn't follow settings references when it looks for
@@ -152,13 +161,15 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
-  scene), `output.list` and `encoder.list` (ordered by ID), each at the current `rev`.
+  scene), `output.list`, `encoder.list` and `bus.list` (ordered by ID), each at the
+  current `rev`.
   So it keeps everything an edit sets: the canvas, source names, kinds, settings and
   filter chains, each item's placement (its transform, or its geometry and the
-  transform view of it), crop, visibility, opacity and blend, each scene's role and each item's scene after an `item.move`,
-  each output's kind, target and encoder profile, and each profile. `video.snapshot`
-  is not one of those reads: the mock has no compositor and answers it with
-  `internal`, as it does for any protocol variant it does not implement;
+  transform view of it), crop, visibility, opacity and blend, each scene's role and
+  each item's scene after an `item.move`, each output's kind, target and encoder
+  profile, each profile, each source's audio, and the buses and sends.
+  `video.snapshot` is not one of those reads: the mock has no compositor and answers it
+  with `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
@@ -173,6 +184,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `MockEngine::stream_key` lets a client test check what was stored. Unlike an
   `Engine` built without `with_key_store`, which answers `action_failed`, the mock
   always has a store, so clients can test the whole flow;
+- `audio.reset_loudness`, which succeeds and does nothing: the mock has no mixer, so it
+  emits no `meters.tick` either (`MockEngine::emit` can inject one);
 - per-client undo and redo (`history.undo`, `history.redo`,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Each batch is a step built
   from the same inverse edits `jstream-graph` returns: a removed item comes back at its
@@ -181,7 +194,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   back to the item's previous scene and index, `scene.set_role` back to the previous
   role, a deleted source with its
   settings, `duplicated_from` and filters, each filter edit to the chain as it was, `item.set_source` back to the item's previous source,
-  a placement, crop or
+  a deleted bus with its fader and sends, a deleted source's audio and sends, and each
+  audio edit back to the values it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
   back with its encoder profile and filters, encoder profile edits undo to the profile as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
@@ -216,9 +230,9 @@ The mock re-implements these checks and reads rather than calling
 for dev-dependencies, so the dependency would need a layering change. The duplication
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
-its outputs and filter chains on a source, the master and an output, the exact answer to every read of it, and the exact
-error for batches rejected against it, RTMP URL, recording path and filter rejections
-included. The mock's
+its outputs and filter chains on a source, the master and an output, the exact answer to
+every read of it, and the exact error for batches rejected against it, RTMP URL,
+recording path, filter and audio rejections included. The mock's
 undo test tears that collection down in one batch and checks that undo gives back
 exactly the fixture's state, which `jstream-graph`'s inverse property test guarantees
 for the graph.

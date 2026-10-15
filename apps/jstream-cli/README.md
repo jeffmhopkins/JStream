@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:0fe0c682590c53a4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; contents list unchanged by B7 or main; holds" }
+verified = { hash = "b3:1fb813d39de11b8b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; main's audio-not-in-CLI sentence beside B7's opacity/blend CLI text; holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:91fae55e6dd30f37", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; B7's opacity/blend commands and filter-edit exclusion merged cleanly with main's text; holds against args.rs" }
+verified = { hash = "b3:7ae3599ba365f639", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; holds beside both sides' additions" }
 -->
 
 ```sh
@@ -121,7 +121,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   grouping is one batch that creates a scene as a group, places it through a `scene:`
   source, and moves the items into it. The placement edits'
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
-  the item's own scene, which omitting it already means.
+  the item's own scene, which omitting it already means. Protocol 0.19's audio edits
+  (`source.set_audio`, `bus.*`, `send.*`), `bus.list` and `audio.reset_loudness` are not
+  in the CLI either.
   `item.set_source <item-id> <source-id>` switches an item to another source.
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine accepts only `normal` until it draws the
@@ -166,7 +168,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
   server URL, as `output.create` takes it). `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
-  (<name>):` by its role, then the outputs. `output status` prints
+  (<name>):` by its role, then the outputs; only `--json` shows the sources' audio, the
+  buses and the sends. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
@@ -183,6 +186,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   When the server dropped events because the CLI read too slowly, it prints
   `events.dropped <count>`. A pipeline drop sample prints
   `stats.tick seq <n> capture_frames <n> audio_frames <n> render_ticks <n> encode_frames <n> encode_blocks <n> output_packets <n>`.
+  Any other event, `meters.tick` among them, prints as its JSON.
 
 **MCP.** `jstream-cli mcp` is the stdio MCP proxy for an agent's MCP client to launch,
 for example:
@@ -239,7 +243,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f1db55bee3902095", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge-only round: merged main at e1e2a94 (#213/#297 virtual_cam output, #309 UI e2e harness, #295, #286, #237, #275, #292); re-read; main's text stands beside this PR's, no D8 change to the CLI; holds" }
+verified = { hash = "b3:5d2e3ad8fc2a5ee9", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -147,6 +147,12 @@
       "kind": {
         "type": "scene",
         "scene_id": "b"
+      },
+      "audio": {
+        "enabled": false,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
       }
     },
     {
@@ -196,6 +202,37 @@
             }
           }
         ]
+      }
+    },
+    {
+      "id": "mic",
+      "name": "Microphone",
+      "kind": {
+        "type": "builtin",
+        "kind": "mic"
+      },
+      "kind_version": 1,
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": -2.0,
+        "muted": true
+      }
+    },
+    {
+      "id": "mic_copy",
+      "name": "Microphone copy",
+      "kind": {
+        "type": "builtin",
+        "kind": "mic"
+      },
+      "kind_version": 1,
+      "duplicated_from": "mic",
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": -2.0,
+        "muted": true
       }
     },
     {
@@ -295,6 +332,42 @@
           "kbps": 128
         }
       }
+    }
+  ],
+  "buses": [
+    {
+      "id": "master",
+      "name": "Master",
+      "gain_db": -1.0,
+      "muted": false
+    },
+    {
+      "id": "vod",
+      "name": "VOD track",
+      "gain_db": -6.0,
+      "muted": true
+    }
+  ],
+  "sends": [
+    {
+      "source_id": "desk",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
+    {
+      "source_id": "mic",
+      "bus_id": "master",
+      "gain_db": -1.5
+    },
+    {
+      "source_id": "mic",
+      "bus_id": "vod",
+      "gain_db": -3.0
+    },
+    {
+      "source_id": "mic_copy",
+      "bus_id": "vod",
+      "gain_db": -3.0
     }
   ],
   "master": {
