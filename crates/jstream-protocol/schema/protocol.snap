@@ -4,7 +4,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {
   "$defs": {
     "Action": {
-      "description": "A command with side effects outside the collection state: never undoable and never\nbatchable.\n\nSerialized with an internal `type` tag holding the command name. The response only\nsays the action was accepted; how it goes is reported by events\n(`output.state_changed`).",
+      "description": "A command with side effects outside the collection state: never undoable and never\nbatchable.\n\nSerialized with an internal `type` tag holding the command name. The response says\nthe action was accepted, with an [`ActionResult`](crate::ActionResult) for the\nactions that return something (a YouTube sign-in's consent URL, a broadcast); how\nit goes is reported by events (`output.state_changed`).",
       "oneOf": [
         {
           "description": "Starts an output (stream, recording or virtual camera).",
@@ -82,6 +82,194 @@ source: crates/jstream-protocol/src/fixtures.rs
             "output_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "Starts signing in to YouTube with the full `youtube` scope (ADR-0041 §4) and\nreturns Google's consent URL (`ActionResult` `youtube.sign_in`). The client opens\nit in a browser; Google then redirects to a listener the engine opened on\n`127.0.0.1`, and the engine finishes the sign-in, keeps the refresh token in the\nOS credential store and emits `youtube.status_changed` (`signed_in`, or\n`signed_out` when the user declines or the sign-in times out after 5 minutes).\nSent again while a sign-in waits, it returns the same URL. Sent while signed in,\nit starts a new sign-in, which replaces the account once it finishes. Fails with\n`action_failed` when the engine has no YouTube client.",
+          "properties": {
+            "type": {
+              "const": "youtube.sign_in",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Signs out of YouTube: revokes the account's token at Google (best effort),\nremoves it from the credential store, and abandons a sign-in that is waiting.\nEmits `youtube.status_changed` `signed_out`. Succeeds when already signed out.\nA running `youtube` output keeps its connection. Fails with `action_failed` when\nthe engine has no YouTube client or the credential store refuses.",
+          "properties": {
+            "type": {
+              "const": "youtube.sign_out",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Creates a YouTube broadcast (`liveBroadcasts.insert`) and returns it. JStream\nmoves it through its states itself (`youtube.transition_broadcast`), so automatic\nstart and stop are off, and its monitor stream is on so `testing` works. Fails\nwith `invalid_argument` for an empty title or start time or an `other` privacy,\nand with `action_failed` when not signed in or YouTube refuses, including when\nthe day's API quota is used up.",
+          "properties": {
+            "description": {
+              "description": "Its description. Omitted means empty.",
+              "type": "string"
+            },
+            "made_for_kids": {
+              "default": false,
+              "description": "Whether it is made for kids. Omitted means `false`.",
+              "type": "boolean"
+            },
+            "privacy": {
+              "$ref": "#/$defs/BroadcastPrivacy",
+              "default": "private",
+              "description": "Who can watch it. Omitted means `private`."
+            },
+            "scheduled_start_time": {
+              "description": "When it is scheduled to start, RFC 3339 (`2026-10-16T19:00:00Z`).",
+              "type": "string"
+            },
+            "title": {
+              "description": "Its title.",
+              "type": "string"
+            },
+            "type": {
+              "const": "youtube.create_broadcast",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "title",
+            "scheduled_start_time"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Binds a stream to a broadcast (`liveBroadcasts.bind`) and returns the broadcast.\nA `youtube` output sends to its broadcast's bound stream. With no `stream_id`,\nthe engine first creates a reusable stream named after the broadcast. Fails\nwith `action_failed` when not signed in or YouTube refuses.",
+          "properties": {
+            "broadcast_id": {
+              "description": "The broadcast.",
+              "type": "string"
+            },
+            "stream_id": {
+              "description": "The stream to bind, as `youtube.list_streams` reports it. Omitted creates one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "youtube.bind_broadcast",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "broadcast_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Moves a broadcast to `testing`, `live` or `complete`\n(`liveBroadcasts.transition`) and returns it. `testing` and `live` need its\nbound stream to be receiving: start its `youtube` output first. Fails with\n`action_failed` when not signed in or YouTube refuses (a transition the\nbroadcast can't make, or a stream that isn't sending).",
+          "properties": {
+            "broadcast_id": {
+              "description": "The broadcast.",
+              "type": "string"
+            },
+            "to": {
+              "$ref": "#/$defs/BroadcastTransition",
+              "description": "Where to move it."
+            },
+            "type": {
+              "const": "youtube.transition_broadcast",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "broadcast_id",
+            "to"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ActionResult": {
+      "description": "What an action returns beyond being accepted. Serialized with an internal `type`\ntag repeating the action's name; most actions return none.",
+      "oneOf": [
+        {
+          "description": "The result of `youtube.sign_in`.",
+          "properties": {
+            "type": {
+              "const": "youtube.sign_in",
+              "type": "string"
+            },
+            "url": {
+              "description": "Google's consent page. The client opens it in a browser; once the user\nagrees, Google redirects to the engine, which finishes the sign-in and emits\n`youtube.status_changed`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `youtube.create_broadcast`: the new broadcast.",
+          "properties": {
+            "broadcast": {
+              "$ref": "#/$defs/BroadcastInfo",
+              "description": "The broadcast, as YouTube created it."
+            },
+            "type": {
+              "const": "youtube.create_broadcast",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "broadcast"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `youtube.bind_broadcast`: the broadcast with its new stream.",
+          "properties": {
+            "broadcast": {
+              "$ref": "#/$defs/BroadcastInfo",
+              "description": "The broadcast after the bind."
+            },
+            "type": {
+              "const": "youtube.bind_broadcast",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "broadcast"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `youtube.transition_broadcast`.",
+          "properties": {
+            "broadcast": {
+              "$ref": "#/$defs/BroadcastInfo",
+              "description": "The broadcast after the transition. Its lifecycle may still be moving\n(`test_starting`, `live_starting`)."
+            },
+            "type": {
+              "const": "youtube.transition_broadcast",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "broadcast"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -123,6 +311,192 @@ source: crates/jstream-protocol/src/fixtures.rs
         "edits"
       ],
       "type": "object"
+    },
+    "BroadcastInfo": {
+      "description": "One broadcast, as the YouTube queries and actions report it.",
+      "properties": {
+        "bound_stream_id": {
+          "description": "The stream bound to it, if any. A `youtube` output can start only once one is.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "broadcast_id": {
+          "description": "YouTube's ID for it: what a `youtube` output target names.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Its description. Omitted when empty.",
+          "type": "string"
+        },
+        "life_cycle": {
+          "$ref": "#/$defs/BroadcastLifeCycle",
+          "description": "Where it is in its lifecycle."
+        },
+        "privacy": {
+          "$ref": "#/$defs/BroadcastPrivacy",
+          "description": "Who can watch it."
+        },
+        "scheduled_start_time": {
+          "description": "When it is scheduled to start, RFC 3339, as YouTube reports it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "Its title.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "broadcast_id",
+        "title",
+        "life_cycle",
+        "privacy"
+      ],
+      "type": "object"
+    },
+    "BroadcastLifeCycle": {
+      "description": "Where a broadcast is in its lifecycle (`status.lifeCycleStatus`). Serialized as a\nsnake_case string.",
+      "oneOf": [
+        {
+          "const": "created",
+          "description": "Created, but missing settings it needs to go live.",
+          "type": "string"
+        },
+        {
+          "const": "ready",
+          "description": "Ready to go live once a stream is bound and sending.",
+          "type": "string"
+        },
+        {
+          "const": "test_starting",
+          "description": "Moving to `testing`.",
+          "type": "string"
+        },
+        {
+          "const": "testing",
+          "description": "Visible only through its monitor stream.",
+          "type": "string"
+        },
+        {
+          "const": "live_starting",
+          "description": "Moving to `live`.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "Visible to viewers.",
+          "type": "string"
+        },
+        {
+          "const": "complete",
+          "description": "Ended.",
+          "type": "string"
+        },
+        {
+          "const": "revoked",
+          "description": "Removed by YouTube.",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "A state this version doesn't know, from YouTube or a newer server.",
+          "type": "string"
+        }
+      ]
+    },
+    "BroadcastListStatus": {
+      "description": "Which broadcasts `youtube.list_broadcasts` returns, by state. Serialized as a\nsnake_case string.",
+      "oneOf": [
+        {
+          "const": "all",
+          "description": "Every broadcast.",
+          "type": "string"
+        },
+        {
+          "const": "upcoming",
+          "description": "Not started yet.",
+          "type": "string"
+        },
+        {
+          "const": "active",
+          "description": "Live now (or testing).",
+          "type": "string"
+        },
+        {
+          "const": "completed",
+          "description": "Ended.",
+          "type": "string"
+        }
+      ]
+    },
+    "BroadcastPrivacy": {
+      "description": "Who can watch a broadcast. Serialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "private",
+          "description": "Only the channel.",
+          "type": "string"
+        },
+        {
+          "const": "public",
+          "description": "Anyone.",
+          "type": "string"
+        },
+        {
+          "const": "unlisted",
+          "description": "Anyone with the link.",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "A value this version doesn't know, from YouTube or a newer server. Refused in\n`youtube.create_broadcast` with `invalid_argument`.",
+          "type": "string"
+        }
+      ]
+    },
+    "BroadcastTransition": {
+      "description": "Which way `youtube.transition_broadcast` moves a broadcast. Serialized as a\nsnake_case string.",
+      "oneOf": [
+        {
+          "const": "testing",
+          "description": "Visible only through the monitor stream. The bound stream must be sending.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "Visible to viewers. The bound stream must be sending.",
+          "type": "string"
+        },
+        {
+          "const": "complete",
+          "description": "Ended. A complete broadcast can't go live again.",
+          "type": "string"
+        }
+      ]
+    },
+    "BroadcastType": {
+      "description": "Which broadcasts `youtube.list_broadcasts` returns, by type. Serialized as a\nsnake_case string.",
+      "oneOf": [
+        {
+          "const": "all",
+          "description": "Both kinds.",
+          "type": "string"
+        },
+        {
+          "const": "event",
+          "description": "Scheduled events.",
+          "type": "string"
+        },
+        {
+          "const": "persistent",
+          "description": "The channel's persistent (\"Stream now\") broadcast.",
+          "type": "string"
+        }
+      ]
     },
     "Call": {
       "description": "What a request asks for. Tagged by `kind`, so the class of every call (ADR-0013) is\nexplicit on the wire.",
@@ -220,6 +594,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             "kind": {
               "const": "action",
               "type": "string"
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ActionResult"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What the action returns, for the actions that return something\n(`youtube.sign_in`, the YouTube broadcast actions). Omitted for the others,\nand missing from a server older than 0.13."
             }
           },
           "required": [
@@ -1200,6 +1585,69 @@ source: crates/jstream-protocol/src/fixtures.rs
             "drops"
           ],
           "type": "object"
+        },
+        {
+          "description": "The engine's YouTube sign-in state changed: a sign-in started, finished or failed,\nthe user signed out, or Google stopped accepting the account's token.",
+          "properties": {
+            "auth": {
+              "$ref": "#/$defs/YoutubeAuth",
+              "description": "The new state."
+            },
+            "type": {
+              "const": "youtube.status_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "auth"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "What YouTube says about the stream a running `youtube` output sends to changed\n(ADR-0041). The engine polls the stream's health while the output runs and sends\nthis when the status, the health or the issues differ from the last report, and\nonce on the first reading.",
+          "properties": {
+            "broadcast_id": {
+              "description": "The broadcast it sends to.",
+              "type": "string"
+            },
+            "health": {
+              "$ref": "#/$defs/StreamHealth",
+              "description": "How healthy what it receives is."
+            },
+            "issues": {
+              "description": "The problems YouTube found. Omitted when there are none.",
+              "items": {
+                "$ref": "#/$defs/HealthIssue"
+              },
+              "type": "array"
+            },
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "status": {
+              "$ref": "#/$defs/StreamStatus",
+              "description": "What YouTube says the stream is doing."
+            },
+            "stream_id": {
+              "description": "The stream bound to that broadcast.",
+              "type": "string"
+            },
+            "type": {
+              "const": "youtube.health_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "broadcast_id",
+            "stream_id",
+            "status",
+            "health"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1240,6 +1688,34 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "HealthIssue": {
+      "description": "One problem YouTube found with a stream's settings (`configurationIssues`). Its text\nis YouTube's, cut to 512 characters with control characters replaced: show it as\nplain text.",
+      "properties": {
+        "description": {
+          "description": "A longer explanation.",
+          "type": "string"
+        },
+        "issue": {
+          "description": "YouTube's name for the problem (`gopSizeLong`, `bitrateLow`, …).",
+          "type": "string"
+        },
+        "reason": {
+          "description": "A short reason.",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/IssueSeverity",
+          "description": "How serious it is."
+        }
+      },
+      "required": [
+        "issue",
+        "severity",
+        "reason",
+        "description"
+      ],
+      "type": "object"
     },
     "Hello": {
       "description": "The client's opening message.",
@@ -1343,6 +1819,31 @@ source: crates/jstream-protocol/src/fixtures.rs
     "IdempotencyKey": {
       "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
       "type": "string"
+    },
+    "IssueSeverity": {
+      "description": "How serious a [`HealthIssue`] is. Serialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "info",
+          "description": "For information.",
+          "type": "string"
+        },
+        {
+          "const": "warning",
+          "description": "Worth fixing.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Hurts the stream.",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "A value this version doesn't know, from YouTube or a newer server.",
+          "type": "string"
+        }
+      ]
     },
     "ItemGeometry": {
       "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, and omitted `perspective_px` means orthographic.",
@@ -1610,7 +2111,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "OutputKind": {
-      "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL and recording to a file are configurable so far. The\nvirtual camera and the YouTube-bound target of the data model come later as new\nvariants.",
+      "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL or a YouTube broadcast, and recording to a file, are\nconfigurable so far. The virtual camera of the data model comes later as a new\nvariant.",
       "oneOf": [
         {
           "description": "A stream sent over RTMP or RTMPS.",
@@ -2142,6 +2643,69 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "Whether the engine is signed in to YouTube. Never calls YouTube.",
+          "properties": {
+            "type": {
+              "const": "youtube.status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists the signed-in channel's broadcasts, one page of up to 50 at a time, in\nYouTube's order. Calls the Live API, so it fails with `action_failed` when not\nsigned in or YouTube refuses (including when the day's quota is used up).",
+          "properties": {
+            "broadcast_type": {
+              "$ref": "#/$defs/BroadcastType",
+              "default": "all",
+              "description": "Which broadcasts, by type. Omitted means `all`, which includes the channel's\npersistent (\"Stream now\") broadcast."
+            },
+            "page_token": {
+              "description": "The `next_page_token` of an earlier page, for the page after it.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status": {
+              "$ref": "#/$defs/BroadcastListStatus",
+              "default": "all",
+              "description": "Which broadcasts, by state. Omitted means `all`."
+            },
+            "type": {
+              "const": "youtube.list_broadcasts",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists the signed-in channel's streams, one page of up to 50 at a time. Their keys\nare never reported. Fails like `youtube.list_broadcasts`.",
+          "properties": {
+            "page_token": {
+              "description": "The `next_page_token` of an earlier page, for the page after it.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "youtube.list_streams",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -2414,6 +2978,80 @@ source: crates/jstream-protocol/src/fixtures.rs
             "outputs"
           ],
           "type": "object"
+        },
+        {
+          "description": "The result of `youtube.status`. Runtime state, so it carries no `rev`.",
+          "properties": {
+            "auth": {
+              "$ref": "#/$defs/YoutubeAuth",
+              "description": "Whether the engine is signed in."
+            },
+            "type": {
+              "const": "youtube.status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "auth"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `youtube.list_broadcasts`.",
+          "properties": {
+            "broadcasts": {
+              "description": "This page's broadcasts.",
+              "items": {
+                "$ref": "#/$defs/BroadcastInfo"
+              },
+              "type": "array"
+            },
+            "next_page_token": {
+              "description": "The token for the next page, if there is one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "youtube.list_broadcasts",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "broadcasts"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `youtube.list_streams`.",
+          "properties": {
+            "next_page_token": {
+              "description": "The token for the next page, if there is one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "streams": {
+              "description": "This page's streams.",
+              "items": {
+                "$ref": "#/$defs/StreamInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "youtube.list_streams",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "streams"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -2491,6 +3129,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "url"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A YouTube broadcast (ADR-0041): on `output.start` the engine reads the\nbroadcast's bound stream from the Live API and publishes to that stream's\n`rtmps://` ingest address with its key. The key comes from YouTube, so\n`output.set_key` isn't needed. The start fails with `action_failed` when the\nengine isn't signed in to YouTube, the broadcast has no bound stream\n(`youtube.bind_broadcast`), or YouTube refuses. The engine rejects, with\n`invalid_argument`, an ID that is empty, longer than 128 bytes or has characters\nother than ASCII letters, digits, `-` and `_`.",
+          "properties": {
+            "broadcast_id": {
+              "description": "The broadcast's ID, as `youtube.list_broadcasts` reports it.",
+              "type": "string"
+            },
+            "type": {
+              "const": "youtube",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "broadcast_id"
           ],
           "type": "object"
         }
@@ -2731,6 +3387,99 @@ source: crates/jstream-protocol/src/fixtures.rs
             "kind"
           ],
           "type": "object"
+        }
+      ]
+    },
+    "StreamHealth": {
+      "description": "How YouTube rates what a stream receives (`status.healthStatus.status`). Serialized\nas a snake_case string.",
+      "oneOf": [
+        {
+          "const": "good",
+          "description": "No problems.",
+          "type": "string"
+        },
+        {
+          "const": "ok",
+          "description": "Minor problems.",
+          "type": "string"
+        },
+        {
+          "const": "bad",
+          "description": "Problems that hurt the stream.",
+          "type": "string"
+        },
+        {
+          "const": "no_data",
+          "description": "YouTube has no data yet.",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "A value this version doesn't know, from YouTube or a newer server.",
+          "type": "string"
+        }
+      ]
+    },
+    "StreamInfo": {
+      "description": "One stream, as `youtube.list_streams` reports it. Its key is never reported.",
+      "properties": {
+        "health": {
+          "$ref": "#/$defs/StreamHealth",
+          "description": "How healthy what it receives is."
+        },
+        "status": {
+          "$ref": "#/$defs/StreamStatus",
+          "description": "What it is doing."
+        },
+        "stream_id": {
+          "description": "YouTube's ID for it: what `youtube.bind_broadcast` takes.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Its title.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stream_id",
+        "title",
+        "status",
+        "health"
+      ],
+      "type": "object"
+    },
+    "StreamStatus": {
+      "description": "What YouTube says a stream is doing (`status.streamStatus`). Serialized as a\nsnake_case string.",
+      "oneOf": [
+        {
+          "const": "active",
+          "description": "Receiving data.",
+          "type": "string"
+        },
+        {
+          "const": "created",
+          "description": "Created, with settings still missing.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Something is wrong with it.",
+          "type": "string"
+        },
+        {
+          "const": "inactive",
+          "description": "Not receiving data.",
+          "type": "string"
+        },
+        {
+          "const": "ready",
+          "description": "Ready to receive data.",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "A value this version doesn't know, from YouTube or a newer server.",
+          "type": "string"
         }
       ]
     },
@@ -3047,6 +3796,36 @@ source: crates/jstream-protocol/src/fixtures.rs
         "message"
       ],
       "type": "object"
+    },
+    "YoutubeAuth": {
+      "description": "Whether the engine is signed in to YouTube. Serialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "unavailable",
+          "description": "The engine has no YouTube client configured: the YouTube actions and queries\nfail with `action_failed`.",
+          "type": "string"
+        },
+        {
+          "const": "signed_out",
+          "description": "Not signed in. `youtube.sign_in` starts a sign-in.",
+          "type": "string"
+        },
+        {
+          "const": "signing_in",
+          "description": "A sign-in is waiting for the user to finish it in the browser.",
+          "type": "string"
+        },
+        {
+          "const": "signed_in",
+          "description": "Signed in. The engine holds the account's refresh token in the OS credential\nstore and uses it for every YouTube call.",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "A state this version of the protocol doesn't know, from a newer server.",
+          "type": "string"
+        }
+      ]
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",

@@ -390,7 +390,7 @@ fn a_batch_a_query_and_events_round_trip() {
         },
     };
     let response = ok(harness.run(control.call(start)));
-    assert_eq!(response.result, CallResult::Action {});
+    assert_eq!(response.result, CallResult::Action { result: None });
     for state in [OutputState::Starting, OutputState::Active] {
         assert_eq!(
             next_event(&harness, &mut events),

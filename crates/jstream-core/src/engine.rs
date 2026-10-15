@@ -20,12 +20,14 @@ use crate::runtime::{
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::youtube::{Youtube, YoutubeSetup};
 use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, HistoryCall,
-    HistoryDirection, IdempotencyKey, OutputId, OutputKind, OutputState, ProtocolError, Query,
-    QueryResult, RecordContainer, RequestId, Rev, SecretString, SourceId,
+    Action, ActionResult, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event,
+    HistoryCall, HistoryDirection, IdempotencyKey, OutputId, OutputKind, OutputState,
+    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SecretString,
+    SourceId, YoutubeAuth,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -78,6 +80,10 @@ struct Shared {
     /// Where the collection is saved, if the host named a file. Taken before the
     /// collection lock, never while holding it, so the disk write happens outside it.
     collection_file: Mutex<Option<CollectionFile>>,
+    /// The YouTube sign-in and Live API client, if the host gave a setup
+    /// ([`Engine::with_youtube`]). On its own lock, taken only to clone the handle: no
+    /// YouTube call runs under the collection lock.
+    youtube: Mutex<Option<Arc<Youtube>>>,
 }
 
 impl Default for Engine {
@@ -93,6 +99,7 @@ impl Default for Engine {
                 keys: Mutex::new(None),
                 audit: Audit::default(),
                 collection_file: Mutex::new(None),
+                youtube: Mutex::new(None),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -155,6 +162,32 @@ impl Engine {
     pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
         *lock(&self.shared.keys) = Some(store);
         self
+    }
+
+    /// Gives the engine YouTube (ADR-0041): the app's OAuth client, the HTTPS
+    /// transport and the store for the account's refresh token. The YouTube actions and
+    /// queries then work, and an output with a `youtube` target can start. Without it,
+    /// `youtube.status` reports `unavailable` and the other YouTube calls fail with
+    /// `action_failed`. Reads the store once, here: a token kept by an earlier sign-in
+    /// signs the engine in. Configure this before [`connect`](Self::connect).
+    #[must_use]
+    pub fn with_youtube(self, setup: YoutubeSetup) -> Self {
+        let shared = Arc::downgrade(&self.shared);
+        let emit = Arc::new(move |event: Event| {
+            if let Some(shared) = shared.upgrade() {
+                let mut wake = Vec::new();
+                lock(&shared.state).subscribers.emit(&event, &mut wake);
+                wake_all(wake);
+            }
+        });
+        *lock(&self.shared.youtube) = Some(Arc::new(Youtube::new(setup, emit)));
+        self
+    }
+
+    /// The YouTube side, if the host gave one. The handle is cloned so no engine lock
+    /// is held while it calls YouTube.
+    pub(crate) fn youtube(&self) -> Option<Arc<Youtube>> {
+        lock(&self.shared.youtube).clone()
     }
 
     /// Records every batch, undo, redo and action this engine executes in `sink`, after
@@ -507,7 +540,9 @@ impl Engine {
             } => Some(output_id.clone()),
             _ => None,
         };
-        let result = if let Call::Action {
+        let result = if let Some(result) = self.youtube_call(&call) {
+            result
+        } else if let Call::Action {
             action: action @ (Action::OutputSetKey { .. } | Action::OutputClearKey { .. }),
         } = call
         {
@@ -555,6 +590,89 @@ impl Engine {
         Executed::Ready(result)
     }
 
+    /// The YouTube actions and queries, or `None` for any other call. They run with no
+    /// engine lock held, since most of them call the Live API.
+    fn youtube_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        let youtube = self.youtube();
+        let unavailable = || ProtocolError::ActionFailed {
+            reason: "this engine has no YouTube client".into(),
+        };
+        let action = |result: Result<ActionResult, ProtocolError>| {
+            result.map(|result| CallResult::Action {
+                result: Some(result),
+            })
+        };
+        let query = |result: Result<QueryResult, ProtocolError>| {
+            result.map(|result| CallResult::Query { result })
+        };
+        Some(match call {
+            Call::Action { action: a } => match a {
+                Action::YoutubeSignIn => {
+                    action(youtube.ok_or_else(unavailable).and_then(|y| y.sign_in()))
+                }
+                Action::YoutubeSignOut => youtube
+                    .ok_or_else(unavailable)
+                    .and_then(|y| y.sign_out())
+                    .map(|()| CallResult::Action { result: None }),
+                Action::YoutubeCreateBroadcast {
+                    title,
+                    description,
+                    scheduled_start_time,
+                    privacy,
+                    made_for_kids,
+                } => action(youtube.ok_or_else(unavailable).and_then(|y| {
+                    y.create_broadcast(
+                        title.clone(),
+                        description.clone(),
+                        scheduled_start_time.clone(),
+                        *privacy,
+                        *made_for_kids,
+                    )
+                })),
+                Action::YoutubeBindBroadcast {
+                    broadcast_id,
+                    stream_id,
+                } => action(
+                    youtube
+                        .ok_or_else(unavailable)
+                        .and_then(|y| y.bind_broadcast(broadcast_id, stream_id.clone())),
+                ),
+                Action::YoutubeTransitionBroadcast { broadcast_id, to } => action(
+                    youtube
+                        .ok_or_else(unavailable)
+                        .and_then(|y| y.transition_broadcast(broadcast_id, *to)),
+                ),
+                _ => return None,
+            },
+            Call::Query { query: q } => {
+                match q {
+                    Query::YoutubeStatus => Ok(CallResult::Query {
+                        result: youtube.map_or(
+                            QueryResult::YoutubeStatus {
+                                auth: YoutubeAuth::Unavailable,
+                            },
+                            |y| y.status(),
+                        ),
+                    }),
+                    Query::YoutubeListBroadcasts {
+                        status,
+                        broadcast_type,
+                        page_token,
+                    } => query(youtube.ok_or_else(unavailable).and_then(|y| {
+                        y.list_broadcasts(*status, *broadcast_type, page_token.clone())
+                    })),
+                    Query::YoutubeListStreams { page_token } => query(
+                        youtube
+                            .ok_or_else(unavailable)
+                            .and_then(|y| y.list_streams(page_token.clone())),
+                    ),
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        })
+    }
+
     /// The key store, if the host gave one. The handle is cloned so the store is
     /// called with no engine lock held.
     fn key_store(&self) -> Option<Arc<dyn StreamKeyStore>> {
@@ -586,7 +704,7 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not store the key: {err}"),
                     })?;
-                Ok(CallResult::Action {})
+                Ok(CallResult::Action { result: None })
             }
             Action::OutputClearKey { output_id } => {
                 let store = self.key_store().ok_or_else(no_key_store)?;
@@ -595,7 +713,7 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not remove the key: {err}"),
                     })?;
-                Ok(CallResult::Action {})
+                Ok(CallResult::Action { result: None })
             }
             other => Err(not_implemented(other.name())),
         }
@@ -665,6 +783,24 @@ impl Engine {
         let Some(host) = &self.media else {
             return Err(not_implemented("output.start"));
         };
+        // A `youtube` output needs a signed-in client. Checked before `starting`, and
+        // without the collection lock, since it waits for a YouTube call in flight.
+        let youtube = match youtube_broadcast(&lock(&self.shared.state).graph, &output_id) {
+            Some(_) => match self.youtube() {
+                Some(youtube) if youtube.signed_in() => Some(youtube),
+                Some(_) => {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: "not signed in to YouTube: send `youtube.sign_in`".into(),
+                    });
+                }
+                None => {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: "this engine has no YouTube client".into(),
+                    });
+                }
+            },
+            None => None,
+        };
         let mut wake = Vec::new();
         let (parts, publish, generation) = loop {
             // A failed pipeline may still be joining. Wait that out before opening
@@ -693,9 +829,23 @@ impl Engine {
                     reason: "another output is already running".into(),
                 });
             }
-            let publish = match record_path(&state.graph, &output_id) {
-                Some(path) => Target::Record(path),
-                None => match lock(&host.publish).take() {
+            let publish = match (
+                record_path(&state.graph, &output_id),
+                youtube_broadcast(&state.graph, &output_id),
+                &youtube,
+            ) {
+                (Some(path), _, _) => Target::Record(path),
+                (None, Some(broadcast_id), Some(youtube)) => Target::YouTube {
+                    broadcast_id,
+                    youtube: Arc::clone(youtube),
+                },
+                // Retargeted to YouTube since the check above: sign-in wasn't checked.
+                (None, Some(_), None) => {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: format!("output `{output_id}` changed while starting"),
+                    });
+                }
+                (None, None, _) => match lock(&host.publish).take() {
                     Some(publish) => Target::Ready(publish),
                     None => match lock(&host.open_publish).as_ref() {
                         Some(open) => Target::Open(Arc::clone(open)),
@@ -746,9 +896,11 @@ impl Engine {
             armed: true,
         };
         let (fail_tx, fail_rx) = mpsc::channel();
+        let mut health = None;
         let launched = publish
             .open(&output_id)
-            .and_then(|destination| {
+            .and_then(|(destination, watch)| {
+                health = watch;
                 launch(parts, destination, output_id.clone(), generation, fail_tx)
             })
             .map(|mut running| {
@@ -869,7 +1021,12 @@ impl Engine {
         };
         wake_all(std::mem::take(&mut wake));
         match outcome {
-            StartOutcome::Active => Ok(CallResult::Action {}),
+            StartOutcome::Active => {
+                if let Some(watch) = health {
+                    self.watch_health(&output_id, watch);
+                }
+                Ok(CallResult::Action { result: None })
+            }
             StartOutcome::Cancelled(running) => {
                 drop(running);
                 drop(inflight);
@@ -892,6 +1049,9 @@ impl Engine {
         let Some(host) = &self.media else {
             return Err(not_implemented("output.stop"));
         };
+        if let Some(youtube) = self.youtube() {
+            youtube.unwatch_health(&output_id);
+        }
         let mut wake = Vec::new();
         let (running, watcher, wait_for) = {
             let mut state = lock(&self.shared.state);
@@ -961,7 +1121,28 @@ impl Engine {
         settle.state = OutputState::Stopped;
         drop(settle);
         drop(clear_drain);
-        Ok(CallResult::Action {})
+        Ok(CallResult::Action { result: None })
+    }
+
+    /// Polls the health of the stream a `youtube` output started on, while the output
+    /// is `active` or `reconnecting`.
+    fn watch_health(&self, output_id: &OutputId, watch: HealthTarget) {
+        let shared = Arc::downgrade(&self.shared);
+        let watched = output_id.clone();
+        let alive = Box::new(move || {
+            shared.upgrade().is_some_and(|shared| {
+                matches!(
+                    lock(&shared.state).outputs.state(&watched),
+                    Ok(OutputState::Active | OutputState::Reconnecting)
+                )
+            })
+        });
+        watch.youtube.watch_health(
+            output_id.clone(),
+            watch.broadcast_id,
+            watch.stream_id,
+            alive,
+        );
     }
 
     fn settle(&self, output_id: &OutputId, state: OutputState) {
@@ -1024,12 +1205,35 @@ fn record_path(graph: &Graph, output_id: &OutputId) -> Option<PathBuf> {
     }
 }
 
+/// The broadcast a `youtube` output in the collection sends to, or `None` when the
+/// output has another target (or is not in the collection).
+fn youtube_broadcast(graph: &Graph, output_id: &OutputId) -> Option<String> {
+    match graph.state().output(output_id)?.kind() {
+        OutputKind::Rtmp {
+            target: RtmpTarget::YouTube { broadcast_id },
+        } => Some(broadcast_id.clone()),
+        _ => None,
+    }
+}
+
 /// Where a start sends its output: a one-shot publish target the host set, the opener
-/// it calls once the locks are released, or a recording file.
+/// it calls once the locks are released, a recording file, or a YouTube broadcast.
 enum Target {
     Ready(Box<dyn LivePublish>),
     Open(OpenPublish),
     Record(PathBuf),
+    /// A `youtube` output: the ingest is read from the Live API when it opens.
+    YouTube {
+        broadcast_id: String,
+        youtube: Arc<Youtube>,
+    },
+}
+
+/// The stream a started `youtube` output sends to, whose health the engine polls.
+struct HealthTarget {
+    youtube: Arc<Youtube>,
+    broadcast_id: String,
+    stream_id: String,
 }
 
 impl Target {
@@ -1041,15 +1245,33 @@ impl Target {
         }
     }
 
-    /// Where to send the output. Runs the opener, outside the engine's locks. A
-    /// recording's file is opened by `launch`, once the frame size is known.
-    fn open(self, output_id: &OutputId) -> Result<Destination, String> {
+    /// Where to send the output, and for a `youtube` output the stream to watch. Runs
+    /// the opener, or reads the YouTube ingest and connects, outside the engine's locks.
+    /// A recording's file is opened by `launch`, once the frame size is known.
+    fn open(self, output_id: &OutputId) -> Result<(Destination, Option<HealthTarget>), String> {
         match self {
-            Target::Ready(publish) => Ok(Destination::Publish(publish)),
+            Target::Ready(publish) => Ok((Destination::Publish(publish), None)),
             Target::Open(open) => open(output_id)
-                .map(Destination::Publish)
+                .map(|publish| (Destination::Publish(publish), None))
                 .map_err(|err| format!("opening the publish target: {err}")),
-            Target::Record(path) => Ok(Destination::Record(path)),
+            Target::Record(path) => Ok((Destination::Record(path), None)),
+            Target::YouTube {
+                broadcast_id,
+                youtube,
+            } => {
+                let ingest = youtube.ingest(&broadcast_id)?;
+                let publish = youtube
+                    .connect(&ingest)
+                    .map_err(|err| format!("connecting to YouTube's ingest: {err}"))?;
+                Ok((
+                    Destination::Publish(publish),
+                    Some(HealthTarget {
+                        youtube,
+                        broadcast_id,
+                        stream_id: ingest.stream_id,
+                    }),
+                ))
+            }
         }
     }
 }
@@ -1551,7 +1773,7 @@ impl State {
                 wake,
             );
         }
-        Ok(CallResult::Action {})
+        Ok(CallResult::Action { result: None })
     }
 
     /// Collection reads go to `Graph::query`; `output.status` reads the outputs.

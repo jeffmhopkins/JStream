@@ -594,7 +594,7 @@ mod tests {
     fn reply(id: &str) -> ServerMessage {
         ServerMessage::Response(Response {
             id: RequestId::new(id),
-            result: CallResult::Action {},
+            result: CallResult::Action { result: None },
         })
     }
 

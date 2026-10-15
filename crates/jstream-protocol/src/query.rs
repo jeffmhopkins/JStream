@@ -7,6 +7,7 @@ use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::output::OutputInfo;
 use crate::settings::Settings;
+use crate::youtube::{BroadcastInfo, BroadcastListStatus, BroadcastType, StreamInfo, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -66,6 +67,33 @@ pub enum Query {
     /// sends. Outputs have no display order of their own.
     #[serde(rename = "output.list")]
     OutputList,
+    /// Whether the engine is signed in to YouTube. Never calls YouTube.
+    #[serde(rename = "youtube.status")]
+    YoutubeStatus,
+    /// Lists the signed-in channel's broadcasts, one page of up to 50 at a time, in
+    /// YouTube's order. Calls the Live API, so it fails with `action_failed` when not
+    /// signed in or YouTube refuses (including when the day's quota is used up).
+    #[serde(rename = "youtube.list_broadcasts")]
+    YoutubeListBroadcasts {
+        /// Which broadcasts, by state. Omitted means `all`.
+        #[serde(default)]
+        status: BroadcastListStatus,
+        /// Which broadcasts, by type. Omitted means `all`, which includes the channel's
+        /// persistent ("Stream now") broadcast.
+        #[serde(default)]
+        broadcast_type: BroadcastType,
+        /// The `next_page_token` of an earlier page, for the page after it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_token: Option<String>,
+    },
+    /// Lists the signed-in channel's streams, one page of up to 50 at a time. Their keys
+    /// are never reported. Fails like `youtube.list_broadcasts`.
+    #[serde(rename = "youtube.list_streams")]
+    YoutubeListStreams {
+        /// The `next_page_token` of an earlier page, for the page after it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_token: Option<String>,
+    },
 }
 
 impl Query {
@@ -81,6 +109,9 @@ impl Query {
             Query::KindList => "kind.list",
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
+            Query::YoutubeStatus => "youtube.status",
+            Query::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
+            Query::YoutubeListStreams { .. } => "youtube.list_streams",
         }
     }
 }
@@ -182,6 +213,30 @@ pub enum QueryResult {
         /// The outputs, ordered by ID.
         outputs: Vec<OutputInfo>,
     },
+    /// The result of `youtube.status`. Runtime state, so it carries no `rev`.
+    #[serde(rename = "youtube.status")]
+    YoutubeStatus {
+        /// Whether the engine is signed in.
+        auth: YoutubeAuth,
+    },
+    /// The result of `youtube.list_broadcasts`.
+    #[serde(rename = "youtube.list_broadcasts")]
+    YoutubeListBroadcasts {
+        /// This page's broadcasts.
+        broadcasts: Vec<BroadcastInfo>,
+        /// The token for the next page, if there is one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        next_page_token: Option<String>,
+    },
+    /// The result of `youtube.list_streams`.
+    #[serde(rename = "youtube.list_streams")]
+    YoutubeListStreams {
+        /// This page's streams.
+        streams: Vec<StreamInfo>,
+        /// The token for the next page, if there is one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        next_page_token: Option<String>,
+    },
 }
 
 impl QueryResult {
@@ -197,6 +252,9 @@ impl QueryResult {
             QueryResult::KindList { .. } => "kind.list",
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
+            QueryResult::YoutubeStatus { .. } => "youtube.status",
+            QueryResult::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
+            QueryResult::YoutubeListStreams { .. } => "youtube.list_streams",
         }
     }
 }

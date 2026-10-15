@@ -5,6 +5,7 @@
 
 mod collection;
 mod history;
+mod youtube;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
@@ -483,7 +484,7 @@ fn events_reach_every_subscriber_in_order() {
     let by_agent = block_on(agent.call(Call::Batch(Batch::single(create("a"))))).expect("batch");
     let by_user = block_on(user.call(Call::Batch(Batch::single(create("b"))))).expect("batch");
     let started = block_on(agent.call(output_call("yt", true))).expect("start");
-    assert_eq!(started.result, CallResult::Action {});
+    assert_eq!(started.result, CallResult::Action { result: None });
 
     let changed = |state| Event::OutputStateChanged {
         output_id: OutputId::new("yt"),

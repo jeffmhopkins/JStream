@@ -7,7 +7,7 @@
 
 use crate::deps::{self, Node};
 use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
-use crate::target::{record_path_problem, rtmp_url_problem};
+use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem};
 use jstream_protocol::{
     Batch, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId, ItemTransform,
     KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
@@ -733,6 +733,10 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
     match target {
         RtmpTarget::Generic { url } => match rtmp_url_problem(url) {
             Some(problem) => Err(invalid(at, &format!("{name}.url"), problem)),
+            None => Ok(()),
+        },
+        RtmpTarget::YouTube { broadcast_id } => match broadcast_id_problem(broadcast_id) {
+            Some(problem) => Err(invalid(at, &format!("{name}.broadcast_id"), problem)),
             None => Ok(()),
         },
         RtmpTarget::Unknown => Err(invalid(

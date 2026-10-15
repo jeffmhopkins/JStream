@@ -14,6 +14,7 @@ use crate::history::HistoryCall;
 use crate::id::{ClientId, RequestId, Rev};
 use crate::query::{Query, QueryResult};
 use crate::version::ProtocolVersion;
+use crate::youtube::ActionResult;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -132,7 +133,13 @@ pub enum CallResult {
         rev: Rev,
     },
     /// The action was accepted. Its progress is reported by events.
-    Action {},
+    Action {
+        /// What the action returns, for the actions that return something
+        /// (`youtube.sign_in`, the YouTube broadcast actions). Omitted for the others,
+        /// and missing from a server older than 0.13.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result: Option<ActionResult>,
+    },
     /// The query's answer.
     Query {
         /// The result.

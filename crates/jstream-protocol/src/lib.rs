@@ -3,7 +3,7 @@
 //! (side effects); queries read; events push changes; errors carry stable codes. The JSON
 //! Schema is generated from these types. Layer 1: plain data, WASM-safe, no I/O.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#design, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#design, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0041-youtube-interaction-scope-v3.md
 
 #![forbid(unsafe_code)]
 
@@ -23,6 +23,7 @@ mod query;
 mod schema;
 mod settings;
 mod version;
+mod youtube;
 
 pub use command::{
     Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole, SourceKind, Vec2,
@@ -49,6 +50,11 @@ pub use query::{ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInf
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};
+pub use youtube::{
+    ActionResult, BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy,
+    BroadcastTransition, BroadcastType, HealthIssue, IssueSeverity, StreamHealth, StreamInfo,
+    StreamStatus, YoutubeAuth,
+};
 
 #[cfg(test)]
 mod fixtures;

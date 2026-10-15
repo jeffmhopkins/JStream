@@ -13,6 +13,7 @@ use crate::geometry::ItemGeometry;
 use crate::id::{IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
+use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -332,9 +333,10 @@ impl Edit {
 /// A command with side effects outside the collection state: never undoable and never
 /// batchable.
 ///
-/// Serialized with an internal `type` tag holding the command name. The response only
-/// says the action was accepted; how it goes is reported by events
-/// (`output.state_changed`).
+/// Serialized with an internal `type` tag holding the command name. The response says
+/// the action was accepted, with an [`ActionResult`](crate::ActionResult) for the
+/// actions that return something (a YouTube sign-in's consent URL, a broadcast); how
+/// it goes is reported by events (`output.state_changed`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[non_exhaustive]
@@ -375,6 +377,70 @@ pub enum Action {
         /// The output whose key to remove.
         output_id: OutputId,
     },
+    /// Starts signing in to YouTube with the full `youtube` scope (ADR-0041 §4) and
+    /// returns Google's consent URL (`ActionResult` `youtube.sign_in`). The client opens
+    /// it in a browser; Google then redirects to a listener the engine opened on
+    /// `127.0.0.1`, and the engine finishes the sign-in, keeps the refresh token in the
+    /// OS credential store and emits `youtube.status_changed` (`signed_in`, or
+    /// `signed_out` when the user declines or the sign-in times out after 5 minutes).
+    /// Sent again while a sign-in waits, it returns the same URL. Sent while signed in,
+    /// it starts a new sign-in, which replaces the account once it finishes. Fails with
+    /// `action_failed` when the engine has no YouTube client.
+    #[serde(rename = "youtube.sign_in")]
+    YoutubeSignIn,
+    /// Signs out of YouTube: revokes the account's token at Google (best effort),
+    /// removes it from the credential store, and abandons a sign-in that is waiting.
+    /// Emits `youtube.status_changed` `signed_out`. Succeeds when already signed out.
+    /// A running `youtube` output keeps its connection. Fails with `action_failed` when
+    /// the engine has no YouTube client or the credential store refuses.
+    #[serde(rename = "youtube.sign_out")]
+    YoutubeSignOut,
+    /// Creates a YouTube broadcast (`liveBroadcasts.insert`) and returns it. JStream
+    /// moves it through its states itself (`youtube.transition_broadcast`), so automatic
+    /// start and stop are off, and its monitor stream is on so `testing` works. Fails
+    /// with `invalid_argument` for an empty title or start time or an `other` privacy,
+    /// and with `action_failed` when not signed in or YouTube refuses, including when
+    /// the day's API quota is used up.
+    #[serde(rename = "youtube.create_broadcast")]
+    YoutubeCreateBroadcast {
+        /// Its title.
+        title: String,
+        /// Its description. Omitted means empty.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        description: String,
+        /// When it is scheduled to start, RFC 3339 (`2026-10-16T19:00:00Z`).
+        scheduled_start_time: String,
+        /// Who can watch it. Omitted means `private`.
+        #[serde(default)]
+        privacy: BroadcastPrivacy,
+        /// Whether it is made for kids. Omitted means `false`.
+        #[serde(default)]
+        made_for_kids: bool,
+    },
+    /// Binds a stream to a broadcast (`liveBroadcasts.bind`) and returns the broadcast.
+    /// A `youtube` output sends to its broadcast's bound stream. With no `stream_id`,
+    /// the engine first creates a reusable stream named after the broadcast. Fails
+    /// with `action_failed` when not signed in or YouTube refuses.
+    #[serde(rename = "youtube.bind_broadcast")]
+    YoutubeBindBroadcast {
+        /// The broadcast.
+        broadcast_id: String,
+        /// The stream to bind, as `youtube.list_streams` reports it. Omitted creates one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stream_id: Option<String>,
+    },
+    /// Moves a broadcast to `testing`, `live` or `complete`
+    /// (`liveBroadcasts.transition`) and returns it. `testing` and `live` need its
+    /// bound stream to be receiving: start its `youtube` output first. Fails with
+    /// `action_failed` when not signed in or YouTube refuses (a transition the
+    /// broadcast can't make, or a stream that isn't sending).
+    #[serde(rename = "youtube.transition_broadcast")]
+    YoutubeTransitionBroadcast {
+        /// The broadcast.
+        broadcast_id: String,
+        /// Where to move it.
+        to: BroadcastTransition,
+    },
 }
 
 impl Action {
@@ -385,6 +451,11 @@ impl Action {
             Action::OutputStop { .. } => "output.stop",
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
+            Action::YoutubeSignIn => "youtube.sign_in",
+            Action::YoutubeSignOut => "youtube.sign_out",
+            Action::YoutubeCreateBroadcast { .. } => "youtube.create_broadcast",
+            Action::YoutubeBindBroadcast { .. } => "youtube.bind_broadcast",
+            Action::YoutubeTransitionBroadcast { .. } => "youtube.transition_broadcast",
         }
     }
 }
