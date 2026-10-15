@@ -538,7 +538,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:84f1c8ab5494756e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B5, filters join the audio edits once they are in the protocol, the mixer has chains since D7b; rest holds at 0.19" }
+verified = { hash = "b3:1ad8c34476bd993c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#345 round 1 after merging main: re-read the section; it does not describe asset path rules (they live in jstream-protocol Design); version mentions match main's 0.19; no message, error code or version change; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

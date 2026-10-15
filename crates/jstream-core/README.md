@@ -182,7 +182,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9b817c7bfb94016b", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
+verified = { hash = "b3:779847433e5dcda6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#345 round 1 after merging main: re-read the live-sources asset resolution paragraph (collection/app roots resolve as before) and the recording-open paragraph; nothing here describes absolute asset path syntax, only the protocol check got stricter; holds" }
 -->
 
 ### Engine and sessions

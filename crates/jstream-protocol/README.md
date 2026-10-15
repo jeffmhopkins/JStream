@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:68e32a9d77022b3e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; version line 0.19 audio, 0.18 virtual_cam, 0.17 role; holds" }
+verified = { hash = "b3:4c764f3b65f0283e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#345 round 1 after merging main: re-read the Kinds and settings bullet (check_asset_path still a pure per-value check) and the version line (PROTOCOL_VERSION 0.19 for audio, matches version.rs); this PR changes no message; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -134,7 +134,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:f61c4f32f259b1d6", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio, bus.list, meters.tick and the envelope example say 0.19; virtual_cam stays 0.18; holds" }
+verified = { hash = "b3:d867958e853e7d0b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '#345 round 1 (B1) after merging main (#240, 0.19): re-read the Kinds and settings Rejections bullet, now also refusing ? and * under absolute (blocks \??\UNC and \??\GLOBALROOT NT object paths), matching check_asset_path; re-read the record path paragraph and the version mentions (0.19 audio, 0.18 virtual_cam); no message or schema change, protocol stays 0.19; holds' }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -335,7 +335,9 @@ never a type per kind.
   Under `absolute` the path is `/…`, `\…`, `C:\…` or `C:/…`, with no `..` segment, no
   second leading separator (`\\host\share`, `//host/share`, `\\.\…` and `\\?\…` name
   a UNC share or a device, and opening one on Windows hands the engine's credentials to
-  that host) and no `:` but the drive letter's. An asset that doesn't exist yet is
+  that host), no `:` but the drive letter's, and no `?` or `*` (Win32 never allows
+  them in a file name, and `\??\UNC\…` or `\??\GLOBALROOT\Device\…` is an NT object
+  path that reaches the same hosts and devices). An asset that doesn't exist yet is
   accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An

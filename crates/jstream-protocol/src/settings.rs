@@ -88,8 +88,8 @@ pub enum Reference {
         /// Under `collection` or `app`, a relative path with `/` separators, no `..`
         /// segment, no drive letter and no leading `/`. Under `absolute`, an absolute
         /// path that is not a UNC or device path (no leading `\\` or `//`) and has no
-        /// `:` but a drive letter's. [`check_asset_path`](crate::check_asset_path) holds
-        /// the full rules.
+        /// `:` but a drive letter's, `?` or `*` (so no `\??\…` NT object path).
+        /// [`check_asset_path`](crate::check_asset_path) holds the full rules.
         path: String,
     },
 }

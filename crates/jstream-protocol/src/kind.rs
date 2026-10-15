@@ -428,7 +428,9 @@ fn reference(value: &Value, want: &str) -> Result<Option<Reference>, String> {
 /// absolute (`/…`, `\…`, `C:/…` or `C:\…`) and still has no `..` segment. It must not
 /// start with two separators, which on Windows name a UNC share (`\\host\share\…`) or a
 /// device (`\\.\…`, `\\?\…`): opening one would send the engine's credentials to that
-/// host. Nor may it contain `:` other than a drive letter's.
+/// host. Nor may it contain `:` other than a drive letter's, or `?` or `*`, which
+/// Win32 never allows in a file name and which name an NT object path (`\??\UNC\…`,
+/// `\??\GLOBALROOT\Device\…`).
 pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
     if path.is_empty() {
         return Err("the asset path must not be empty".into());
@@ -450,6 +452,10 @@ pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
             } else if rest.contains(':') {
                 // On Windows `C:\a.png:s` names an NTFS alternate data stream of `a.png`.
                 Err("an `absolute` asset path must not contain `:` but a drive letter's".into())
+            } else if rest.contains(['?', '*']) {
+                // Win32 never allows `?` or `*` in a file name; `\??\…` is an NT object
+                // path (`\??\UNC\host\…`, `\??\GLOBALROOT\Device\…`).
+                Err("an `absolute` asset path must not contain `?` or `*`".into())
             } else {
                 Ok(())
             }
@@ -656,6 +662,10 @@ mod tests {
             "C:\\a.png:stream",
             "/home/a:b.png",
             "\\C:\\a.png",
+            "\\??\\UNC\\attacker.example\\share\\a.png",
+            "\\??\\GLOBALROOT\\Device\\NamedPipe\\x",
+            "/img/a?.png",
+            "/img/*.png",
         ] {
             assert!(check(bad).is_err(), "{bad}");
         }
