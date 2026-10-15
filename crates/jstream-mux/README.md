@@ -13,13 +13,14 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mux", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0034-youtube-interaction-scope-v2.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:4fb5ccf4cc34efbd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-mux row is unchanged and this Purpose still matches it" }
+verified = { hash = "b3:1c9f649924564d01", by = "agent:claude@session_01MsvHxNcKDw6nuUVq4SwHac", note = "Re-read Purpose against the new fmp4 module: the intro now names fragmented MP4 for recording, the fmp4 bullet matches fmp4.rs (init segment boxes, moof/traf/trun layout, track IDs and time scales, keyframe and audio-only cuts, held-back last sample, deferred init, errors), and Not yet drops MP4/fMP4; the ARCH crate-map row (FLV, MP4/fMP4) and ADR-0031/0034 still hold" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):
-muxers are written in Rust, no FFmpeg). This first cut writes **FLV** for H.264 and AAC,
-the container M1a's RTMP(S) output sends to YouTube
-([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)). It consumes
+muxers are written in Rust, no FFmpeg). It writes H.264 and AAC into **FLV**, the
+container M1a's RTMP(S) output sends to YouTube
+([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)), and into
+**fragmented MP4**, the container recording writes. It consumes
 [`jstream-media`](../jstream-media/README.md#purpose) `Packet`s, does no network I/O,
 has no `unsafe`, and depends only on `jstream-media` and `thiserror`.
 
@@ -55,6 +56,31 @@ Contents:
   - `duration` and `filesize` are not written, because the output may be live.
     `FlvWriter::new` builds the start tags before writing the file header, so an invalid
     configuration fails before anything is written.
+- **`fmp4`:** `Fmp4Muxer` turns packets into `Segment`s with no I/O: one init segment
+  (`ftyp`, then a `moov` whose sample tables are empty and whose `mvex` has a `trex` per
+  track), then media segments, each a `moof` (`mfhd`, a `traf` per track with `tfhd`
+  default-base-is-moof, a version-1 `tfdt` and a `trun` giving every sample's duration,
+  size, flags and, for video, composition offset) and its `mdat`. `Fmp4Writer` writes
+  them to any `std::io::Write`. A file cut short keeps every complete fragment.
+  - Video is track 1 (`avc1` with `avcC`, 90 kHz), audio is track 2, or track 1 without
+    video (`mp4a` with an `esds` holding the `AudioSpecificConfig`, ticking at the
+    sample rate). Timestamps are each packet's dts and pts rescaled to the track's time
+    scale, rounded to nearest, from a configurable origin, so the tracks stay in sync
+    with no edit list.
+  - A video keyframe closes the fragment of everything before it: the earlier video and
+    the audio that decodes before the keyframe, so every fragment's video starts with a
+    keyframe. An audio-only stream cuts a fragment once a second of audio is buffered.
+  - A sample's duration is the gap to the next sample of its track, so decode times must
+    strictly increase and each track's newest sample waits for the next one. At
+    `finish` it gets the duration of the sample before it (one AAC frame or 1/30 s if
+    it is alone).
+  - Without a configured `AvcDecoderConfig`, the init segment waits for the first video
+    packet, which must be a keyframe carrying SPS and PPS; audio before it is buffered.
+    The first video packet must be a keyframe in any case. Packets before the origin,
+    composition offsets or durations beyond 32 bits, and non-increasing decode times are
+    errors, and a rejected packet leaves the muxer unchanged.
+  - Times and durations in `mvhd`, `tkhd` and `mdhd` are zero; players take the
+    duration from the fragments. No `sidx` or `mfra` index is written.
 - **`h264`:** Annex B ↔ AVCC conversion (3- and 4-byte start codes, 4-byte lengths), SPS
   and PPS extraction, and `AvcDecoderConfig`, the ISO/IEC 14496-15 record. For profiles
   other than Baseline, Main and Extended it appends the chroma format and bit depths read
@@ -70,4 +96,5 @@ Contents:
 - **Errors:** one `thiserror` enum, `MuxError`.
 
 **Not yet:** enhanced RTMP (HEVC and AV1 through FourCC video tags, which ADR-0034 calls
-for), MP4/fMP4, and a mid-stream change of SPS/PPS (a new sequence header).
+for), non-fragmented MP4, and a mid-stream change of SPS/PPS (a new sequence header or
+sample entry).
