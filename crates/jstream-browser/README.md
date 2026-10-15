@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:8fdbc35ada7779d3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1 (#290 review N1): seam paragraph says use_device gets a device the host opens on the media adapter for now, not the engine's own; rest re-read against page.rs, audio.rs, fake.rs and cef/" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
@@ -89,7 +88,6 @@ to, and the shutdown time. It runs on Windows with the `cef` feature only.
 ## Open items
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md"]
-verified = { hash = "b3:fe59fe3a187983b6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: open items match what the CEF backend leaves out (no_sandbox, no file request handler, no host wiring, no render import, no visibility hook)" }
 -->
 
 What ADR-0021 asks for that this crate doesn't do yet. The first three block any host
