@@ -505,7 +505,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:4699930e0491f2e1", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the YouTube bullet's ADR link; ADR-0041 §1-3 restate the chat.send, chat.feature and youtube.stats design word for word, so the bullet holds" }
+verified = { hash = "b3:f75e0a24a225f2bc", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (#214 ADR-0041 re-stamp, text unchanged here): re-read; this PR's scene.create role / rebuild claims and main's text both hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
