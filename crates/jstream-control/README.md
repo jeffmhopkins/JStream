@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:55afc10914989afb", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; #203's undo and redo bullet and B9's delete.plan internal / no blockers note both hold" }
+verified = { hash = "b3:6db073177e120b24", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; connection bullet and open question 3 now say a served page gets in with Basic credentials, subprotocol as fallback; client code unchanged" }
 -->
 
 ### The trait
@@ -220,8 +220,9 @@ native targets only, so a `wasm32` build never pulls tokio, even with `ws` on.
   no path, always with the control token
   ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)). It goes in the upgrade request
   rather than the URL, so it stays out of logs: an `Authorization: Bearer` header from
-  native clients, and later the `Sec-WebSocket-Protocol` header from browsers, which
-  can't set others. The caller supplies the token (the CLI reads it from a token file).
+  native clients. A browser can't set that header itself; a page the server serves gets
+  in with the `Basic` credentials the browser sends on its upgrade
+  ([jstream-server › Design](../jstream-server/README.md#design)). The caller supplies the token (the CLI reads it from a token file).
   The server validates `Host`, and `Origin` when present; browsers set `Origin`
   themselves, and the native client sends the server's own origin
   (`http://<host>:<port>` of the URL) unless `WsConfig::origin` names another.
@@ -258,8 +259,10 @@ server on a loopback port and drives it with this client.
    (correlating with an external log) would need `call` to take a `Request`.
    `jstream-server` works around it by mapping session IDs back to wire IDs
    ([jstream-server › Design](../jstream-server/README.md#design)).
-3. **Browser client.** The `wasm32` implementation over `gloo-net`, with the token in
-   `Sec-WebSocket-Protocol`, comes with the web UI.
+3. **Browser client.** The `wasm32` implementation comes with the web UI. Served by
+   `jstream-server`, it needs no token of its own: the browser sends the page's `Basic`
+   credentials on the upgrade. `Sec-WebSocket-Protocol` is the fallback for a browser
+   that doesn't, or a UI served from elsewhere.
 4. **TLS.** `wss://` needs a TLS feature of `tokio-tungstenite` (rustls with ring) and
    its wiring. `ring` is already on the lint-deps native-code allowlist, for
    `jstream-outputs`' RTMPS, so that part needs no further governance change.

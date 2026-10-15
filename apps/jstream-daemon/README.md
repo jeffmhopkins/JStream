@@ -184,7 +184,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:a5098b579b640504", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221 C2 text, G3c vcam registration): re-read; main's Virtual camera registration paragraph kept; C5 changes no daemon text, stale only through the core cascade; holds" }
+verified = { hash = "b3:873b0656a5ac7112", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: stale only through server design; re-read: daemon does not set ui_dir yet, MCP and listening bullets hold" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

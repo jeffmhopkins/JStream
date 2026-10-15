@@ -620,7 +620,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   because the token is the gate, while an `Origin` that is present must be on the allow
   list. The same server
   serves MCP's streamable-HTTP transport at `/mcp` on the control port, behind the same
-  checks, when the host turns it on ([MCP](#mcp)).
+  checks, when the host turns it on ([MCP](#mcp)), and the web UI's files at every other
+  path, behind the same checks too, when the host names a UI directory. A browser
+  presents the token as the password of HTTP `Basic` credentials, which it then sends
+  on the UI's WebSocket upgrade as well.
 - **Slow clients:** each connection gets a bounded event buffer, and the server keeps
   draining the engine's events while a client is slow to read. When the buffer
   overflows, the server drops the queued events and sends one `events.dropped {count}`
