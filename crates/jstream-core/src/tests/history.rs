@@ -41,6 +41,7 @@ fn one(edit: Edit) -> Batch {
 fn moved_to(item: &str, x: f32) -> Edit {
     Edit::ItemSetTransform {
         item_id: ItemId::new(item),
+        scene_id: None,
         transform: ItemTransform {
             position: Vec2::new(x, 0.0).expect("finite"),
             ..ItemTransform::IDENTITY
@@ -258,6 +259,7 @@ fn another_clients_unrelated_change_does_not_block_an_undo() {
         &agent,
         one(Edit::ItemSetVisible {
             item_id: ItemId::new("cam"),
+            scene_id: None,
             visible: false,
         }),
     )

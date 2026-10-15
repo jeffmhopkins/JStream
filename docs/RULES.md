@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d4fb911b13c3542a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3 at 0.11: rule text unchanged; re-read, holds for an additive minor" }
+verified = { hash = "b3:ee1670969f47fe74", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: rule text unchanged; re-read, holds for B6 as its own additive minor 0.12" }
 -->
 
 <a id="R-API-001"></a>
@@ -782,7 +782,7 @@ rules.
 ## Governance
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:6a3bee027e59ef38", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-GOV-001..005 against ADR-0019: owner-only verdicts live in REVIEW/gate, labels+justification, tiers and proxy decisions unchanged" }
+verified = { hash = "b3:689f8a82ade70b26", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read R-GOV-001..005: R-GOV-005 now follows ADR-0043's narrowed maintainer tier; labels, overrides, gate and proxy decisions unchanged" }
 -->
 
 <a id="R-GOV-001"></a>
@@ -835,16 +835,18 @@ finding is wrong). Disputes that last three rounds go to the maintainer through
 `needs-human` ([REVIEW › Re-review rounds](../REVIEW.md#rounds)).
 
 <a id="R-GOV-005"></a>
-### R-GOV-005: Tier-1 decisions need the maintainer
+### R-GOV-005: Maintainer-tier decisions need the maintainer
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
 applies_to = ["docs/adr/**"]
 -->
 Every new ADR declares `tier = "maintainer"` or `tier = "agent"`, following
-[ADR-0017](adr/0017-adr-decision-tiers.md). A Tier-1 ADR (product and platforms, process
-and governance, or superseding any ADR) lands as `proposed` with `needs-human`. It becomes
-`accepted` or `rejected` only on the maintainer's `/accept` or `/reject` decision on the
-PR, either directly or relayed by an agent with a quoted instruction from the maintainer that
-names the ADR ([ADR-0017](adr/0017-adr-decision-tiers.md)). Agents never post a decision the
-maintainer did not give.
+[ADR-0043](adr/0043-narrow-maintainer-tier.md). A maintainer-tier ADR (product scope,
+licensing, security and privacy posture, public compatibility promises, spending, or the
+tier rules themselves) lands as `proposed` with `needs-human`. It becomes `accepted` or
+`rejected` only on the maintainer's `/accept` or `/reject` decision on the PR, either
+directly or relayed by an agent with a quoted instruction from the maintainer that names the
+ADR. Every other ADR, including one that amends or supersedes an ADR on another subject, is
+agent tier and lands as `accepted` after review. Agents never post a decision the maintainer
+did not give.

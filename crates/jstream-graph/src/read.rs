@@ -64,6 +64,7 @@ impl Graph {
                 .map(|scene| SceneSummary {
                     scene_id: scene.id.clone(),
                     name: scene.name.clone(),
+                    role: scene.role,
                     item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                 })
                 .collect(),
@@ -144,6 +145,7 @@ impl Scene {
         SceneInfo {
             scene_id: self.id.clone(),
             name: self.name.clone(),
+            role: self.role,
             items: self.items.iter().map(Item::to_info).collect(),
         }
     }
