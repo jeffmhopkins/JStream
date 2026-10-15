@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:1851d03558773cf6", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (#213, #292 and others) into #237: took main's stamp; stale only via ARCH#threading, whose CLAP-host paragraph now says the shared block and mixer side are built; this section names no CLAP hosts; re-read; Transport shutdown text (#209, #236) and main's text hold" }
+verified = { hash = "b3:3e89aa49f9bf9e64", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue #346 part 1: re-read Purpose against the RtmpError::Rejected change; added that the server's code/description are cut to 512 chars with control characters replaced after key redaction; rest (commands, URLs and keys, logging) still holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -86,7 +86,9 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   application name and the stream key separate. `StreamKey` prints as `***`, and no error
   carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The server's
   status code and description are untrusted text, so `RtmpError::Rejected` replaces any
-  echo of the key in them with `***`.
+  echo of the key in them with `***`, then cuts each to 512 characters and replaces
+  control characters with spaces, so a server can't forge log lines or flood the
+  errors an agent reads.
 - **Reconnect** (`reconnect`): `ReconnectingPublisher` wraps a published session and a
   `Connector`, the function that opens and publishes a replacement (`rtmp_connector`
   for TCP and TLS, built on `connect_publisher`). A send or `poll` that fails because
