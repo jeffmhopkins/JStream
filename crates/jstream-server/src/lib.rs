@@ -159,7 +159,9 @@ impl Server {
 
     /// Serves until `signal` completes, then stops accepting connections and closes the
     /// open ones (close code 1001), which makes their clients' calls fail with
-    /// `Disconnected`.
+    /// `Disconnected`. Returns once every WebSocket connection has finished closing, so a
+    /// host that exits afterwards doesn't cut a close short: that takes at most about
+    /// `CLOSE_TIMEOUT` (2 s), for a client that stopped reading.
     pub async fn serve_with_shutdown<F>(self, signal: F) -> Result<(), ServerError>
     where
         F: Future<Output = ()> + Send + 'static,
@@ -179,16 +181,32 @@ impl Server {
             router = router.fallback(ui::handle);
         }
         let router = router.with_state(app);
-        let signal = async move {
-            signal.await;
-            shutdown.send_replace(true);
+        let shutdown = Arc::new(shutdown);
+        let signal = {
+            let shutdown = Arc::clone(&shutdown);
+            async move {
+                signal.await;
+                shutdown.send_replace(true);
+            }
         };
         // The peer address is only logged, never trusted: the gate decides on the headers.
         let service = router.into_make_service_with_connect_info::<Accepted>();
         axum::serve(Limited::new(listener, header_read_timeout), service)
             .with_graceful_shutdown(signal)
             .await
-            .map_err(ServerError::Serve)
+            .map_err(ServerError::Serve)?;
+        // axum doesn't wait for upgraded connections: they run in their own tasks, each
+        // holding a receiver of `shutdown` until it has sent its close and finished the
+        // closing handshake (bounded by `CLOSE_TIMEOUT`). Without this wait, a host that
+        // drops its runtime once this returns would cut those closes short (#294). The
+        // bound only guards against a receiver held elsewhere by mistake.
+        if tokio::time::timeout(session::CLOSE_TIMEOUT * 2, shutdown.closed())
+            .await
+            .is_err()
+        {
+            tracing::warn!("stopped without waiting for every connection to close");
+        }
+        Ok(())
     }
 }
 

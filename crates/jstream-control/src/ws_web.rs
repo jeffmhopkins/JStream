@@ -24,7 +24,9 @@
 use crate::WS_PROTOCOL;
 use crate::control::{BinaryStream, BoxFuture, Control, EventStream};
 use crate::error::ControlError;
-use crate::ws_config::{WsConfig, browser_url, disconnected, token_protocol};
+use crate::ws_config::{
+    SocketEnd, WsConfig, browser_url, disconnected, end_reason, token_protocol,
+};
 use futures_channel::{mpsc, oneshot};
 use futures_core::Stream;
 use jstream_protocol::{
@@ -66,6 +68,7 @@ struct Handlers {
     _open: Closure<dyn FnMut(DomEvent)>,
     _message: Closure<dyn FnMut(MessageEvent)>,
     _close: Closure<dyn FnMut(CloseEvent)>,
+    _error: Closure<dyn FnMut(DomEvent)>,
 }
 
 /// What the handle and the socket's handlers share.
@@ -97,7 +100,7 @@ impl State {
 
     /// Records why the connection closed, fails whatever is still waiting and ends the
     /// event streams once they have yielded what they buffered. Only the first reason
-    /// is kept.
+    /// is kept, so a `close` after an `error` (or a second of either) changes nothing.
     fn close(&mut self, reason: String) {
         if self.closed.is_some() {
             return;
@@ -215,23 +218,28 @@ impl WsControl {
             let url = url.clone();
             Closure::<dyn FnMut(CloseEvent)>::new(move |event: CloseEvent| {
                 let mut state = state.borrow_mut();
-                let reason = if state.connecting.is_some() {
-                    format!(
-                        "could not connect to the engine at `{url}`: it is unreachable, or \
-                         it refused the token or this page's origin"
-                    )
-                } else if event.reason().is_empty() {
-                    "the engine closed the connection".to_owned()
-                } else {
-                    format!("the engine closed the connection: {}", event.reason())
-                };
+                let reason = event.reason();
+                let end = SocketEnd::Close { reason: &reason };
+                let reason = end_reason(&url, state.connecting.is_some(), end);
+                state.close(reason);
+            })
+        };
+        // `error` is usually followed by `close`, but not when the page's Content Security
+        // Policy refuses the URL: Chromium then fires only `error` and leaves the socket
+        // `CLOSED`. So `error` ends the session itself; `State::close` keeps the first
+        // reason, and a later `close` changes nothing.
+        let error = {
+            let state = Rc::clone(&state);
+            Closure::<dyn FnMut(DomEvent)>::new(move |_: DomEvent| {
+                let mut state = state.borrow_mut();
+                let reason = end_reason(&url, state.connecting.is_some(), SocketEnd::Error);
                 state.close(reason);
             })
         };
         socket.set_onopen(Some(open.as_ref().unchecked_ref()));
         socket.set_onmessage(Some(message.as_ref().unchecked_ref()));
         socket.set_onclose(Some(close.as_ref().unchecked_ref()));
-        // An `error` event is always followed by `close`, which reports it.
+        socket.set_onerror(Some(error.as_ref().unchecked_ref()));
 
         let control = WsControl {
             socket,
@@ -241,6 +249,7 @@ impl WsControl {
                 _open: open,
                 _message: message,
                 _close: close,
+                _error: error,
             },
         };
         Ok((control, ready_rx))
@@ -261,6 +270,7 @@ impl Drop for WsControl {
         self.socket.set_onopen(None);
         self.socket.set_onmessage(None);
         self.socket.set_onclose(None);
+        self.socket.set_onerror(None);
         // Best effort: the socket may already be closed.
         let _ = self.socket.close();
         self.state

@@ -35,7 +35,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   implementation; its tests hold it to the mock's answers.
 - **WebSocket client** (feature `ws`): `WsControl`, the `Control` trait over the
   engine's WebSocket API, natively (`ws.rs`) and in the browser (`ws_web.rs`, `wasm32`);
-  `WsConfig` and the handshake pieces both share (`ws_config.rs`).
+  `WsConfig`, and the URL, token and end-reason helpers the browser client uses, kept
+  here so they test natively (`ws_config.rs`).
 - **Shared names** (`lib.rs`, no feature): `WS_PATH`, the API's path, and
   `WS_PROTOCOL` and `WS_TOKEN_PROTOCOL_PREFIX`, the subprotocols a browser offers;
   `jstream-server` uses the same constants, so client and server can't drift.
@@ -284,7 +285,11 @@ pulls `web-sys`.
 - **Failures are `Disconnected`.** An invalid URL (or a `wss://` one, natively), an
   unreachable engine, or a refused upgrade fails `connect`. Natively the reason names
   HTTP 401 for the token and 403 for `Origin` or `Host`; a browser doesn't tell the page
-  why an upgrade failed, so there the reason covers all three. When the socket closes, pending and later calls fail with
+  why an upgrade failed, so there the reason covers all three, and a URL the page's
+  Content Security Policy blocks too. The browser client ends the session on the
+  socket's `error` event as well as on `close`, because `error` is not always followed
+  by `close` (Chromium sends none when CSP refuses the URL); the first of the two sets
+  the reason. When the socket closes, pending and later calls fail with
   `Disconnected` carrying the reason (the server's close reason when it gave one), and
   every event stream ends after what it buffered. Dropping the `WsControl` closes the
   socket. Reconnecting is the caller's choice (a new session, then re-read the state),
@@ -292,8 +297,13 @@ pulls `web-sys`.
 
 The native client's end-to-end tests live in `jstream-server`, which runs a
 `MockEngine` behind a real server on a loopback port and drives it with this client.
-The browser client has no automated test yet: it type-checks in CI's `wasm32` build,
-and the URL and token handling it shares are unit-tested natively (`ws_config.rs`).
+The browser client is tested end to end through the web UI: Playwright drives
+`jstream-ui` in Chromium against a mock daemon, connecting, failing to connect (a
+refused upgrade, and a URL the page's policy blocks) and calling the engine
+([jstream-ui end-to-end tests](../jstream-ui/tests/e2e/README.md#tests)). It also
+type-checks in CI's `wasm32` build, and the URL and token handling and the choice of
+the reason a session ended with, which it shares, are unit-tested natively
+(`ws_config.rs`).
 
 ### Open questions
 
@@ -313,8 +323,9 @@ and the URL and token handling it shares are unit-tested natively (`ws_config.rs
    `jstream-server` works around it by mapping session IDs back to wire IDs
    ([jstream-server › Design](../jstream-server/README.md#design)).
 3. **Browser client.** Settled and built: `web-sys`'s `WebSocket` on `wasm32`, with the
-   token in a subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). A
-   browser test (wasm-bindgen-test against a server) is still open.
+   token in a subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). It is
+   tested end to end through the web UI (above); a test of the client on its own
+   (wasm-bindgen-test against a server) is still open.
 4. **TLS.** `wss://` needs a TLS feature of `tokio-tungstenite` (rustls with ring) and
    its wiring. `ring` is already on the lint-deps native-code allowlist, for
    `jstream-outputs`' RTMPS, so that part needs no further governance change.
