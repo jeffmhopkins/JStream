@@ -78,6 +78,12 @@ pub trait LivePublish: Send {
     /// that cannot finish by then fails instead, and `finish` past it closes without
     /// waiting on the peer. Called once, on the output thread, when the stop's drain
     /// starts. The default does nothing, for a destination that never blocks.
+    ///
+    /// `output.stop` does not rely on it: it waits for the output thread only until the
+    /// deadline plus a short grace, then returns and leaves the thread to end when the
+    /// blocked call does. A destination that ignores the deadline still keeps its
+    /// connection, and that thread, until its call returns, and what the thread drops
+    /// after the stop returned is not counted.
     fn stop_by(&mut self, deadline: Instant) {
         let _ = deadline;
     }
@@ -143,8 +149,10 @@ impl LivePublish for RecordingPublish {
 /// [`ReconnectPolicy`]). `send_metadata` on the publisher adds `@setDataFrame`
 /// itself, so script tags are the file-style `onMetaData` body.
 ///
-/// Once the output is stopping ([`LivePublish::stop_by`]), each write's timeout is
-/// cut to the time left before the deadline, a lost link is not reconnected, and past
+/// Once the output is stopping ([`LivePublish::stop_by`]), every socket write's
+/// timeout is cut to the time left before the deadline (each of the many one large tag
+/// takes, so a peer reading a trickle cannot stretch it), a lost link is not
+/// reconnected, and past
 /// the deadline sends fail and `finish` drops the connection without the
 /// `FCUnpublish` … `deleteStream` goodbye, so a peer that has stopped reading cannot
 /// hold the stop.
@@ -161,25 +169,23 @@ impl RtmpPublish {
             .ok_or_else(|| PublishError::new("the RTMP session has finished"))
     }
 
-    /// While stopping: bounds the next write by the time left before the deadline.
+    /// While stopping: bounds every write of the session by the deadline, each socket
+    /// write's timeout cut to the time left
+    /// ([`Transport::set_write_deadline`](jstream_outputs::rtmp::Transport::set_write_deadline)),
+    /// so a peer that reads a trickle cannot stretch one large tag past it (#138).
     /// `Ok(false)` when the link is down, so the caller does not wait on a
     /// reconnect. Fails once the deadline has passed. Not stopping: `Ok(true)`.
     fn before_io(&mut self) -> Result<bool, PublishError> {
         let Some(deadline) = self.deadline else {
             return Ok(true);
         };
-        let left = deadline.saturating_duration_since(Instant::now());
-        if left.is_zero() {
+        if Instant::now() >= deadline {
             return Err(PublishError::new("the stop deadline passed"));
         }
-        let Some(session) = self.publisher()?.publisher() else {
+        let Some(session) = self.publisher()?.publisher_mut() else {
             return Ok(false);
         };
-        // A zero timeout means "none" to the OS, so never go below 1 ms.
-        session
-            .get_ref()
-            .set_write_timeout(Some(left.max(Duration::from_millis(1))))
-            .map_err(|err| PublishError::new(format!("bounding the write timeout: {err}")))?;
+        session.get_mut().set_write_deadline(Some(deadline));
         Ok(true)
     }
 }
@@ -608,6 +614,65 @@ pub(crate) mod tests {
         assert!(
             took < Duration::from_secs(2),
             "finish returned {took:?} after a 300 ms deadline"
+        );
+    }
+
+    /// #138: a peer that keeps reading, but only a trickle (64 KiB every 60 ms, about
+    /// 1 MB/s), and one 12 MiB tag, far more than the socket buffers hold (RTMP caps a
+    /// message just under 16 MiB). Each socket write makes a little progress, so a
+    /// timeout set once per tag restarts with every partial write: the tag took about
+    /// 12 s after a 1 s deadline. Cut before each write, the sends give up at the
+    /// deadline.
+    #[test]
+    fn a_trickle_reading_peer_cannot_stretch_a_tag_past_the_deadline() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let port = listener.local_addr().expect("addr").port();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let server = thread::spawn(move || {
+            let (mut io, _) = listener.accept().expect("accept");
+            drop(listener);
+            answer(io.try_clone().expect("clone"), Duration::ZERO)
+                .join()
+                .expect("reader");
+            io.set_read_timeout(Some(Duration::from_millis(50)))
+                .expect("read timeout");
+            let mut buf = vec![0u8; 64 * 1024];
+            while release_rx.try_recv().is_err() {
+                match io.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(_) => thread::sleep(Duration::from_millis(60)),
+                    Err(err)
+                        if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
+                    Err(_) => break,
+                }
+            }
+        });
+
+        let mut publish =
+            connect_rtmp(&format!("rtmp://127.0.0.1:{port}/live"), "test-key").expect("publish");
+        let tag = FlvTag {
+            tag_type: TagType::Video,
+            timestamp: 0,
+            body: [&[0x17u8, 1, 0, 0, 0][..], &vec![0u8; 12 * 1024 * 1024]].concat(),
+        };
+        let started = Instant::now();
+        publish.stop_by(started + Duration::from_secs(1));
+        let mut failed = false;
+        while started.elapsed() < Duration::from_secs(60) {
+            if publish.send_tag(&tag).is_err() {
+                failed = true;
+                break;
+            }
+        }
+        let sent_for = started.elapsed();
+        publish.finish().expect("finish");
+        drop(publish);
+        let _ = release_tx.send(());
+        server.join().expect("server");
+        assert!(failed, "sends to a trickle-reading peer never failed");
+        assert!(
+            sent_for < Duration::from_secs(4),
+            "the sends gave up {sent_for:?} after a 1 s deadline"
         );
     }
 }
