@@ -82,7 +82,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:7690fc486aabad2d", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main into #135 plus with_backends rustdoc (#135 N1): re-read Pipeline/failure/stop paragraphs against engine.rs; one-shot vs opener wording, opener after starting outside the locks, error text R-SEC-001, kept on failure all match; Locking unchanged" }
+verified = { hash = "b3:a74e171ce9f258da", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Stale via ARCH#protocol/control design (I1 MCP over HTTP wording): InProcessControl and connector text unaffected; holds" }
 -->
 
 ### Engine and sessions

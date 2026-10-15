@@ -98,7 +98,7 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:418109e505e0d384", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read GpuFrame, FrameSync and the unsafe-import split against the gpu-pipeline sentence that names legacy_quad. Render still uses this device when present, opens its own otherwise, and does not write the NV12 encode target." }
+verified = { hash = "b3:6107e0b7ddf384b0", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Stale via ARCH#crate-map (I1 dropped (not built) from the mcp and server rows): nothing here depends on those rows; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:41bde4792835f4eb", by = "agent:grok@stats-tick", note = "Re-read the event bullets and open question 1 against mock.rs. MockEngine::emit still injects events the mock does not produce, including stats.tick. That event is protocol 0.6 and is emitted about once a second while a pipeline runs. Streams still end with the session." }
+verified = { hash = "b3:68a420afc314c2e3", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Stale via ARCH#protocol (I1 added /mcp wording): the WsControl design makes no claim about MCP over HTTP; holds" }
 -->
 
 ### The trait

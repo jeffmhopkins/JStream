@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d002ffb73e0e21a0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via apps/jstream-cli (mcp.rs comment, README, tests): jstream-cli is still the remote client with the stdio MCP proxy and doesn't link the engine; table and diagram hold" }
+verified = { hash = "b3:5273e7d5d20ce9cd", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1: daemon row now says the first cut serves the WebSocket API and MCP over streamable HTTP, not the UI; cli row unchanged" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:d002ffb73e0e21a0", by = "agent:claude@session_01QBbMRwRu
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API only ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI yet ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ffeb76b8de905c81", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the apps/* row against apps/jstream-daemon/Cargo.toml: still layer 6 with unsafe_allowed false; the new direct deps tracing and blake3 are external crates (no new jstream crate edge), so the row text holds" }
+verified = { hash = "b3:1ce472e637a0377d", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1: jstream-mcp and jstream-server rows drop (not built); jstream-server's new jstream-mcp dependency is L4 on L3, allowed by R-ARCH-002; jstream-mcp Cargo.toml summary matches" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -147,9 +147,9 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
-| 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` (not built) | no |
+| 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
-| 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks (not built) | no |
+| 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0034](adr/0034-youtube-interaction-scope-v2.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
@@ -487,7 +487,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:730d037d3a32ecb6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via the jstream-server README (open question 8): Transport bullet still holds; the handshake timeout is server-local, envelope unchanged" }
+verified = { hash = "b3:6a670467b3b41bd6", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1: transport bullet names /mcp and that the host turns MCP on; WebSocket text unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -564,8 +564,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
   list. The same server
-  serves MCP's streamable-HTTP transport on the control port, behind the same checks
-  ([MCP](#mcp)).
+  serves MCP's streamable-HTTP transport at `/mcp` on the control port, behind the same
+  checks, when the host turns it on ([MCP](#mcp)).
 - **Slow clients:** each connection gets a bounded event buffer, and the server keeps
   draining the engine's events while a client is slow to read. When the buffer
   overflows, the server drops the queued events and sends one `events.dropped {count}`
@@ -579,7 +579,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:86ae7c32cfa70b9a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via jstream-mcp server.rs/README: tools, events buffer, schema, access and audit bullets unaffected by sending hello at initialize; audit still names the client (clientInfo.name)" }
+verified = { hash = "b3:905ea185dede590e", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1: Access bullet settles that /mcp lets a request without Origin through to the token check, as built in jstream-server mcp.rs; other bullets unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -607,13 +607,14 @@ verified = { hash = "b3:86ae7c32cfa70b9a", by = "agent:claude@session_01QBbMRwRu
   short placeholder in `png`, so the image doesn't flood the agent's context.
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
-  streamable-HTTP transport (not built) is served by `jstream-server` on the control port,
-  behind the same token and `Origin` checks as the WebSocket API, so it validates
+  streamable-HTTP transport is served by `jstream-server` at `/mcp` on the control port,
+  behind the same token, `Host` and `Origin` checks as the WebSocket API, so it validates
   `Origin`, as the
   [MCP transport spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
-  requires. Whether that transport also lets a request without `Origin` through, as the
-  WebSocket API does, is settled when it is built: browsers send `Origin` on a
-  cross-origin `fetch`, and the bearer token forces a preflight.
+  requires. Like the WebSocket API it lets a request without `Origin` through to the
+  token check: browsers send `Origin` on a cross-origin `fetch`, and the bearer token
+  forces a preflight, so only native clients send none
+  ([jstream-server › Design](../crates/jstream-server/README.md#design)).
 - Every agent action goes to the audit log with the client's name. Undo is per client,
   so an agent can never undo the user's work.
 

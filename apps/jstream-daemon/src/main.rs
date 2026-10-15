@@ -191,7 +191,14 @@ fn run(options: Options) -> Result<(), Failure> {
         };
         // The URL line comes last: it tells a script or a test that the daemon serves.
         // Output is best effort: with stdout closed the server still runs.
-        let _ = print(&format!("{token_line}\nlistening on {}\n", server.ws_url()));
+        let mcp_line = server
+            .mcp_url()
+            .map(|url| format!("mcp endpoint: {url}\n"))
+            .unwrap_or_default();
+        let _ = print(&format!(
+            "{token_line}\n{mcp_line}listening on {}\n",
+            server.ws_url()
+        ));
         server
             .serve_with_shutdown(stop)
             .await
