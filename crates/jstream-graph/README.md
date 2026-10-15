@@ -78,10 +78,13 @@ the batch **touched**.
   delete also names what it removed), the objects created or deleted, the objects used
   (an item's scene and source, both sources of an `item.set_source`, a `scene`
   source's scene, a duplicate's original, the scene an `item.move` names, the profile
-  an `output.set_encoder` names), the properties set (names, a scene's role, an item's
-  placement, crop, visibility, index and source, each settings parameter, an output's
-  target and encoder choice, a profile's encoding), and whether the scenes' order or
-  the canvas size was set. An edit it doesn't know marks the set as conflicting with
+  an `output.set_encoder` names, a send's source and bus), the properties set (names,
+  a scene's role, an item's placement, crop, visibility, index and source, each
+  settings parameter, an output's target and encoder choice, a profile's encoding, each
+  audio field a `source.set_audio` or `bus.set_fader` sets, a send's gain), and whether
+  the scenes' order or the canvas size was set. A send is an object of its own, so two
+  sources' sends into one bus don't conflict, and deleting a bus conflicts with every
+  change to its sends. An edit it doesn't know marks the set as conflicting with
   everything. `conflicts_with` is the undo rule the engine's history applies to other
   clients' later batches: one set creates or deletes an object the other touches, both
   set the same property, both set the scenes' order, or both set the canvas size.

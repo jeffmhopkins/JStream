@@ -76,7 +76,8 @@ $cli = 'target\release\jstream-cli.exe'
    `& $cli --url ws://127.0.0.1:4460 events`. While the output runs, a `stats.tick` line
    comes about once a second. Its counters are running totals of dropped frames and
    packets since the daemon started, so all zeros is healthy. A counter that keeps
-   climbing is worth an issue.
+   climbing is worth an issue. While the program runs, `meters.tick` lines, the audio
+  levels, come about ten a second as well.
 5. **Go live:** the `output` tool with `{"op": {"type": "output.start", "output_id":
    "live"}}`, or `& $cli --url ws://127.0.0.1:4460 output start live`.
    Check: the events show `output.state_changed` going `starting`, then `active`, and

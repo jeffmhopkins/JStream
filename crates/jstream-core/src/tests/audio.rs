@@ -87,7 +87,7 @@ fn the_mixer_follows_edits_and_undo_and_meters_tick() {
     let Some(Event::MetersTick { sources, buses }) = drain(&mut events).pop() else {
         panic!("a meters.tick");
     };
-    assert_eq!(sources.len(), 1);
+    assert!(sources.is_empty(), "a disabled source has no meter");
     let ids: Vec<&str> = buses.iter().map(|b| b.bus_id.as_str()).collect();
     assert_eq!(ids, ["master", "vod"]);
 

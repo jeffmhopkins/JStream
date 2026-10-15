@@ -73,7 +73,8 @@ state machine. Contents:
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
-  mixer input has its fader, its mute (`muted`, or not `enabled`) and its sends;
+  mixer input has its fader and its sends (silenced while it is `muted`), and is
+  muted and unmetered while its audio is off;
   `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
   `audio.reset_loudness` restarts its integrated loudness. No source opens a mixer
@@ -499,11 +500,14 @@ so a stage that stops after another has opened detaches only its own. After ever
 applied batch, undo and redo, and on attach and collection load, `AudioRouting::sync`
 brings the mixer in line with the collection under the collection lock:
 - each bus other than the master gets a mixer bus (`MixerControl::add_bus`), and a
-  mixer bus whose collection bus is gone is removed; a bus the mixer refuses is logged
-  and retried on the next sync;
+  mixer bus whose collection bus is gone is removed; a bus the mixer refuses to add or
+  remove is retried on the next sync (a refused add is logged);
 - every bus's fader and mute, the master's on `Mixer::bus`;
-- for each source with a mixer input, its fader, its mute (`muted`, or `enabled` off)
-  and a send into each mixer bus as the collection's sends say, removing the others.
+- for each source with a mixer input, its fader and a send into each mixer bus as the
+  collection's sends say, removing the others. A `muted` source keeps its sends at
+  silence, so its post-fader meter still reads, as ADR-0028's mute requires; a source
+  whose audio is off is muted in the mixer and has no meter in `meters.tick`. An input
+  whose source is gone, or has no audio now, is removed, retried like a bus.
   Every control is a few atomics, so a sync never waits on the mixer thread
   ([R-RT-003](../../docs/RULES.md#R-RT-003)). No source opens an input yet: C5's audio
   kinds will, through the seam tests use now (`AudioRouting::set_input`); the
@@ -511,7 +515,7 @@ brings the mixer in line with the collection under the collection lock:
   master at unity.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
-reading of every routed source's meter and every bus's, peak (held since the last
+reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
 reading) and RMS, linear per channel. The master adds its true peak and BS.1770
 loudness, which the mixer thread measures on every block it mixes (`MasterMetering`,
 whose meters are built before the thread starts, since the loudness meter allocates,

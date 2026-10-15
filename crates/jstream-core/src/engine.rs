@@ -1780,7 +1780,7 @@ impl State {
 
     /// Emits one `meters.tick`, if the program mixer runs.
     fn emit_meters(&mut self, wake: &mut Vec<Waker>) {
-        if let Some((sources, buses)) = self.audio.meters() {
+        if let Some((sources, buses)) = self.audio.meters(self.graph.state()) {
             self.subscribers
                 .emit(&Event::MetersTick { sources, buses }, wake);
         }

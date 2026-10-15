@@ -176,8 +176,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   index with its placement in its own form (transform or geometry), crop and
   visibility, a deleted scene at its position with its items, a deleted source with its
   settings and `duplicated_from`, `item.set_source` back to the item's previous source,
-  a deleted bus with its fader and sends, a source's audio and sends as they were,
-  a placement, crop or
+  a deleted bus with its fader and sends, a deleted source's audio and sends, and each
+  audio edit back to the values it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
   back with its encoder profile, encoder profile edits undo to the profile as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then

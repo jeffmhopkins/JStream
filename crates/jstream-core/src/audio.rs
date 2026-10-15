@@ -36,7 +36,26 @@ struct Attached {
     buses: BTreeMap<BusId, BusControl>,
     /// The mixer input of each source that has one.
     inputs: BTreeMap<SourceId, InputControl>,
+    /// Mixer buses and inputs whose removal the mixer refused (its command queue was
+    /// full): each sync tries again.
+    removing: Vec<Removing>,
     meters: Arc<MasterMeters>,
+}
+
+/// A mixer bus or input still to remove.
+enum Removing {
+    Bus(BusControl),
+    Input(InputControl),
+}
+
+impl Removing {
+    /// Asks the mixer to remove it; false if the mixer refused, to try again.
+    fn remove(&self) -> bool {
+        match self {
+            Removing::Bus(bus) => bus.remove(),
+            Removing::Input(input) => input.remove(),
+        }
+    }
 }
 
 /// What the program stage hands the engine when its mixer opens.
@@ -57,6 +76,7 @@ impl AudioRouting {
             master: mixer.master,
             buses: BTreeMap::new(),
             inputs: BTreeMap::new(),
+            removing: Vec::new(),
             meters: mixer.meters,
         });
         self.sync(state);
@@ -90,13 +110,20 @@ impl AudioRouting {
         let Some(attached) = &mut self.attached else {
             return;
         };
-        attached.buses.retain(|id, bus| {
-            let keep = state.bus(id).is_some();
-            if !keep {
-                bus.remove();
+        attached.removing.retain(|gone| !gone.remove());
+        let gone: Vec<BusId> = attached
+            .buses
+            .keys()
+            .filter(|id| state.bus(id).is_none())
+            .cloned()
+            .collect();
+        for id in gone {
+            if let Some(bus) = attached.buses.remove(&id)
+                && !bus.remove()
+            {
+                attached.removing.push(Removing::Bus(bus));
             }
-            keep
-        });
+        }
         for bus in state.buses() {
             let control = if bus.id().is_master() {
                 &attached.master
@@ -118,19 +145,27 @@ impl AudioRouting {
             control.set_muted(bus.muted());
         }
         // An input whose source went, or has no audio now, stops being routed.
-        attached.inputs.retain(|id, input| {
-            let keep = state.source(id).and_then(|s| s.audio()).is_some();
-            if !keep {
-                input.remove();
+        let gone: Vec<SourceId> = attached
+            .inputs
+            .keys()
+            .filter(|id| state.source(id).and_then(|s| s.audio()).is_none())
+            .cloned()
+            .collect();
+        for id in gone {
+            if let Some(input) = attached.inputs.remove(&id)
+                && !input.remove()
+            {
+                attached.removing.push(Removing::Input(input));
             }
-            keep
-        });
+        }
         for (id, input) in &attached.inputs {
             let Some(audio) = state.source(id).and_then(|s| s.audio()) else {
                 continue;
             };
             input.set_gain_db(audio.gain_db.get());
-            input.set_muted(audio.muted || !audio.enabled);
+            // Off closes the channel: silent and unmetered. A mute keeps the sends but
+            // silences them, so the input's post-fader meter still reads (ADR-0028).
+            input.set_muted(!audio.enabled);
             let master = (BusId::master(), attached.master.id());
             let others = attached
                 .buses
@@ -138,6 +173,7 @@ impl AudioRouting {
                 .map(|(id, bus)| (id.clone(), bus.id()));
             for (bus_id, mixer_bus) in std::iter::once(master).chain(others) {
                 match state.send(id, &bus_id) {
+                    Some(_) if audio.muted => input.set_send(mixer_bus, 0.0),
                     Some(gain) => input.set_send_db(mixer_bus, gain.get()),
                     None => {
                         input.remove_send(mixer_bus);
@@ -148,12 +184,18 @@ impl AudioRouting {
     }
 
     /// Every routed source's and bus's levels since the last call, or `None` while no
-    /// mixer runs.
-    pub(crate) fn meters(&self) -> Option<(Vec<SourceMeter>, Vec<BusMeter>)> {
+    /// mixer runs. A source whose audio is off in `state` has no meter.
+    pub(crate) fn meters(&self, state: &State) -> Option<(Vec<SourceMeter>, Vec<BusMeter>)> {
         let attached = self.attached.as_ref()?;
         let sources = attached
             .inputs
             .iter()
+            .filter(|(id, _)| {
+                state
+                    .source(id)
+                    .and_then(|s| s.audio())
+                    .is_some_and(|audio| audio.enabled)
+            })
             .map(|(id, input)| {
                 let reading = input.take_meter();
                 SourceMeter {
@@ -398,13 +440,30 @@ mod tests {
         );
         routing.sync(graph.state());
         assert_eq!(input.send(jstream_audio::BusId::MASTER), None);
+        // Muted: the send is kept but silent, and the input itself still plays to its
+        // meter.
+        assert_eq!(input.send(vod), Some(0.0));
+        assert!((input.gain() - 1.995).abs() < 1e-3, "{}", input.gain());
+        assert!(!input.muted());
+        assert!((mixer.bus().gain() - 0.1).abs() < 1e-4);
+        let (sources, _) = routing.meters(graph.state()).expect("meters");
+        assert_eq!(sources.len(), 1, "a muted source is metered");
+
+        apply(
+            &mut graph,
+            vec![Edit::SourceSetAudio {
+                source_id: SourceId::new("mic"),
+                enabled: None,
+                follow: None,
+                gain_db: None,
+                muted: Some(false),
+            }],
+        );
+        routing.sync(graph.state());
         let send = input.send(vod).expect("a send to vod");
         assert!((send - 0.501).abs() < 1e-3, "{send}");
-        assert!((input.gain() - 1.995).abs() < 1e-3, "{}", input.gain());
-        assert!(input.muted());
-        assert!((mixer.bus().gain() - 0.1).abs() < 1e-4);
 
-        // Disabling mutes too; deleting the bus removes its mixer bus.
+        // Off mutes the input and drops its meter; deleting the bus removes its mixer bus.
         apply(
             &mut graph,
             vec![
@@ -424,19 +483,24 @@ mod tests {
         assert!(input.muted());
         let attached = routing.attached.as_ref().expect("attached");
         assert!(attached.buses.is_empty());
-        let (sources, buses) = routing.meters().expect("meters while attached");
-        assert_eq!(sources.len(), 1);
+        let (sources, buses) = routing
+            .meters(graph.state())
+            .expect("meters while attached");
+        assert!(
+            sources.is_empty(),
+            "a source whose audio is off has no meter"
+        );
         assert_eq!(buses.len(), 1);
         assert!(buses[0].bus_id.is_master());
         assert!(buses[0].loudness.is_some() && buses[0].true_peak.is_some());
 
         routing.detach(generation.wrapping_add(1));
         assert!(
-            routing.meters().is_some(),
+            routing.meters(graph.state()).is_some(),
             "another attach's detach is ignored"
         );
         routing.detach(generation);
-        assert!(routing.meters().is_none());
+        assert!(routing.meters(graph.state()).is_none());
     }
 
     #[test]
