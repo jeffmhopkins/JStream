@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:6777f086abb3388a", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 B1 finding: Not-here-yet now says the engine can load and save a collection file but the daemon doesn't wire --collection yet (A6); rest unchanged" }
+verified = { hash = "b3:9c3cf659bf5fda8a", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#225 Backends.video_devices) into A3: build.rs bullet now says it delay-loads the Media Foundation DLLs; delay_load.rs test bullet checks the backends' DLLs are delayed and none is a load-time import; other contents hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -33,16 +33,25 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
-- **Serving** (`serve.rs`): builds the engine (with its placeholder outputs), installs
-  the signal handlers that stop it, then binds the server with MCP on.
+- **Serving** (`serve.rs`): builds the engine (with its placeholder outputs; on
+  Windows a live one, [Design](#design)), installs the signal handlers that stop it,
+  then binds the server with MCP on.
+- **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
+  advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
+  ([Design](#design)).
+- **Build script** (`build.rs`): delay-loads the Media Foundation DLLs on Windows
+  (MSVC), so that check can run at all.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
   ([Design](#design)).
 - **Crash reports** (`crash.rs`): the panic hook that writes a redacted report into the
   log directory ([Design](#design)).
 - **Tests** (`serve.rs`, `token.rs`, `args.rs`, `logs.rs`, `crash.rs` unit tests, the
-  crash hook in a child process; `tests/daemon.rs`, the built binary driven by
+  crash hook in a child process; the publish opener and the live engine on the
+  platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
-  SIGINT).
+  SIGINT; `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE
+  headers to check that the backends' Media Foundation DLLs are delay-loaded and none
+  is a load-time import).
 
 Not here yet: serving the web UI (it waits on `jstream-server`,
 [jstream-server › Design](../../crates/jstream-server/README.md#design)),
@@ -58,7 +67,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:f0074e842b9bc57a", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205: args.rs only rewords the --collection refusal (daemon wires no collection file yet); the usage bullet 'refused with a usage error that says it is not supported yet' still holds" }
+verified = { hash = "b3:548561c153a39b06", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#225) into A3 plus review N2: --help exit 3 now names the AAC encoder too, matching the exit-code table and the Media Foundation bullet; options and Going live bullets unchanged and hold" }
 -->
 
 ```sh
@@ -73,7 +82,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 |---|---|
 | `--token-file <path>` | The control token file. Default: the `JSTREAM_TOKEN_FILE` environment variable, which `jstream-cli` reads too. One of them is required. |
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
-| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. |
+| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files and crash reports go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
 | `-V`, `--version` | Prints the daemon and protocol versions. |
@@ -115,27 +124,77 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 - **Stopping.** Ctrl-C (SIGINT) or SIGTERM on Unix, Ctrl-C or Ctrl-Break on Windows:
   it stops accepting connections, closes the open ones (their clients see
   `Disconnected`, and event streams end) and exits 0. The engine's state is lost.
+- **Going live (Windows).** `output.create` with an RTMP(S) server URL, then
+  `output.set_key` (stored in Windows Credential Manager), then `output.start`
+  connects and streams. A start fails with `action_failed` and a reason that says what
+  to fix when the output has no target (a `--output` placeholder), no stream key, or
+  the key can't be read. Elsewhere, `output.start` only steps the placeholder state
+  machine and `output.set_key` fails: there is no key store.
+- **Media Foundation (Windows).** On a Windows without Media Foundation (an N or KN
+  edition without the Media Feature Pack, or Windows Server without its "Server Media
+  Foundation" feature), the daemon logs the problem, prints `error: Media Foundation
+  is not installed: <what to install>` and exits 3, after creating the log directory
+  and before touching the token file. If Media Foundation is there but has no AAC
+  encoder, it does the same with `error: Media Foundation's AAC encoder is not
+  installed: …`. Listing the codecs fails with exit 1.
 - `--collection` is refused with a usage error that says it is not supported yet.
 
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, or printed the help or version |
-| 1 | Failed: the log directory or a log file can't be created, the token file is unusable or can't be created, the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: the log directory or a log file can't be created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
+| 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:296e449deaee937f", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Cascade restamp after merging main (#208, #196, #192) into #207: stale only via core#design's depends_on; re-read every daemon Design bullet (engine and sessions, MCP, listening, token, signals, output, logging, log rotation, data dir, crash reports, argument parsing, dependencies) and the open questions; this PR changes nothing here and all still hold" }
+verified = { hash = "b3:db823ec3144334a1", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14, #185) into A3: design text is A3's (live engine, opener, MF+AAC check, mfplat/mf/mfreadwrite delay-load); main changed no daemon code; daemon tests pass on the merge" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
   the server a `Connector` that calls `Engine::connect()`, so every WebSocket client
   gets its own `InProcessControl` (its own `client_id`) on the shared engine, and sees
   every other client's events ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
-  The daemon never touches the protocol itself.
+  The daemon never touches the protocol itself. The connector holds the engine in an
+  `Arc`; the server, and through it every session, keep it alive.
+- **Live on Windows** (`serve.rs`). Under `cfg(windows)` the engine gets the
+  `jstream-platform-windows` backends (`QpcClock`, `WgcCapture`, `MfVideoDevices`,
+  `WasapiAudio`, `MfCodecs`, `WindowsGpu`; no virtual camera sink yet), `WindowsCredentials` as its
+  stream key store (`with_key_store`), and a publish opener (`with_publish_opener`).
+  Creating the backends opens no device; each opens what it needs when a pipeline
+  starts. Elsewhere there are no backends yet, so outputs stay the placeholder state
+  machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
+- **The publish opener.** On each `output.start` it reads the output's server URL with
+  `Engine::output_kind` and its key from the store, then calls `connect_rtmp`, so each
+  start connects anew. It fails the start with its own reason (`PublishError::new`)
+  when the output is not in the collection, is a kind it can't publish, has no key, or
+  the store fails; no reason carries the key
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)), and `connect_rtmp`'s errors don't
+  either. The engine stores the opener, so the opener holds only a `Weak` to the
+  engine's `Arc`, set once the engine is built: a strong handle would be a cycle that
+  keeps the engine and its running pipeline alive after the server lets go. The
+  opener upgrades it only to read the target. `live` is that wiring over any backends,
+  key store and connect function, which is how the tests run it on the platform fakes.
+- **Media Foundation check and delay-load.** The `windows` crate imports Media
+  Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
+  the loader would refuse to start the binary, naming a DLL, before `main` runs.
+  `build.rs` links the binary (not its test binaries) with `/DELAYLOAD` for each DLL
+  the daemon's backends import from (`mfplat.dll` for `MfCodecs` and
+  `MfVideoDevices`, `mf.dll` and `mfreadwrite.dll` for `MfVideoDevices`) and
+  `delayimp.lib` when the target is MSVC, so each loads on the first call into it.
+  `main.rs` runs `jstream_platform_windows::check_media_foundation` right after
+  logging starts, before the engine is built or anything else calls Media Foundation,
+  then lists `MfCodecs`' codecs and requires an AAC encoder (`components.rs`, plain
+  data in and out, tested everywhere), since every stream's audio needs one. Either
+  failure is a `MissingComponent`, mapped to exit code 3 with its advice.
+  `mfsensorgroup.dll` (`WindowsVcam`) joins the list when the daemon links the
+  virtual camera, not before: delay-loading a DLL the binary doesn't import from is
+  linker warning LNK4199, which CI's `-D warnings` turns into an error.
+  `tests/delay_load.rs` checks the built binary's import tables, so CI's Windows job
+  proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib imports.
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server
   answers MCP at `/mcp` on the same port, with its default MCP session cap and idle
   timeout. Each MCP session is one more engine client through the same `Connector`, so
@@ -213,7 +272,10 @@ verified = { hash = "b3:296e449deaee937f", by = "agent:claude@session_01B51ap3T7
   (`--token-file`, `--port`, `--output`, `--log-dir`, `--log-level`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
-  `jstream-protocol` (`OutputId`), `anyhow`, `tracing` (the startup line) and `blake3`
+  `jstream-platform` (`Backends`, the key store trait), `jstream-platform-windows` on
+  Windows only (the backends, the key store and the Media Foundation check),
+  `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
+  check), `anyhow`, `tracing` (the startup line) and `blake3`
   (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,
   `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), `tracing-subscriber`
   (features `fmt` and `std` only: no `ansi`, `env-filter` or `tracing-log`, so it adds
@@ -222,7 +284,8 @@ verified = { hash = "b3:296e449deaee937f", by = "agent:claude@session_01B51ap3T7
   portable source of cryptographic randomness, and the alternatives without a crate
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
-  `futures-util` and tokio's `time`, to drive the daemon as a client would.
+  `futures-util` and tokio's `time`, to drive the daemon as a client would;
+  `jstream-platform` (feature `fake`), for the live engine and opener tests.
 
 <a id="open-questions"></a>
 ### Open questions

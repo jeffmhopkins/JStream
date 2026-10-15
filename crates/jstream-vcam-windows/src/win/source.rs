@@ -349,13 +349,13 @@ impl IMFGetService_Impl for MediaSource_Impl {
     }
 }
 
-fn guard_service(service: *const GUID) -> Result<()> {
-    super::dll::guard_quiet("Source::GetService", || {
-        // SAFETY: checked for null before the read.
-        let s = (!service.is_null()).then(|| unsafe { *service });
-        log(format_args!("Source::GetService {s:?} -> unsupported"));
-        Err(MF_E_UNSUPPORTED_SERVICE.into())
-    })
+fn guard_service(_service: *const GUID) -> Result<()> {
+    // Frame Server asks for services (often GUID_NULL) many times per session; none are
+    // supported, and that is routine, so it isn't logged.
+    super::dll::guard_quiet(
+        "Source::GetService",
+        || Err(MF_E_UNSUPPORTED_SERVICE.into()),
+    )
 }
 
 impl IKsControl_Impl for MediaSource_Impl {

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:cf234b6fe2de8ff9", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "#185: capture::mailbox is now pub(crate) and video_device's stream imports it (the #[path] copy and its duplicate_mod allow are gone); the README already says webcam frames go to the same single-slot mailbox as display capture, and the mailbox bullet (one atomic pointer, tested across threads) is unchanged; holds" }
+verified = { hash = "b3:fd304808d003ca32", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#185 shared capture mailbox) into A3: mailbox wording is main's; A3's line that jstream-daemon's startup calls check_media_foundation and main's per-backend delay-load list both hold" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -333,8 +333,7 @@ The code is ported from spikes S1 to S3. This first cut has:
   returns `PlatformError::MissingComponent`, and the registry's `EditionID` picks the
   advice: the Media Feature Pack for an N edition (an ID ending in a capital `N`), the
   server feature for an ID starting with `Server`, and both otherwise. The host must
-  call it before creating the backends; nothing calls it yet (the daemon's startup
-  will).
+  call it before creating the backends, as `jstream-daemon`'s startup does.
   - **Delay-loading:** the `windows` crate imports Media Foundation's DLLs when the
     process loads, so on such a machine Windows refuses to start a binary that links a
     Media Foundation backend before any check can run. That binary must delay-load each
