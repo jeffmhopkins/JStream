@@ -365,7 +365,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:9b6300f85c94cfbb", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Ported #202's fix for the #189 flake (RTMP reconnect test and send_until helper in runtime/publish.rs, test-only) so this PR's CI can go green; re-read, no prose describes that test; holds" }
+verified = { hash = "b3:93e9be3cc81f6b6f", by = "agent:claude", note = "#189: test-only change to the RTMP reconnect test and its send_until helper in runtime/publish.rs; re-read, no prose describes that test or its budget; still holds" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
