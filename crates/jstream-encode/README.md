@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:c68aab6962dc5c78", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; F5's text holds; a recording output subscribes to the encode sessions like RTMP" }
+verified = { hash = "b3:dc0131f96856cecc", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose unchanged; ARCH#threading change is the recording sink on the output thread, not the encoders" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:dfaed88ddbd4cc59", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#169 Y2, #153 I1) into F2b round 2: took main's verified line and re-read; I1's /mcp transport text; the server forwards protocol messages opaquely, no version-specific text" }
+verified = { hash = "b3:c24ceae945978770", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: control design gained only mock recording checks, which the server design doesn't describe" }
 -->
 
 ### Listening and admission

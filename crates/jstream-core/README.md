@@ -100,7 +100,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8324d3757072fb35", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#147 C6 nested scene rendering) into F2b; took main's verified line and re-read; C6's nested-snapshot paragraphs touch snapshot.rs only; F2b Recording paragraph still matches runtime/sink.rs" }
+verified = { hash = "b3:c6fc31d036233f3d", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's Recording paragraph plus main's; re-read against sink.rs, pipeline.rs and engine.rs on the merged tree" }
 -->
 
 ### Engine and sessions

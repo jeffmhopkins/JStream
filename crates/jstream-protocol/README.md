@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:6b9cedafd3354839", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b round 2: output.rs gains Unknown on OutputKind, RtmpTarget and RecordContainer (schemars-skipped, schema unchanged); Outputs bullet and version text hold" }
+verified = { hash = "b3:a655b1c4ad444569", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: parity bullet now says the collection has a recording output and recording path rejections, matching parity.rs" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -77,8 +77,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
-  support, not wire types. One batch that builds a small collection, the exact answer
-  to every collection read of it, and the exact error for batches rejected against it.
+  support, not wire types. One batch that builds a small collection with two RTMP
+  outputs and a recording output, the exact answer to every collection read of it
+  (`output.list` included), and the exact error for batches rejected against it (RTMP
+  URL and recording path checks included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -91,7 +93,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:0156f643d61c54e5", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b round 2 (review B2): Compatibility bullet says OutputKind/RtmpTarget/RecordContainer parse unknown values as Unknown from 0.9 and that 0.7/0.8 clients can't parse output.list or state.get once a record output exists; open question 8 names it and leaves the minor-bump call to the maintainer" }
+verified = { hash = "b3:1eebe9000cc00689", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's 0.9 record kind and Compatibility/OQ8; #166 changed only parity.rs and the mock, no wire type" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
