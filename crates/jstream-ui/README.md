@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:03681d80c54c1817", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: outputs.rs gained start_or_stop_all and tests, app.rs connect fields leave the form element; contents list still holds" }
+verified = { hash = "b3:af3e35a10329ba97", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Merge of main (U3b outputs, U4 canvas, U5 host) into U3a: contents now list host.rs, store.rs, the U3a panels and outputs.rs as an inspector page, and U4's canvas; re-read, holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -58,7 +58,7 @@ Contents ([Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:86b7b86fc572f2c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: Outputs bullet says go live/end stream try every output and report each failure; new bullet: key and token fields opt out of password managers (no form, autocomplete=off, non-credential names); connecting bullet still holds" }
+verified = { hash = "b3:a092461aaa4f762a", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Merge of main into U3a plus review B1: the event loop holds no session handle, so Disconnect closes the socket; outputs routed as an inspector page; canvas keeps its own selection (noted as a follow-up); main's connecting, outputs and password-manager bullets unchanged; re-read, holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -154,7 +154,7 @@ verified = { hash = "b3:86b7b86fc572f2c6", by = "agent:claude@session_01K4N6DrL8
   no form submission for the browser to offer saving. A test checks both fields.
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
-  (`session.rs`, `store.rs`) and in plain functions the panels are built on (the rows,
+  (`session.rs`, `store.rs`, `panels/outputs.rs`) and in plain functions the panels are built on (the rows,
   what "Add" sends, the form's sections, parsing and checks); only the components
   themselves need a browser.
 
@@ -209,7 +209,7 @@ scene and sends the edits. These three are pure and tested natively against
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:755c311fa103cf2c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: dropped 'until jstream-server accepts the token subprotocol'; trunk-served page still needs an extra origin; holds" }
+verified = { hash = "b3:ee018d67ba5f4dbd", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Merge of main into U3a: took main's text; Cargo.toml keeps serde_json; trunk build --locked --offline succeeds after the merge; holds" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
