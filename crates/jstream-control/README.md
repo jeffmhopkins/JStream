@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:b10544e7956fd894", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: kept main's B9 line (delete.plan internal, no blockers on refused deletes) beside this branch's set_role/item.move bullets; matches mock.rs" }
+verified = { hash = "b3:75325ca5beb660c9", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (#210 B6-f mock item.move and set_role) into U2: main's mock bullets kept, U2's browser-token wording kept; re-read, holds" }
 -->
 
 ### The trait

@@ -519,7 +519,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:b84d57b23cb0f078", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: main's B9 delete.plan/blockers text kept; unaffected by this branch" }
+verified = { hash = "b3:b1f6fd8a89b11311", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: main changed no protocol transport text; U2's UI and token sentence kept; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
