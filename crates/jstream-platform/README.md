@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:62bfcf9a2a82742c", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: Media files bullet rewritten for MediaDecoderConfig::audio, MediaAudioInfo, next_audio and seek moving both streams; fake bullet names FakeAudio and the audio_blocks stat; re-read against media_file.rs and fake.rs" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -160,7 +159,6 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:5c670769263bdfef", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (e1e2a94: #295 clock-swap replan, G3b daemon vcam #297, Q3 #309, #286, #237) into C9: section text unchanged by C9; stale only through the merged crate map; re-read, holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
