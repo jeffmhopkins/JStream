@@ -19,13 +19,15 @@ use crate::{ClapError, MAX_BLOCK_EVENTS, ParamEvent};
 /// Everything it needs is allocated by [`Plugin::activate`](crate::Plugin::activate),
 /// so [`process`](Self::process) never allocates, locks or blocks on JStream's side;
 /// what the plugin does inside is the plugin's. Dropping it stops processing, on the
-/// thread that drops it, which should be the audio thread.
+/// thread that drops it, which should be the audio thread. It never deactivates or
+/// destroys the instance: its [`Plugin`](crate::Plugin) does, on the main thread.
 pub struct Processor {
     inner: Arc<Inner>,
     max_frames: usize,
-    /// Deinterleaved input, then output, channels: `max_frames` each.
-    input: [Vec<f32>; 2],
-    output: [Vec<f32>; 2],
+    /// Every input port: the main one carries the block, the rest (sidechains) silence.
+    input: Ports,
+    /// Every output port: the main one's output is returned, the rest dropped.
+    output: Ports,
     /// The parameter events for the block being processed. Reserved for
     /// [`MAX_BLOCK_EVENTS`].
     events_in: Vec<clap_event_param_value>,
@@ -49,17 +51,77 @@ impl std::fmt::Debug for Processor {
 
 // SAFETY: a `Processor` makes only CLAP's audio-thread calls (`start_processing`,
 // `process`, `reset`, `stop_processing`), from whichever single thread owns it, which
-// CLAP allows to be any thread the host chooses as its audio thread. Its buffers are
-// its own.
+// CLAP allows to be any thread the host chooses as its audio thread. Its buffers, and
+// the raw pointers into them in its port tables, are its own.
 unsafe impl Send for Processor {}
 
+/// One direction's audio ports: a buffer for each channel, and the tables CLAP reads.
+struct Ports {
+    /// `max_frames` samples for each channel of every port in order: the main port's
+    /// two first.
+    channels: Vec<Vec<f32>>,
+    /// Each port's channel count.
+    counts: Vec<u32>,
+    /// A pointer to each channel's buffer, set by [`point`](Self::point).
+    ptrs: Vec<*mut f32>,
+    /// Each port's `clap_audio_buffer`, set by [`point`](Self::point).
+    buffers: Vec<clap_audio_buffer>,
+}
+
+impl Ports {
+    fn new(counts: &[u32], max_frames: usize) -> Self {
+        let total = counts.iter().map(|&n| n as usize).sum();
+        Self {
+            channels: (0..total).map(|_| vec![0.0; max_frames]).collect(),
+            counts: counts.to_vec(),
+            ptrs: vec![std::ptr::null_mut(); total],
+            buffers: counts
+                .iter()
+                .map(|&n| clap_audio_buffer {
+                    data32: std::ptr::null_mut(),
+                    data64: std::ptr::null_mut(),
+                    channel_count: n,
+                    latency: 0,
+                    constant_mask: 0,
+                })
+                .collect(),
+        }
+    }
+
+    /// Points the tables at the channel buffers. Called after the buffers were last
+    /// written through `channels` and right before the plugin runs, so the pointers
+    /// are fresh. With `silent_extras`, every port after the main one is marked
+    /// constant (each of its channels is silence). Never allocates.
+    fn point(&mut self, silent_extras: bool) {
+        for (ptr, channel) in self.ptrs.iter_mut().zip(&mut self.channels) {
+            *ptr = channel.as_mut_ptr();
+        }
+        let base = self.ptrs.as_mut_ptr();
+        let mut at = 0;
+        for (i, (buffer, &n)) in self.buffers.iter_mut().zip(&self.counts).enumerate() {
+            // In bounds: the counts sum to `ptrs.len()`.
+            buffer.data32 = base.wrapping_add(at);
+            buffer.constant_mask = if silent_extras && i > 0 { u64::MAX } else { 0 };
+            at += n as usize;
+        }
+    }
+}
+
 impl Processor {
-    pub(crate) fn new(inner: Arc<Inner>, max_frames: usize) -> Self {
+    /// A processor for an instance activated for `max_frames`, with these channel
+    /// counts for its input and output ports. Port 0 each way is the stereo main port
+    /// (checked by `Plugin::activate`).
+    pub(crate) fn new(
+        inner: Arc<Inner>,
+        max_frames: usize,
+        inputs: &[u32],
+        outputs: &[u32],
+    ) -> Self {
         Self {
             inner,
             max_frames,
-            input: [vec![0.0; max_frames], vec![0.0; max_frames]],
-            output: [vec![0.0; max_frames], vec![0.0; max_frames]],
+            input: Ports::new(inputs, max_frames),
+            output: Ports::new(outputs, max_frames),
             events_in: Vec::with_capacity(MAX_BLOCK_EVENTS),
             events_out: Vec::with_capacity(MAX_BLOCK_EVENTS),
             started: false,
@@ -113,7 +175,9 @@ impl Processor {
         }
         let process = self.inner.raw().process.ok_or(ClapError::Process)?;
 
-        let [in_l, in_r] = &mut self.input;
+        let [in_l, in_r, sidechains @ ..] = self.input.channels.as_mut_slice() else {
+            return Err(ClapError::Process);
+        };
         for ((frame, l), r) in input
             .chunks_exact(2)
             .zip(in_l.iter_mut())
@@ -121,6 +185,10 @@ impl Processor {
         {
             *l = frame[0];
             *r = frame[1];
+        }
+        // The plugin may have written into its inputs: silence them every block.
+        for channel in sidechains {
+            channel[..frames].fill(0.0);
         }
         self.events_in.clear();
         self.events_in.extend(
@@ -131,22 +199,8 @@ impl Processor {
         );
         self.events_out.clear();
 
-        let mut in_ptrs = [self.input[0].as_mut_ptr(), self.input[1].as_mut_ptr()];
-        let mut out_ptrs = [self.output[0].as_mut_ptr(), self.output[1].as_mut_ptr()];
-        let audio_in = clap_audio_buffer {
-            data32: in_ptrs.as_mut_ptr(),
-            data64: std::ptr::null_mut(),
-            channel_count: 2,
-            latency: 0,
-            constant_mask: 0,
-        };
-        let mut audio_out = clap_audio_buffer {
-            data32: out_ptrs.as_mut_ptr(),
-            data64: std::ptr::null_mut(),
-            channel_count: 2,
-            latency: 0,
-            constant_mask: 0,
-        };
+        self.input.point(true);
+        self.output.point(false);
         let in_events = clap_input_events {
             ctx: (&raw const self.events_in).cast_mut().cast::<c_void>(),
             size: Some(events_size),
@@ -160,22 +214,27 @@ impl Processor {
             steady_time: self.steady_time,
             frames_count: frames as u32,
             transport: std::ptr::null(),
-            audio_inputs: &audio_in,
-            audio_outputs: &mut audio_out,
-            audio_inputs_count: 1,
-            audio_outputs_count: 1,
+            audio_inputs: self.input.buffers.as_ptr(),
+            audio_outputs: self.output.buffers.as_mut_ptr(),
+            // As many as `clap_plugin_audio_ports.count` (at most MAX_PORTS).
+            audio_inputs_count: self.input.buffers.len() as u32,
+            audio_outputs_count: self.output.buffers.len() as u32,
             in_events: &in_events,
             out_events: &out_events,
         };
         // SAFETY: audio thread, processing started; every pointer in `block` points at
-        // buffers and lists that outlive the call, sized for `frames`.
+        // buffers and lists that outlive the call: one `clap_audio_buffer` for each of
+        // the plugin's ports each way, with one buffer of `max_frames >= frames`
+        // samples for each channel the port reported.
         let status = unsafe { process(self.inner.plugin, &block) };
         self.steady_time += frames as i64;
         if status == CLAP_PROCESS_ERROR {
             return Err(ClapError::Process);
         }
 
-        let [out_l, out_r] = &self.output;
+        let [out_l, out_r, ..] = self.output.channels.as_slice() else {
+            return Err(ClapError::Process);
+        };
         for ((frame, l), r) in output.chunks_exact_mut(2).zip(out_l).zip(out_r) {
             frame[0] = *l;
             frame[1] = *r;

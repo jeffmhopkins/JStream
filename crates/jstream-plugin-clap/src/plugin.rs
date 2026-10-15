@@ -16,13 +16,20 @@ use clap_sys::ext::state::{CLAP_EXT_STATE, clap_plugin_state};
 use clap_sys::plugin::clap_plugin;
 use clap_sys::stream::{clap_istream, clap_ostream};
 
-use crate::host::HostData;
+use crate::host::HostBox;
 use crate::library::c_id;
 use crate::process::Processor;
 use crate::{ClapError, Library, MAX_STATE_BYTES, PluginInfo, strings};
 
 /// The most parameters read from one plugin. Only bounds a broken plugin.
 const MAX_PARAMS: u32 = 16_384;
+
+/// The most audio ports each way a hosted plugin may have (its main port, sidechains
+/// and auxiliary outputs).
+pub const MAX_PORTS: u32 = 16;
+
+/// The most channels one of a plugin's audio ports may have.
+pub const MAX_PORT_CHANNELS: u32 = 32;
 
 /// One of a plugin's parameters.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,7 +63,8 @@ pub(crate) struct Inner {
     pub(crate) plugin: *const clap_plugin,
     /// Whether `activate` succeeded and `deactivate` hasn't run.
     pub(crate) active: AtomicBool,
-    pub(crate) host: Box<HostData>,
+    /// Freed after `destroy`: fields drop after `Drop::drop`, in order.
+    pub(crate) host: HostBox,
     latency: Option<*const clap_plugin_latency>,
     params: Option<*const clap_plugin_params>,
     state: Option<*const clap_plugin_state>,
@@ -66,9 +74,12 @@ pub(crate) struct Inner {
 }
 
 // SAFETY: CLAP plugins are called from a main thread and an audio thread; `Inner` only
-// holds the instance and its extension tables, which are plain pointers valid until
-// `destroy`. The `Plugin` keeps main-thread calls on its thread (it is not `Sync`), and
-// the `Processor` makes the audio-thread calls.
+// holds the instance, its host and its extension tables, which are plain pointers
+// valid until `destroy`. Main-thread calls are made only through `Plugin`, which is
+// neither `Send` nor `Sync`, so they stay on the thread that created it; the
+// `Processor` makes the audio-thread calls. `Inner` itself is dropped, which runs
+// `deactivate` and `destroy`, only by `Plugin` on that thread: `Plugin::drop` leaks
+// the instance rather than let a `Processor` hold the last reference.
 unsafe impl Send for Inner {}
 // SAFETY: as for `Send`: the shared fields are pointers to tables the plugin owns and
 // atomics; which thread calls what is kept by `Plugin` and `Processor`.
@@ -113,13 +124,36 @@ impl Drop for Inner {
 /// A plugin instance, on the host's main thread: create it, read its parameters and
 /// state, then [`activate`](Self::activate) it to get its [`Processor`].
 ///
-/// Dropping it destroys the instance once its [`Processor`] is gone too. Not `Sync`:
-/// CLAP's main-thread calls stay on the thread that owns it.
+/// Neither `Send` nor `Sync`: CLAP's main-thread calls, `destroy` included, stay on
+/// the thread that created it. Drop its [`Processor`] first (on the audio thread);
+/// dropping the `Plugin` destroys the instance then. Dropped while its `Processor`
+/// still exists, it leaks the instance and its library instead, so that `deactivate`
+/// and `destroy` never run on the audio thread.
+///
+/// ```compile_fail
+/// fn needs_send<T: Send>() {}
+/// needs_send::<jstream_plugin_clap::Plugin>();
+/// ```
 pub struct Plugin {
     inner: Arc<Inner>,
     info: PluginInfo,
-    /// Keeps `Plugin` `!Sync` (main-thread calls from one thread at a time).
-    _not_sync: std::marker::PhantomData<std::cell::Cell<()>>,
+    /// Keeps `Plugin` `!Send` and `!Sync`.
+    _main_thread: std::marker::PhantomData<*const ()>,
+}
+
+impl Drop for Plugin {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.inner) > 1 {
+            // The `Processor` still holds the instance. Keep one reference forever so
+            // that its drop never destroys it on its thread.
+            std::mem::forget(Arc::clone(&self.inner));
+        } else {
+            // Ordered after the `Processor`'s last use (its drop released its
+            // reference). `self.inner` is the last reference: dropping it here, after
+            // this body, deactivates and destroys the instance on this thread.
+            std::sync::atomic::fence(Ordering::Acquire);
+        }
+    }
 }
 
 impl std::fmt::Debug for Plugin {
@@ -145,11 +179,12 @@ impl Plugin {
         }
         let factory = library.factory().ok_or(ClapError::NoFactory)?;
         let create = factory.create_plugin.ok_or(ClapError::Create)?;
-        let host = HostData::new();
+        let host = HostBox::new();
         let id_c = c_id(id)?;
-        // SAFETY: the factory is thread-safe; `host` is boxed and outlives the instance
-        // (both live in `Inner`); `id_c` is NUL-terminated.
-        let plugin = unsafe { create(factory, &host.clap, id_c.as_ptr()) };
+        // SAFETY: the factory is thread-safe; `host` is on the heap and outlives the
+        // instance (both live in `Inner`, which frees it after `destroy`; the error
+        // paths below drop it after `destroy` too); `id_c` is NUL-terminated.
+        let plugin = unsafe { create(factory, host.clap(), id_c.as_ptr()) };
         // SAFETY: a non-null result is a live instance until `destroy`.
         let raw = unsafe { plugin.as_ref() }.ok_or(ClapError::Create)?;
         let destroy = |raw: &clap_plugin| {
@@ -180,7 +215,7 @@ impl Plugin {
         Ok(Self {
             inner: Arc::new(inner),
             info,
-            _not_sync: std::marker::PhantomData,
+            _main_thread: std::marker::PhantomData,
         })
     }
 
@@ -196,18 +231,19 @@ impl Plugin {
 
     /// Activates the plugin at `sample_rate` for blocks of 1 to `max_frames` frames, and
     /// returns its [`Processor`] for the audio thread. Checks first that its main input
-    /// and main output are stereo.
+    /// and main output (port 0 each way) are stereo, and reads its other ports
+    /// (sidechain inputs, which get silence, and auxiliary outputs, which are dropped).
     ///
     /// # Errors
     /// [`ClapError::WrongState`] when it is already active, [`ClapError::NotStereo`],
-    /// and [`ClapError::Activate`] when the plugin refuses.
+    /// [`ClapError::Ports`] past [`MAX_PORTS`] or [`MAX_PORT_CHANNELS`], and
+    /// [`ClapError::Activate`] when the plugin refuses.
     pub fn activate(&mut self, sample_rate: u32, max_frames: u32) -> Result<Processor, ClapError> {
         if self.is_active() {
             return Err(ClapError::WrongState("already active"));
         }
-        if !self.stereo_main_ports() {
-            return Err(ClapError::NotStereo);
-        }
+        let inputs = self.port_channels(true)?;
+        let outputs = self.port_channels(false)?;
         let activate = self.inner.raw().activate.ok_or(ClapError::Activate)?;
         if max_frames == 0 {
             return Err(ClapError::Activate);
@@ -217,7 +253,12 @@ impl Plugin {
             return Err(ClapError::Activate);
         }
         self.inner.active.store(true, Ordering::Release);
-        Ok(Processor::new(Arc::clone(&self.inner), max_frames as usize))
+        Ok(Processor::new(
+            Arc::clone(&self.inner),
+            max_frames as usize,
+            &inputs,
+            &outputs,
+        ))
     }
 
     /// Deactivates the plugin. Its [`Processor`] must be dropped first (on the audio
@@ -229,6 +270,9 @@ impl Plugin {
         if Arc::strong_count(&self.inner) > 1 {
             return Err(ClapError::Busy);
         }
+        // Ordered after the `Processor`'s `stop_processing` (its drop released its
+        // reference).
+        std::sync::atomic::fence(Ordering::Acquire);
         self.inner.deactivate();
         Ok(())
     }
@@ -401,28 +445,40 @@ impl Plugin {
         self.inner.host.requests.callback.load(Ordering::Acquire)
     }
 
-    /// Whether the main input and main output both exist and have two channels.
-    fn stereo_main_ports(&self) -> bool {
+    /// The channel count of each of the plugin's input (or output) ports, in its
+    /// order. Port 0 must be the main port, in stereo.
+    fn port_channels(&self, is_input: bool) -> Result<Vec<u32>, ClapError> {
         let Some(ext) = self.inner.ports else {
-            return false;
+            return Err(ClapError::NotStereo);
         };
         // SAFETY: the table is valid until `destroy`.
         let ext = unsafe { &*ext };
         let (Some(count), Some(get)) = (ext.count, ext.get) else {
-            return false;
+            return Err(ClapError::NotStereo);
         };
-        let main_is_stereo = |is_input: bool| {
-            // SAFETY: main thread, inactive.
-            if unsafe { count(self.inner.plugin, is_input) } == 0 {
-                return false;
-            }
-            // SAFETY: an all-zero port info is valid (null port type, zero numbers).
-            let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
-            // SAFETY: index 0 is below the count; `info` is writable.
-            let got = unsafe { get(self.inner.plugin, 0, is_input, &mut info) };
-            got && info.flags & CLAP_AUDIO_PORT_IS_MAIN != 0 && info.channel_count == 2
-        };
-        main_is_stereo(true) && main_is_stereo(false)
+        // SAFETY: main thread, inactive.
+        let n = unsafe { count(self.inner.plugin, is_input) };
+        if n == 0 {
+            return Err(ClapError::NotStereo);
+        }
+        if n > MAX_PORTS {
+            return Err(ClapError::Ports);
+        }
+        (0..n)
+            .map(|i| {
+                // SAFETY: an all-zero port info is valid (null port type, zero numbers).
+                let mut info: clap_audio_port_info = unsafe { std::mem::zeroed() };
+                // SAFETY: `i` is below the count; `info` is writable.
+                let got = unsafe { get(self.inner.plugin, i, is_input, &mut info) };
+                let main = info.flags & CLAP_AUDIO_PORT_IS_MAIN != 0;
+                match (i, got) {
+                    (0, true) if main && info.channel_count == 2 => Ok(2),
+                    (0, _) => Err(ClapError::NotStereo),
+                    (_, true) if info.channel_count <= MAX_PORT_CHANNELS => Ok(info.channel_count),
+                    _ => Err(ClapError::Ports),
+                }
+            })
+            .collect()
     }
 }
 
@@ -447,7 +503,7 @@ unsafe extern "C" fn sink_write(
         let Ok(size) = usize::try_from(size) else {
             return -1;
         };
-        if sink.bytes.len() + size > MAX_STATE_BYTES {
+        if size > MAX_STATE_BYTES - sink.bytes.len() {
             sink.overflow = true;
             return -1;
         }

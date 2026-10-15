@@ -32,7 +32,7 @@ mod testplugin;
 pub use error::ClapError;
 pub use jstream_plugin_proto::ParamEvent;
 pub use library::{Library, PluginInfo};
-pub use plugin::{ParamInfo, Plugin};
+pub use plugin::{MAX_PORT_CHANNELS, MAX_PORTS, ParamInfo, Plugin};
 pub use process::Processor;
 
 // Counts allocations inside `assert_no_alloc` scopes in this crate's tests (R-RT-001's

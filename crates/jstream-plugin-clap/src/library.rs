@@ -237,7 +237,9 @@ mod tests {
             [
                 testplugin::GAIN_ID,
                 testplugin::SYNTH_ID,
-                testplugin::MONO_ID
+                testplugin::MONO_ID,
+                testplugin::SIDECHAIN_ID,
+                testplugin::WIDE_ID,
             ]
         );
         let gain = &plugins[0];

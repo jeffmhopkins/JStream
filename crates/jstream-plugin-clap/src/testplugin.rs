@@ -8,6 +8,11 @@
 //! state is the gain's 8 bytes, written in two parts (a gain of exactly 42 writes 3 MiB
 //! instead, to test the size limit); at `init` it asks the host for its latency
 //! extension and for a main-thread callback.
+//!
+//! The sidechain effect is the gain effect with a mono sidechain input and a stereo
+//! auxiliary output besides its main ports: it adds the sidechain into its left output
+//! and writes 9.0 into the auxiliary one. The wide effect has more ports than the host
+//! takes.
 
 use std::ffi::{CStr, c_char, c_void};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -35,6 +40,8 @@ use clap_sys::version::CLAP_VERSION;
 pub(crate) const GAIN_ID: &str = "org.jstream.test.gain";
 pub(crate) const SYNTH_ID: &str = "org.jstream.test.synth";
 pub(crate) const MONO_ID: &str = "org.jstream.test.mono";
+pub(crate) const SIDECHAIN_ID: &str = "org.jstream.test.sidechain";
+pub(crate) const WIDE_ID: &str = "org.jstream.test.wide";
 
 /// Calls to `on_main_thread`, across every instance.
 pub(crate) static MAIN_THREAD_CALLS: AtomicU32 = AtomicU32::new(0);
@@ -42,6 +49,11 @@ pub(crate) static MAIN_THREAD_CALLS: AtomicU32 = AtomicU32::new(0);
 pub(crate) static RESETS: AtomicU32 = AtomicU32::new(0);
 /// Calls to `stop_processing`, across every instance.
 pub(crate) static STOPS: AtomicU32 = AtomicU32::new(0);
+
+thread_local! {
+    /// Calls to `destroy` on this thread.
+    pub(crate) static DESTROYS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
 
 /// A null-terminated list of feature strings.
 struct Features<const N: usize>([*const c_char; N]);
@@ -74,7 +86,7 @@ const fn descriptor(
     }
 }
 
-static DESCRIPTORS: [clap_plugin_descriptor; 3] = [
+static DESCRIPTORS: [clap_plugin_descriptor; 5] = [
     descriptor(
         c"org.jstream.test.gain",
         c"Test gain",
@@ -88,6 +100,16 @@ static DESCRIPTORS: [clap_plugin_descriptor; 3] = [
     descriptor(
         c"org.jstream.test.mono",
         c"Test mono",
+        EFFECT_FEATURES.0.as_ptr(),
+    ),
+    descriptor(
+        c"org.jstream.test.sidechain",
+        c"Test sidechain",
+        EFFECT_FEATURES.0.as_ptr(),
+    ),
+    descriptor(
+        c"org.jstream.test.wide",
+        c"Test wide",
         EFFECT_FEATURES.0.as_ptr(),
     ),
 ];
@@ -139,6 +161,8 @@ struct Instance {
     clap: clap_plugin,
     host: *const clap_host,
     channels: u32,
+    /// Ports after the main one, each way.
+    extra_ports: u32,
     gain: f64,
 }
 
@@ -177,6 +201,11 @@ unsafe extern "C" fn factory_create(
         } else {
             2
         },
+        extra_ports: match id.to_bytes() {
+            b"org.jstream.test.sidechain" => 1,
+            b"org.jstream.test.wide" => crate::MAX_PORTS,
+            _ => 0,
+        },
         gain: 1.0,
     });
     // `clap` is the first field of a `repr(C)` struct, so the instance's address is
@@ -208,6 +237,7 @@ unsafe extern "C" fn plugin_init(plugin: *const clap_plugin) -> bool {
 unsafe extern "C" fn plugin_destroy(plugin: *const clap_plugin) {
     // SAFETY: the instance came from `Box::into_raw` and is destroyed once.
     drop(unsafe { Box::from_raw(plugin.cast::<Instance>().cast_mut()) });
+    DESTROYS.with(|d| d.set(d.get() + 1));
 }
 
 unsafe extern "C" fn plugin_activate(
@@ -260,6 +290,9 @@ unsafe extern "C" fn plugin_process(
                 }
             }
         }
+        // The host passes every port it was told about.
+        assert_eq!(p.audio_inputs_count, 1 + me.extra_ports);
+        assert_eq!(p.audio_outputs_count, 1 + me.extra_ports);
         let input: &clap_audio_buffer = &*p.audio_inputs;
         let output: &clap_audio_buffer = &*p.audio_outputs;
         for c in 0..2 {
@@ -267,6 +300,25 @@ unsafe extern "C" fn plugin_process(
             let dst = *output.data32.add(c);
             for n in 0..p.frames_count as usize {
                 *dst.add(n) = (f64::from(*src.add(n)) * me.gain) as f32;
+            }
+        }
+        if me.extra_ports > 0 {
+            let side = &*p.audio_inputs.add(1);
+            let aux = &*p.audio_outputs.add(1);
+            assert_eq!((side.channel_count, aux.channel_count), (1, 2));
+            assert_ne!(side.constant_mask, 0);
+            let side = *side.data32;
+            let left = *output.data32;
+            for n in 0..p.frames_count as usize {
+                *left.add(n) += *side.add(n);
+                // Scribble on the input, which the host must silence again.
+                *side.add(n) = 5.0;
+            }
+            for c in 0..2 {
+                let dst = *aux.data32.add(c);
+                for n in 0..p.frames_count as usize {
+                    *dst.add(n) = 9.0;
+                }
             }
         }
     }
@@ -312,26 +364,33 @@ unsafe extern "C" fn plugin_extension(
     }
 }
 
-unsafe extern "C" fn ports_count(_plugin: *const clap_plugin, _is_input: bool) -> u32 {
-    1
+unsafe extern "C" fn ports_count(plugin: *const clap_plugin, _is_input: bool) -> u32 {
+    // SAFETY: a live instance, from the host.
+    1 + unsafe { instance(plugin) }.extra_ports
 }
 
 unsafe extern "C" fn ports_get(
     plugin: *const clap_plugin,
     index: u32,
-    _is_input: bool,
+    is_input: bool,
     info: *mut clap_audio_port_info,
 ) -> bool {
-    if index != 0 {
-        return false;
-    }
     // SAFETY: a live instance and a writable info, from the host.
     unsafe {
+        let me = instance(plugin);
+        if index > me.extra_ports {
+            return false;
+        }
         let info = &mut *info;
-        info.id = 0;
-        info.flags = CLAP_AUDIO_PORT_IS_MAIN;
-        info.channel_count = instance(plugin).channels;
+        info.id = index;
         info.port_type = std::ptr::null();
+        if index == 0 {
+            info.flags = CLAP_AUDIO_PORT_IS_MAIN;
+            info.channel_count = me.channels;
+        } else {
+            info.flags = 0;
+            info.channel_count = if is_input { 1 } else { 2 };
+        }
     }
     true
 }
@@ -437,6 +496,54 @@ mod tests {
             ClapError::NotStereo
         );
         assert!(!mono.is_active());
+        let mut wide = Plugin::new(&lib, WIDE_ID).unwrap();
+        assert_eq!(wide.activate(48_000, 256).unwrap_err(), ClapError::Ports);
+        assert!(!wide.is_active());
+    }
+
+    #[test]
+    fn sidechain_inputs_get_silence_and_aux_outputs_are_dropped() {
+        let lib = Library::from_static(&ENTRY).unwrap();
+        let mut plugin = Plugin::new(&lib, SIDECHAIN_ID).unwrap();
+        let mut processor = plugin.activate(48_000, 16).unwrap();
+        let input: Vec<f32> = (0..32).map(|i| i as f32).collect();
+        let mut output = vec![0.0; 32];
+        // Twice: the plugin scribbles on its sidechain, which is silenced again.
+        for _ in 0..2 {
+            processor.process(&input, &mut output, &[]).unwrap();
+            assert_eq!(output, input);
+        }
+        let before = assert_no_alloc::violation_count();
+        assert_no_alloc::assert_no_alloc(|| processor.process(&input, &mut output, &[])).unwrap();
+        assert_eq!(assert_no_alloc::violation_count(), before);
+    }
+
+    #[test]
+    fn the_instance_is_destroyed_only_by_its_plugin() {
+        let destroys = || DESTROYS.with(std::cell::Cell::get);
+        // Plugin last: destroyed when the plugin drops, on its thread.
+        let mut plugin = gain();
+        let processor = plugin.activate(48_000, 16).unwrap();
+        drop(processor);
+        let before = destroys();
+        drop(plugin);
+        assert_eq!(destroys(), before + 1);
+        // Plugin first, its processor on the audio thread: never destroyed there, or
+        // anywhere (the instance is leaked instead).
+        let mut plugin = gain();
+        let mut processor = plugin.activate(48_000, 16).unwrap();
+        let before = destroys();
+        drop(plugin);
+        let on_audio_thread = std::thread::spawn(move || {
+            let mut out = [0.0; 32];
+            processor.process(&[1.0; 32], &mut out, &[]).unwrap();
+            drop(processor);
+            DESTROYS.with(std::cell::Cell::get)
+        })
+        .join()
+        .unwrap();
+        assert_eq!(on_audio_thread, 0);
+        assert_eq!(destroys(), before);
     }
 
     #[test]

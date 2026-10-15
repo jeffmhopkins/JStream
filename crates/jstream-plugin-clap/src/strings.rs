@@ -1,10 +1,10 @@
-//! Reading strings the plugin owns, which may be null, unterminated within reason, or
-//! not UTF-8.
+//! Reading strings the plugin owns, which may be null or not UTF-8. A non-null one
+//! must be NUL-terminated (a CLAP requirement): only how much of it is kept is capped.
 
 use std::ffi::{CStr, c_char};
 
-/// The longest string read from a plugin's pointer, bytes. Names and ids are far
-/// shorter; this only bounds a broken plugin.
+/// The most bytes kept of a string read from a plugin's pointer. Names and ids are far
+/// shorter; this only bounds what a broken plugin can make the host store.
 const MAX_LEN: usize = 4096;
 
 /// The string at `ptr`, lossily decoded, or `None` for a null pointer.

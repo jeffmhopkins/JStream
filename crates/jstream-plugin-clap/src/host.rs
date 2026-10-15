@@ -4,6 +4,7 @@
 
 use std::ffi::{CStr, c_char, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use clap_sys::ext::latency::{CLAP_EXT_LATENCY, clap_host_latency};
@@ -35,17 +36,23 @@ pub(crate) struct Requests {
     pub(crate) dirty: AtomicBool,
 }
 
-/// The `clap_host` handed to one plugin instance, with its requests. Boxed, so the
-/// address the plugin keeps stays put.
+/// The `clap_host` handed to one plugin instance, with its requests.
 #[derive(Debug)]
 pub(crate) struct HostData {
     pub(crate) clap: clap_host,
     pub(crate) requests: Requests,
 }
 
-impl HostData {
-    pub(crate) fn new() -> Box<Self> {
-        let mut data = Box::new(Self {
+/// Owns a [`HostData`] on the heap through a raw pointer, so the address the plugin
+/// keeps stays valid however the owner moves (a moved `Box` would re-assert unique
+/// ownership of it). Only shared access is given out: after construction, every field
+/// the plugin can reach is read-only or atomic.
+#[derive(Debug)]
+pub(crate) struct HostBox(NonNull<HostData>);
+
+impl HostBox {
+    pub(crate) fn new() -> Self {
+        let data = NonNull::from(Box::leak(Box::new(HostData {
             clap: clap_host {
                 clap_version: CLAP_VERSION,
                 host_data: std::ptr::null_mut(),
@@ -59,10 +66,32 @@ impl HostData {
                 request_callback: Some(request_callback),
             },
             requests: Requests::default(),
-        });
-        let ptr: *mut Self = &mut *data;
-        data.clap.host_data = ptr.cast();
-        data
+        })));
+        // SAFETY: `data` is a fresh, unshared allocation; this is its only write.
+        unsafe { (*data.as_ptr()).clap.host_data = data.as_ptr().cast() };
+        Self(data)
+    }
+
+    /// The `clap_host` to hand the plugin, derived from the owning pointer.
+    pub(crate) fn clap(&self) -> *const clap_host {
+        // SAFETY: the allocation is live while `self` is.
+        unsafe { &raw const (*self.0.as_ptr()).clap }
+    }
+}
+
+impl std::ops::Deref for HostBox {
+    type Target = HostData;
+    fn deref(&self) -> &HostData {
+        // SAFETY: live until `drop`, and never mutably borrowed after `new`.
+        unsafe { self.0.as_ref() }
+    }
+}
+
+impl Drop for HostBox {
+    fn drop(&mut self) {
+        // SAFETY: the pointer came from `Box::leak` in `new` and is freed once, here.
+        // The owner drops it only after the plugin is destroyed.
+        drop(unsafe { Box::from_raw(self.0.as_ptr()) });
     }
 }
 
@@ -169,8 +198,8 @@ mod tests {
 
     #[test]
     fn callbacks_set_their_flags() {
-        let host = HostData::new();
-        let h: *const clap_host = &host.clap;
+        let host = HostBox::new();
+        let h = host.clap();
         // SAFETY: `h` is a live host, as a plugin would hold it.
         unsafe {
             request_restart(h);
@@ -191,7 +220,7 @@ mod tests {
 
     #[test]
     fn offers_latency_params_and_state_only() {
-        let host = HostData::new();
+        let host = HostBox::new();
         let get = host.clap.get_extension.unwrap();
         // SAFETY: literals are NUL-terminated.
         unsafe {

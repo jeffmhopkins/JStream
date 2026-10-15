@@ -37,6 +37,11 @@ pub enum ClapError {
     /// The plugin has no main input and main output of two channels each.
     #[error("the plugin has no stereo main input and output")]
     NotStereo,
+    /// The plugin has more audio ports, or more channels on one, than the host takes
+    /// ([`MAX_PORTS`](crate::MAX_PORTS), [`MAX_PORT_CHANNELS`](crate::MAX_PORT_CHANNELS)),
+    /// or a port it counts can't be read.
+    #[error("the plugin's audio ports are more than the host takes")]
+    Ports,
     /// The plugin refused to activate at this rate and block size.
     #[error("the plugin refused to activate")]
     Activate,
