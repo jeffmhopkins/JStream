@@ -529,7 +529,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:70362ac384ff3ac8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): History bullet says protocol 0.10; record kind bullet 0.9 from main holds" }
+verified = { hash = "b3:acec851b35f8fa00", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1 (protocol README only changed): re-read; History bullet (undo_conflict, protocol 0.10) still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -675,7 +675,7 @@ verified = { hash = "b3:93f000624e12ab05", by = "agent:claude@session_01WG1uLVaz
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:d26d09005596402c", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: one-scene compositor paragraph now names render_into/layer for reused nested-scene layers and ResourceCache freeing after the frame that last used an image; render thread placed in jstream-core; steps 1-6, S1 result and output path unchanged" }
+verified = { hash = "b3:b98d1e190bda125c", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (E3a, C7 S4 browser source section) into E1: E1's render_into/ResourceCache paragraph unchanged and still holds beside main's capture and browser text" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -758,6 +758,73 @@ node per output with a video chain, and a privacy node per output. The privacy s
 comes last, so no output chain can undo it, and it fails closed: if its pass can't run,
 the output gets a black frame. None of this is built yet.
 
+<a id="browser-source"></a>
+## Browser source
+<!-- @section
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native-interop.md"]
+verified = { hash = "b3:cd6c3960b512a104", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review: sandbox is required where supported (bootstrap layout may replace the helper, or a superseding ADR), zip-size estimate marked unchecked and listed as open, pts wording and all three packet counts (2999/3000/2999) re-checked against the run JSON" }
+-->
+
+A browser source is a CEF off-screen browser
+([ADR-0021](adr/0021-browser-source.md)), not built yet. Each `OnAcceleratedPaint`
+hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
+and no fence. CEF takes the texture back into its pool when the callback returns. So the
+callback opens the handle on the wgpu D3D12 device, imports it through hal as in the GPU
+pipeline's step 2, copies it into a texture the source owns, and waits for that copy
+before it returns. The source's audio comes from CEF's audio handler as planar float PCM.
+
+**Choices made by spike S4:**
+- **Bindings:** the `cef` crate (tauri-apps/cef-rs), pinned exactly, with default
+  features off. It is generated from CEF's C API and released for each CEF version. Its
+  sys crate downloads the CEF binary distribution and builds CEF's C++ wrapper with CMake
+  and Ninja, so it needs the lint-deps allowlist entry and governance change that
+  ADR-0021 names.
+- **Helper processes:** a separate small `jstream-browser-helper.exe`, set as CEF's
+  `browser_subprocess_path`, so the engine exe never runs as a Chromium subprocess. Both
+  layouts that ADR-0021 allows measured the same.
+- **Not yet decided:** the sandbox. ADR-0021 requires it where supported. On Windows,
+  CEF sandboxes subprocesses only in its bootstrap layout, where CEF's `bootstrap.exe` is
+  the exe and loads the application as a DLL. S4 ran unsandboxed and didn't test that
+  layout. The browser source must adopt it before it ships, which may replace the helper
+  exe above, or a superseding ADR must accept running unsandboxed.
+
+**S4 result**, on the S1 machine with CEF 154.0.34 (Chromium 154.0.8037.98). Each run
+measured 30 s of the built-in test page, which has a frame counter, alpha probes and a
+440 Hz / 660 Hz stereo tone:
+
+| Run | Paint rate | Intervals over 1.5 frames | Callback p50 / p99 | CPU, all processes | Private memory |
+|---|---|---|---|---|---|
+| 1920x1080, helper is the engine exe | 60.03 fps | 3 of 1799 | 2.6 / 3.9 ms | 22% of one core | 587 MB |
+| 1920x1080, separate helper exe | 60.02 fps | 0 of 1799 | 2.2 / 3.7 ms | 21% of one core | 569 MB |
+| 3840x2160, helper is the engine exe | 60.01 fps | 1 of 1799 | 4.1 / 6.6 ms | 22% of one core | 700 MB |
+
+- **Video:** all 1800 paints per run were accelerated, with no failures. The page's frame
+  counter showed every page frame once, none skipped, repeated or out of order. The
+  alpha probes held on every frame: the page texture is transparent and premultiplied,
+  and blending it over an opaque background gave the expected colours. CEF reused about
+  250 distinct texture handles at 1080p and 430 at 4K.
+- **Audio:** CEF honoured the requested 48 kHz stereo in 480-frame (10 ms) packets. Both
+  tones came through at the right pitch and level on the right channels. The runs
+  received 2999, 3000 and 2999 packets, as expected for 30 s.
+- **Audio timestamps:** contrary to CEF's header, which documents Unix-epoch
+  milliseconds, a packet's `pts` is not. It differed from the wall clock by the same offset to the millisecond in all
+  three runs, which fits milliseconds since boot (Chromium's QPC-based `TimeTicks`).
+  That is inferred, not checked against QPC. If it holds, packets map onto the media
+  clock directly.
+- **Shutdown:** every run reported one audio error, "Socket closed unexpectedly", while
+  the browser closed. The source must treat it as the end of the stream, not a fault.
+- **Codecs:** the page reports no H.264 or AAC support, and VP8, VP9, AV1, Opus, Vorbis,
+  FLAC, MP3 and WAV playable. That is the royalty-free set ADR-0021 expects.
+- **Runtime size:** the CEF runtime is about 400 MB uncompressed, 290 MB of it
+  `libcef.dll`. Its compressed size in the zip wasn't measured, so ADR-0021's estimate
+  of 150–250 MB added to the zip is still unchecked. The runtime includes CEF's
+  `CREDITS.html`.
+
+Still open, before the browser source is built: the CEF runtime's compressed size in
+the zip, other GPU vendors and multi-GPU machines (Chromium must render on the adapter
+the engine imports on), several browsers at once, pages with video, input events, and
+the sandboxed layout.
+
 <a id="persistence"></a>
 ## Persistence, config and secrets
 <!-- @section
@@ -783,13 +850,16 @@ verified = { hash = "b3:fe28871dd73ab140", by = "agent:claude@session_01QBbMRwRu
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:a4757b3070f69873", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0035: the zip gains jstream-plugin-host.exe from M3; portable layout, state location and S2 vcam registration findings unchanged" }
+verified = { hash = "b3:f7c98d9194d6528e", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review B1: folder list now names jstream-browser-helper.exe beside the CEF runtime, matching ARCH#browser-source, with the bootstrap-layout caveat; rest unchanged" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
 `jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
-runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder.
+runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder,
+with `jstream-browser-helper.exe` for CEF's subprocesses
+([ARCH › Browser source](#browser-source); the sandbox decision may replace it with
+CEF's bootstrap layout).
 From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin host
 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). Release builds
 link the C runtime statically and need only OS components (WebView2, Media Foundation,

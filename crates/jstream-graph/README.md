@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:6a9d16859c74e721", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#data-model after the merge: graph accepts any acyclic depth (the 8-level limit is the program mix's); B2 history text is main's; holds" }
+verified = { hash = "b3:8c4afeb6d531ff5c", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH after merging C7/E3a: graph purpose has nothing on capture or browsers; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

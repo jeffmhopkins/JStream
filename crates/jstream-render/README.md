@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:291e69242e752e2e", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: nested-scene bullet now names layer/render_into/render_image; new ResourceCache bullet (keyed reuse, freed after the last frame that used it, handed back as Reclaimed); Not-in-this-cut now says the render thread and snapshots are jstream-core's; checked against compositor.rs, image.rs, cache.rs" }
+verified = { hash = "b3:74c259cf71ca887d", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (E3a: capture GPU frames are Bgra8UnormSrgb, import takes them as is) into E1: main's capture-formats bullet beside E1's cache and layer bullets; both hold" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -340,11 +340,11 @@ adds a package so tests can render, and it does not weaken a check.
   ends the submit in `PRESENT`. Software adapters often lack `TEXTURE_FORMAT_NV12`,
   so that pass cannot be the CI path. Proposed default: keep this RGBA output, and
   let a later pass sample it into the platform `encode_target` on the real device.
-- **Capture formats.** WGC frames are not sRGB RGBA. A conversion into the sampled
-  format has to land before `import` can take a capture `GpuFrame`. Who owns that
-  pass, this crate or the platform crate, is open. That pass could also write
-  premultiplied linear, which would remove the straight-alpha fringe that a partly
-  transparent import (a browser source, a nested scene's output) still has.
+- **Capture formats.** Windows capture's GPU frames (`WgcCapture::on_gpu`) are opaque
+  `Bgra8UnormSrgb`, which `import` takes as is, so they need no conversion pass. Open:
+  whether a pass that writes premultiplied linear should exist anyway, to remove the
+  straight-alpha fringe that a partly transparent import (a browser source, a nested
+  scene's output) still has, and which crate owns it.
 - **Opacity and blend ownership** was left open by ADR-0022 (decision-register D2).
   The snapshot puts opacity on the item because that is what ARCH's data model and
   the compositor consequences of

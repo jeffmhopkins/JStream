@@ -123,7 +123,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:dff9afdc55b729c6", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (F2b sink, B2 undo, B8 audit, D1) into E1: Not-yet line drops undo and audit (built on main) and keeps live values and the audio/outputs snapshots; render thread, collector and locking text hold beside main's sink and history text" }
+verified = { hash = "b3:1556e01a18817491", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (E3a WGC GPU capture, C7 S4, #198 undo docs) into E1: core text unchanged by the merge; E1's render snapshot and compose text still hold (capture still reaches core as CPU RGBA through the fake interop)" }
 -->
 
 ### Engine and sessions
