@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:c67561b93957b007", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14) into A3: purpose text is main's plus nothing from A3 beyond PublishError::new being public, which the runtime bullet doesn't name; holds" }
+verified = { hash = "b3:e51476e405a5cf26", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#229, #230, #226 A3) into B9 at 0.15: took main's text and stamp, re-read; B9 touches only check_key's constructor in engine.rs; A3's text holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5248ce9c9c185f8d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14, item.set_source history) into A3: Outputs paragraph keeps A3's daemon opener line and main's Record sentence; Pipeline keeps the PublishError::new line; history paragraph is main's" }
+verified = { hash = "b3:cf9f2db47c4ece12", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#229, #230, #226 A3) into B9 at 0.15: took main's text and stamp, re-read; Graph::query answers delete.plan with no engine change; A3's text holds" }
 -->
 
 ### Engine and sessions
