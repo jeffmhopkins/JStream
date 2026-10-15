@@ -67,6 +67,11 @@ png = { version = "0.18", default-features = false }
 # The web UI framework (ADR-0045): client-side rendering only, no server functions or
 # hydration. Its `csr` feature also turns on `getrandom`'s browser backend.
 leptos = { version = "0.8", default-features = false, features = ["csr"] }
+# Property tests with shrinking (`jstream-graph`'s `tests/`), test-only. Held at 1.11:
+# 1.12 moves to `rand` 0.10, a second `rand` beside the 0.9 already in the tree
+# (R-DEP-005). No default features: no `fork`/`timeout` (`rusty-fork`, `tempfile`) and
+# no `bit-set`.
+proptest = { version = "~1.11", default-features = false, features = ["std"] }
 pulldown-cmark = { version = "0.13", default-features = false }
 # SHA-256 and the OS random source for OAuth PKCE (`jstream-youtube`). Already in the tree
 # as rustls' crypto provider (R-DEP-006), so this adds no crate; no default features.
