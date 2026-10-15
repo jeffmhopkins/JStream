@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:ae9bd9719a916622", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; server forwards history calls opaquely over WS and /mcp" }
+verified = { hash = "b3:0dc6e023484f7549", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: re-read; purpose (WebSocket API in front of dyn Control) holds with preview.rs added as a session helper" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e9892aea2e4a1928", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; per-session undo history wording holds; server forwards delete.plan as an opaque query" }
+verified = { hash = "b3:6805c7daa3ad03f4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: Sessions bullets: client binary messages get malformed; new Preview frames bullet matches session.rs (binary() after hello, FRAME_BUFFER 8, writer sends text before binary, KeyframeGate)" }
 -->
 
 ### Listening and admission
@@ -133,8 +133,16 @@ task speaks the envelope
   run; answers go back as they complete, carrying the client's request ID. A request
   before `hello` is answered by the session itself (`handshake_required`).
 - A message that doesn't parse gets a `malformed` error, with the request ID when one is
-  readable. Binary frames get `malformed` too, until binary streams are designed.
-  Messages over 4 MiB close the connection.
+  readable. A binary message from the client gets `malformed` too: binary frames only
+  go to the client. Messages over 4 MiB close the connection.
+- **Preview frames.** After a successful `hello` the task also opens the session's
+  binary channel (`Control::binary`) and sends each frame it yields as a WebSocket
+  binary message (`BinaryFrame::to_bytes`), so `preview.subscribe` works over the
+  wire. The frames have their own queue of 8 (`FRAME_BUFFER`), apart from the outbox:
+  the writer sends text before binary, so a picture never delays an answer, and when a
+  frame finds the queue full that channel's frames are dropped until a keyframe finds
+  room (`KeyframeGate`), so what the client receives decodes. The session's own queue
+  is bounded the same way, so a slow client holds a few pictures and nothing more.
 - **Request IDs.** A `Control` session assigns its own IDs, which appear in the
   `state.changed` events its calls cause. The task maps them back to the client's wire
   IDs, so a client matches its event to its response by the ID it chose, as in the

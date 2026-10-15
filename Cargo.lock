@@ -856,6 +856,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
+ "zune-jpeg",
 ]
 
 [[package]]

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:fd2f10fecf76c5ac", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6): daemon row is main's (loads and saves --collection) plus registering the virtual camera (--register-vcam); diagram unchanged" }
+verified = { hash = "b3:4458ed617ccb0220", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: diagram line now says binary frames carry preview, meters later" }
 -->
 
 ```
@@ -29,7 +29,7 @@ verified = { hash = "b3:fd2f10fecf76c5ac", by = "agent:claude@session_01Lx8gSdsa
    │ jstream-ui (Leptos→WASM)   jstream-mcp (MCP tools)   jstream-cli   3rd party │
    └───────────────┬──────────────────────────────────────────────────────────────┘
                    │  Control trait: in-process (InProcessControl), or WebSocket + token
-                   │  (JSON messages, including video.snapshot's PNG; binary frames later: preview, meters)
+                   │  (JSON messages, including video.snapshot's PNG; binary frames: preview, later meters)
                    ▼
 ┌───────────────────────────── jstream-core :: Engine ─────────────────────────────┐
 │ command bus → state (rev N) → events      per-client undo · audit log · persist │
@@ -386,7 +386,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:7d2feead6f32e91a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: Collector row now says the program stage's collector is fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs) and the mixer's own frees input rings; matches launch_program, push_each and Program::drop (render, mixer, then collector); render-snapshot paragraph holds" }
+verified = { hash = "b3:4d7179343d29d6fa", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: new Preview thread row matches preview/mod.rs (one per engine while streams are open, own compositor, lock-free render snapshot load, full queue not drawn)" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -403,6 +403,7 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
+| Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and reads the render snapshot without the lock. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release. |
 
@@ -519,7 +520,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:160cce3c32ad09ff", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; delete.plan and blockers at 0.15 beside main's 0.14 text; #203 changes no wire shape" }
+verified = { hash = "b3:dd16ec013497b518", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: Binary streams bullet describes 0.16's preview.subscribe, header and drop-to-keyframe, links protocol Design; meter frame still undesigned; pre-master default matches the privacy bullet" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -601,8 +602,16 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `scene.delete` or `source.delete` refused because something still refers to its
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
   [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
-- **Binary streams** (WebSocket binary frames): preview video and meters. Not designed
-  yet, except the meter frame's fields
+- **Binary streams** (WebSocket binary frames, protocol 0.16): preview video now, meters
+  later. `preview.subscribe` opens a stream of the program mix for the calling session,
+  scaled down, at most `fps` pictures a second and only when the mix changes, in H.264
+  when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the
+  session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
+  keyframe, size, presentation time, `rev`) and the picture, and every hop that queues
+  frames drops up to the next keyframe when full, so a slow client still decodes what
+  it gets. The layout is in
+  [jstream-protocol › Design](../crates/jstream-protocol/README.md#design). Not designed
+  yet: the meter frame, beyond its fields
   ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
   (4× oversampled, BS.1770); per bus, also momentary, short-term and integrated loudness
   (LUFS). Loudness is computed only for the master bus and for subscribed buses and
@@ -634,11 +643,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; tool list includes delete and encoder; tools.snap 146 KB, text says about 145 KB" }
+verified = { hash = "b3:f356862749786dee", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: tool list gains preview; new bullet that preview.subscribe fails over MCP; tools.snap now 151,791 bytes, text says about 150 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `preview`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -648,12 +657,15 @@ verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9f
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 145 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 150 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
+- **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
+  tool's `preview.subscribe` fails with `action_failed`; an agent looks with
+  `video.snapshot`.
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an

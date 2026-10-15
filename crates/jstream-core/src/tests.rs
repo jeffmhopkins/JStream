@@ -6,6 +6,7 @@
 mod audio;
 mod collection;
 mod history;
+mod preview;
 mod sources;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};

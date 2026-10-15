@@ -22,7 +22,7 @@ use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
-use crate::{HistoryCall, HistoryDirection, HistoryOp};
+use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -307,6 +307,14 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::OutputClearKey {
             output_id: OutputId::new("out_yt"),
         },
+        Action::PreviewSubscribe {
+            channel: 1,
+            max_width: Some(960),
+            max_height: None,
+            fps: Some(30),
+            codecs: vec![PreviewCodec::H264, PreviewCodec::Jpeg],
+        },
+        Action::PreviewUnsubscribe { channel: 1 },
     ]
 }
 

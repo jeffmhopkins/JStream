@@ -20,6 +20,7 @@ mod kind;
 mod output;
 #[cfg(feature = "fixtures")]
 pub mod parity;
+mod preview;
 mod query;
 mod schema;
 mod settings;
@@ -52,6 +53,10 @@ pub use kind::{
     VisibleIf, check_asset_path,
 };
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
+pub use preview::{
+    BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
+    PreviewCodec, PreviewSettings, StreamKind,
+};
 pub use query::{DeleteTarget, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};

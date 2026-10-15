@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:9b8119ee0c3297c6", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; contents list holds; mock.rs only swaps InvalidArgument literals for the constructor, including #203's running-output undo test" }
+verified = { hash = "b3:586e96587a96a5a4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: trait bullet names binary() and BinaryStream, matching control.rs and lib.rs exports" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -24,8 +24,9 @@ implementation. Layer 2: it builds on `jstream-protocol` (layer 1), is WASM-safe
 needs no async runtime from its callers (the native WebSocket client runs its own).
 
 Contents (a first cut; [Design](#design) explains the choices):
-- **The trait** (`control.rs`): `Control` with `hello`, `call` and `events`, and the
-  `BoxFuture`, `EventStream` and `MaybeSendSync` types that keep it dyn-compatible.
+- **The trait** (`control.rs`): `Control` with `hello`, `call`, `events` and
+  `binary`, and the `BoxFuture`, `EventStream`, `BinaryStream` and `MaybeSendSync`
+  types that keep it dyn-compatible.
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
 - **Mock** (`mock.rs`, feature `mock`): `MockEngine` and `MockControl`, an in-memory
@@ -44,7 +45,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:55afc10914989afb", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; #203's undo and redo bullet and B9's delete.plan internal / no blockers note both hold" }
+verified = { hash = "b3:8bf14044013e84e8", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: The trait gains binary() (one channel per session, reopening ends the previous, bounded and gated, default ends at once); WebSocket client parses binary messages into a 16-frame gated queue; matches ws.rs" }
 -->
 
 ### The trait
@@ -63,6 +64,13 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
 - `events() -> EventStream`: an independent subscription to every event emitted after
   the call, buffered until read, in emission order. It ends when the session or the
   engine goes away.
+- `binary() -> BinaryStream`: the session's binary channel, the preview frames of its
+  `preview.subscribe` streams (protocol 0.16). A session has one: opening it again
+  ends the one before and the streams on it, and `preview.subscribe` fails with
+  `action_failed` until it is open. Unlike events its frames are bounded: a reader
+  that falls behind loses frames up to the next keyframe (`KeyframeGate`), so what it
+  reads decodes. The default implementation is a stream that ends at once, for an
+  implementation with no binary channel (the mock, MCP).
 
 Every method takes `&self`, so a session can be shared as `Arc<dyn Control>` with
 several calls in flight.
@@ -229,7 +237,11 @@ native targets only, so a `wasm32` build never pulls tokio, even with `ws` on.
   `req_2`, … per session, and the server reports the `state.changed` event a call
   causes with that same ID. The connection thread routes each `response` or `error` to
   its waiting call by request ID (`welcome`, and an error without an ID, answer the
-  oldest pending `hello`) and fans `event`s out to the subscriptions.
+  oldest pending `hello`) and fans `event`s out to the subscriptions. Binary messages
+  are parsed as `BinaryFrame`s and queued for the stream `binary()` last opened, at
+  most 16 (`BINARY_BUFFER`), dropping up to a keyframe when full; an unreadable one is
+  skipped. The server opens its own side of the channel after `hello`, so frames
+  arrive once a `preview.subscribe` succeeds.
 - **Failures are `Disconnected`.** An invalid or `wss://` URL, an unreachable engine, or
   a refused upgrade (the reason names HTTP 401 for the token, 403 for `Origin` or
   `Host`) fails `connect`. When the socket closes, pending and later calls fail with

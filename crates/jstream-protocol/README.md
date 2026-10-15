@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:7087dc44ec771c09", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: version line says 0.15 for delete.plan and blockers, 0.14 references and clones; Queries bullet keeps encoder.list and adds delete.plan/DeleteTarget; Errors bullet names Blocker" }
+verified = { hash = "b3:faa9d468fee3cf9c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: Action list gains preview.subscribe/unsubscribe; new Preview streams bullet for preview.rs (codecs, settings, BinaryFrame/header, KeyframeGate); version line 0.16 for preview streams" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -40,7 +40,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `output.create`, `output.set_target`, `output.set_encoder`, `output.delete`,
   `encoder.create`, `encoder.update`, `encoder.delete`), with `ItemTransform`
   (deprecated), `Crop`, `SourceKind` and `SceneRole`;
-  `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
+  `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
+  `preview.subscribe`, `preview.unsubscribe`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
@@ -69,6 +70,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   shares them. No kind is defined here.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `events.dropped` and
   `stats.tick`.
+- **Preview streams** (`preview.rs`, [ADR-0002](../../docs/adr/0002-web-ui-everywhere.md)):
+  `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
+  their defaults and range checks, shared by every implementation), and the binary
+  frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
+  `to_bytes`/`parse` and `BinaryError`, and `KeyframeGate`, the drop rule every hop that
+  queues frames applies ([Binary streams](#design)).
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
@@ -85,8 +92,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.15 because of
-  `delete.plan` and the `blockers` detail on `invalid_argument`; 0.14 added references
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.16 because of
+  the preview streams (`preview.subscribe`, `preview.unsubscribe` and the binary
+  frame); 0.15 added `delete.plan` and the `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
   `item.move`, a scene's `role` and the placement edits' `scene_id`), 0.11 the canvas
@@ -118,7 +126,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:6b59c1521d465bbf", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; envelope example at 0.15; Deletes bullet, delete.plan in Queries, blockers row and OQ12 hold beside main's groups, encoder and references text; blockers doc says older than 0.15" }
+verified = { hash = "b3:f7f7612b6a116c5a", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: envelope example at minor 16; Binary streams section rewritten to the built design (subscribe semantics and defaults, 32-byte header table matching BinaryHeader::to_bytes/parse, end frame, overload gate, compatibility); matches preview.rs and command.rs docs" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -138,8 +146,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":15},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":15},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":16},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":16},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -673,14 +681,57 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   the engine's runtime source sizes, and live geometry values (ADR-0032's `live.set`),
   which need the live-value channel. Both are later minors.
 
-### Binary streams (deferred)
+### Binary streams
 
-Preview video and audio meters
-([ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol)) stay WebSocket binary
-frames, not designed yet except the meter frame's fields. Preview is the M2 low-res
-H.264 stream ([ROADMAP › M2](../../ROADMAP.md#m2)). They will travel with a small fixed
-header (stream ID, stream kind, the `rev` or media timestamp they show) and be opened
-and closed with JSON subscriptions. That header is part of the preview work.
+Preview video travels as WebSocket binary messages, one `BinaryFrame` each, alongside
+the JSON text messages of the same connection (0.16,
+[ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol),
+[ADR-0002](../../docs/adr/0002-web-ui-everywhere.md)). Audio meters will use the same
+frame with another kind; their fields are not designed yet beyond ADR-0028's list.
+
+- **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,
+  codecs?}` is an action: it opens a stream of the program mix for the calling
+  session only, tagged with the `channel` number the client chose (a `u32`, not an ID:
+  it only tells the session's streams apart in the frame header). The picture is the
+  canvas scaled down to fit `max_width` × `max_height` (default 640 × 360, at most
+  1920 × 1080) with even sides, so it follows `canvas.set_size`. A picture is sent when
+  what the program mix draws changes, at most `fps` times a second (default 15, at
+  most 30), and at least every 2 s as a keyframe. `codecs` lists what the client can
+  decode, most preferred first (default `["h264", "jpeg"]`); the engine uses the first
+  it can encode, and may fall back to a later one if an encoder fails to open, so each
+  frame names its codec. A session has at most 4 streams. `preview.unsubscribe
+  {channel}` closes one (and succeeds for a channel that isn't open); so does the
+  session's end. The stream shows the mix before any master stage, which is the
+  default ARCH asks for; a post-master option comes with that stage. Over MCP, which
+  has no binary channel, `preview.subscribe` fails with `action_failed`.
+- **The frame.** A fixed 32-byte little-endian header, then the payload:
+
+  | Offset | Size | Field |
+  |---|---|---|
+  | 0 | 1 | version, 1 |
+  | 1 | 1 | kind: 1 = preview |
+  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG |
+  | 3 | 1 | flags: bit 0 keyframe, bit 1 end of stream |
+  | 4 | 4 | channel |
+  | 8 | 2 | width |
+  | 10 | 2 | height |
+  | 12 | 4 | reserved, 0 |
+  | 16 | 8 | presentation time in µs since the stream opened (signed) |
+  | 24 | 8 | the `rev` the picture shows |
+
+  An H.264 payload is one access unit in Annex B form, with the parameter sets in band
+  at keyframes, which WebCodecs' `VideoDecoder` takes with no `description`. A JPEG
+  payload is a whole baseline JFIF picture, always a keyframe. An end frame (flag bit
+  1, codec 0) says the engine ended the stream; its payload is the reason as UTF-8, and
+  the channel is free again. A client ignores a frame whose version, kind or codec it
+  doesn't know, and the reserved bytes and spare flag bits.
+- **Overload.** Frames are never buffered without bound. Each hop that queues them (the
+  engine, the server, the WebSocket client) drops a frame that finds its queue full,
+  and every later frame of that channel until a keyframe finds room (`KeyframeGate`),
+  so what a client receives always decodes. The 2 s keyframe bounds the gap.
+- **Compatibility.** The header's version byte changes only with a new protocol major.
+  A new kind, codec or flag is a minor change, and a frame a client can't read is
+  skipped.
 
 `video.snapshot` is not one of those frames. M1a uses it so an agent can check a scene
 over the JSON API and over MCP ([ROADMAP › M1](../../ROADMAP.md#m1),

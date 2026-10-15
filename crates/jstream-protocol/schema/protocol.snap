@@ -82,6 +82,80 @@ source: crates/jstream-protocol/src/fixtures.rs
             "output_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "Opens a preview stream of the program mix for this session: low-resolution\npictures sent as binary frames on `channel`, only to this session (ADR-0002).\nThe picture is the canvas scaled down to fit `max_width` × `max_height`, with\neven sides; it follows the canvas when that changes. A picture is sent when what\nthe program mix draws changes, at most `fps` times a second, and at least once\nevery 2 s (a keyframe), so a client that lost frames recovers. The engine picks\nthe first of `codecs` it can encode, and every frame names its codec. The stream\nshows the mix before any master stage. It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nfifth open stream; and with `action_failed` when the session cannot receive\nbinary frames (an MCP session) or none of `codecs` can be encoded here.",
+          "properties": {
+            "channel": {
+              "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "codecs": {
+              "description": "The codecs the client can decode, most preferred first. Empty or omitted\nmeans `[\"h264\", \"jpeg\"]`.",
+              "items": {
+                "$ref": "#/$defs/PreviewCodec"
+              },
+              "type": "array"
+            },
+            "fps": {
+              "description": "Pictures per second, at most. Default 15.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "max_height": {
+              "description": "The tallest the picture may be, in pixels. Default 360.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "max_width": {
+              "description": "The widest the picture may be, in pixels. Default 640.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "preview.subscribe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Closes one of this session's preview streams. No end frame follows; frames\nalready sent may still arrive. Succeeds for a channel that is not open.",
+          "properties": {
+            "channel": {
+              "description": "The channel the stream was opened on.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "preview.unsubscribe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -2331,6 +2405,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "PreviewCodec": {
+      "description": "How a preview stream's pictures are encoded.",
+      "oneOf": [
+        {
+          "const": "h264",
+          "description": "H.264 access units in Annex B form (start codes, parameter sets in band), for\nWebCodecs' `VideoDecoder` with no `description`. A frame is a keyframe exactly\nwhen its header says so.",
+          "type": "string"
+        },
+        {
+          "const": "jpeg",
+          "description": "One baseline JPEG per frame, every one a keyframe. The fallback when the engine\nhas no H.264 encoder or the client can't decode H.264.",
+          "type": "string"
+        }
+      ]
+    },
     "ProtocolVersion": {
       "description": "A protocol version: `major.minor`. Patch releases never change the wire format, so\nthey are not part of it.",
       "properties": {
@@ -3630,5 +3719,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.15"
+  "title": "JStream protocol 0.16"
 }
