@@ -237,10 +237,20 @@ fn shutdown_over_tls_honours_the_write_deadline() {
         .shutdown()
         .expect_err("close_notify was sent past the deadline");
     assert_eq!(err.kind(), io::ErrorKind::TimedOut, "{err:?}");
-    // Held until the server has read the end, so it sees the shutdown's FIN and not
-    // the reset a drop with unread session tickets would send.
+    // Held until the server has read the end, so whatever end it sees came from the
+    // shutdown, not from a drop.
     let ended = server.join().unwrap().unwrap();
     drop(t);
-    // A clean TLS close reads as `Ok`; an end with no `close_notify` is `UnexpectedEof`.
-    assert_eq!(ended, Err(io::ErrorKind::UnexpectedEof));
+    // A clean TLS close reads as `Ok`, and no shutdown as the read timeout. The
+    // shutdown's FIN, with no `close_notify`, is `UnexpectedEof`; Windows aborts the
+    // connection instead when the client has left the session tickets unread.
+    assert!(
+        matches!(
+            ended,
+            Err(io::ErrorKind::UnexpectedEof
+                | io::ErrorKind::ConnectionAborted
+                | io::ErrorKind::ConnectionReset)
+        ),
+        "the server saw {ended:?}"
+    );
 }

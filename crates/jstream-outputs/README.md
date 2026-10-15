@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:334446b7785baa52", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "#236: Transport bullet now says shutdown shuts the socket down even when close_notify fails; re-read the section against transport.rs (shutdown, unless_peer_gone); the Tests paragraph's shutdown close_notify test still holds; holds" }
+verified = { hash = "b3:913f0d20d68577bb", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "#237 Windows CI fix: only the shutdown test's server assertion changed (also accepts the abort Windows sends); re-read the Transport bullet and Tests paragraph, which still describe the shutdown close_notify test and shutdown behaviour; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
