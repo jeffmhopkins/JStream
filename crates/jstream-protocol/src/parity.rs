@@ -10,9 +10,6 @@
 //! Docs: crates/jstream-protocol/README.md#purpose
 
 use crate::{
-    AudioFollow, BusId, BusInfo, SendInfo, SourceAudio,
-};
-use crate::{
     AudioCodec, AudioEncoding, Batch, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId,
     EncoderProfileInfo, EntityKind, Finite32, FitMode, HardwarePreference, ItemGeometry, ItemId,
     ItemInfo, ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind,
@@ -20,6 +17,7 @@ use crate::{
     RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId, SourceInfo,
     SourceKind, Vec2, VideoCodec, VideoEncoding,
 };
+use crate::{AudioFollow, BusId, BusInfo, SendInfo, SourceAudio};
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
 /// applied to it: the batch is applied as one batch, so exactly one revision later.

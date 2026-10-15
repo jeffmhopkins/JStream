@@ -4,7 +4,38 @@ source: crates/jstream-mcp/src/tests.rs
 {
   "tools": [
     {
-      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `canvas`, `encoder`, `item`, `output`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `audio` operation: set `op.type` to one of `audio.reset_loudness` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `audio` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Restarts the master bus's integrated loudness measurement (ADR-0028). Meters are\nruntime state, so this is an action, never an edit. Succeeds, doing nothing, while\nthe mixer isn't running.",
+                "properties": {
+                  "type": {
+                    "const": "audio.reset_loudness",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "audio"
+    },
+    {
+      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `bus`, `canvas`, `encoder`, `item`, `output`, `scene`, `send`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "AudioCodec": {
@@ -36,6 +67,25 @@ source: crates/jstream-mcp/src/tests.rs
               "kbps"
             ],
             "type": "object"
+          },
+          "AudioFollow": {
+            "description": "When a source's audio is heard (ADR-0028, D18). Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "always",
+                "description": "Heard whether or not the source is on program: microphones and other audio\ninputs, desktop and application audio.",
+                "type": "string"
+              },
+              {
+                "const": "when_shown",
+                "description": "Heard only while the source is shown on the Program mix, fading with the\ntransition that shows or hides it: browser, media, webcam audio and nested\nscenes.",
+                "type": "string"
+              }
+            ]
+          },
+          "BusId": {
+            "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
+            "type": "string"
           },
           "Crop": {
             "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
@@ -446,7 +496,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Adds a source to the collection. It appears in no scene until an `item.add`\nplaces it. Inverse: `source.delete`.",
+                "description": "Adds a source to the collection. It appears in no scene until an `item.add`\nplaces it. An audio source (its kind produces audio, or it is a `scene` source)\nstarts with its kind's default audio settings, and one that is not a `scene`\nsource sends to the master bus at 0 dB (ADR-0028). Inverse: `source.delete`.",
                 "properties": {
                   "duplicated_from": {
                     "anyOf": [
@@ -535,7 +585,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Copies a source under a new ID: a separate instance with the same kind and\nsettings, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
+                "description": "Copies a source under a new ID: a separate instance with the same kind,\nsettings, audio settings and sends, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
                 "properties": {
                   "name": {
                     "description": "The copy's display name.",
@@ -563,7 +613,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Deleting a source that others were\ncopied from is allowed: their `duplicated_from` then reads as absent. Inverse:\n`source.create` with its name, kind, settings and `duplicated_from`.",
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Deleting a source that others were\ncopied from is allowed: their `duplicated_from` then reads as absent. Its sends go\nwith it. Inverse: `source.create` with its name, kind, settings and\n`duplicated_from`, then `send.remove` of its master send if it had none,\n`send.set` for each send that `source.create` doesn't restore as it was, and\n`source.set_audio` if its audio settings were not the defaults.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -797,6 +847,211 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "profile_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
+                "properties": {
+                  "enabled": {
+                    "description": "Whether the engine opens the source's audio. Off keeps its sends, inactive.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "follow": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/AudioFollow"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "When the source is heard."
+                  },
+                  "gain_db": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The fader, in dB."
+                  },
+                  "muted": {
+                    "description": "Whether it is muted.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to change."
+                  },
+                  "type": {
+                    "const": "source.set_audio",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Adds a bus, at 0 dB, unmuted, with no sends into it. A collection holds at most\n16 buses, the master included; one more is `invalid_argument`. Inverse:\n`bus.delete`.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The new bus's ID, chosen by the client. Rejected if it exists, so `master` is\nalways taken."
+                  },
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "bus.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Renames a bus, the master included. Inverse: `bus.rename` back to the previous\nname.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus to rename."
+                  },
+                  "name": {
+                    "description": "The new display name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "bus.rename",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes a bus's fader or mute, the master's included: the fields sent change,\nand sending neither is `invalid_argument`, as is a gain outside −100 to +24 dB.\nInverse: `bus.set_fader` with the previous values of the fields sent.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus to change."
+                  },
+                  "gain_db": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The fader, in dB, applied after the bus's sum."
+                  },
+                  "muted": {
+                    "description": "Whether the bus is muted.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "bus.set_fader",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`). Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus to delete."
+                  },
+                  "type": {
+                    "const": "bus.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sends a source into a bus at a gain, post-fader, or changes that send's gain.\nThe source must be an audio source that is not a `scene` source, which has no\nsends of its own (`invalid_argument` on `source_id`), and the gain must be from\n−100 to +24 dB. Buses never feed other buses (ADR-0028), so sends can't form a\ncycle. Inverse: `send.remove` for a new send, else `send.set` with the previous\ngain.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus it sends into."
+                  },
+                  "gain_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The send's gain, in dB."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source sending."
+                  },
+                  "type": {
+                    "const": "send.set",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "bus_id",
+                  "gain_db"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Stops a source sending into a bus. No such send is `invalid_argument` on\n`bus_id`. Inverse: `send.set` with its gain.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus it sends into."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source sending."
+                  },
+                  "type": {
+                    "const": "send.remove",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "bus_id"
                 ],
                 "type": "object"
               }
@@ -1282,6 +1537,180 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "batch"
     },
     {
+      "description": "Runs one `bus` operation: set `op.type` to one of `bus.create` (edit), `bus.rename` (edit), `bus.set_fader` (edit), `bus.delete` (edit), `bus.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "BusId": {
+            "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
+            "type": "string"
+          },
+          "Finite32": {
+            "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
+            "format": "float",
+            "type": "number"
+          },
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `bus` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Adds a bus, at 0 dB, unmuted, with no sends into it. A collection holds at most\n16 buses, the master included; one more is `invalid_argument`. Inverse:\n`bus.delete`.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The new bus's ID, chosen by the client. Rejected if it exists, so `master` is\nalways taken."
+                  },
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "bus.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Renames a bus, the master included. Inverse: `bus.rename` back to the previous\nname.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus to rename."
+                  },
+                  "name": {
+                    "description": "The new display name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "bus.rename",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes a bus's fader or mute, the master's included: the fields sent change,\nand sending neither is `invalid_argument`, as is a gain outside −100 to +24 dB.\nInverse: `bus.set_fader` with the previous values of the fields sent.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus to change."
+                  },
+                  "gain_db": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The fader, in dB, applied after the bus's sum."
+                  },
+                  "muted": {
+                    "description": "Whether the bus is muted.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "bus.set_fader",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`). Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus to delete."
+                  },
+                  "type": {
+                    "const": "bus.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists the collection's audio buses, ordered by ID, and every send into them.",
+                "properties": {
+                  "type": {
+                    "const": "bus.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "bus"
+    },
+    {
       "description": "Runs one `canvas` operation: set `op.type` to one of `canvas.set_size` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
@@ -1672,7 +2101,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "encoder"
     },
     {
-      "description": "Returns the engine's events after the cursor `after`, oldest first, without waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` say whose batch did it) and `output.state_changed`, from every client, yours included, and `events.dropped` (the server dropped `count` events because this session fell behind; re-read the state). The once-a-second `stats.tick` is not in `events`: each read returns the newest one as `stats` (running drop totals). Each comes with a `seq`, a sequence number of this MCP server, starting at 1 when your first call opened the session. Pass the returned `next` as `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At most 100 events come back at once; `more` says others are waiting. The server keeps the last 1000: `dropped` counts events after your cursor that were discarded before you read them, so re-read the state if it is not 0. `ended` means the session is gone and no more events will come.",
+      "description": "Returns the engine's events after the cursor `after`, oldest first, without waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` say whose batch did it) and `output.state_changed`, from every client, yours included, and `events.dropped` (the server dropped `count` events because this session fell behind; re-read the state). The once-a-second `stats.tick` is not in `events`: each read returns the newest one as `stats` (running drop totals). Nor is `meters.tick`, about ten a second while the mixer runs: each read returns the newest one as `meters` (each source's and bus's audio levels, and the master's loudness). Each comes with a `seq`, a sequence number of this MCP server, starting at 1 when your first call opened the session. Pass the returned `next` as `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At most 100 events come back at once; `more` says others are waiting. The server keeps the last 1000: `dropped` counts events after your cursor that were discarded before you read them, so re-read the state if it is not 0. `ended` means the session is gone and no more events will come.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2893,9 +3322,145 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "scene"
     },
     {
-      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `send` operation: set `op.type` to one of `send.set` (edit), `send.remove` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "BusId": {
+            "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
+            "type": "string"
+          },
+          "Finite32": {
+            "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
+            "format": "float",
+            "type": "number"
+          },
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "SourceId": {
+            "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `send` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Sends a source into a bus at a gain, post-fader, or changes that send's gain.\nThe source must be an audio source that is not a `scene` source, which has no\nsends of its own (`invalid_argument` on `source_id`), and the gain must be from\n−100 to +24 dB. Buses never feed other buses (ADR-0028), so sends can't form a\ncycle. Inverse: `send.remove` for a new send, else `send.set` with the previous\ngain.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus it sends into."
+                  },
+                  "gain_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The send's gain, in dB."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source sending."
+                  },
+                  "type": {
+                    "const": "send.set",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "bus_id",
+                  "gain_db"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Stops a source sending into a bus. No such send is `invalid_argument` on\n`bus_id`. Inverse: `send.set` with its gain.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus it sends into."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source sending."
+                  },
+                  "type": {
+                    "const": "send.remove",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "bus_id"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "send"
+    },
+    {
+      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_audio` (edit), `source.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "AudioFollow": {
+            "description": "When a source's audio is heard (ADR-0028, D18). Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "always",
+                "description": "Heard whether or not the source is on program: microphones and other audio\ninputs, desktop and application audio.",
+                "type": "string"
+              },
+              {
+                "const": "when_shown",
+                "description": "Heard only while the source is shown on the Program mix, fading with the\ntransition that shows or hides it: browser, media, webcam audio and nested\nscenes.",
+                "type": "string"
+              }
+            ]
+          },
+          "Finite32": {
+            "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
+            "format": "float",
+            "type": "number"
+          },
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
@@ -2989,7 +3554,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `source` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Adds a source to the collection. It appears in no scene until an `item.add`\nplaces it. Inverse: `source.delete`.",
+                "description": "Adds a source to the collection. It appears in no scene until an `item.add`\nplaces it. An audio source (its kind produces audio, or it is a `scene` source)\nstarts with its kind's default audio settings, and one that is not a `scene`\nsource sends to the master bus at 0 dB (ADR-0028). Inverse: `source.delete`.",
                 "properties": {
                   "duplicated_from": {
                     "anyOf": [
@@ -3078,7 +3643,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Copies a source under a new ID: a separate instance with the same kind and\nsettings, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
+                "description": "Copies a source under a new ID: a separate instance with the same kind,\nsettings, audio settings and sends, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
                 "properties": {
                   "name": {
                     "description": "The copy's display name.",
@@ -3106,7 +3671,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Deleting a source that others were\ncopied from is allowed: their `duplicated_from` then reads as absent. Inverse:\n`source.create` with its name, kind, settings and `duplicated_from`.",
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Deleting a source that others were\ncopied from is allowed: their `duplicated_from` then reads as absent. Its sends go\nwith it. Inverse: `source.create` with its name, kind, settings and\n`duplicated_from`, then `send.remove` of its master send if it had none,\n`send.set` for each send that `source.create` doesn't restore as it was, and\n`source.set_audio` if its audio settings were not the defaults.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -3114,6 +3679,60 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "type": {
                     "const": "source.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
+                "properties": {
+                  "enabled": {
+                    "description": "Whether the engine opens the source's audio. Off keeps its sends, inactive.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "follow": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/AudioFollow"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "When the source is heard."
+                  },
+                  "gain_db": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The fader, in dB."
+                  },
+                  "muted": {
+                    "description": "Whether it is muted.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to change."
+                  },
+                  "type": {
+                    "const": "source.set_audio",
                     "type": "string"
                   }
                 },
@@ -3155,7 +3774,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `state` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, every output and every encoder profile) at one revision: what a client\nreads on connecting, after a `state.changed` it didn't cause, or before an edit it\nsends with `expected_rev`.",
+                "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, every output, every encoder profile, and the buses and sends) at one\nrevision: what a client\nreads on connecting, after a `state.changed` it didn't cause, or before an edit it\nsends with `expected_rev`.",
                 "properties": {
                   "type": {
                     "const": "state.get",

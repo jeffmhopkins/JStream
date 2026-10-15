@@ -185,7 +185,8 @@ the buffer nor the `Control`'s own stream grows while the agent is idle. It keep
 Consequences). A tick carries running totals, so the feed keeps only the newest one,
 outside the buffer, and every read returns it as `stats`; an agent still sees the drop
 counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
-counted in `dropped`. A read drains
+counted in `dropped`. `meters.tick`, about ten a second while the mixer runs, is kept
+the same way as `meters`: each one is a full reading of the levels. A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 
@@ -197,6 +198,7 @@ then returns at most `PAGE_SIZE` events after `after`:
 | `more` | further events are buffered after `next` |
 | `ended` | the subscription has ended with the session; no more events will come |
 | `stats` | the newest `stats.tick`, kept outside the buffer; absent until the first tick |
+| `meters` | the newest `meters.tick`, kept outside the buffer; absent until the first tick |
 
 An `events.dropped` event among `events` is a different gap: over the WebSocket API,
 `jstream-server` dropped events this session's connection had not read yet

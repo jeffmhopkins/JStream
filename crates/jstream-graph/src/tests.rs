@@ -2,11 +2,11 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    AudioFollow, BusId, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, EntityKind, Finite32, FitMode,
-    ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputInfo,
-    OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query, QueryResult,
-    RecordContainer, Rev, RtmpTarget, SceneId, SceneRole, Settings, Size, SourceAudio, SourceId,
-    SourceKind, Vec2,
+    AudioFollow, BusId, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, EntityKind, Finite32,
+    FitMode, ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId,
+    OutputInfo, OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query,
+    QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SceneRole, Settings, Size, SourceAudio,
+    SourceId, SourceKind, Vec2,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -987,9 +987,9 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        AudioFollow, BusId, Crop, Edit, EncoderProfile, EncoderProfileId, Finite32, FitMode, ItemGeometry, ItemId,
-        ItemTransform, OutputId, RateControl, Rev, SceneId, SceneRole, Settings, Size, SourceId,
-        SourceKind, Vec2,
+        AudioFollow, BusId, Crop, Edit, EncoderProfile, EncoderProfileId, Finite32, FitMode,
+        ItemGeometry, ItemId, ItemTransform, OutputId, RateControl, Rev, SceneId, SceneRole,
+        Settings, Size, SourceId, SourceKind, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -2707,7 +2707,11 @@ fn new_sources_get_their_kinds_audio_defaults() {
     let mut graph = fixture();
     apply_ok(&mut graph, vec![tone_create("t")]);
     let state = graph.state();
-    let audio = |id: &str| state.source(&SourceId::new(id)).and_then(|s| s.audio().copied());
+    let audio = |id: &str| {
+        state
+            .source(&SourceId::new(id))
+            .and_then(|s| s.audio().copied())
+    };
     assert_eq!(audio("t"), Some(SourceAudio::new(AudioFollow::Always)));
     assert_eq!(audio("sa"), Some(SourceAudio::new(AudioFollow::WhenShown)));
     assert_eq!(audio("cam"), None);

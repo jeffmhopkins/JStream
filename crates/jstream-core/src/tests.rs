@@ -3,6 +3,7 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod audio;
 mod collection;
 mod history;
 mod sources;
@@ -133,6 +134,12 @@ fn scene_ids(control: &dyn Control) -> (Rev, Vec<String>) {
         ),
         other => panic!("not a scene list: {other:?}"),
     }
+}
+
+/// An engine that describes every kind of the parity fixture: the built-in ones, and
+/// `mic` until C5 adds the audio kinds.
+fn parity_engine() -> Engine {
+    Engine::new().with_extra_kinds(parity::kinds())
 }
 
 pub(crate) fn check_stale_expected_rev_is_rejected() {
@@ -395,7 +402,7 @@ fn kinds_are_described_and_settings_checked() {
 /// expects, the answers `jstream-graph` and the mock are held to.
 #[test]
 fn queries_match_the_parity_fixture() {
-    let engine = Engine::new().with_output(OutputId::new("rec"));
+    let engine = parity_engine().with_output(OutputId::new("rec"));
     let control = connected(&engine);
     assert_eq!(
         batch(&control, parity::collection()),
@@ -774,10 +781,12 @@ fn the_engine_answers_like_the_mock() {
         },
     ];
 
-    let engine = Engine::new().with_output(OutputId::new("yt"));
+    let engine = parity_engine().with_output(OutputId::new("yt"));
     let real = connected(&engine);
     let mut real_events = real.events();
-    let mock_engine = MockEngine::new().with_output(OutputId::new("yt"));
+    let mock_engine = MockEngine::new()
+        .with_kinds(parity::kinds())
+        .with_output(OutputId::new("yt"));
     let mock = mock_engine.connect();
     block_on(mock.hello(hello())).expect("mock handshake");
     let mut mock_events = mock.events();
@@ -1470,14 +1479,14 @@ pub(crate) fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The output states among the buffered events. `stats.tick` is skipped: the
-/// pipeline emits one about once a second and a final one when it stops.
+/// The output states among the buffered events. `stats.tick` and `meters.tick` are
+/// skipped: the pipeline emits them while it runs, and a final `stats.tick` when it stops.
 fn output_steps(events: &mut EventStream) -> Vec<OutputState> {
     drain(events)
         .into_iter()
         .filter_map(|event| match event {
             Event::OutputStateChanged { state, .. } => Some(state),
-            Event::StatsTick { .. } => None,
+            Event::StatsTick { .. } | Event::MetersTick { .. } => None,
             other => panic!("unexpected event {other:?}"),
         })
         .collect()

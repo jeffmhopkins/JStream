@@ -7,6 +7,7 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::audio::{AudioRouting, MixerHandles};
 use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
@@ -208,6 +209,7 @@ impl Engine {
                 .live
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
+            state.audio.sync(state.graph.state());
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             *file = Some(opened);
@@ -362,6 +364,50 @@ impl Engine {
                 None
             }
         }
+    }
+
+    /// Routes the collection's audio into the program's mixer, until the returned
+    /// closure is called, when the program stops. The closure holds the collection, not
+    /// the [`MediaHost`], like the ticker.
+    pub(crate) fn attach_mixer(&self, mixer: MixerHandles) -> Box<dyn FnOnce() + Send> {
+        let generation = {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state.audio.attach(mixer, state.graph.state())
+        };
+        let shared = Arc::clone(&self.shared);
+        Box::new(move || lock(&shared.state).audio.detach(generation))
+    }
+
+    /// Adds kinds the built-in registry doesn't have yet: the parity fixture's `mic`,
+    /// an audio input, until C5 adds the audio kinds.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_extra_kinds(self, kinds: Vec<jstream_protocol::KindDescriptor>) -> Self {
+        {
+            let mut state = lock(&self.shared.state);
+            let graph = std::mem::take(&mut state.graph);
+            state.graph = graph.with_kinds(kinds);
+        }
+        self
+    }
+
+    /// Emits one `meters.tick` now, if the program mixer runs. The stats ticker calls
+    /// this about ten times a second.
+    #[cfg(test)]
+    pub(crate) fn emit_meters_tick(&self) {
+        let mut wake = Vec::new();
+        lock(&self.shared.state).emit_meters(&mut wake);
+        wake_all(wake);
+    }
+
+    /// Routes `source_id`'s mixer input as the collection says (tests; C5's sources
+    /// will open inputs).
+    #[cfg(test)]
+    pub(crate) fn set_audio_input(&self, source_id: SourceId, input: jstream_audio::InputControl) {
+        let mut state = lock(&self.shared.state);
+        let state = &mut *state;
+        state.audio.set_input(source_id, input, state.graph.state());
     }
 
     /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
@@ -1380,7 +1426,8 @@ fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     }
 }
 
-/// Wakes every 100 ms so a stop joins promptly, and emits once those waits add up to a second.
+/// Wakes every 100 ms so a stop joins promptly, emits `meters.tick` on each wake, and
+/// `stats.tick` once those waits add up to a second.
 fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<AtomicBool>) {
     let mut waited_ms = 0u32;
     while !stop.load(Ordering::Relaxed) {
@@ -1388,6 +1435,9 @@ fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<A
         if stop.load(Ordering::Relaxed) {
             break;
         }
+        let mut wake = Vec::new();
+        lock(&shared.state).emit_meters(&mut wake);
+        wake_all(wake);
         waited_ms += 100;
         if waited_ms < 1_000 {
             continue;
@@ -1449,6 +1499,8 @@ struct State {
     render: Arc<RenderHub>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
+    /// The program mixer's controls while it runs: it follows the collection's audio.
+    audio: AudioRouting,
 }
 
 impl State {
@@ -1615,8 +1667,8 @@ impl State {
         Ok(result)
     }
 
-    /// What follows every applied batch, undo and redo: the outputs follow the
-    /// collection, a deleted source's stored frame goes (unless the same edits made a
+    /// What follows every applied batch, undo and redo: the outputs, the live sources and
+    /// the program mixer follow the collection, a deleted source's stored frame goes (unless the same edits made a
     /// new source under its id), and `state.changed` is emitted.
     fn changed(
         &mut self,
@@ -1629,6 +1681,7 @@ impl State {
     ) {
         self.outputs.sync(self.graph.state());
         self.live.sync(self.graph.state());
+        self.audio.sync(self.graph.state());
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -1656,6 +1709,12 @@ impl State {
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
+            // Restarts the master's integrated loudness, if the mixer runs; there is
+            // nothing to restart otherwise, which is no failure.
+            Action::AudioResetLoudness {} => {
+                self.audio.reset_loudness();
+                return Ok(CallResult::Action {});
+            }
             other => return Err(not_implemented(other.name())),
         };
         for state in self.outputs.transition(&output_id, start)? {
@@ -1710,6 +1769,14 @@ impl State {
         });
         render.publish(shot);
         live.wake_at(wake);
+    }
+
+    /// Emits one `meters.tick`, if the program mixer runs.
+    fn emit_meters(&mut self, wake: &mut Vec<Waker>) {
+        if let Some((sources, buses)) = self.audio.meters() {
+            self.subscribers
+                .emit(&Event::MetersTick { sources, buses }, wake);
+        }
     }
 
     fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {

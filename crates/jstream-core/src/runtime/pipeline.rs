@@ -49,6 +49,7 @@ use jstream_protocol::{
 };
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
 
+use crate::audio::{MasterMetering, MixerHandles};
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, AudioInputDrops, DropGuard, DropSnapshot, FnDropSource,
     VideoEncodeDrops, capture_drops, output_packet_drops, render_tick_drops,
@@ -316,6 +317,8 @@ pub(crate) struct Program {
     /// Emits one last `stats.tick` once the threads have stopped and the sources are
     /// latched, so the run's final drops are reported when it ends.
     final_tick: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    /// Stops the engine routing the collection's audio into this program's mixer.
+    detach_audio: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
 
 impl Program {
@@ -380,6 +383,14 @@ impl Program {
 
 impl Drop for Program {
     fn drop(&mut self) {
+        let detach = self
+            .detach_audio
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(detach) = detach {
+            detach();
+        }
         self.stop.store(true, Ordering::Release);
         join("render", self.render.take());
         join("mixer", self.mixer.take());
@@ -723,6 +734,8 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     // The mixer timestamps its first block `latency` before the clock, so a stream's
     // origin sits that far back. Later blocks and frames stay at or after it.
     let latency = mixer_latency(parts.clock.as_ref(), &mixer)?;
+    let mixer_control = mixer.control();
+    let (metering, master_meters) = MasterMetering::new(mixer.config().sample_rate)?;
     let capture_drops = DropSnapshot::new();
     let stop = Arc::new(AtomicBool::new(false));
     let readbacks = Arc::new(AtomicU64::new(0));
@@ -779,7 +792,8 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         let stop = Arc::clone(&stop);
         let fail = fail_tx;
         let collector = mixer_collector;
-        move || mixer_thread(mixer, clock, audio_inputs, format, stop, fail, &collector)
+        let mixing = Mixing { mixer, metering };
+        move || mixer_thread(mixing, clock, audio_inputs, format, stop, fail, &collector)
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -812,10 +826,17 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         drop_guard: None,
         ticker: None,
         final_tick: Mutex::new(None),
+        detach_audio: Mutex::new(None),
     };
     match ready_rx.recv_timeout(parts.open_timeout) {
         Ok(Ok(())) => {
             program.arm_stats(engine);
+            let detach = engine.attach_mixer(MixerHandles {
+                control: mixer_control,
+                master: program.bus.clone(),
+                meters: master_meters,
+            });
+            *lock(&program.detach_audio) = Some(detach);
             Ok(Arc::new(program))
         }
         Ok(Err(reason)) => {
@@ -1451,7 +1472,7 @@ fn push_each<T>(targets: &mut Vec<T>, mut push: impl FnMut(&T) -> bool, mut reti
 /// The mixer thread's boundary: a panic is caught and reported as fatal. The encoders
 /// then get no more audio, so the outputs cannot keep running.
 fn mixer_thread(
-    mixer: Mixer,
+    mixing: Mixing,
     clock: Arc<dyn MediaClock>,
     inputs: Receiver<AudioInput>,
     format: AudioFormat,
@@ -1461,7 +1482,7 @@ fn mixer_thread(
 ) {
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
         mixer_loop(
-            mixer,
+            mixing,
             clock.as_ref(),
             &inputs,
             format,
@@ -1478,12 +1499,22 @@ fn mixer_thread(
     }
 }
 
-/// Mixes on the media clock, and pushes each block into every encoder session the
+/// What the mixer thread owns: the mixer, and the master's true-peak and loudness
+/// meters, which it runs on every block.
+struct Mixing {
+    mixer: Mixer,
+    metering: MasterMetering,
+}
+
+/// Mixes on the media clock, meters the master, and pushes each block into every encoder session the
 /// program has handed it, letting go of one that has finished. A rejected block or a
 /// poll error is fatal: both mean the mixer and the encoder disagree about the format,
 /// which no retry fixes.
 fn mixer_loop(
-    mut mixer: Mixer,
+    Mixing {
+        mut mixer,
+        mut metering,
+    }: Mixing,
     clock: &dyn MediaClock,
     inputs: &Receiver<AudioInput>,
     format: AudioFormat,
@@ -1497,6 +1528,7 @@ fn mixer_loop(
     'mix: while !stop.load(Ordering::Relaxed) {
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
+                metering.process(&samples);
                 targets.extend(inputs.try_iter());
                 let mut rejected = None;
                 // The mix itself does not allocate. `AudioInput::push` takes an owned

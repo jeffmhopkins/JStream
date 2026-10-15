@@ -266,6 +266,9 @@ impl Mixer {
     /// silence before the first. `None` when the mixer does not hold that bus: it was
     /// removed, or the mixer has not applied its addition yet.
     pub fn bus_block(&self, bus: BusId) -> Option<&[f32]> {
+        if !bus.belongs_to(self.plane.tag()) {
+            return None;
+        }
         let slot = self.buses.get(bus.slot)?.as_ref()?;
         if slot.id != bus.id {
             return None;
@@ -531,7 +534,7 @@ impl MixerControl {
     pub fn add_bus(&self) -> Result<BusControl, AudioError> {
         let (slot, id, shared) = self.plane.add_bus()?;
         Ok(BusControl::new(
-            BusId { slot, id },
+            BusId::new(slot, id, self.plane.tag()),
             shared,
             Arc::clone(&self.plane),
         ))

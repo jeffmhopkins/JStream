@@ -19,12 +19,15 @@ pub struct InputId(pub(crate) u64);
 
 /// One mixer's bus. Opaque: [`BusControl::id`] produces one, and [`BusId::MASTER`]
 /// names the master bus. Ids are never reused within a mixer, so the id of a removed
-/// bus never names a later one.
+/// bus never names a later one. Each id is tagged with its mixer: an input, or
+/// [`Mixer::bus_block`](crate::Mixer::bus_block), ignores another mixer's bus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct BusId {
     /// The mixer's buffer slot for the bus.
     pub(crate) slot: usize,
     pub(crate) id: u64,
+    /// The mixer's tag; 0 for [`BusId::MASTER`], which names every mixer's master.
+    mixer: u64,
 }
 
 impl BusId {
@@ -32,7 +35,17 @@ impl BusId {
     pub const MASTER: Self = Self {
         slot: 0,
         id: MASTER_ID,
+        mixer: 0,
     };
+
+    pub(crate) fn new(slot: usize, id: u64, mixer: u64) -> Self {
+        Self { slot, id, mixer }
+    }
+
+    /// Whether this names a bus of the mixer tagged `mixer`.
+    pub(crate) fn belongs_to(self, mixer: u64) -> bool {
+        self.mixer == 0 || self.mixer == mixer
+    }
 }
 
 /// Controls and observes one mixer input: the source's fader and mute, and its row of
@@ -108,9 +121,11 @@ impl InputControl {
     /// Sends the input into `bus` (post-fader) at `gain`, linear, or changes that
     /// send's gain. Clamped to 0..=+24 dB; NaN changes nothing. The mixer ramps to it
     /// over one block, from silence for a new send. A send to a bus that is later
-    /// removed does nothing. `bus` must belong to this input's mixer.
+    /// removed does nothing, and so does a send to another mixer's bus.
     pub fn set_send(&self, bus: BusId, gain: f32) {
-        self.shared.sends.set(bus.slot, bus.id, gain);
+        if bus.belongs_to(self.plane.tag()) {
+            self.shared.sends.set(bus.slot, bus.id, gain);
+        }
     }
 
     /// [`Self::set_send`] in dB (`-inf` keeps the send, silent).
@@ -119,13 +134,17 @@ impl InputControl {
     }
 
     /// Stops sending the input into `bus`; the mixer ramps the send out over one block.
-    /// False when there was no such send.
+    /// False when there was no such send, as for another mixer's bus.
     pub fn remove_send(&self, bus: BusId) -> bool {
-        self.shared.sends.clear(bus.slot, bus.id)
+        bus.belongs_to(self.plane.tag()) && self.shared.sends.clear(bus.slot, bus.id)
     }
 
-    /// The linear gain of the input's send into `bus`, if it has one.
+    /// The linear gain of the input's send into `bus`, if it has one. `None` for
+    /// another mixer's bus.
     pub fn send(&self, bus: BusId) -> Option<f32> {
+        if !bus.belongs_to(self.plane.tag()) {
+            return None;
+        }
         self.shared.sends.get(bus.slot, bus.id)
     }
 
@@ -281,4 +300,35 @@ pub struct BusStats {
     /// Engine frames skipped because the mixer fell more than half a ring behind the
     /// clock. Counted on the master bus only; every bus skips the same frames.
     pub skipped_frames: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BusId;
+    use crate::{Mixer, MixerConfig};
+    use jstream_media::{AudioFormat, ChannelLayout, SampleFormat};
+
+    /// Another mixer's bus is refused (#228 N2); every mixer's master is the same id.
+    #[test]
+    fn a_bus_of_another_mixer_is_ignored() {
+        let format = AudioFormat::new(48_000, ChannelLayout::Stereo, SampleFormat::F32Interleaved)
+            .expect("valid format");
+        let mut a = Mixer::new(MixerConfig::default()).expect("mixer");
+        let mut b = Mixer::new(MixerConfig::default()).expect("mixer");
+        let (_producer, input) = a.add_input(format).expect("input");
+        let own = a.add_bus().expect("bus");
+        let foreign = b.add_bus().expect("bus");
+        // Both are the first extra bus of their mixer: the same slot and number.
+        assert_ne!(own.id(), foreign.id());
+        input.set_send(foreign.id(), 0.5);
+        assert_eq!(input.send(foreign.id()), None);
+        assert!(!input.remove_send(foreign.id()));
+        assert_eq!(input.send(own.id()), None);
+        input.set_send(own.id(), 0.5);
+        assert_eq!(input.send(own.id()), Some(0.5));
+        assert!(b.bus_block(own.id()).is_none());
+        assert!(a.bus_block(own.id()).is_some());
+        assert!(b.bus_block(BusId::MASTER).is_some());
+        assert_eq!(a.bus().id(), BusId::MASTER);
+    }
 }
