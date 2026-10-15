@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:75e80f9d5bfc8517", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2 history 0.10) into B3 at 0.11: re-read; contents list holds for args.rs/run.rs with B2's history cause and B3's geometry: None" }
+verified = { hash = "b3:a312cbb31b9ce11a", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; contents list holds; CLI gains neither B3's nor B6's commands" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:bfbfdab2c4076796", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Edits bullet now says protocol 0.11's canvas.set_size/item.set_geometry are not in the CLI; B2's undo/redo cause suffix and exit-code row hold" }
+verified = { hash = "b3:ce7283c86927a586", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Edits bullet keeps B3's 0.11 canvas/geometry note and says 0.12's set_role/item.move/scene_id aren't in the CLI" }
 -->
 
 ```sh
@@ -106,7 +106,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   creates gets its kind's defaults. Protocol 0.11's `canvas.set_size`,
   `item.set_geometry` and `item.add`'s `geometry`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
-  yet; `item.add` sends neither placement, so its item is a legacy one. Several edits on one line go as **one atomic batch**: one new
+  yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
+  the placement edits' optional `scene_id` are not in the CLI either. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -212,7 +213,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e8613ebfa1f33687", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; parsing, connector, mock and MCP proxy bullets hold" }
+verified = { hash = "b3:ba6b3375fe9da05d", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; parsing and writers hold with scene_id: None on the placement constructors" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

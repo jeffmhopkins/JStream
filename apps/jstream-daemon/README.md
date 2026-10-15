@@ -128,7 +128,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:552f82974ceff32c", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205: daemon still builds its engine without a collection file; only an error string and a test message changed; bullets hold" }
+verified = { hash = "b3:5c1350160832426d", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: cascade only; re-read, daemon text names no protocol minor, edit kind or placement" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

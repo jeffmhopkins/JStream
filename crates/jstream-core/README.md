@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:63ff09347a7af014", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (#202) plus N2/N5: re-read; Collection file bullet and tests list still match; #202's reconnect test text kept" }
+verified = { hash = "b3:2a3c84ae047a0400", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#202 RTMP reconnect test, #200 vcam) into B6: #202 changes only publish.rs's test and stamps; re-read, contents and History bullet hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -121,7 +121,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a50b57c47be9d17f", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 N2/N5: with_collection_file now reads the file with only the file lock held (graph copied under the collection lock), a failed Unix directory flush after the rename only warns; Collection file subsection still holds (atomic write, save never under the collection lock); #202 prose kept" }
+verified = { hash = "b3:11feed9980e3ac36", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#202, #200) into B6: re-read; Conflicts bullet (B3 placement/canvas, B6 role/item.move) and runtime text hold with #202's test-only change" }
 -->
 
 ### Engine and sessions
@@ -246,10 +246,11 @@ collection lock:
 - **Conflicts.** Each applied batch, undo and redo is logged with what it *touched*,
   computed in core from its edits and the inverse's (so a delete also names what it
   removed): objects created or deleted, objects used (an item's scene and source, a
-  `scene` source's scene, a duplicate's original), properties set (names, an item's
-  placement, whether set as a transform or a geometry, crop, visibility, an item's
-  index, each settings parameter, an output's target), the scenes' order, and the
-  canvas size. An undo or redo first applies the step's edits to a copy of the
+  `scene` source's scene, a duplicate's original, the scenes an `item.move` and its
+  inverse name), properties set (names, a scene's role, an item's placement, whether
+  set as a transform or a geometry, crop, visibility, an item's index, which
+  `item.move` also sets, each settings parameter, an output's target), the scenes'
+  order, and the canvas size. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
   `scene.create` also deletes the items the scene holds now, even ones whose own step
   was dropped. The step conflicts with another client's later entry, logged after
