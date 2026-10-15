@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:abf65baa6c0ede4a", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Review round 1 B2/N2: re-read against frames.rs: a live, fresh producer with no safe frame repeats the last copied frame (Shared::Hold), colour bars only without a live producer or after a shared-path error, and a non-live block drops the opened objects at once; rest unchanged" }
+verified = { hash = "b3:985e95f02c9ab497", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Stale only through ARCH#packaging (new hardware-result bullet); re-read: Purpose still matches the code, and its no-pacing behaviour is consistent with #193" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -68,7 +68,7 @@ example on Windows.
 <!-- @section
 covers = ["crates/jstream-vcam-windows/examples/**"]
 depends_on = ["docs/ARCHITECTURE.md#packaging"]
-verified = { hash = "b3:e71245c93f81f3f6", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "New section: steps match examples/vcam_smoke after fmt (args --seconds/--no-camera/--no-producer, report verdict line), the DLL file name and the log path from src/win/log.rs" }
+verified = { hash = "b3:5ed44e8bb066a818", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Added that the first hardware run passed with no extra grant on the step-2 folder; steps unchanged and still match examples/vcam_smoke" }
 -->
 
 `examples/vcam_smoke` stands in for the engine side: it publishes the ring, the fence and
@@ -89,6 +89,8 @@ root:
 5. Clean up in an elevated prompt with
    `regsvr32 /u C:\JStreamVcamTest\jstream_vcam_windows.dll`.
 
-The report's `verdict` line says whether shared frames reached the camera. The DLL's log
+The report's `verdict` line says whether shared frames reached the camera. The first
+run on hardware passed without step 2's folder needing any extra grant
+([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)). The DLL's log
 is `C:\Windows\ServiceProfiles\LocalService\AppData\Local\JStream\vcam\vcam.log`, readable
 from an elevated prompt.

@@ -751,7 +751,7 @@ verified = { hash = "b3:fe28871dd73ab140", by = "agent:claude@session_01QBbMRwRu
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:a4757b3070f69873", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0035: the zip gains jstream-plugin-host.exe from M3; portable layout, state location and S2 vcam registration findings unchanged" }
+verified = { hash = "b3:d27481fae3a888e6", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Added the first jstream-vcam-windows hardware result (Jeff's run, vcam_smoke PASS, 2700 producer frames, 11124 samples all shared): loaded by Frame Server from outside a user profile with no LOCAL SERVICE grant; pacing gap tracked in #193; S2 findings above unchanged" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -785,3 +785,11 @@ Direct3D 12).
   - **Shared-object names:** a non-elevated engine can't create `Global\` objects (access
     denied). So the hand-off uses the engine's session namespace, and the DLL opens it as
     `Session\<id>\…`.
+  - **`jstream-vcam-windows` on hardware** (Windows 11, AMD Radeon 780M, with the
+    `vcam_smoke` producer): registered with `regsvr32` from a folder outside any user
+    profile, the DLL was loaded by Frame Server (session 0, `svchost`, LOCAL SERVICE) and
+    served only the producer's frames, with **no** LOCAL SERVICE grant on the file. So the
+    grant matters only for a DLL inside a user profile, which is inferred from S2 rather
+    than isolated. Frame Server requested about four samples per producer frame, because
+    the stream doesn't pace `RequestSample` yet
+    (#193).
