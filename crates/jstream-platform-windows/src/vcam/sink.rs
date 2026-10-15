@@ -12,7 +12,7 @@ use jstream_vcam_proto::{
     CLSID_STR, CONTROL_NAME, Control, FRIENDLY_NAME, HEIGHT, MAGIC, RING, STATE_EMPTY, STATE_LIVE,
     STATE_STOPPED, Scope, VERSION, WIDTH, fence_base, sddl_objects, slot_of, texture_base,
 };
-use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, GENERIC_ALL, HMODULE};
+use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, FreeLibrary, GENERIC_ALL, HMODULE};
 use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1,
 };
@@ -31,8 +31,11 @@ use windows::Win32::Media::MediaFoundation::{
     MFShutdown, MFStartup, MFVirtualCameraAccess_CurrentUser, MFVirtualCameraLifetime_Session,
     MFVirtualCameraType_SoftwareCameraSource,
 };
+use windows::Win32::System::LibraryLoader::{
+    GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW,
+};
 use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_ANY, RegGetValueW};
-use windows::core::{HSTRING, Interface};
+use windows::core::{HSTRING, Interface, s, w};
 
 use super::format::{Pixels, check_format, contract_format, frame_pixels};
 use super::shared::{Handle, Mapping, SecurityAttributes, qpc, session_id, user_sid};
@@ -54,6 +57,9 @@ const HEARTBEAT: Duration = Duration::from_millis(200);
 /// - **Format:** only the contract's, 1920x1080 BGRA at 30 fps
 ///   ([`offered_format`](Self::offered_format)). Frames are system-memory BGRA
 ///   (`VideoSurface::Cpu`); GPU frames are `Unsupported` for now.
+/// - **Windows 11:** `start` first checks that `mfsensorgroup.dll` exports
+///   `MFCreateVirtualCamera`, and is `Unsupported` without it, so a binary that
+///   delay-loads the DLL gets an error rather than a delay-load exception.
 /// - **Registration:** the media source must already be registered machine-wide (the
 ///   app's `--register-vcam` step). `start` checks for its `HKLM` class key and is
 ///   `Unsupported` without it.
@@ -103,6 +109,13 @@ impl VcamSink for WindowsVcam {
             });
         }
         check_format(&format)?;
+        if !virtual_camera_api() {
+            return Err(PlatformError::Unsupported {
+                what: "the virtual camera: this Windows has no `MFCreateVirtualCamera` \
+                       (it needs Windows 11)"
+                    .into(),
+            });
+        }
         if !registered()? {
             return Err(PlatformError::Unsupported {
                 what: format!(
@@ -169,6 +182,28 @@ struct Live {
 
 /// Whether the media source's class is registered machine-wide, where Frame Server looks
 /// (ARCH › Packaging: it ignores `HKCU`).
+/// Whether `mfsensorgroup.dll` loads from System32 and exports `MFCreateVirtualCamera`,
+/// which Windows 11 added. A binary that delay-loads the DLL (the daemon does) would
+/// otherwise raise a delay-load exception, not an error, on the first call into a
+/// Windows 10 or an N edition without the Media Feature Pack. Only System32 is
+/// searched, so a stray copy next to the exe can't satisfy it.
+fn virtual_camera_api() -> bool {
+    // SAFETY: plain call with a static, null-terminated name. Loading the DLL runs only
+    // its own initialisation, which has no requirements on the caller.
+    let Ok(module) =
+        (unsafe { LoadLibraryExW(w!("mfsensorgroup.dll"), None, LOAD_LIBRARY_SEARCH_SYSTEM32) })
+    else {
+        return false;
+    };
+    // SAFETY: the module is loaded until the FreeLibrary below; the name is static and
+    // null-terminated. The address is only tested, never called.
+    let found = unsafe { GetProcAddress(module, s!("MFCreateVirtualCamera")) }.is_some();
+    // SAFETY: the handle came from a successful LoadLibraryExW and is freed once. The
+    // sink's own calls load the DLL again through the import or delay-load table.
+    let _ = unsafe { FreeLibrary(module) };
+    found
+}
+
 fn registered() -> Result<bool, PlatformError> {
     let key = HSTRING::from(format!(
         r"Software\Classes\CLSID\{CLSID_STR}\InprocServer32"
