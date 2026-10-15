@@ -18,9 +18,9 @@ provisional, and globs that match nothing are only warnings.
 <a id="shape"></a>
 ## Shape of the system
 <!-- @section
-covers = ["apps/**"]
+covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:5d5cfa8162c194b9", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; holds" }
+verified = { hash = "b3:12acea01746e7b87", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#184 B6, #206, #199, G3a) into ADR-0042: no shape text changed on main and no app manifest view or main.rs changed; host table holds" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:5d5cfa8162c194b9", by = "agent:claude@session_01TkdJbk8g
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI yet ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI or `--collection` yet ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -114,9 +114,9 @@ JStream/
 <a id="crate-map"></a>
 ## Crate map
 <!-- @section
-covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
+covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:e39a8376b6d18fa3", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4 adds only a dev-dependency (assert_no_alloc) to jstream-audio's Cargo.toml; its row (layer 2, summary, unsafe no) is unchanged" }
+verified = { hash = "b3:fe49fcc72d07a32d", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (G3a) into ADR-0042: the view changed because jstream-platform-windows gained a jstream-vcam-proto dependency (L2 -> L0, allowed by R-ARCH-002); its row (vcam sink side) still holds and no row text changed" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:d00c62b7f529d4a8", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; studio removed from the collection tree, program is runtime state (ADR-0030), main's canvas text kept" }
+verified = { hash = "b3:e07f3c8ed49ca530", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; depends_on keeps ADR-0030 beside main's list; studio gone from the tree, program runtime state; B6 Built so far holds" }
 -->
 
 ```
@@ -345,7 +345,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   filters yet), scenes in display order, and items in stacking order with `source_id`,
   a placement, `crop` and `visible`. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
-  its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Items refer to sources; they never copy them. Scene and source
+  its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Scenes have
+  a `role` (`scene` or `group`, set by `scene.set_role`), and `item.move` moves an item
+  to another scene keeping its id, under the same cycle check. The placement edits take
+  an optional `scene_id`, accepted only when it names the item's own scene until
+  variants exist (protocol 0.12). Items refer to sources; they never copy them. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
@@ -356,8 +360,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, 3D
-  geometry, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
-  variants and overrides, folders, labels, favourites and other organisation metadata,
+  geometry, `scene.create`'s optional `role`, variants and overrides (so no edit drops
+  any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
   and `outputs`. Nothing is persisted yet. The program scene is built in
@@ -366,9 +370,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <a id="threading"></a>
 ## Threads, clock and sync
 <!-- @section
-covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
-depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:92eb867695f2637b", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; prose is main's collector sentences plus F2b's recording output-thread sentence; both hold for runtime/sink.rs and audio rt cmd/retire" }
+depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
+verified = { hash = "b3:1ef01f3d3f4dfbbf", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main into ADR-0042: no code covers; output-pipeline paragraph stays in core README#runtime (now with main's recording text); 'In the engine' keeps main's new add/remove-inputs and collector sentence beside the link to audio #realtime; roster, clock, snapshots, handover, privacy, CLAP, S3 unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -388,33 +391,12 @@ every mix runs at the base rate divided by an integer.
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003) |
 
-**Output pipeline** (`jstream-core` `src/runtime/`), the part that is built.
-`output.start`, once the host has injected platform backends and a publish target
-(a recording output needs none), starts it and emits `output.state_changed` from the control thread. The render
-thread calls the platform capture mailbox, composites one scene on each 1/30 s
-tick, repeats the last frame when capture is empty, and reads that frame back.
-This cut encodes that CPU readback, and the readback is counted. The mixer thread
-polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
-desktop loopback. Encode threads are the
-ones inside the encoder sessions. The output thread muxes FLV and sends tags to the
-publish target, or, for a recording output, muxes fragmented MP4 and writes it to the
-file, syncing each fragment (writes may block on the disk; the encoder queues absorb
-that and drop when full). `output.start` also starts `jstream-stats`, which is not a
-real-time thread: it emits `stats.tick` about once a second from the stage
-counters, and once more when the pipeline stops. The render loop publishes capture
-mailbox skips, and a tick that falls a whole period behind the clock skips to the
-current tick and counts the skipped ones in `render_ticks`. None of those threads
-lock the collection. `output.stop` during
-`starting` cancels that start and emits `stopped` only after the start has dropped
-its threads. The render and mixer threads catch a panic at their boundary
-([R-RT-006](RULES.md#R-RT-006)); a capture error or a missing frame repeats the last
-one, and a render panic repeats the last frame until teardown. A fatal error on the
-render, mixer or output thread (a publish or recording write failure, an encoder stream that ends
-before stop, a render or mixer panic) is a channel message to a watcher the control
-thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
-encoder session queues. Arc-swap snapshots and a GPU encode target are still the
-rows above, not this cut. The collector so far is the mixer's own, and frees only
-input rings and their counters.
+This section is the engine-wide model. Each subsystem's runtime, as built, is described
+next to its code, which that section covers: the output pipeline in
+[`jstream-core`'s runtime](../crates/jstream-core/README.md#runtime) and the audio and
+mixer threads in [`jstream-audio`'s real-time design](../crates/jstream-audio/README.md#realtime)
+([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)). Neither may contradict this
+model; a change that would edits it in the same PR.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
@@ -444,15 +426,12 @@ Still open: the mic and the output share the ES-9's crystal, so the relative dri
 only −0.12 ppm. Drift between two independent devices, and events rarer than about once
 in 20 minutes, haven't been measured.
 
-**In the engine:** `jstream-audio` runs S3's drift fit and PI loop with S3's tuning on
-each input's audio thread, resampling into a per-input ring indexed by engine frame
-that the mixer reads on the engine clock
-([its real-time design](../crates/jstream-audio/README.md#realtime)). Inputs are added
-and removed through a lock-free command queue while the mixer runs, and a ring released
-by the mixer or the audio thread is freed on the collector thread. It differs from
-what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, and the
-timing error is absolute, so inputs line up with each other. That combination has been
-simulated (within 0.05 ms after settling), not yet measured on hardware.
+**In the engine:** `jstream-audio` runs S3's drift fit and PI loop on each input's audio
+thread, resampling into a per-input ring that the mixer reads on the engine clock. Inputs
+are added and removed through a lock-free command queue while the mixer runs, and a ring
+released by the mixer or the audio thread is freed on the collector thread. How it
+differs from what S3 measured is in
+[its real-time design](../crates/jstream-audio/README.md#realtime).
 
 **Audio timestamps** ([ADR-0028](adr/0028-audio-model-v2.md)): every audio filter reports
 its latency in frames, and the mixer delays the shorter paths before each sum so all inputs
@@ -507,7 +486,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1a0713f6d3b2ef90", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; scene.switch example and Program scene bullet at 0.12 now cover batch, undo or redo; main's canvas and history bullets hold" }
+verified = { hash = "b3:d04e4a8a782aff1f", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; Program scene bullet at 0.13; B6 Edits bullet at 0.12 holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -520,8 +499,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
-  id, and placement edits take an optional `scene_id` so they can write a keyframe
-  scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
+  id, `scene.set_role` marks a scene as a group, and placement edits take an optional
+  `scene_id` so they can write a keyframe scene's override
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.12). Until keyframe scenes are
+  built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
@@ -534,7 +515,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Actions** (`output.start`, `scene.switch`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
-- **Program scene** (protocol 0.12, [ADR-0030](adr/0030-studio-state-and-scene-switching.md)):
+- **Program scene** (protocol 0.13, [ADR-0030](adr/0030-studio-state-and-scene-switching.md)):
   the action `scene.switch { scene_id }` puts a scene on program with a cut, with no
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
@@ -616,7 +597,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:7f4ce16ac6d55fe7", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; studio in the tool list beside canvas and history" }
+verified = { hash = "b3:5506d42b19295413", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; studio in the tool list; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -630,7 +611,7 @@ verified = { hash = "b3:7f4ce16ac6d55fe7", by = "agent:claude@session_01TkdJbk8g
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 100 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 115 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

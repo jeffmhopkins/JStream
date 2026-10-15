@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:4b057c05b9f28965", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; events tool description wrapped (N3), studio.changed listed; holds" }
+verified = { hash = "b3:be29222df1a3a71a", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; studio tool and studio.changed in events description; tools.snap size text holds" }
 -->
 
 ### Tools

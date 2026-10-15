@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:59eaa4e4510bd09d", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; Studio bullet and Runtime bullet now say the render thread composites the capture alone (N2); audit and history contents hold" }
+verified = { hash = "b3:c4e51c50a2cae44a", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; Studio and Runtime bullets hold beside main's runtime section" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -119,7 +119,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ef2b86e79f6f8f4e", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read Program scene (reconciled after batch, undo and redo in changed()), Snapshots, Audit log (scene_id for scene.switch); holds" }
+verified = { hash = "b3:fcdadd7b6613e735", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; Program scene now says role changes nothing (a group can go on program); Snapshots and Audit log hold" }
 -->
 
 ### Engine and sessions
@@ -246,10 +246,11 @@ collection lock:
 - **Conflicts.** Each applied batch, undo and redo is logged with what it *touched*,
   computed in core from its edits and the inverse's (so a delete also names what it
   removed): objects created or deleted, objects used (an item's scene and source, a
-  `scene` source's scene, a duplicate's original), properties set (names, an item's
-  placement, whether set as a transform or a geometry, crop, visibility, an item's
-  index, each settings parameter, an output's target), the scenes' order, and the
-  canvas size. An undo or redo first applies the step's edits to a copy of the
+  `scene` source's scene, a duplicate's original, the scenes an `item.move` and its
+  inverse name), properties set (names, a scene's role, an item's placement, whether
+  set as a transform or a geometry, crop, visibility, an item's index, which
+  `item.move` also sets, each settings parameter, an output's target), the scenes'
+  order, and the canvas size. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
   `scene.create` also deletes the items the scene holds now, even ones whose own step
   was dropped. The step conflicts with another client's later entry, logged after
@@ -277,7 +278,8 @@ sets it (`not_found` for a scene the collection doesn't have) and emits
 `studio.changed`, with no `rev` change; a switch to the scene already on program emits
 nothing. After every applied batch, undo and redo the engine reconciles it: the collection's first
 scene goes on program when it is created, a deleted program scene gives way to the
-first scene left (or none), and a reorder never moves it. A batch, undo or redo that moves
+first scene left (or none), and a reorder never moves it. A scene's `role` changes none
+of this: a group is a scene here, and can go on program. A batch, undo or redo that moves
 program emits `studio.changed` right after its `state.changed`, naming the same request. The
 mock applies the same rules, and the differential script holds the two to each other.
 Nothing is persisted, so a restart starts with the first scene on program. Only a cut
@@ -661,3 +663,40 @@ item.
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): one scene, a CPU readback
   into the encoder, and the platform fakes in the test. `video.snapshot` still
   composites from frames the host injects with `set_source_frame`.
+
+<a id="runtime"></a>
+## Runtime
+<!-- @section
+covers = ["crates/jstream-core/src/runtime/**"]
+depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
+verified = { hash = "b3:394d044e4ddca917", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#202, test-only: RTMP reconnect test and its send_until helper in runtime/publish.rs) into ADR-0042: no prose describes that test or its time budget; the section holds" }
+-->
+
+The output pipeline (`src/runtime/`) is the part of
+[ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading) that is built.
+`output.start`, once the host has injected platform backends and a publish target
+(a recording output needs none), starts it and emits `output.state_changed` from the control thread. The render
+thread calls the platform capture mailbox, composites one scene on each 1/30 s
+tick, repeats the last frame when capture is empty, and reads that frame back.
+This cut encodes that CPU readback, and the readback is counted. The mixer thread
+polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
+desktop loopback. Encode threads are the
+ones inside the encoder sessions. The output thread muxes FLV and sends tags to the
+publish target, or, for a recording output, muxes fragmented MP4 and writes it to the
+file, syncing each fragment (writes may block on the disk; the encoder queues absorb
+that and drop when full). `output.start` also starts `jstream-stats`, which is not a
+real-time thread: it emits `stats.tick` about once a second from the stage
+counters, and once more when the pipeline stops. The render loop publishes capture
+mailbox skips, and a tick that falls a whole period behind the clock skips to the
+current tick and counts the skipped ones in `render_ticks`. None of those threads
+lock the collection. `output.stop` during
+`starting` cancels that start and emits `stopped` only after the start has dropped
+its threads. The render and mixer threads catch a panic at their boundary
+([R-RT-006](../../docs/RULES.md#R-RT-006)); a capture error or a missing frame repeats the last
+one, and a render panic repeats the last frame until teardown. A fatal error on the
+render, mixer or output thread (a publish or recording write failure, an encoder stream that ends
+before stop, a render or mixer panic) is a channel message to a watcher the control
+thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
+encoder session queues. Arc-swap snapshots and a GPU encode target are still rows
+of the ARCH thread table, not this cut. The collector so far is the mixer's own, and
+frees only input rings and their counters.

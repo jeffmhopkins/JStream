@@ -11,9 +11,9 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-platform/src/**"]
+covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:910dfda0dfda06b9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (F2b #170, G2 #174) into E3a: E3a's Not yet (Windows capture delivers GPU frames; consumers missing) kept; main's changes are ARCH#threading's recording sink and the crate-map vcam row, which change no platform trait" }
+verified = { hash = "b3:119a92991fa79767", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042: covers gains Cargo.toml; 'depends only on jstream-media, thiserror and wgpu' matches the manifest; merge of main's text re-read, ARCH#threading edits don't touch the mailbox wording" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

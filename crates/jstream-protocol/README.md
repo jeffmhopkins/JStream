@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:34eab9554aa5678b", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; Contents list scene.switch, studio.get, studio.changed; PROTOCOL_VERSION 0.12 line after main's 0.11" }
+verified = { hash = "b3:c0ed2c8d535942cf", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; Commands list merges B6's set_role/item.move with scene.switch; version line 0.13 (switch), 0.12 groups, 0.11 canvas" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -33,11 +33,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   kind, and `HistoryDirection` (`undo`, `redo`), the `cause` of a `state.changed` and
   the `direction` of a `history_empty` error.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
-  `scene.reorder`, `item.add`, `item.remove`, `item.reorder`, `item.set_geometry`,
-  `item.set_transform` (deprecated), `item.set_crop`, `item.set_visible`,
-  `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
-  `source.duplicate`, `source.delete`, `output.create`, `output.set_target`,
-  `output.delete`), with `ItemTransform` (deprecated), `Crop` and `SourceKind`;
+  `scene.reorder`, `scene.set_role`, `item.add`, `item.remove`, `item.reorder`,
+  `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
+  `item.set_visible`, `canvas.set_size`, `source.create`, `source.rename`,
+  `source.set_settings`, `source.duplicate`, `source.delete`, `output.create`,
+  `output.set_target`, `output.delete`), with `ItemTransform` (deprecated), `Crop`,
+  `SourceKind` and `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch`);
   `Batch`; and the `Command`/`CommandClass`
@@ -78,10 +79,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.12 because of
-  `scene.switch`, `studio.get` and `studio.changed`; 0.11 added the canvas and the
-  geometry wire surface ([Item geometry](#design)), 0.10 the
-  `history` calls, 0.9 the `record` output kind, 0.8 the kind queries and settings,
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.13 because of
+  `scene.switch`, `studio.get` and `studio.changed`; 0.12 added groups
+  (`scene.set_role`, `item.move`, a scene's `role` and the placement edits'
+  `scene_id`), 0.11 the canvas and the geometry wire surface
+  ([Item geometry](#design)), 0.10 the `history` calls, 0.9 the `record` output kind, 0.8 the kind queries and settings,
   0.7 the output edits, `output.list`, the key actions and `key_set`, 0.6 `stats.tick`
   and 0.5 `video.snapshot`.
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
@@ -105,7 +107,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:796cf4fabac5b3e9", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; studio.get query, studio.changed (batch, undo or redo) and OQ5 settled by ADR-0030 at 0.12" }
+verified = { hash = "b3:d1535f8640beced0", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; studio.get and studio.changed Added in 0.13; Groups subsection unchanged; OQ5 settled by ADR-0030" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -201,6 +203,29 @@ renames one. A `SourceKind` is `builtin` (a kind the engine describes) or `scene
 nests another scene. Positions are indexes: scenes in display order, items in stacking
 order with 0 at the bottom.
 
+### Groups and placement addressing
+
+[ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
+`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`, and
+`scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
+`scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.11 reader sees
+no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
+to a position in another scene, keeping its ID and every placement property, under the
+same cycle check as `item.add` (field `scene_id`). `index` is the item's position after
+the move: up to the number of items already there for another scene, and below it for
+the item's own scene, where the move is a reorder. Grouping is a client-built batch:
+`scene.create`, `scene.set_role` to `group`, `source.create` of a `scene` source,
+`item.add` of it with `item.move` to the lowest selected index, then an `item.move` of
+each selected item into the group, bottom first. `scene.create` doesn't take a `role`
+yet.
+
+The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
+`item.set_visible`) take an
+optional `scene_id`, fixed now so that keyframe scenes can arrive additively (ADR-0024
+§2). Absent, or the item's own scene, changes the item. Until keyframe scenes exist,
+any other existing scene is `invalid_argument` on `edits.N.scene_id`, and a missing one
+`not_found`. An inverse keeps the addressing of the edit it undoes.
+
 ### Kinds and settings
 
 [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) decides the shape. A
@@ -240,7 +265,8 @@ never a type per kind.
   letter or leading `/`; an asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
-  edit that would close a cycle (`item.add`, `source.create`, `source.set_settings`) is
+  edit that would close a cycle (`item.add`, `item.move`, `source.create`,
+  `source.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
   scene `a`). `scene.delete` and `source.delete` are rejected while a setting refers to the
   target, naming each `<source>.settings.<param>`. Asset references are not edges.
@@ -309,7 +335,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   with its items, and every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
-- `scene.list`: the scenes in display order, each with its name and item count.
+- `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
+  `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
   its name, `SourceKind` and settings.
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
@@ -324,7 +351,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `studio.get`: the scene on program (`program_scene`, omitted only while the collection
   has no scene). Runtime state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
-  Added in 0.12.
+  Added in 0.13.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
@@ -365,7 +392,9 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop` and
 `item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
-`scene.reorder` unless it was last, and each item's restore, bottom to top. Undoing
+`scene.reorder` unless it was last, `scene.set_role` for a group, and each item's
+restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings, and undoing
 `source.set_settings` is a patch of the old values. Deleting a source that items still
 place or a setting refers to, or a scene that a `scene` source shows or a setting refers
@@ -435,7 +464,7 @@ After `welcome`, the server pushes every event to every client.
   (program moves to the first scene left, or to none). For edits it follows their
   `state.changed`. A switch to the scene already on program emits nothing.
   Program is runtime state, so it carries no `rev`
-  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). Added in 0.12.
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). Added in 0.13.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

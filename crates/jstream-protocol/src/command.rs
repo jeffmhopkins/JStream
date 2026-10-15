@@ -46,12 +46,23 @@ pub enum Edit {
         /// The new display name.
         name: String,
     },
+    /// Changes what a scene is for (ADR-0024 §1): a `scene`, or a `group` placed in
+    /// other scenes through a `scene` source. The role changes no engine behaviour: a
+    /// group renders, nests and can be placed more than once like any scene, and clients
+    /// hide groups from the scene list. Inverse: `scene.set_role` with the previous role.
+    #[serde(rename = "scene.set_role")]
+    SceneSetRole {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// Its new role.
+        role: SceneRole,
+    },
     /// Deletes a scene and its items; the sources they placed stay. Rejected with
     /// `invalid_argument` while a `scene` source shows it or any source's settings refer
     /// to it: delete those sources, or clear those references, first (in the same batch
     /// if needed). Inverse: `scene.create`, then `scene.reorder` to its old
-    /// display position (unless it was last), then each deleted item's `item.remove`
-    /// inverse, from bottom to top.
+    /// display position (unless it was last), `scene.set_role` if it was a group, then
+    /// each deleted item's `item.remove` inverse, from bottom to top.
     #[serde(rename = "scene.delete")]
     SceneDelete {
         /// The scene to delete.
@@ -92,6 +103,24 @@ pub enum Edit {
         /// The item to remove.
         item_id: ItemId,
     },
+    /// Moves an item to a stacking position in another scene, keeping its ID, source,
+    /// placement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a
+    /// group scene, places it, and moves the selected items into it. Rejected with
+    /// `invalid_argument` if the move would make a scene contain itself (field
+    /// `scene_id`, naming the cycle) or if the index is out of range. Inverse:
+    /// `item.move` back to its previous scene and index.
+    #[serde(rename = "item.move")]
+    ItemMove {
+        /// The item to move.
+        item_id: ItemId,
+        /// The scene to move it to. Its own scene is allowed, and then the move is an
+        /// `item.reorder`.
+        scene_id: SceneId,
+        /// Its position in that scene after the move, counted from the bottom (0). Must
+        /// be at most the number of items already in that scene (less than it for the
+        /// item's own scene), else `invalid_argument`.
+        index: u32,
+    },
     /// **Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.
     /// Replaces an item's placement with a legacy one, which keeps its 0.3 meaning.
     /// Inverse: the previous placement, as `item.set_transform` if it was legacy and
@@ -100,6 +129,9 @@ pub enum Edit {
     ItemSetTransform {
         /// The item to move.
         item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
         /// The new transform.
         transform: ItemTransform,
     },
@@ -113,6 +145,9 @@ pub enum Edit {
     ItemSetGeometry {
         /// The item to place.
         item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
         /// The new geometry.
         geometry: ItemGeometry,
     },
@@ -121,6 +156,12 @@ pub enum Edit {
     ItemSetVisible {
         /// The item to show or hide.
         item_id: ItemId,
+        /// The scene whose placement of the item to change, as every placement edit
+        /// takes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.
+        /// Any other scene is `invalid_argument` until keyframe scenes exist, when naming
+        /// a keyframe scene of the item's scene will write that scene's override.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
         /// Whether the item is drawn. Items are visible when added.
         visible: bool,
     },
@@ -140,6 +181,9 @@ pub enum Edit {
     ItemSetCrop {
         /// The item to crop.
         item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
         /// The new crop. Items are added uncropped ([`Crop::NONE`]).
         crop: Crop,
     },
@@ -262,9 +306,11 @@ impl Edit {
         match self {
             Edit::SceneCreate { .. } => "scene.create",
             Edit::SceneRename { .. } => "scene.rename",
+            Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",
             Edit::ItemAdd { .. } => "item.add",
             Edit::ItemRemove { .. } => "item.remove",
+            Edit::ItemMove { .. } => "item.move",
             Edit::ItemSetTransform { .. } => "item.set_transform",
             Edit::ItemSetGeometry { .. } => "item.set_geometry",
             Edit::ItemSetVisible { .. } => "item.set_visible",
@@ -582,6 +628,27 @@ pub enum SourceKind {
         /// The kind's ID, as `kind.list` reports it.
         kind: String,
     },
+}
+
+/// What a scene is for (ADR-0024 §1). It changes no engine behaviour; it tells clients,
+/// agents and switchers how to show the scene.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SceneRole {
+    /// A scene of its own, listed in the scene list. Scenes are created with this role.
+    #[default]
+    Scene,
+    /// A group: a scene placed in other scenes to hold items together. Clients hide it
+    /// from the scene list and show it under the items that place it.
+    Group,
+}
+
+impl SceneRole {
+    /// Whether this is the default role, `scene`, which query results omit.
+    pub fn is_scene(&self) -> bool {
+        *self == SceneRole::Scene
+    }
 }
 
 #[cfg(test)]

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:48f11b4a9989a45d", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; contents list holds for args.rs/run.rs with scene switch and studio get added" }
+verified = { hash = "b3:f09027d0a5c57a57", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; contents list holds with B6's edits and B10's scene switch/studio get" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:e63eddc4937d552d", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B2, B8, canvas) into B10: re-read; scene switch and studio get rows hold beside main's history and canvas rows" }
+verified = { hash = "b3:73e10e296433d951", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; scene switch and studio get rows sit beside B6's rows; holds" }
 -->
 
 ```sh
@@ -108,7 +108,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   creates gets its kind's defaults. Protocol 0.11's `canvas.set_size`,
   `item.set_geometry` and `item.add`'s `geometry`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
-  yet; `item.add` sends neither placement, so its item is a legacy one. Several edits on one line go as **one atomic batch**: one new
+  yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
+  the placement edits' optional `scene_id` are not in the CLI either. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -214,7 +215,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f8f879e8857a6a45", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; Output bullet names studio.changed beside state.changed and the undo/redo suffix; rest holds" }
+verified = { hash = "b3:550eab4a97289a04", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; Output bullet names studio.changed; B6 placement text unchanged; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

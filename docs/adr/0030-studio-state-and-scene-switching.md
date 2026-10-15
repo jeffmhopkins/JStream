@@ -43,7 +43,7 @@ The forces:
 state, not in the collection. It is not counted by `rev`, not undoable, and not part of
 `state.get`.
 
-**Protocol (0.12):**
+**Protocol (0.13):**
 - Action `scene.switch { scene_id }` puts a scene on program with a cut. It fails with
   `not_found` for a scene not in the collection. Switching to the scene already on
   program succeeds and emits nothing. ADR-0029's optional `preset` is added with the

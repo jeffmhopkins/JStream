@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:e8e2282b9cb46590", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; holds" }
+verified = { hash = "b3:579141fe199f2438", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:64f1dc27fd3dc12d", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; mock program bullet is batch-only, correct because the mock has no undo/redo" }
+verified = { hash = "b3:4e3042ed3601bbb4", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; mock program bullet (batch only, mock has no undo) sits beside B6's set_role/item.move bullet; holds" }
 -->
 
 ### The trait
@@ -101,13 +101,15 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   retry with a known key answers first; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but protocol 0.12's `scene.set_role` and `item.move` (which answer
+  `internal`), with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
   - reorder indices out of range;
+  - a placement edit's `scene_id` naming a scene other than the item's own;
   - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
     not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or

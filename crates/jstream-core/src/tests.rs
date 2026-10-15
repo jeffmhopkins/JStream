@@ -1694,6 +1694,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
         &control,
         Batch::single(Edit::ItemSetVisible {
             item_id: ItemId::new("layer"),
+            scene_id: None,
             visible: false,
         }),
     )
