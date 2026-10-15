@@ -606,7 +606,10 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 On a draft PR every `ci` job is skipped; they run when the PR is marked ready for review.
 `ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e` and `macos` are in
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
-([ADR-0054](adr/0054-platform-ci-after-review.md)).
+([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
+the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
+A PR into a `wave/*` branch skips only `test`, `doc`, `deny`, `wasm` and the after-review jobs;
+every other check runs. The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
 
 | Check | Runs | Required | From |
 |---|---|---|---|

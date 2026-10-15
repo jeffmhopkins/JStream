@@ -115,7 +115,10 @@ impl Server {
     ///
     /// An extra host without a port (or with an invalid one) is refused with
     /// [`ServerError::InvalidHost`] before anything is opened, since it could never match.
+    /// A zero connection limit or timeout is refused the same way, with
+    /// [`ServerError::InvalidLimit`].
     pub async fn bind(config: ServerConfig, connector: Connector) -> Result<Server, ServerError> {
+        config.check_limits()?;
         gate::check_extra_hosts(&config.extra_hosts)?;
         let ui = config.ui_dir.as_deref().map(Ui::new).transpose()?;
         let devices = Arc::new(Devices::load(config.device_file.clone())?);

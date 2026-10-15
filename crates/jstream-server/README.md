@@ -140,6 +140,10 @@ the default:
 | `header_read_timeout` | 10 s from accept to an accepted upgrade request | The connection is dropped, unanswered. |
 | `handshake_timeout` | 10 s from accept to a successful `hello` | The connection is closed with close code 1008 (see *Sessions*). |
 
+`Server::bind` refuses a zero limit or timeout, and a zero `max_mcp_sessions` or
+`mcp_idle_timeout` (see *MCP over streamable HTTP*), with `ServerError::InvalidLimit` before opening the
+socket, since the server would refuse or drop everything.
+
 The header-read timeout is kept on the socket, by the listener (`listener.rs`), since
 hyper's own isn't reachable through `axum::serve`: until the upgrade handler accepts a
 request, every read and write fails once the deadline has passed. So it also drops a
