@@ -42,9 +42,8 @@ pub(crate) const KIND: &str = "video capture device";
 
 /// Media Foundation started, and the process's multithreaded apartment kept alive, for as
 /// long as the guard lives. Both are reference-counted by the OS, so every holder starts
-/// its own. With the MTA alive, a thread that never initialised COM (the engine's control
-/// thread, a capture thread) is an implicit MTA member and may use MF's free-threaded
-/// objects.
+/// its own. The backend's calls and its capture thread also join the MTA explicitly
+/// (`Com::init`), so they never rely on being implicit MTA members.
 pub(crate) struct MfStarted {
     /// Dropped after `MFShutdown` in `Drop`, so the apartment outlives Media Foundation.
     _mta: MtaUsage,

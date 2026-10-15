@@ -39,8 +39,8 @@ pub struct MfMjpegDecoder {
 
 // SAFETY: the decoder holds no COM object until its first `decode`, so the engine can
 // build it on one thread and move it to the capture thread. The MFT is then created,
-// used and dropped by whichever thread calls `decode` (the stream's capture thread, an
-// implicit MTA member while `MfStarted` keeps the MTA alive). Enumeration asks only for
+// used and dropped by whichever thread calls `decode` (the stream's capture thread, which
+// joins the MTA with `Com::init` for its lifetime). Enumeration asks only for
 // synchronous, in-proc MFTs (`SYNCMFT | LOCALMFT`); Microsoft's in-box MJPEG decoder is
 // free-threaded, so moving the decoder after its first frame is sound for it too.
 // `decode` takes `&mut self`, so one thread uses it at a time; the trait asks only for
