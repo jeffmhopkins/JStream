@@ -117,6 +117,8 @@ pub mod fake {
         pub request: HostRequest,
         crashed: AtomicBool,
         hung: AtomicBool,
+        /// Still loading: it read `Start` but isn't ready (or beating) until released.
+        loading: AtomicBool,
         exited: AtomicBool,
         /// The state the host answers `SaveState` with.
         state: Mutex<Vec<u8>>,
@@ -133,6 +135,11 @@ pub mod fake {
         /// The process hangs: no more heartbeat or blocks, but it hasn't exited.
         pub fn hang(&self) {
             self.hung.store(true, Ordering::Release);
+        }
+
+        /// Ends a slow load ([`FakePluginHosts::start_loading`]): the host gets ready.
+        pub fn finish_loading(&self) {
+            self.loading.store(false, Ordering::Release);
         }
 
         /// Whether the process has exited.
@@ -162,6 +169,7 @@ pub mod fake {
         hosts: Arc<Mutex<Vec<Arc<FakeHostControl>>>>,
         refuse_starts: Arc<AtomicBool>,
         start_hung: Arc<AtomicBool>,
+        start_loading: Arc<AtomicBool>,
     }
 
     impl FakePluginHosts {
@@ -188,6 +196,12 @@ pub mod fake {
         /// Makes every later host hang from the start, before it reads `Start`.
         pub fn start_hung(&self, hung: bool) {
             self.start_hung.store(hung, Ordering::Release);
+        }
+
+        /// Makes every later host load slowly, as a real plugin can: it reads `Start`
+        /// but neither gets ready nor beats until [`FakeHostControl::finish_loading`].
+        pub fn start_loading(&self, loading: bool) {
+            self.start_loading.store(loading, Ordering::Release);
         }
     }
 
@@ -223,6 +237,7 @@ pub mod fake {
                 request: request.clone(),
                 crashed: AtomicBool::new(false),
                 hung: AtomicBool::new(self.start_hung.load(Ordering::Acquire)),
+                loading: AtomicBool::new(self.start_loading.load(Ordering::Acquire)),
                 exited: AtomicBool::new(false),
                 state: Mutex::new(request.state.clone().unwrap_or_default()),
                 received: Mutex::new(Vec::new()),
@@ -310,6 +325,7 @@ pub mod fake {
         let samples = config.block_frames as usize * CHANNELS;
         let mut buffer = vec![0.0; samples];
         let mut next = 0u64;
+        let mut asked = false;
         let mut started = false;
         let s = &shared.status;
         loop {
@@ -323,12 +339,7 @@ pub mod fake {
             while let Some(message) = lock(inbox).pop_front() {
                 lock(&control.received).push(message.clone());
                 match message {
-                    ToHost::Start { .. } if !started => {
-                        started = true;
-                        shared.publish_ready(FAKE_LATENCY);
-                        lock(outbox).push_back(FromHost::Params(vec![fake_param()]));
-                    }
-                    ToHost::Start { .. } => {}
+                    ToHost::Start { .. } => asked = true,
                     ToHost::SaveState => {
                         let state = lock(&control.state).clone();
                         lock(outbox).push_back(FromHost::State(state));
@@ -344,8 +355,14 @@ pub mod fake {
                 s.host_state.store(STATE_STOPPED, Ordering::Release);
                 break;
             }
-            s.heartbeat.fetch_add(1, Ordering::Release);
+            if asked && !started && !control.loading.load(Ordering::Acquire) {
+                started = true;
+                shared.publish_ready(FAKE_LATENCY);
+                lock(outbox).push_back(FromHost::Params(vec![fake_param()]));
+            }
             if started {
+                // Like the real host, it beats only once its real-time loop runs.
+                s.heartbeat.fetch_add(1, Ordering::Release);
                 let head = shared.input.head();
                 next = next.max(first_useful(head, config.depth));
                 while next < head {

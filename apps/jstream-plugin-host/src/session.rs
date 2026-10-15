@@ -27,6 +27,11 @@ use crate::rt;
 /// while no control message arrives.
 const POLL: Duration = Duration::from_millis(10);
 
+/// How long the main thread keeps the heartbeat going while it re-activates the plugin
+/// for a restart it asked for. Past that the beats stop, and the engine counts the host
+/// as hung.
+const RESTART_GRACE: Duration = Duration::from_secs(10);
+
 /// A run that ended badly. Why is on the block (`host_error`) and was sent to the engine
 /// as an `Error` message.
 #[derive(Debug)]
@@ -176,22 +181,43 @@ pub(crate) fn run<G>(
             }
         });
         // The processor was dropped on the real-time thread.
-        let _ = plugin.deactivate();
-        match outcome {
-            Outcome::Stop => break,
-            Outcome::Restart => {
-                processor = activate(shared, &mut out, &mut plugin, config)?;
-                out.send(&FromHost::Params(
-                    plugin.params().iter().map(param_desc).collect(),
-                ));
-            }
+        if matches!(outcome, Outcome::Stop) {
+            let _ = plugin.deactivate();
+            break;
         }
+        // The real-time loop is gone, so the engine would count a slow re-activation
+        // as a hang: keep beating meanwhile.
+        processor = while_beating(shared, || {
+            let _ = plugin.deactivate();
+            activate(shared, &mut out, &mut plugin, config)
+        })?;
+        out.send(&FromHost::Params(
+            plugin.params().iter().map(param_desc).collect(),
+        ));
     }
     shared
         .status
         .host_state
         .store(STATE_STOPPED, Ordering::Release);
     Ok(())
+}
+
+/// Runs `f`, beating the block's heartbeat from another thread every 100 ms meanwhile,
+/// for at most [`RESTART_GRACE`].
+fn while_beating<T>(shared: &Shared, f: impl FnOnce() -> T) -> T {
+    let done = AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            let deadline = std::time::Instant::now() + RESTART_GRACE;
+            while !done.load(Ordering::Acquire) && std::time::Instant::now() < deadline {
+                shared.status.heartbeat.fetch_add(1, Ordering::Release);
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        });
+        let result = f();
+        done.store(true, Ordering::Release);
+        result
+    })
 }
 
 /// Activates the plugin for the block's rate and block size, checks its latency, and
@@ -528,5 +554,18 @@ mod tests {
         );
         tx.send(ToHost::Stop.encode()).unwrap();
         host.join().unwrap().unwrap();
+    }
+
+    /// A re-activation keeps the heartbeat going, so the engine doesn't count a slow one
+    /// as a hang.
+    #[test]
+    fn a_restart_beats_while_it_reactivates() {
+        let shared = Shared::new_boxed();
+        let got = while_beating(&shared, || {
+            std::thread::sleep(Duration::from_millis(350));
+            7
+        });
+        assert_eq!(got, 7);
+        assert!(shared.status.heartbeat.load(Ordering::Relaxed) >= 3);
     }
 }

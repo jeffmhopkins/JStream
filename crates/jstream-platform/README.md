@@ -136,9 +136,11 @@ Contents:
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
   `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
   `fake::backends`. `plugin_host::fake::FakePluginHosts` (scans find the files a test
-  adds; `refuse_starts` fails starts, and `start_hung` starts hosts already hung) runs each host as a thread acting like a
-  unity-gain plugin with `FAKE_LATENCY` and one parameter (`fake_param`): it publishes
-  ready, beats the heartbeat, copies each input block to the output under the same
+  adds; `refuse_starts` fails starts, `start_hung` starts hosts already hung, and
+  `start_loading` starts hosts that don't get ready until `finish_loading`) runs each
+  host as a thread acting like a unity-gain plugin with `FAKE_LATENCY` and one
+  parameter (`fake_param`): once started it publishes ready and, like the real host,
+  only then beats the heartbeat, copies each input block to the output under the same
   number, answers `SaveState` and ends on `Stop` or the `stop` word. A test makes it
   `crash` (it exits) or `hang` (the heartbeat stops but it hasn't exited) through its
   `FakeHostControl`, which also records what the host received. The crate's tests drive every trait through trait objects only,

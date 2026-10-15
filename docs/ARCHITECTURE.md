@@ -433,7 +433,8 @@ process (`jstream-plugin-host`) are built, and so are starting hosts
 supervisor, and the `stats.tick` count are not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
-processes read from the same OS counter. Audio crosses through shared-memory rings, and
+processes read from the same OS counter (not built yet: for now the host sleeps a
+quarter block between passes). Audio crosses through shared-memory rings, and
 the mixer never waits on the host: it writes block *n* and reads the processed block
 *n − d* (by default *d* is two engine blocks), with no syscall or lock for the plugin
 ([R-RT-001](RULES.md#R-RT-001)). A late block is bypassed with a short crossfade, by

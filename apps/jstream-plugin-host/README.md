@@ -59,6 +59,9 @@ and stdout. It has no protocol connection and no control token.
    - sends `StateDirty` when the plugin marks its state changed;
    - on the plugin's restart request (a new latency or port layout), stops the loop,
      deactivates and activates again, publishes the latency and sends `Params` again.
+     With the real-time loop stopped, another thread beats the heartbeat meanwhile (for
+     at most `RESTART_GRACE`, 10 s), so the engine doesn't count a slow re-activation
+     as a hang.
 5. Ends on `Stop`, the block's `stop` word, or the end of the control stream (the engine
    is gone, and its job object will end this process anyway). It then stops the loop,
    deactivates the plugin and marks the block `STATE_STOPPED`.

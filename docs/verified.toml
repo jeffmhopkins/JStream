@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:7cf2e92ef9075824", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:7cf2e92ef9075824", by = "agent:claude", note = "Rows changed: jstream-platform adds PluginHosts, jstream-platform-windows the plugin block and launcher, jstream-core CLAP kinds and the supervisor, apps/* jstream-plugin-host's links; each matches the crate's Cargo.toml metadata; lint-deps passes" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -30,7 +30,7 @@ stamp = { hash = "b3:8bc8c6ff8e57508b" }
 stamp = { hash = "b3:f7c235327227029b" }
 
 ["ARCH#crate-map"."file:apps/jstream-plugin-host/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:e21b72207884b0d8", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:e21b72207884b0d8", by = "agent:claude", note = "Rows changed: jstream-platform adds PluginHosts, jstream-platform-windows the plugin block and launcher, jstream-core CLAP kinds and the supervisor, apps/* jstream-plugin-host's links; each matches the crate's Cargo.toml metadata; lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-anim/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:324421806c43a0e9" }
@@ -42,7 +42,7 @@ stamp = { hash = "b3:9ffc9ae352b160a3" }
 stamp = { hash = "b3:e5fef95eb12cb895" }
 
 ["ARCH#crate-map"."file:crates/jstream-core/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:c268181528d3755d", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:c268181528d3755d", by = "agent:claude", note = "Rows changed: jstream-platform adds PluginHosts, jstream-platform-windows the plugin block and launcher, jstream-core CLAP kinds and the supervisor, apps/* jstream-plugin-host's links; each matches the crate's Cargo.toml metadata; lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-effects/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:100b037ae75599a7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
@@ -66,10 +66,10 @@ stamp = { hash = "b3:24f40f915476b541" }
 stamp = { hash = "b3:2bdf736999b99a35" }
 
 ["ARCH#crate-map"."file:crates/jstream-platform-windows/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:22fe41d4904c3dd1", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:22fe41d4904c3dd1", by = "agent:claude", note = "Rows changed: jstream-platform adds PluginHosts, jstream-platform-windows the plugin block and launcher, jstream-core CLAP kinds and the supervisor, apps/* jstream-plugin-host's links; each matches the crate's Cargo.toml metadata; lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-platform/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:c65c274e29baa86f", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:c65c274e29baa86f", by = "agent:claude", note = "Rows changed: jstream-platform adds PluginHosts, jstream-platform-windows the plugin block and launcher, jstream-core CLAP kinds and the supervisor, apps/* jstream-plugin-host's links; each matches the crate's Cargo.toml metadata; lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-plugin-clap/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:f1f50ef6d886b714", by = "agent:claude", note = "Re-read: keeps main's jstream-anim row and this PR's jstream-plugin-clap row; summary matches the crate's metadata; lint-deps passes" }
@@ -432,7 +432,7 @@ stamp = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDH
 stamp = { hash = "b3:0c6fb015c0446730", by = "agent:claude", note = "xtask/src/main.rs only changed the merge-main help line; the layout and the xtask command list still hold." }
 
 ["ARCH#shape"."body"]
-stamp = { hash = "b3:1675e6a5f6a3106d", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:1675e6a5f6a3106d", by = "agent:claude", note = "Adds the jstream-plugin-host row (not an engine host; one process per CLAP filter instance, shared block and control channel only, no protocol connection), matching apps/jstream-plugin-host's Cargo metadata and main.rs" }
 
 ["ARCH#shape"."dep:docs/adr/0001-library-first-engine.md"]
 stamp = { hash = "b3:7a1c016d1f87fdaf" }
@@ -459,13 +459,13 @@ stamp = { hash = "b3:f7c235327227029b" }
 stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
 ["ARCH#shape"."file:apps/jstream-plugin-host/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:e21b72207884b0d8", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:e21b72207884b0d8", by = "agent:claude", note = "Adds the jstream-plugin-host row (not an engine host; one process per CLAP filter instance, shared block and control channel only, no protocol connection), matching apps/jstream-plugin-host's Cargo metadata and main.rs" }
 
 ["ARCH#shape"."file:apps/jstream-plugin-host/src/main.rs"]
-stamp = { hash = "b3:70eb73efd430e77a", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:70eb73efd430e77a", by = "agent:claude", note = "Adds the jstream-plugin-host row (not an engine host; one process per CLAP filter instance, shared block and control channel only, no protocol connection), matching apps/jstream-plugin-host's Cargo metadata and main.rs" }
 
 ["ARCH#threading"."body"]
-stamp = { hash = "b3:55003da5ea549507", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:4beedcf5894a3938", by = "agent:claude", note = "CLAP paragraph: the status sentence lists the host, launcher and HostSupervisor as built and graph filters and stats.tick as not yet; the media-clock wake is marked not built (the host sleeps a quarter block, rt.rs run), agreeing with the host README (review B3)" }
 
 ["ARCH#threading"."dep:docs/adr/0014-media-clock.md"]
 stamp = { hash = "b3:68451099d1cf8c6d" }
@@ -582,7 +582,7 @@ stamp = { hash = "b3:c14e3114d974adb4", by = "agent:claude@session_01PpGi5RaafND
 stamp = { hash = "b3:308082ece28cb86f" }
 
 ["CRATE-jstream-audio#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:55003da5ea549507", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read; the only upstream changes are ARCH's apps/* row naming the plugin host's links, the crate-map rows for the plugin-host seam, and ARCH#threading's CLAP status sentence (host, launcher and supervisor built; graph filters not yet); nothing this section claims depends on them" }
+stamp = { hash = "b3:4beedcf5894a3938", by = "agent:claude", note = "Upstream ARCH#threading change is only its CLAP paragraph (host process, launcher and HostSupervisor built; graph filters and stats.tick not yet; the host sleeps a quarter block instead of waking on the media clock); the mixer side of the CLAP filter is unchanged, so this holds" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/error.rs"]
 stamp = { hash = "b3:d8e9ac73d567425f" }
@@ -687,7 +687,7 @@ stamp = { hash = "b3:e5a6edbd7802a068" }
 stamp = { hash = "b3:044226cbcf228628", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph (input_push 1024 / 940-941 frames) holds against benches/mix.rs" }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:55003da5ea549507", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read; the only upstream changes are ARCH's apps/* row naming the plugin host's links, the crate-map rows for the plugin-host seam, and ARCH#threading's CLAP status sentence (host, launcher and supervisor built; graph filters not yet); nothing this section claims depends on them" }
+stamp = { hash = "b3:4beedcf5894a3938", by = "agent:claude", note = "Upstream ARCH#threading change is only its CLAP paragraph (host process, launcher and HostSupervisor built; graph filters and stats.tick not yet; the host sleeps a quarter block instead of waking on the media clock); the mixer still never waits on the host, as this section says" }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/RULES.md#R-RT-001"]
 stamp = { hash = "b3:3221ab22f6747616" }
@@ -780,7 +780,7 @@ stamp = { hash = "b3:0fd49566ae310db7" }
 stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's, the CLI's commands are unchanged by D5; holds" }
 
 ["CRATE-jstream-cli#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:3007f51d38f91081", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read; the only upstream changes are ARCH's apps/* row naming the plugin host's links, the crate-map rows for the plugin-host seam, and ARCH#threading's CLAP status sentence (host, launcher and supervisor built; graph filters not yet); nothing this section claims depends on them" }
+stamp = { hash = "b3:3007f51d38f91081", by = "agent:claude", note = "Upstream ARCH#crate-map apps/* row now names jstream-plugin-host's links (plugin-clap, plugin-proto, the Windows platform crate); the CLI links only control and mcp, so its purpose is unaffected" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:5ae0e8dd6e0d9eee" }
@@ -888,7 +888,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:4fb1b48b1b4c0a50", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:4fb1b48b1b4c0a50", by = "agent:claude", note = "Dependencies paragraph now lists jstream-plugin-proto and serde_json for the CLAP kinds (Cargo.toml), and the queries line says kind.list includes kinds a scan added (engine.rs, plugins/kinds.rs); supervisor.rs and tests.rs changes don't touch what this section describes" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
@@ -906,7 +906,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
-stamp = { hash = "b3:4233800909eef6a0", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:4233800909eef6a0", by = "agent:claude", note = "Dependencies paragraph now lists jstream-plugin-proto and serde_json for the CLAP kinds (Cargo.toml), and the queries line says kind.list includes kinds a scan added (engine.rs, plugins/kinds.rs); supervisor.rs and tests.rs changes don't touch what this section describes" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:5e06b48ac662790f" }
@@ -927,7 +927,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:6394875f6122f42f", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:6394875f6122f42f", by = "agent:claude", note = "Dependencies paragraph now lists jstream-plugin-proto and serde_json for the CLAP kinds (Cargo.toml), and the queries line says kind.list includes kinds a scan added (engine.rs, plugins/kinds.rs); supervisor.rs and tests.rs changes don't touch what this section describes" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -939,7 +939,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:29301fe6ecd05436" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:d47bcc05911d873e", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:d47bcc05911d873e", by = "agent:claude", note = "Dependencies paragraph now lists jstream-plugin-proto and serde_json for the CLAP kinds (Cargo.toml), and the queries line says kind.list includes kinds a scan added (engine.rs, plugins/kinds.rs); supervisor.rs and tests.rs changes don't touch what this section describes" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:9ceafdfcc04ac858" }
@@ -948,13 +948,13 @@ stamp = { hash = "b3:9ceafdfcc04ac858" }
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/plugins/kinds.rs"]
-stamp = { hash = "b3:a97b278098700971", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:a97b278098700971", by = "agent:claude", note = "Dependencies paragraph now lists jstream-plugin-proto and serde_json for the CLAP kinds (Cargo.toml), and the queries line says kind.list includes kinds a scan added (engine.rs, plugins/kinds.rs); supervisor.rs and tests.rs changes don't touch what this section describes" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/plugins/mod.rs"]
-stamp = { hash = "b3:2ca9e733fb2b7ccf", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:2ca9e733fb2b7ccf", by = "agent:claude", note = "Dependencies paragraph now lists jstream-plugin-proto and serde_json for the CLAP kinds (Cargo.toml), and the queries line says kind.list includes kinds a scan added (engine.rs, plugins/kinds.rs); supervisor.rs and tests.rs changes don't touch what this section describes" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/plugins/supervisor.rs"]
-stamp = { hash = "b3:7d6f6bb18f7723e3", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:58eafa4460718214", by = "agent:claude", note = "Dependencies paragraph now lists jstream-plugin-proto and serde_json for the CLAP kinds (Cargo.toml), and the queries line says kind.list includes kinds a scan added (engine.rs, plugins/kinds.rs); supervisor.rs and tests.rs changes don't touch what this section describes" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/mod.rs"]
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
@@ -984,7 +984,7 @@ stamp = { hash = "b3:918fe91ec11037de" }
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:73adb2989ad5e26f", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:73adb2989ad5e26f", by = "agent:claude", note = "Dependencies paragraph now lists jstream-plugin-proto and serde_json for the CLAP kinds (Cargo.toml), and the queries line says kind.list includes kinds a scan added (engine.rs, plugins/kinds.rs); supervisor.rs and tests.rs changes don't touch what this section describes" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -1002,10 +1002,10 @@ stamp = { hash = "b3:c9688aabcb558c82" }
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:af75d9fb387a79a5", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:37301e0051104e3e", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
-stamp = { hash = "b3:d7e4bb2db0e1df6d", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:d7e4bb2db0e1df6d", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:5e06b48ac662790f" }
@@ -1026,7 +1026,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:6394875f6122f42f", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:6394875f6122f42f", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1038,7 +1038,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:29301fe6ecd05436" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:d47bcc05911d873e", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:d47bcc05911d873e", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:9ceafdfcc04ac858" }
@@ -1047,13 +1047,13 @@ stamp = { hash = "b3:9ceafdfcc04ac858" }
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/plugins/kinds.rs"]
-stamp = { hash = "b3:a97b278098700971", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:a97b278098700971", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/plugins/mod.rs"]
-stamp = { hash = "b3:2ca9e733fb2b7ccf", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:2ca9e733fb2b7ccf", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/plugins/supervisor.rs"]
-stamp = { hash = "b3:7d6f6bb18f7723e3", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:58eafa4460718214", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/mod.rs"]
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
@@ -1083,7 +1083,7 @@ stamp = { hash = "b3:918fe91ec11037de" }
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:73adb2989ad5e26f", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:73adb2989ad5e26f", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -1110,7 +1110,7 @@ stamp = { hash = "b3:993e780364d6f4d3" }
 stamp = { hash = "b3:50a6bc0982573317", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:55003da5ea549507", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read; the only upstream changes are ARCH's apps/* row naming the plugin host's links, the crate-map rows for the plugin-host seam, and ARCH#threading's CLAP status sentence (host, launcher and supervisor built; graph filters not yet); nothing this section claims depends on them" }
+stamp = { hash = "b3:4beedcf5894a3938", by = "agent:claude", note = "Upstream ARCH#threading change is only its CLAP paragraph (host process, launcher and HostSupervisor built; graph filters and stats.tick not yet; the host sleeps a quarter block instead of waking on the media clock); the engine's thread list doesn't run a supervisor yet, so this section still holds" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/RULES.md#R-RT-006"]
 stamp = { hash = "b3:f2c3ac9292e67cf2" }
@@ -1134,10 +1134,10 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:6c9573abe8f8690a", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:6c9573abe8f8690a", by = "agent:claude", note = "Adds the jstream-clap-scan thread: WindowsPluginHosts, Engine::scan_clap_plugins after with_collection_file, kinds appear in kind.list, failures logged, serving meanwhile, every file fails without jstream-plugin-host.exe beside the daemon; matches serve.rs and core's design section" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:4fb1b48b1b4c0a50", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:4fb1b48b1b4c0a50", by = "agent:claude", note = "Adds the jstream-clap-scan thread: WindowsPluginHosts, Engine::scan_clap_plugins after with_collection_file, kinds appear in kind.list, failures logged, serving meanwhile, every file fails without jstream-plugin-host.exe beside the daemon; matches serve.rs and core's design section" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
@@ -1167,16 +1167,16 @@ stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:38158f98f6dd36a6", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:38158f98f6dd36a6", by = "agent:claude", note = "Adds the jstream-clap-scan thread: WindowsPluginHosts, Engine::scan_clap_plugins after with_collection_file, kinds appear in kind.list, failures logged, serving meanwhile, every file fails without jstream-plugin-host.exe beside the daemon; matches serve.rs and core's design section" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:5b73caa28ffd99e3" }
 
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:313c74feb216b7b9", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:313c74feb216b7b9", by = "agent:claude", note = "Purpose bullet now says the Windows engine scans the CLAP plugins (serve.rs's jstream-clap-scan thread), merged with the wave's --ui-dir wording; the apps/* crate-map row agrees" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:3007f51d38f91081", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:3007f51d38f91081", by = "agent:claude", note = "Purpose bullet now says the Windows engine scans the CLAP plugins (serve.rs's jstream-clap-scan thread), merged with the wave's --ui-dir wording; the apps/* crate-map row agrees" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
@@ -1197,7 +1197,7 @@ stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:38158f98f6dd36a6", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:38158f98f6dd36a6", by = "agent:claude", note = "Purpose bullet now says the Windows engine scans the CLAP plugins (serve.rs's jstream-clap-scan thread), merged with the wave's --ui-dir wording; the apps/* crate-map row agrees" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:5b73caa28ffd99e3" }
@@ -1275,7 +1275,7 @@ stamp = { hash = "b3:558b5c5512b30191" }
 stamp = { hash = "b3:ec6f85c97d250939", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:3007f51d38f91081", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read; the only upstream changes are ARCH's apps/* row naming the plugin host's links, the crate-map rows for the plugin-host seam, and ARCH#threading's CLAP status sentence (host, launcher and supervisor built; graph filters not yet); nothing this section claims depends on them" }
+stamp = { hash = "b3:3007f51d38f91081", by = "agent:claude", note = "Upstream ARCH#crate-map apps/* row now names jstream-plugin-host's links (plugin-clap, plugin-proto, the Windows platform crate); the desktop app's links and purpose are unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:c539140aae7561d4" }
@@ -1410,7 +1410,7 @@ stamp = { hash = "b3:984f333744172f87" }
 stamp = { hash = "b3:d72def29f6861e6d" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:55003da5ea549507", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read; the only upstream changes are ARCH's apps/* row naming the plugin host's links, the crate-map rows for the plugin-host seam, and ARCH#threading's CLAP status sentence (host, launcher and supervisor built; graph filters not yet); nothing this section claims depends on them" }
+stamp = { hash = "b3:4beedcf5894a3938", by = "agent:claude", note = "Upstream ARCH#threading change is only its CLAP paragraph (host process, launcher and HostSupervisor built; graph filters and stats.tick not yet; the host sleeps a quarter block instead of waking on the media clock); encoding threads are unaffected" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/audio.rs"]
 stamp = { hash = "b3:79b9830d47ed6557" }
@@ -1437,7 +1437,7 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:21668f51b28f0233" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:e0c8eab6842f1174", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:e0c8eab6842f1174", by = "agent:claude", note = "source.create now refuses a kind whose category isn't Source with invalid_argument on kind.kind (apply.rs, test a_filter_kind_cannot_be_created_as_a_source); the Settings bullet says so; the rest is unchanged" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
 stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
@@ -1449,7 +1449,7 @@ stamp = { hash = "b3:95dbeb7275d807fb" }
 stamp = { hash = "b3:d72def29f6861e6d" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/apply.rs"]
-stamp = { hash = "b3:59d45629b1369f76", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:59d45629b1369f76", by = "agent:claude", note = "source.create now refuses a kind whose category isn't Source with invalid_argument on kind.kind (apply.rs, test a_filter_kind_cannot_be_created_as_a_source); the Settings bullet says so; the rest is unchanged" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/audio.rs"]
 stamp = { hash = "b3:3a5dcf3b621fc077" }
@@ -1485,7 +1485,7 @@ stamp = { hash = "b3:490d41a1b4731026" }
 stamp = { hash = "b3:675f46eea33b1c83", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
-stamp = { hash = "b3:d25914e0fe2c404e", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:d25914e0fe2c404e", by = "agent:claude", note = "source.create now refuses a kind whose category isn't Source with invalid_argument on kind.kind (apply.rs, test a_filter_kind_cannot_be_created_as_a_source); the Settings bullet says so; the rest is unchanged" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/touched.rs"]
 stamp = { hash = "b3:943bb9518712a4b5" }
@@ -1653,7 +1653,7 @@ stamp = { hash = "b3:71db17a5973fc33a", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:2ef270bb1b4e0cc6" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:55003da5ea549507", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read; the only upstream changes are ARCH's apps/* row naming the plugin host's links, the crate-map rows for the plugin-host seam, and ARCH#threading's CLAP status sentence (host, launcher and supervisor built; graph filters not yet); nothing this section claims depends on them" }
+stamp = { hash = "b3:4beedcf5894a3938", by = "agent:claude", note = "Upstream ARCH#threading change is only its CLAP paragraph (host process, launcher and HostSupervisor built; graph filters and stats.tick not yet; the host sleeps a quarter block instead of waking on the media clock); outputs are unaffected" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
@@ -1716,7 +1716,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:7cf2e92ef9075824", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read; the only upstream changes are ARCH's apps/* row naming the plugin host's links, the crate-map rows for the plugin-host seam, and ARCH#threading's CLAP status sentence (host, launcher and supervisor built; graph filters not yet); nothing this section claims depends on them" }
+stamp = { hash = "b3:7cf2e92ef9075824", by = "agent:claude", note = "Upstream crate-map change only adds plugin-host rows (PluginHosts on jstream-platform, the launcher on platform-windows, CLAP kinds on core); GPU frame types and the unsafe split are unchanged" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
@@ -1728,16 +1728,16 @@ stamp = { hash = "b3:6bae18b37405b2cc", by = "agent:claude", note = "Re-read: cr
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:ef8270694a86015f", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:58a25247f9918e35", by = "agent:claude", note = "Adds the jstream-plugin-proto dependency (Cargo.toml) and the PluginHosts/PluginHost bullet (search_paths, scan, start, HostBlock, try_recv/send/kill) matching plugin_host.rs and lib.rs; the fake now has start_loading/finish_loading and beats only once started; crate-map and threading changes agree" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:e204cadb57ccceae" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform"]
-stamp = { hash = "b3:76fb1703e44d3e72", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:76fb1703e44d3e72", by = "agent:claude", note = "Adds the jstream-plugin-proto dependency (Cargo.toml) and the PluginHosts/PluginHost bullet (search_paths, scan, start, HostBlock, try_recv/send/kill) matching plugin_host.rs and lib.rs; the fake now has start_loading/finish_loading and beats only once started; crate-map and threading changes agree" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:55003da5ea549507", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:4beedcf5894a3938", by = "agent:claude", note = "Adds the jstream-plugin-proto dependency (Cargo.toml) and the PluginHosts/PluginHost bullet (search_paths, scan, start, HostBlock, try_recv/send/kill) matching plugin_host.rs and lib.rs; the fake now has start_loading/finish_loading and beats only once started; crate-map and threading changes agree" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -1752,7 +1752,7 @@ stamp = { hash = "b3:febfe552adc09d5b" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/Cargo.toml"]
-stamp = { hash = "b3:cb08a9c0cc6d43fa", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:cb08a9c0cc6d43fa", by = "agent:claude", note = "Adds the jstream-plugin-proto dependency (Cargo.toml) and the PluginHosts/PluginHost bullet (search_paths, scan, start, HostBlock, try_recv/send/kill) matching plugin_host.rs and lib.rs; the fake now has start_loading/finish_loading and beats only once started; crate-map and threading changes agree" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/audio.rs"]
 stamp = { hash = "b3:f0a2d34cd26f9151" }
@@ -1785,10 +1785,10 @@ stamp = { hash = "b3:8019c83df5cad30a" }
 stamp = { hash = "b3:5e9dc58061f8fffa" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/lib.rs"]
-stamp = { hash = "b3:266a0e2b52f8a0b3", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:266a0e2b52f8a0b3", by = "agent:claude", note = "Adds the jstream-plugin-proto dependency (Cargo.toml) and the PluginHosts/PluginHost bullet (search_paths, scan, start, HostBlock, try_recv/send/kill) matching plugin_host.rs and lib.rs; the fake now has start_loading/finish_loading and beats only once started; crate-map and threading changes agree" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/plugin_host.rs"]
-stamp = { hash = "b3:c0458dddeef14ef4", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:8f23065e169f3e0e", by = "agent:claude", note = "Adds the jstream-plugin-proto dependency (Cargo.toml) and the PluginHosts/PluginHost bullet (search_paths, scan, start, HostBlock, try_recv/send/kill) matching plugin_host.rs and lib.rs; the fake now has start_loading/finish_loading and beats only once started; crate-map and threading changes agree" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/surface.rs"]
 stamp = { hash = "b3:acaa4ad70c04147a" }
@@ -1803,16 +1803,16 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:78542066d111178a", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:78542066d111178a", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:ef8270694a86015f", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:58a25247f9918e35", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
-stamp = { hash = "b3:418a25c59491a42c", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:418a25c59491a42c", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:55003da5ea549507", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:4beedcf5894a3938", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/RULES.md#real-time"]
 stamp = { hash = "b3:c60cba487fc0a5e5" }
@@ -1896,25 +1896,25 @@ stamp = { hash = "b3:74636e2565276acc" }
 stamp = { hash = "b3:1f10a420e9f6a9bc" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/lib.rs"]
-stamp = { hash = "b3:9af116b02ba2900e", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:9af116b02ba2900e", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/n_edition.rs"]
 stamp = { hash = "b3:ede57dd335c2eec0" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/plugin_block.rs"]
-stamp = { hash = "b3:7f14b3bb7eb52944", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:7f14b3bb7eb52944", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/plugin_hosts.rs"]
-stamp = { hash = "b3:51ed695e06830a27", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:51ed695e06830a27", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/format.rs"]
 stamp = { hash = "b3:04540a625ddb78d5" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/mod.rs"]
-stamp = { hash = "b3:57ee2cd8b8984db0", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:57ee2cd8b8984db0", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/shared.rs"]
-stamp = { hash = "b3:518cf8d8efd63e59", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:518cf8d8efd63e59", by = "agent:claude", note = "Adds the PluginBlock/ProAudioThread/WindowsPluginHosts bullet, matching plugin_block.rs (user-only DACL, create refuses existing names, open checks the size) and plugin_hosts.rs (job object, KEPT_ENV, stderr discarded, Local name, 20 s scan, CLAP search order); lib.rs exports them; the vcam/mod.rs and vcam/shared.rs edits only widen Handle and SecurityAttributes (and the shared module) to pub(crate), so PluginBlock reuses them; upstream platform README and ARCH rows agree" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/vcam/sink.rs"]
 stamp = { hash = "b3:2fcb7bb950608efc" }
@@ -1944,7 +1944,7 @@ stamp = { hash = "b3:25518dc134afe9b2" }
 stamp = { hash = "b3:ae38f30acfef5995" }
 
 ["CRATE-jstream-plugin-clap#purpose"."body"]
-stamp = { hash = "b3:e3159c7676b1dacb", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:e3159c7676b1dacb", by = "agent:claude", note = "Only change: the test_plugin paragraph for the new test-plugin feature (library(), plugin ids, gain/echo params, latency), matching lib.rs, library.rs and testplugin.rs; the not-yet list now says the host app loads real files, checked on Windows hardware" }
 
 ["CRATE-jstream-plugin-clap#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-plugin-clap"]
 stamp = { hash = "b3:7eba4b3549316e86" }
@@ -1962,10 +1962,10 @@ stamp = { hash = "b3:48dcc2d5387f6b81" }
 stamp = { hash = "b3:b33cd5cb312eb4a8" }
 
 ["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/lib.rs"]
-stamp = { hash = "b3:69b46c301ca62060", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:69b46c301ca62060", by = "agent:claude", note = "Only change: the test_plugin paragraph for the new test-plugin feature (library(), plugin ids, gain/echo params, latency), matching lib.rs, library.rs and testplugin.rs; the not-yet list now says the host app loads real files, checked on Windows hardware" }
 
 ["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/library.rs"]
-stamp = { hash = "b3:f6ae6d5900e84475", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:f6ae6d5900e84475", by = "agent:claude", note = "Only change: the test_plugin paragraph for the new test-plugin feature (library(), plugin ids, gain/echo params, latency), matching lib.rs, library.rs and testplugin.rs; the not-yet list now says the host app loads real files, checked on Windows hardware" }
 
 ["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/plugin.rs"]
 stamp = { hash = "b3:6452d7a92dbab528" }
@@ -1977,43 +1977,43 @@ stamp = { hash = "b3:121d390b11e45a47" }
 stamp = { hash = "b3:9d287f1810f2f80d" }
 
 ["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/testplugin.rs"]
-stamp = { hash = "b3:e03635fcf2ffc099", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:e03635fcf2ffc099", by = "agent:claude", note = "Only change: the test_plugin paragraph for the new test-plugin feature (library(), plugin ids, gain/echo params, latency), matching lib.rs, library.rs and testplugin.rs; the not-yet list now says the host app loads real files, checked on Windows hardware" }
 
 ["CRATE-jstream-plugin-host#purpose"."body"]
-stamp = { hash = "b3:657f049256fac811", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:fc578d866b37c4f9", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:crates/jstream-plugin-clap/README.md#purpose"]
-stamp = { hash = "b3:e3159c7676b1dacb", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:e3159c7676b1dacb", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:crates/jstream-plugin-proto/README.md#purpose"]
-stamp = { hash = "b3:25a515b8ac8875db", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:25a515b8ac8875db", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:3007f51d38f91081", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:3007f51d38f91081", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:55003da5ea549507", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:4beedcf5894a3938", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:docs/RULES.md#R-RT-001"]
-stamp = { hash = "b3:3221ab22f6747616", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:3221ab22f6747616", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:docs/adr/0035-clap-plugins-out-of-process.md#decision"]
-stamp = { hash = "b3:97ad7e8e9e7724bf", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:97ad7e8e9e7724bf", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."file:apps/jstream-plugin-host/src/main.rs"]
-stamp = { hash = "b3:70eb73efd430e77a", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:70eb73efd430e77a", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."file:apps/jstream-plugin-host/src/rt.rs"]
-stamp = { hash = "b3:9485bd03fa8ddce5", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:9485bd03fa8ddce5", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."file:apps/jstream-plugin-host/src/scan.rs"]
-stamp = { hash = "b3:48aeaee8a74c10d8", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:48aeaee8a74c10d8", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."file:apps/jstream-plugin-host/src/session.rs"]
-stamp = { hash = "b3:a5f2040714d823cf", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:969cbec898871a04", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-proto#purpose"."body"]
-stamp = { hash = "b3:25a515b8ac8875db", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:25a515b8ac8875db", by = "agent:claude", note = "Adds the control module paragraph (messages each way, u32 length frames up to MAX_FRAME, decode refusals) matching control.rs, the AsRef<Shared> note matching shared.rs, and the round-trip/truncation tests; the not-here list now points at PluginBlock, WindowsPluginHosts, HostSupervisor and the host app" }
 
 ["CRATE-jstream-plugin-proto#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-plugin-proto"]
 stamp = { hash = "b3:abb01bfde77a5db4" }
@@ -2022,10 +2022,10 @@ stamp = { hash = "b3:abb01bfde77a5db4" }
 stamp = { hash = "b3:97ad7e8e9e7724bf" }
 
 ["CRATE-jstream-plugin-proto#purpose"."file:crates/jstream-plugin-proto/src/control.rs"]
-stamp = { hash = "b3:514eca1ae489d50c", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:514eca1ae489d50c", by = "agent:claude", note = "Adds the control module paragraph (messages each way, u32 length frames up to MAX_FRAME, decode refusals) matching control.rs, the AsRef<Shared> note matching shared.rs, and the round-trip/truncation tests; the not-here list now points at PluginBlock, WindowsPluginHosts, HostSupervisor and the host app" }
 
 ["CRATE-jstream-plugin-proto#purpose"."file:crates/jstream-plugin-proto/src/lib.rs"]
-stamp = { hash = "b3:844f413d516b6a89", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:844f413d516b6a89", by = "agent:claude", note = "Adds the control module paragraph (messages each way, u32 length frames up to MAX_FRAME, decode refusals) matching control.rs, the AsRef<Shared> note matching shared.rs, and the round-trip/truncation tests; the not-here list now points at PluginBlock, WindowsPluginHosts, HostSupervisor and the host app" }
 
 ["CRATE-jstream-plugin-proto#purpose"."file:crates/jstream-plugin-proto/src/params.rs"]
 stamp = { hash = "b3:053682d10c8a595b" }
@@ -2034,7 +2034,7 @@ stamp = { hash = "b3:053682d10c8a595b" }
 stamp = { hash = "b3:546555571fcb0210" }
 
 ["CRATE-jstream-plugin-proto#purpose"."file:crates/jstream-plugin-proto/src/shared.rs"]
-stamp = { hash = "b3:2b8f6e8a57cc2d5a", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read this section's text against part 3's diff (plugin host app, PluginHosts seam and Windows launcher, HostSupervisor and CLAP filter kinds) and the merged wave; it describes what the code does, with the not-yet lists updated" }
+stamp = { hash = "b3:2b8f6e8a57cc2d5a", by = "agent:claude", note = "Adds the control module paragraph (messages each way, u32 length frames up to MAX_FRAME, decode refusals) matching control.rs, the AsRef<Shared> note matching shared.rs, and the round-trip/truncation tests; the not-here list now points at PluginBlock, WindowsPluginHosts, HostSupervisor and the host app" }
 
 ["CRATE-jstream-plugin-proto#purpose"."file:crates/jstream-plugin-proto/src/status.rs"]
 stamp = { hash = "b3:8cec5f4716edad12" }
@@ -2727,7 +2727,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via platform#purpose (Audio and FakeAudioIo lines); Secret and OAuthTokenStore text unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:ef8270694a86015f", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read; the only upstream changes are ARCH's apps/* row naming the plugin host's links, the crate-map rows for the plugin-host seam, and ARCH#threading's CLAP status sentence (host, launcher and supervisor built; graph filters not yet); nothing this section claims depends on them" }
+stamp = { hash = "b3:58a25247f9918e35", by = "agent:claude", note = "Upstream change is the platform README's Purpose (the jstream-plugin-proto dependency, the PluginHosts bullet and its fake); this crate uses only the token store and HTTP traits, so its purpose still holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:e3b27ea549009815" }
@@ -3015,7 +3015,7 @@ stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 stamp = { hash = "b3:c60cba487fc0a5e5", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
 
 ["RULES#real-time"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:55003da5ea549507", by = "agent:claude", note = "CL1 part 3 onto wave/m3: re-read; the only upstream changes are ARCH's apps/* row naming the plugin host's links, the crate-map rows for the plugin-host seam, and ARCH#threading's CLAP status sentence (host, launcher and supervisor built; graph filters not yet); nothing this section claims depends on them" }
+stamp = { hash = "b3:4beedcf5894a3938", by = "agent:claude", note = "Upstream ARCH#threading change is only its CLAP paragraph (host process, launcher and HostSupervisor built; graph filters and stats.tick not yet; the host sleeps a quarter block instead of waking on the media clock); R-RT-001..006's text holds, and R-RT-001 now also applies to the host's rt.rs, whose pass doesn't allocate (a_pass_does_not_allocate)" }
 
 ["RUNBOOK-GO-LIVE#before"."body"]
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }

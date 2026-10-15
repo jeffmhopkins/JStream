@@ -65,9 +65,9 @@ state machine. Contents:
     lock is held only to add the kinds.
   - `HostSupervisor` keeps one CLAP filter instance's host process running, on a
     control thread, driven by `tick(now)`, which returns `HostEvent`s. A host is
-    `Ready` (with its block and latency) once its block says so. One that exits, stops
-    its heartbeat for `LIVENESS_MS` or isn't ready within `start_timeout` has
-    `Crashed`: it is killed and restarted after a wait that doubles from `first_retry`
+    `Ready` (with its block and latency) once its block says so. One that exits, isn't
+    ready within `start_timeout` (it may load the plugin without beating until then),
+    or, once ready, stops its heartbeat for `LIVENESS_MS` has `Crashed`: it is killed and restarted after a wait that doubles from `first_retry`
     up to `max_retry`. After `max_crashes` crashes with no stable run (`stable_after`)
     between them, or at once when the host marks a failure a restart can't fix (load,
     not an effect, activate, configuration), it is `Disabled` until `enable`. The

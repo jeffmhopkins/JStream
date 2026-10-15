@@ -310,7 +310,11 @@ impl HostSupervisor {
         let heartbeat = status.heartbeat.load(Ordering::Acquire);
         if heartbeat != self.beat.0 {
             self.beat = (heartbeat, now);
-        } else if now.saturating_duration_since(self.beat.1) > Duration::from_millis(LIVENESS_MS) {
+        } else if self.status == HostStatus::Running
+            && now.saturating_duration_since(self.beat.1) > Duration::from_millis(LIVENESS_MS)
+        {
+            // Only a running host must beat: one that is starting is still loading and
+            // activating the plugin, which can take seconds, and `start_timeout` bounds it.
             self.crash("the plugin host stopped responding".into(), now, events);
             return;
         }
@@ -319,6 +323,7 @@ impl HostSupervisor {
                 if let Some(latency) = shared(&block).ready_latency() {
                     self.status = HostStatus::Running;
                     self.since = now;
+                    self.beat = (heartbeat, now);
                     self.block = Some(Arc::clone(&block));
                     events.push(HostEvent::Ready { block, latency });
                 } else if now.saturating_duration_since(self.since) > self.policy.start_timeout {
@@ -571,8 +576,7 @@ mod tests {
             start_timeout: Duration::from_millis(200),
             ..SupervisorPolicy::default()
         });
-        // Hung from the start, it never reads `Start`. The timeout is inside the
-        // liveness window, so it is what fires.
+        // Hung from the start, it never reads `Start` or beats.
         rig.hosts.start_hung(true);
         assert!(rig.tick(Duration::ZERO).is_empty());
         assert!(rig.tick(Duration::from_millis(200)).is_empty());
@@ -582,6 +586,27 @@ mod tests {
             "{events:?}"
         );
         assert!(rig.hosts.hosts()[0].has_exited());
+    }
+
+    #[test]
+    fn a_host_may_load_for_longer_than_the_liveness_window() {
+        let mut rig = Rig::new(SupervisorPolicy::default());
+        // It reads `Start` but doesn't beat or get ready while the plugin loads.
+        rig.hosts.start_loading(true);
+        assert!(rig.tick(Duration::ZERO).is_empty());
+        assert!(rig.tick(Duration::from_secs(3)).is_empty());
+        assert_eq!(rig.sup.status(), HostStatus::Starting);
+        rig.hosts.hosts()[0].finish_loading();
+        rig.until_ready();
+        assert_eq!(rig.hosts.hosts().len(), 1, "no restart");
+        // Running, it must beat: a hang is caught as before.
+        rig.hosts.hosts()[0].hang();
+        rig.tick(Duration::from_millis(1));
+        let events = rig.tick(Duration::from_millis(1100));
+        assert!(
+            matches!(&events[..], [HostEvent::Crashed { reason, .. }] if reason.contains("stopped responding")),
+            "{events:?}"
+        );
     }
 
     #[test]
