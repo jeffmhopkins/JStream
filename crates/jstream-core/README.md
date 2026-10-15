@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:521ee643c162233d", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#170 F2b record) into C1a: stamp from main; F2b's recording-output Engine/Tests text and C1a's Kinds and Not-here-yet bullets coexist" }
+verified = { hash = "b3:43f3653c5edebc45", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#171 B8 audit log) into C1a: stamp from main; Not-here-yet conflict resolved to B8's list (audit log now built) plus C1a's rendering-from-registry item; B8's Audit bullet and C1a's Kinds bullet coexist" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -31,7 +31,7 @@ The control plane is the scene graph, the sessions and `video.snapshot`.
 state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
-  `with_publish_opener` and `with_key_store`;
+  `with_publish_opener`, `with_key_store` and `with_audit`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads the running pipeline; `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
@@ -39,6 +39,10 @@ state machine. Contents:
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys and the
   subscribers behind one lock, and the drop ledger behind another, and executes
   batches, actions and queries. The pipeline threads do not take the collection lock.
+- **Audit log** (`audit.rs`): one `AuditEntry` per executed batch and action, sent to
+  the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
+  keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
+  `audit.jsonl` from its own writer thread (see *Audit log* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)),
   taken from `jstream-sources`' built-in registry. Nothing renders from them yet;
@@ -83,11 +87,13 @@ state machine. Contents:
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
   the hidden `Engine::with_cpu_compositor`), the output edits and the stream-key
   actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
-  which captures the engine's traces), and an MCP agent (`jstream-mcp`, a
+  which captures the engine's traces and audit entries), the audit entries of a run of
+  batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
+  rotation (`audit.rs`), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
-Not here yet: per-client undo, the audit log, persistence, rendering from the source
-registry, arc-swap snapshots, a GPU encode target, and the platform's Windows devices. See
+Not here yet: per-client undo, persistence, rendering from the source registry,
+arc-swap snapshots, a GPU encode target, and the platform's Windows devices. See
 [Design › Not yet](#design).
 
 Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
@@ -99,7 +105,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a1779e321f43d933", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#170 F2b record) into C1a: Dependencies prose conflict resolved to F2b's mux/outputs wording plus C1a's jstream-sources line; F2b's Recording paragraph and C1a's Not yet bullet both hold" }
+verified = { hash = "b3:a99c92254ac49349", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#171 B8 audit log) into C1a: stamp from main; Not-yet conflict resolved to B8's persistence and daemon audit file plus C1a's rendering-from-registry wording; B8's audit design text and C1a's Dependencies both hold" }
 -->
 
 ### Engine and sessions
@@ -117,7 +123,8 @@ WebSocket API does, minus serialization:
 - `hello` checks the version (`unsupported_version`; a host may hand the session to a
   client built against another protocol version) and assigns a `client_id`
   (`client_1`, `client_2`, …, unique per engine). A second `hello` returns the same
-  identity with the current `rev`. A refused `hello` opens nothing.
+  identity with the current `rev`, and its `client_name` replaces the first in the audit
+  log. A refused `hello` opens nothing.
 - Every call before `hello` fails with `handshake_required`. `events()` does not need
   the handshake, as with the mock; `jstream-server` subscribes only after `welcome`.
 - Request IDs are `req_1`, `req_2`, … per session, as `WsControl` numbers them, and
@@ -337,7 +344,8 @@ the store refuses, both fail with `action_failed`. The key is write-only
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): every reason is fixed text, nothing logs
 the call's arguments, and no response, event or query carries it. The crate-root test
 `secrets_are_redacted` sets a key and checks the reply, `state.get`, `output.list`,
-`output.status`, the events and every span and event the engine traces.
+`output.status`, the events, every span and event the engine traces, and the audit
+entries.
 
 **Placeholder.** With no backends, the actions only move a state machine, as
 `jstream-control`'s mock does. The protocol defines an action's response as "accepted"
@@ -484,7 +492,8 @@ stops reading while the deadline runs out.
 
 `std::sync::Mutex` locks, always taken in one order: a session's identity lock (held
 by `hello` while it registers the client), then the engine's collection lock, then
-the pipeline gate, then a subscription queue's. The drop ledger is its own mutex.
+the pipeline gate, then a subscription queue's. The drop ledger is its own mutex, and
+so is the audit sink's handle, which is only cloned under it (see *Audit log*).
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. The snapshot compositor belongs to the snapshot
@@ -521,6 +530,47 @@ name and protocol version, and a call before `hello` are `debug`. Only names, ID
 revisions and error codes are logged, never a call's arguments
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
+### Audit log
+
+Every agent action goes to the audit log
+([ADR-0006](../../docs/adr/0006-mcp-full-access.md),
+[ARCH › MCP](../../docs/ARCHITECTURE.md#mcp)). `Engine::execute` records one
+`AuditEntry` for each batch and action, failed ones included, and none for queries:
+the time, `client_id`, the client's name from its latest `hello` (`client_name`, cut
+to 128 bytes; `client_id`s restart at `client_1` with the engine, so the name is what
+says which agent acted across restarts), the session's `request_id`, the call (`batch`
+or the action's name), a batch's edits by name in order, an action's `output_id`, the `rev` before and
+after, the result (`ok` or the error code), and `replayed` for a batch whose
+idempotency key had already been applied. It holds no argument of any call: no names,
+settings, URLs or keys, so `output.set_key` records only that action on that output
+([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The `rev` before is read just before the
+call; an applied batch reports its own `rev` minus one, so another client's batch
+landing in between does not skew it, and a failed batch or an action reports the same
+`rev` twice. The `request_id` is the in-process session's (`req_N`); for a WebSocket
+client the server maps its own wire ID to it, so the entry can't yet be matched to the
+ID the client sent. The engine keeps each client's name for its lifetime, as it keeps
+the IDs.
+
+`AuditSink` is a trait because the host chooses the sink (a file in the data
+directory, memory in tests, its own view in a UI), the same kind of host-injection
+seam as `DropSource`.
+
+The sink is behind its own mutex, taken only to clone the handle, and `record` is
+called after the call completes, with no engine lock held. A sink must not block:
+`AuditFile` (`audit.rs`) sends entries over a bounded channel (1024 entries) to its
+writer thread, and when that is full counts what it drops; the next line written is
+`{"time":…,"dropped":n}`. The writer appends one JSON line per entry to `audit.jsonl`
+in the directory the host names (the data directory,
+[ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)), with mode `0600` on Unix.
+When a line would take it past 8 MiB (or the limit given to `with_limit`) it is
+renamed to `audit.1.jsonl`, replacing the previous one, so the log stays under about
+twice the limit. A write error is logged at `warn` and loses the entry; it never fails
+the call. Dropping the `AuditFile` writes what is queued and joins the thread. Times
+are UTC, RFC 3339 to the millisecond, formatted without a date crate.
+
+No host injects a sink yet: the daemon's wiring, in its data directory, is a later
+item.
+
 ### Not yet
 
 - **Per-client undo** ([ADR-0013](../../docs/adr/0013-command-model.md)). The protocol
@@ -531,8 +581,8 @@ revisions and error codes are logged, never a call's arguments
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- The audit log, persistence (the collection file), and rendering sources from
-  `jstream-sources`' registry, so settings change what renders.
+- Persistence (the collection file), the daemon's audit file, and rendering
+  sources from `jstream-sources`' registry, so settings change what renders.
 - Arc-swap snapshots, the collector thread, live-value handover, and a GPU encode
   target. `output.start` is the first cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): one scene, a CPU readback
