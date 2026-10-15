@@ -59,7 +59,7 @@ const MAX_HELD_EVENTS: usize = 1024;
 /// How long a closing connection waits for the client to take what is still queued and
 /// the close frame. A client that has stopped reading would otherwise hold the
 /// connection, and its `Control` session, open for good (#108 review N1).
-const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+pub(crate) const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// How many events a connection's outbox holds before it drops them all and queues one
 /// `events.dropped` notice instead.

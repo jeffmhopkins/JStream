@@ -1,6 +1,6 @@
 //! Detects a Windows without Media Foundation, such as an N or KN edition without the
 //! Media Feature Pack, so the host fails with an error the user can act on instead of an
-//! unexplained `MFStartup` failure (ADR-0003 names this gap).
+//! unexplained `MFStartup` failure (ADR-0031's Consequences name this gap).
 //!
 //! The probe loads `mfplat.dll` from System32 and looks for `MFStartup`; when that fails,
 //! the edition (the registry's `EditionID`) picks the advice. The decision is plain data
@@ -63,7 +63,7 @@ pub(crate) fn decide(probe: &Probe) -> Result<(), PlatformError> {
              JStream again.",
             edition.unwrap_or_default()
         ),
-        Kind::Other => "mfplat.dll is missing from System32. On an N edition of Windows, \
+        Kind::Other => "Media Foundation (mfplat.dll) could not be loaded from System32. On an N edition of Windows, \
                         install the Media Feature Pack (Settings > System > Optional \
                         features); on Windows Server, add the \"Server Media Foundation\" \
                         feature. Then restart and start JStream again."
