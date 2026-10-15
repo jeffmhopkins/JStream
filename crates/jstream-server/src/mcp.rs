@@ -58,6 +58,8 @@ pub(crate) struct Mcp {
     connector: Connector,
     max_sessions: usize,
     idle_timeout: Duration,
+    /// Whether each server lists the `youtube` tool ([`ServerConfig::mcp_youtube`]).
+    youtube: bool,
     sessions: Mutex<HashMap<String, Session>>,
     /// The server for requests without `Mcp-Session-Id`, opened at the first one.
     stateless: OnceLock<Arc<McpServer>>,
@@ -86,6 +88,7 @@ impl Mcp {
             connector,
             max_sessions: config.max_mcp_sessions,
             idle_timeout: config.mcp_idle_timeout,
+            youtube: config.mcp_youtube,
             sessions: Mutex::new(HashMap::new()),
             stateless: OnceLock::new(),
             numbers: AtomicU64::new(0),
@@ -99,7 +102,12 @@ impl Mcp {
         let span = tracing::info_span!("mcp_client", id = number, kind);
         let server = span.in_scope(|| {
             tracing::info!(peer = %peer, "mcp session opened");
-            Arc::new(McpServer::new(Arc::from((self.connector)())))
+            let server = McpServer::new(Arc::from((self.connector)()));
+            Arc::new(if self.youtube {
+                server.with_youtube()
+            } else {
+                server
+            })
         });
         (number, server)
     }

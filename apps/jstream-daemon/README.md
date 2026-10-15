@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:9df3d4c514ab9338", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Jeff: no required OAuth client. YouTube bullet now says the client is optional and user-supplied; still read from --youtube-client or env" }
+verified = { hash = "b3:599291ea80000eff", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b round 1 and the MCP tool wiring: YouTube bullet (optional, user-supplied client) holds; serve.rs Built/bind change is described in Design" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -81,7 +81,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:6800fd7229d43a34", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Jeff: no required OAuth client. --youtube-client row and help say optional, your own; YouTube bullet says JStream ships none and points to Going live with YouTube Studio's RTMPS URL and key; rest unchanged" }
+verified = { hash = "b3:5419cf8ec6f61713", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b B2/N2: YouTube bullet says this build ships none, and without a client MCP lists no youtube tool; matches serve::bind passing mcp_youtube; rest unchanged" }
 -->
 
 ```sh
@@ -142,7 +142,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   it stops accepting connections, closes the open ones (their clients see
   `Disconnected`, and event streams end) and exits 0. Without `--collection` the
   engine's state is lost.
-- **YouTube (Windows), optional.** JStream ships no OAuth client and needs none: to
+- **YouTube (Windows), optional.** This build ships no OAuth client and needs none: to
   stream to YouTube without one, use **Going live** below with YouTube Studio's RTMPS
   URL and stream key. With an OAuth client you supply yourself, the `youtube.*` calls
   work too ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)): `youtube.sign_in`
@@ -151,8 +151,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   type "Desktop app" with the YouTube Data API v3 enabled. Pass its downloaded JSON
   with `--youtube-client`, or set `JSTREAM_YOUTUBE_CLIENT_ID` (and
   `JSTREAM_YOUTUBE_CLIENT_SECRET`, if it has one). Never commit it. Without a client,
-  or off Windows, `youtube.status` answers `unavailable` and the startup log says why.
-  A client file that can't be read or holds no `client_id`, or a secret set without an
+  or off Windows, `youtube.status` answers `unavailable`, the startup log says why, and
+  MCP doesn't list the `youtube` tool. A client file that can't be read or holds no `client_id`, or a secret set without an
   ID, is a startup failure (exit 1); the message names the file but never its contents
   or the secret ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Going live (Windows).** `output.create` with an RTMP(S) server URL, then
@@ -208,7 +208,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:e03533ea4ed82dd1", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Wording-only change in youtube.rs and serve.rs docs (the user's client, none shipped); the YouTube design bullet still matches the code" }
+verified = { hash = "b3:21735ca5fb882852", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: YouTube bullet adds serve::engine returning whether the engine got YouTube and serve::bind setting ServerConfig::mcp_youtube; N3: jstream-youtube is a Windows-only dependency and the Dependencies sentence is rewritten; matches Cargo.toml" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -271,8 +271,11 @@ verified = { hash = "b3:e03533ea4ed82dd1", by = "agent:claude@session_01YKRrREb5
   the token store, before the engine goes live; core keeps the token under its fixed
   account ID. Off Windows there is no OAuth token store, so the client is dropped with
   a warning. Neither a missing client nor a transport that can't be built stops the
-  daemon: YouTube is optional (ADR-0041). `youtube::set_up` is that call over any
-  transport and store, which is how the test runs it on `jstream-youtube`'s fake.
+  daemon: YouTube is optional (ADR-0041). `serve::engine` returns whether the engine
+  got YouTube, and `serve::bind` passes that to the server as
+  `ServerConfig::mcp_youtube`, so MCP lists the `youtube` tool only then.
+  `youtube::set_up` is that call over any transport and store, which is how the test
+  runs it on `jstream-youtube`'s fake.
 - **Collection file and audit log** (`serve.rs`, `main.rs`). The daemon only passes
   them to the engine: `Engine::with_collection_file` loads and saves the collection,
   and `with_audit` takes a `jstream_core::AuditFile`, whose writer thread appends
@@ -364,9 +367,9 @@ verified = { hash = "b3:e03533ea4ed82dd1", by = "agent:claude@session_01YKRrREb5
   `jstream-platform` (`Backends`, the key store trait), `jstream-platform-windows` on
   Windows only (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
-  check), `jstream-youtube` (the HTTPS transport) and `serde_json` (the OAuth client
-  file), both already in the tree through core and the server, `anyhow`, `tracing` (the startup line) and `blake3`
-  (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,
+  check), `jstream-youtube` on Windows only (the HTTPS transport) and `serde_json` (the
+  OAuth client file), `anyhow`, `tracing` (the startup line) and `blake3` (the crash
+  reports' secret digests), all already in the tree through core and the server, tokio (`rt-multi-thread` for the runtime,
   `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), `tracing-subscriber`
   (features `fmt` and `std` only: no `ansi`, `env-filter` or `tracing-log`, so it adds
   only `sharded-slab` and `thread_local`), and `getrandom`

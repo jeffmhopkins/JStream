@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:feba9db13c101e57", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:61fa63eb0229dfa0", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: Configuration bullet adds whether MCP lists the youtube tool (ServerConfig::mcp_youtube); matches config.rs" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -34,7 +34,8 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Web UI** (`ui.rs`): the UI bundle's files from `ServerConfig::ui_dir`, with their
   types and a Content Security Policy.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
-  origins, connection limits, the MCP switch and its limits, the UI directory) and
+  origins, connection limits, the MCP switch, its limits and whether it lists the
+  `youtube` tool, the UI directory) and
   `Token`, the control token.
 - **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
   an accepted upgrade request in time.
@@ -57,7 +58,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4882addaa1ca5d5e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:ae0a7e74780998e5", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: Sessions paragraph adds that each MCP server lists youtube only with mcp_youtube on (off by default, set by the host); matches Mcp::open and the new mcp_lists_youtube_only_when_the_host_turns_it_on test" }
 -->
 
 ### Listening and admission
@@ -284,7 +285,10 @@ bytes from the OS's random source (`getrandom`) as 32 hex digits. It is not a se
 that admits anyone: every request still needs the token. Requests that carry no session
 share one stateless server, opened at the first of them, so those clients share a
 session ([jstream-mcp › Open questions](../jstream-mcp/README.md#open-questions)).
-Requests to one session may run concurrently.
+Requests to one session may run concurrently. Each server lists the `youtube` tool
+(`jstream_mcp::Server::with_youtube`) only with `ServerConfig::mcp_youtube` on, which
+`ServerConfig::new` leaves off: the host turns it on when its engine has a YouTube
+setup, from an OAuth client the user configured.
 
 **Limits.** At most `max_mcp_sessions` (default 16) sessions are open. One unused for
 `mcp_idle_timeout` (default 30 minutes) is ended, and its `Control` session dropped,

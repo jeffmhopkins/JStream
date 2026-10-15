@@ -43,7 +43,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | Milestone | Progress | Merged | In review | Planned |
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
-| [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `████████░░` 83% | 15 | 2 | 1 |
+| [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `████████░░` 83% | 15 | 3 | 0 |
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 83% | 29 | 3 | 3 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `███████░░░` 67% | 4 | 1 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
@@ -93,7 +93,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | Y2 | OAuth token store | ✅ merged | #169 |
 | YA | ADR-0041 one sign-in | ✅ merged | #214 |
 | Y3 | YouTube in the engine | 🔍 in review | #223 |
-| A6b | Daemon YouTube wiring | ⏳ planned |  |
+| A6b | Daemon YouTube wiring | 🔍 in review | #312 |
 
 </details>
 

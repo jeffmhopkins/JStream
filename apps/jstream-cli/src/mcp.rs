@@ -9,9 +9,13 @@
 //! Docs: apps/jstream-cli/README.md#usage, apps/jstream-cli/README.md#design, docs/ARCHITECTURE.md#mcp, docs/adr/0006-mcp-full-access.md
 
 use crate::args::Connection;
+use crate::block::block_on;
 use crate::exit::CliError;
-use crate::run::Connector;
+use crate::run::{CLIENT_NAME, Connector};
 use jstream_control::Control;
+use jstream_control::protocol::{
+    Call, CallResult, Hello, PROTOCOL_VERSION, Query, QueryResult, YoutubeAuth,
+};
 use jstream_mcp::{McpError, Server};
 use std::io::{self, BufRead, Read, Write};
 use std::sync::Arc;
@@ -34,6 +38,11 @@ pub fn serve(
 ) -> Result<(), CliError> {
     let control: Arc<dyn Control> = Arc::from(connector(connection)?);
     let server = Server::new(control);
+    let server = if engine_has_youtube(connection, connector) {
+        server.with_youtube()
+    } else {
+        server
+    };
     // `jstream-mcp` reports read and write failures alike, so the input remembers its own.
     let mut input = Input {
         inner: input,
@@ -52,6 +61,32 @@ pub fn serve(
             CliError::Io(error)
         }
     })
+}
+
+/// Whether the engine has YouTube (an OAuth client the user configured), so the proxy
+/// lists the `youtube` tool. Asked over a short session of its own: the MCP server's
+/// session sends `hello` only at `initialize`, with the agent's name. Any failure, such
+/// as an engine that doesn't know `youtube.status`, counts as no: the tool stays hidden.
+fn engine_has_youtube(connection: &Connection, connector: Connector<'_>) -> bool {
+    let Ok(control) = connector(connection) else {
+        return false;
+    };
+    let hello = Hello {
+        protocol: PROTOCOL_VERSION,
+        client_name: CLIENT_NAME.into(),
+    };
+    if block_on(control.hello(hello)).is_err() {
+        return false;
+    }
+    let status = block_on(control.call(Call::Query {
+        query: Query::YoutubeStatus,
+    }));
+    matches!(
+        status.map(|response| response.result),
+        Ok(CallResult::Query {
+            result: QueryResult::YoutubeStatus { auth },
+        }) if auth != YoutubeAuth::Unavailable
+    )
 }
 
 /// The proxy's input, noting whether reading it failed: serving stops at the first
@@ -96,5 +131,76 @@ impl BufRead for Input<'_> {
 
     fn consume(&mut self, amount: usize) {
         self.inner.consume(amount);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::engine_has_youtube;
+    use crate::args::Connection;
+    use crate::exit::CliError;
+    use jstream_control::protocol::{
+        Call, CallResult, Hello, Query, QueryResult, RequestId, Response, Welcome, YoutubeAuth,
+    };
+    use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
+
+    /// A `MockEngine` session that answers `youtube.status` with `auth`, when given.
+    struct Youtube {
+        inner: MockControl,
+        auth: Option<YoutubeAuth>,
+    }
+
+    impl Control for Youtube {
+        fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+            self.inner.hello(hello)
+        }
+
+        fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+            match (&call, self.auth) {
+                (
+                    Call::Query {
+                        query: Query::YoutubeStatus,
+                    },
+                    Some(auth),
+                ) => Box::pin(async move {
+                    Ok(Response {
+                        id: RequestId::new("req_1"),
+                        result: CallResult::Query {
+                            result: QueryResult::YoutubeStatus { auth },
+                        },
+                    })
+                }),
+                _ => self.inner.call(call),
+            }
+        }
+
+        fn events(&self) -> EventStream {
+            self.inner.events()
+        }
+    }
+
+    fn has_youtube(auth: Option<YoutubeAuth>) -> bool {
+        let engine = MockEngine::new();
+        let connector = move |_: &Connection| -> Result<Box<dyn Control>, CliError> {
+            Ok(Box::new(Youtube {
+                inner: engine.connect(),
+                auth,
+            }))
+        };
+        let connection = Connection::Remote {
+            url: None,
+            token_file: None,
+        };
+        engine_has_youtube(&connection, &connector)
+    }
+
+    /// The proxy lists `youtube` only when the engine has a YouTube setup.
+    #[test]
+    fn youtube_is_listed_only_when_the_engine_has_it() {
+        assert!(has_youtube(Some(YoutubeAuth::SignedOut)));
+        assert!(has_youtube(Some(YoutubeAuth::SignedIn)));
+        assert!(!has_youtube(Some(YoutubeAuth::Unavailable)));
+        // An engine that doesn't answer `youtube.status` (the mock's error) hides it.
+        assert!(!has_youtube(None));
     }
 }

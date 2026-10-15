@@ -93,6 +93,8 @@ fn daemon() -> Command {
     command.env_remove("JSTREAM_TOKEN_FILE");
     command.env_remove("RUST_LOG");
     command.env_remove("XDG_DATA_HOME");
+    command.env_remove("JSTREAM_YOUTUBE_CLIENT_ID");
+    command.env_remove("JSTREAM_YOUTUBE_CLIENT_SECRET");
     command.env("HOME", &home);
     command.env("APPDATA", &home);
     command
@@ -339,6 +341,12 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     assert_eq!(status, 200, "{body}");
     assert!(body.contains("\"isError\":false"), "{body}");
     assert!(body.contains("main"), "{body}");
+    // No OAuth client, so YouTube's tool is hidden.
+    let tools = r#"{"jsonrpc":"2.0","id":3,"method":"tools/list"}"#;
+    let (status, _, body) = mcp_post(&authority, token, Some(&session), tools);
+    assert_eq!(status, 200, "{body}");
+    assert!(body.contains("\"name\":\"scene\""), "{body}");
+    assert!(!body.contains("\"name\":\"youtube\""), "{body}");
     let (status, _, _) = mcp_post(&authority, WRONG_TOKEN, None, initialize);
     assert_eq!(status, 401, "the MCP endpoint needs the token too");
 

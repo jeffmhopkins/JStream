@@ -26,6 +26,15 @@ use {
 pub type Connect =
     Arc<dyn Fn(&str, &Secret) -> Result<Box<dyn LivePublish>, PublishError> + Send + Sync>;
 
+/// What [`engine`] builds: the engine, and whether it has YouTube, which [`bind`] tells
+/// MCP so it lists the `youtube` tool only then.
+pub struct Built {
+    /// The engine.
+    pub engine: Arc<Engine>,
+    /// Whether `Engine::with_youtube` gave it YouTube, from the user's OAuth client.
+    pub youtube: bool,
+}
+
 /// The engine the daemon serves: the collection in `--collection`'s file (else an empty
 /// one that is not saved), the placeholder outputs, and `audit` recording every batch,
 /// undo, redo and action.
@@ -42,7 +51,7 @@ pub fn engine(
     options: &Options,
     audit: Arc<dyn AuditSink>,
     youtube: Option<youtube::Client>,
-) -> anyhow::Result<Arc<Engine>> {
+) -> anyhow::Result<Built> {
     let mut engine = Engine::new().with_audit(audit);
     if let Some(path) = &options.collection {
         // The error names the file and what is wrong with it.
@@ -56,7 +65,7 @@ pub fn engine(
         .iter()
         .cloned()
         .fold(engine, Engine::with_output);
-    let engine = with_youtube(engine, youtube);
+    let (engine, youtube) = with_youtube(engine, youtube);
     #[cfg(windows)]
     let engine = live(
         engine,
@@ -66,20 +75,20 @@ pub fn engine(
     );
     #[cfg(not(windows))]
     let engine = Arc::new(engine);
-    Ok(engine)
+    Ok(Built { engine, youtube })
 }
 
 /// YouTube (ADR-0041), when the daemon has the user's OAuth client and somewhere to keep
 /// the account's refresh token: Windows Credential Manager. Elsewhere, and without a
 /// client, `youtube.status` answers `unavailable`. Never fails the start: a transport
 /// that can't be built is logged, and YouTube stays unavailable.
-fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> Engine {
+fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> (Engine, bool) {
     let Some(client) = client else {
         tracing::info!(
             "YouTube is unavailable: no OAuth client (`--youtube-client`, or {})",
             youtube::CLIENT_ID_ENV
         );
-        return engine;
+        return (engine, false);
     };
     #[cfg(windows)]
     {
@@ -87,16 +96,17 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> Engine {
             Ok(transport) => transport,
             Err(error) => {
                 tracing::warn!(%error, "YouTube is unavailable: no HTTPS transport");
-                return engine;
+                return (engine, false);
             }
         };
         tracing::info!("YouTube sign-in is available");
-        youtube::set_up(
+        let engine = youtube::set_up(
             engine,
             client,
             Arc::new(transport),
             Arc::new(jstream_platform_windows::WindowsCredentials),
-        )
+        );
+        (engine, true)
     }
     #[cfg(not(windows))]
     {
@@ -106,7 +116,7 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> Engine {
             "YouTube is unavailable: it keeps its sign-in in the OS credential store, \
              which the daemon has only on Windows"
         );
-        engine
+        (engine, false)
     }
 }
 
@@ -208,18 +218,21 @@ fn opener(
     })
 }
 
-/// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token`, with MCP's
-/// streamable-HTTP transport on. Each connection and each MCP session gets its own
-/// session (its own `client_id`); all of them share the engine.
+/// Binds the server on `127.0.0.1:<port>`, serving `built`'s engine behind `token`, with
+/// MCP's streamable-HTTP transport on, listing the `youtube` tool only when the engine
+/// has YouTube. Each connection and each MCP session gets its own session (its own
+/// `client_id`); all of them share the engine.
 pub async fn bind(
-    engine: Arc<Engine>,
+    built: Built,
     port: u16,
     token: Token,
 ) -> Result<Server, jstream_server::ServerError> {
+    let Built { engine, youtube } = built;
     let connector: Connector = Arc::new(move || Box::new(engine.connect()));
     let mut config = ServerConfig::new(token);
     config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     config.mcp = true;
+    config.mcp_youtube = youtube;
     Server::bind(config, connector).await
 }
 
@@ -630,7 +643,9 @@ mod tests {
             ..Options::default()
         };
         let audit = Arc::new(AuditMemory::new());
-        let first = engine(&options, Arc::clone(&audit) as _, None).expect("an engine");
+        let first = engine(&options, Arc::clone(&audit) as _, None)
+            .expect("an engine")
+            .engine;
         assert!(file.exists(), "a missing file is created");
         let control = session(&first).await;
         timely(control.call(Call::Batch(Batch::single(Edit::SceneCreate {
@@ -648,7 +663,9 @@ mod tests {
         drop(control);
         drop(first);
 
-        let second = engine(&options, Arc::new(AuditMemory::new()), None).expect("an engine");
+        let second = engine(&options, Arc::new(AuditMemory::new()), None)
+            .expect("an engine")
+            .engine;
         let control = session(&second).await;
         match timely(control.call(Call::Query {
             query: Query::SceneList,

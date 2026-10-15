@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:469fc571f78f1a44", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: stale through ARCH#protocol; R-API-001..004 hold" }
+verified = { hash = "b3:57ac7b173758c682", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 change to Y3 (no required OAuth client): re-read; nothing here names the client or the tool list, so the text holds (the daemon still calls no with_youtube; the server's MCP endpoint gets Server::new, so it lists no youtube tool until A6b adds one)" }
 -->
 
 <a id="R-API-001"></a>

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:7f32d6e5ad5b5117", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: daemon row adds YouTube sign-in with the app's OAuth client (--youtube-client); diagram unchanged" }
+verified = { hash = "b3:382e8ca3e46d8ccc", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b B1: daemon row now says optional YouTube sign-in with an OAuth client the user supplies (--youtube-client), matching the daemon README" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:7f32d6e5ad5b5117", by = "agent:claude@session_01YKRrREb5
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), registers the virtual camera (`--register-vcam`), and offers YouTube sign-in with the app's OAuth client (`--youtube-client`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), registers the virtual camera (`--register-vcam`), and offers optional YouTube sign-in with an OAuth client the user supplies (`--youtube-client`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:68ab2ea744c281a3", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: daemon now depends on jstream-youtube (layer 2) for its HTTPS transport, below the app layer; table rows unchanged and hold" }
+verified = { hash = "b3:3d39d525571cdf3a", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: daemon's jstream-youtube dependency moved to Windows-only target deps; still layer 2 below apps; rows hold" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -527,7 +527,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:4c5f86faf8db5da9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:2627ae7b8f9ebd43", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: stale via jstream-server (mcp_youtube config); protocol text unchanged by it; the youtube unavailable wording holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -612,7 +612,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   and `youtube.list_streams` (never a stream key); the events `youtube.status_changed`
   and `youtube.health_changed` (a running YouTube output's stream health); and the RTMP
   target `youtube { broadcast_id }`, which `output.start` resolves to the bound stream's
-  `rtmps://` ingest and key through the Live API. Planned for M3:
+  `rtmps://` ingest and key through the Live API. All of these need a Google OAuth
+  client the user configured themselves (JStream embeds none); without one
+  `youtube.status` reports `unavailable`, the rest fail with `action_failed`, and
+  clients hide them. Streaming to YouTube with a stream key needs none of this. Planned
+  for M3:
   the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
   the channel and goes to the audit log, and `youtube.chat.feature { message_id }`, which
   sets or clears the featured message (runtime state, reported by an event) that the chat
@@ -661,11 +665,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:801a5ca4daece7b9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: nouns add delete, studio and youtube; tools.snap measured 164260 bytes, text says about 165 KB" }
+verified = { hash = "b3:8a9a9a55ca3eac37", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 (ADR-0051 proposed, Jeff: avoid requiring an OAuth client): re-read; YouTube is off unless the host passes a user-supplied client: Server::new hides the youtube tool, Server::with_youtube lists it; snapshot taken with it (16 tools), default list 15, checked against server.rs, tools.rs and tests.rs" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio`, `video` and `youtube` so far; `audio`
+  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio`, `video` and, when the user configured a Google OAuth client, `youtube` so far; `audio`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events

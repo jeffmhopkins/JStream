@@ -110,6 +110,11 @@ pub struct ServerConfig {
     /// How long an MCP session may go unused before it is ended, and its `Control`
     /// session with it. [`ServerConfig::new`] sets 30 minutes.
     pub mcp_idle_timeout: Duration,
+    /// Whether MCP lists the `youtube` tool
+    /// ([`jstream_mcp::Server::with_youtube`]). The host sets it when the engine has a
+    /// YouTube setup, from an OAuth client the user configured; [`ServerConfig::new`]
+    /// leaves it off, so the tool is hidden.
+    pub mcp_youtube: bool,
     /// The web UI's built bundle (`trunk build`'s `dist` directory), served at every
     /// path the API doesn't use, behind the same checks, with a browser's `Basic`
     /// credentials carrying the token. [`Server::bind`](crate::Server::bind) refuses one
@@ -133,6 +138,7 @@ impl ServerConfig {
             mcp: false,
             max_mcp_sessions: MAX_MCP_SESSIONS,
             mcp_idle_timeout: MCP_IDLE_TIMEOUT,
+            mcp_youtube: false,
             ui_dir: None,
         }
     }

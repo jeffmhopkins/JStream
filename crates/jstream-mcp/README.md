@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:5a6513c1a4d01474", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: tool table lists delete, studio and youtube (16 tools in tests.rs)" }
+verified = { hash = "b3:31fe1cec21c349b3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 (ADR-0051 proposed, Jeff: avoid requiring an OAuth client): re-read; YouTube is off unless the host passes a user-supplied client: Server::new hides the youtube tool, Server::with_youtube lists it; snapshot taken with it (16 tools), default list 15, checked against server.rs, tools.rs and tests.rs" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:192756fc24b7c37f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: re-read; grouping holds, tools.snap regenerated" }
+verified = { hash = "b3:642036b0cc698eb3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 (ADR-0051 proposed, Jeff: avoid requiring an OAuth client): re-read; YouTube is off unless the host passes a user-supplied client: Server::new hides the youtube tool, Server::with_youtube lists it; snapshot taken with it (16 tools), default list 15, checked against server.rs, tools.rs and tests.rs" }
 -->
 
 ### Tools
@@ -56,11 +56,14 @@ generated from the protocol's JSON Schema when a `Server` is built: every varian
 named after its noun
 takes it as its `op` argument. A command added to the protocol becomes an op with no
 change here, and a new noun becomes a new tool. The generated list is in the snapshot
-below; its shape is:
+below; its shape is the following. `Server::new` leaves the `youtube` tool out, since
+YouTube's API features are off unless the user configured their own Google OAuth
+client; a host whose engine has a YouTube setup lists it with `Server::with_youtube`.
+The snapshot is taken with it.
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio`, `video`, `youtube` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio`, `video`, and `youtube` when the host adds it, today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |

@@ -29,9 +29,6 @@ jstream-platform.workspace = true
 # `OutputId`, for `--output`; `OutputKind`, for the publish opener.
 jstream-protocol.workspace = true
 jstream-server.workspace = true
-# `HttpTransport`, and on Windows `HttpsTransport`, the transport YouTube's calls go
-# through (`Engine::with_youtube`).
-jstream-youtube.workspace = true
 # Reading the YouTube OAuth client file Google Cloud gives (`--youtube-client`).
 serde_json.workspace = true
 # The runtime the server runs on; `signal` for Ctrl-C (and SIGTERM on Unix).
@@ -46,6 +43,8 @@ tracing-subscriber.workspace = true
 # key store, and the Media Foundation check that runs at startup.
 [target.'cfg(windows)'.dependencies]
 jstream-platform-windows.workspace = true
+# `HttpsTransport`, the transport YouTube's calls go through (`Engine::with_youtube`).
+jstream-youtube.workspace = true
 
 [dev-dependencies]
 # The tests drive the daemon through the WebSocket client, as the CLI does.

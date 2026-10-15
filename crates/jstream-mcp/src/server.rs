@@ -28,8 +28,13 @@ const SERVER_NAME: &str = "jstream-mcp";
 /// The client name sent in the engine `hello` when the MCP client gave none.
 const DEFAULT_CLIENT_NAME: &str = "jstream-mcp";
 
+/// The tool [`Server::with_youtube`] adds: YouTube's API features, which are off unless
+/// the user configured their own Google OAuth client.
+const YOUTUBE_TOOL: &str = "youtube";
+
 /// How long a modern client may cache `server/discover` and `tools/list`: the tools are
-/// generated at build time, so they only change with the binary.
+/// generated at build time, so they only change with the binary and the host's
+/// configuration.
 const TOOLS_TTL_MS: u64 = 3_600_000;
 
 const META: &str = "_meta";
@@ -91,15 +96,27 @@ pub struct Server {
 impl Server {
     /// A server over `control`, a session that has not sent `hello` yet (or has: a
     /// second `hello` returns the same identity).
+    ///
+    /// It lists every tool but `youtube`: YouTube's API features are off unless the
+    /// user configured a Google OAuth client, and then the host adds the tool with
+    /// [`with_youtube`](Self::with_youtube).
     pub fn new(control: Arc<dyn Control>) -> Self {
         Server {
             control,
             span: tracing::info_span!("mcp_session"),
-            tools: Tools::generate(),
+            tools: Tools::generate().without(YOUTUBE_TOOL),
             opened: AtomicBool::new(false),
             feed: OnceLock::new(),
             legacy: Mutex::new(None),
         }
+    }
+
+    /// Lists the `youtube` tool too. The host calls this when the engine has a YouTube
+    /// setup, from an OAuth client the user configured.
+    #[must_use]
+    pub fn with_youtube(mut self) -> Self {
+        self.tools = Tools::generate();
+        self
     }
 
     /// Answers one JSON-RPC message (one line of the stdio transport, without its

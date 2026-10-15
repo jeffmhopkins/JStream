@@ -1346,6 +1346,35 @@ fn mcp_is_off_by_default() {
     assert_eq!(harness.sessions.load(Ordering::SeqCst), 0);
 }
 
+/// MCP lists the `youtube` tool only when the host says the engine has YouTube.
+#[test]
+fn mcp_lists_youtube_only_when_the_host_turns_it_on() {
+    let names = |youtube: bool| {
+        let harness = start_with(&MockEngine::new(), |config| {
+            config.mcp = true;
+            config.mcp_youtube = youtube;
+        });
+        let session = harness.mcp_session("agent");
+        let list = serde_json::json!({"jsonrpc": "2.0", "id": 5, "method": "tools/list"});
+        let reply = harness.mcp(Some(&session), &list);
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        reply.json()["result"]["tools"]
+            .as_array()
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter_map(|tool| tool["name"].as_str().map(str::to_owned))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
+    let hidden = names(false);
+    assert!(hidden.iter().any(|name| name == "scene"), "{hidden:?}");
+    assert!(!hidden.iter().any(|name| name == "youtube"), "{hidden:?}");
+    let listed = names(true);
+    assert!(listed.iter().any(|name| name == "youtube"), "{listed:?}");
+}
+
 /// Each `initialize` opens its own session, with its own engine client; requests carrying
 /// its ID act as that client, and the engine sees the edits.
 #[test]

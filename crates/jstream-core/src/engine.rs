@@ -23,7 +23,7 @@ use crate::runtime::{
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
 use crate::studio::Studio;
-use crate::youtube::{Youtube, YoutubeSetup};
+use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
@@ -169,11 +169,13 @@ impl Engine {
         self
     }
 
-    /// Gives the engine YouTube (ADR-0041): the app's OAuth client, the HTTPS
-    /// transport and the store for the account's refresh token. The YouTube actions and
-    /// queries then work, and an output with a `youtube` target can start. Without it,
-    /// `youtube.status` reports `unavailable` and the other YouTube calls fail with
-    /// `action_failed`. Reads the store once, here: a token kept by an earlier sign-in
+    /// Gives the engine YouTube (ADR-0041): the user's own Google OAuth client, the
+    /// HTTPS transport and the store for the account's refresh token. The host calls this
+    /// only when the user configured a client; JStream embeds none. The YouTube actions
+    /// and queries then work, and an output with a `youtube` target can start. Without
+    /// it, YouTube's API features are off: `youtube.status` reports `unavailable`, the
+    /// other YouTube calls fail with `action_failed` saying no client is configured, and
+    /// clients hide them. Reads the store once, here: a token kept by an earlier sign-in
     /// signs the engine in. Configure this before [`connect`](Self::connect).
     #[must_use]
     pub fn with_youtube(self, setup: YoutubeSetup) -> Self {
@@ -622,7 +624,7 @@ impl Engine {
     fn youtube_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
         let youtube = self.youtube();
         let unavailable = || ProtocolError::ActionFailed {
-            reason: "this engine has no YouTube client".into(),
+            reason: NO_YOUTUBE_CLIENT.into(),
         };
         let action = |result: Result<ActionResult, ProtocolError>| {
             result.map(|result| CallResult::Action {
@@ -871,7 +873,7 @@ impl Engine {
                 }
                 None => {
                     return Err(ProtocolError::ActionFailed {
-                        reason: "this engine has no YouTube client".into(),
+                        reason: NO_YOUTUBE_CLIENT.into(),
                     });
                 }
             },
