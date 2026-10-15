@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:9416cf39b58da517", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 youtube_chat preset: re-read; video parsing, blank on empty, default CSS, browser settings reuse checked against youtube_chat.rs, browser::open and tests/youtube_chat.rs" }
+verified = { hash = "b3:553b098ae5492f3e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375 round 1 B2/N3 and merge of C8 at e4689ab: re-read; browser and youtube_chat both have gpu_frame and audio, Context's backend names both, opens_browser documented, Tests lists the video_id unit test and tests/youtube_chat.rs; youtube_chat bullet matches the case-insensitive scheme/host; C8's browser text holds beside it" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -37,15 +37,16 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   needs a new source instead. A source whose picture is on the GPU also returns it from
   `gpu_frame` (`None` by default), and one that makes its own audio returns it from
   `audio` as a `SourceAudio`: its format, and `open(handler)`, which feeds an
-  `AudioInputHandler` until the returned stream is dropped. Only `browser` has either.
+  `AudioInputHandler` until the returned stream is dropped. Only `browser` and its
+  `youtube_chat` preset have either; `opens_browser(kind)` names those kinds.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
   and its program mix asks each source for `frame` and `next_change` (see
   `jstream-core`'s *Live sources*).
 - `Context`: the folders behind the `collection` and `app` asset roots
-  (`AssetRoots`), the injected `BrowserBackend` that `browser` sources open their pages
-  in (`browser`; none by default), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
+  (`AssetRoots`), the injected `BrowserBackend` that `browser` and `youtube_chat` sources
+  open their pages in (`browser`; none by default), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
   sides and 1 GiB of decoded memory by default. The image's size is checked before
   anything is allocated for it, and the decoded-memory cap counts the frames kept plus
   the working buffers held while decoding: a GIF's canvas and its "restore to
@@ -109,8 +110,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
   `Context.browser` ([`jstream-browser`](../jstream-browser/README.md)). An empty URL
   with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
-  background transparent) is the one live setting: a change replaces the page's custom
-  CSS without reloading it. The page's picture is only on the GPU (`gpu_frame`), so
+  background transparent) is the one live setting: `update` replaces the page's custom
+  CSS without reloading it. Through the engine a `css` edit still reloads the page, until
+  the engine updates live settings in place (core's README › Open items). The page's picture is only on the GPU (`gpu_frame`), so
   `frame` is a transparent frame of the page's size, and the page's audio is the
   source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a
   backend's failure is `SourceError::Browser`. Dropping the source closes the page.
@@ -182,7 +184,8 @@ features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmainta
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
-distance transform and reading an audio target from settings, and in `source.rs` the
+distance transform, reading an audio target from settings and taking a YouTube video
+ID from an ID or link (`youtube_chat.rs`), and in `source.rs` the
 asset checks refuse a file swapped in from outside the root (Unix) and a junction or
 symbolic link inside the root that leads outside it (Windows, both when the path is
 resolved and in the walk on its own, as a link swapped in after resolving would meet
@@ -196,3 +199,6 @@ alignment, padding, outline, live updates, font assets and limits, plus golden P
 `tests/data/text` (`JSTREAM_BLESS=1` rewrites them). `tests/browser.rs` runs the
 `browser` kind against `jstream-browser`'s fake backend: the page spec it opens, file
 over URL, setting and backend errors, live CSS, closing on drop and the audio hand-off.
+`tests/youtube_chat.rs` runs the `youtube_chat` preset the same way: the popout chat
+page a video or link opens, a blank page for an empty setting, refused links, the
+default CSS and live CSS.

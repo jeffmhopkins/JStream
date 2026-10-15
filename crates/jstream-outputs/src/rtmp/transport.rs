@@ -94,8 +94,14 @@ impl Transport {
     }
 
     /// Closes the connection cleanly: for TLS, sends `close_notify` first so the server
-    /// sees an orderly end rather than a truncated session; then shuts the socket down
-    /// in both directions.
+    /// sees an orderly end rather than a truncated session; then shuts down the
+    /// socket's sending side, so the server sees a FIN.
+    ///
+    /// The receiving side stays open until the transport is dropped, so whatever the
+    /// server still sends (its own `close_notify`, a late `onStatus`) can be read. A
+    /// shutdown in both directions would let Windows abort the connection instead of
+    /// sending the FIN whenever the server's data sits unread, such as TLS 1.3 session
+    /// tickets, and the server's stack could then discard `close_notify` unread (#243).
     ///
     /// A socket the peer has already disconnected or reset counts as shut down, at
     /// either step. With a [write deadline](Self::set_write_deadline) set, sending
@@ -117,7 +123,7 @@ impl Transport {
         } else {
             Ok(())
         };
-        let closed = self.tcp().shutdown(Shutdown::Both);
+        let closed = self.tcp().shutdown(Shutdown::Write);
         unless_peer_gone(notified).and(unless_peer_gone(closed))
     }
 }

@@ -43,8 +43,10 @@ pub(crate) trait LiveHost: Send + Sync {
 /// The live sources of one engine. Lives in the engine state, under the collection lock.
 pub(crate) struct LiveSources {
     registry: Arc<Registry>,
-    ctx: Context,
+    /// Declared before `ctx`, so the running sources drop first: a `browser` page closes
+    /// while the backend in `ctx` is still there.
     entries: BTreeMap<SourceId, Entry>,
+    ctx: Context,
     /// Numbers the builds, so a result installs only if nothing changed the source
     /// since it was asked for.
     tickets: u64,
@@ -142,11 +144,15 @@ impl LiveSources {
         self.worker.wake.notify_all();
     }
 
-    /// The browser engine `browser` sources open their pages in. Sources of that kind
-    /// built before have none, so they are built again.
+    /// The browser engine `browser` sources and its presets (`youtube_chat`) open their
+    /// pages in. Sources of those kinds built before have none, so they are built again.
     pub(crate) fn set_browser(&mut self, browser: Arc<dyn BrowserBackend>) {
         self.ctx.browser = Some(browser);
-        for entry in self.entries.values_mut().filter(|e| e.kind == "browser") {
+        for entry in self
+            .entries
+            .values_mut()
+            .filter(|e| jstream_sources::opens_browser(&e.kind))
+        {
             entry.settings = Settings::new();
         }
     }

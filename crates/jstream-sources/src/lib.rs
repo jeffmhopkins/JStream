@@ -32,6 +32,7 @@ mod text;
 mod youtube_chat;
 
 pub use audio::AudioTarget;
+pub use browser::opens_browser;
 pub use error::SourceError;
 /// The browser engine seam `browser` sources open their pages through, which the host
 /// injects into the engine (ADR-0021).

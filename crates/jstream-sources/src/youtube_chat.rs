@@ -16,6 +16,9 @@ pub(crate) const POPOUT_CHAT: &str = "https://www.youtube.com/live_chat?is_popou
 /// The longest `video` setting, in characters: room for a full URL.
 const MAX_VIDEO_CHARS: u32 = 2048;
 
+/// The kind's ID.
+pub(crate) const KIND: &str = "youtube_chat";
+
 /// The CSS a new chat source starts with: a transparent page with no scroll bars, and
 /// the chat's header, ticker and message box hidden, so only the messages show.
 pub const YOUTUBE_CHAT_CSS: &str = "html, body, yt-live-chat-app, yt-live-chat-renderer, \
@@ -34,8 +37,8 @@ impl YoutubeChatKind {
             params: vec![
                 ParamDescriptor {
                     description: Some(
-                        "The live video: its ID, or a youtube.com/watch, youtube.com/live or \
-                         youtu.be link. Empty shows nothing."
+                        "The live video: its ID, or a youtube.com/watch, youtube.com/live, \
+                         youtube.com/live_chat or youtu.be link. Empty shows nothing."
                             .into(),
                     ),
                     ..param(
@@ -73,7 +76,7 @@ impl YoutubeChatKind {
                     )
                 },
             ],
-            ..kind("youtube_chat", "YouTube chat", true, true)
+            ..kind(KIND, "YouTube chat", true, true)
         })
     }
 }
@@ -98,7 +101,7 @@ impl SourceKind for YoutubeChatKind {
             }
             None => {
                 return Err(bad(
-                    "must be a video ID or a youtube.com/watch, youtube.com/live or youtu.be link",
+                    "must be a video ID or a youtube.com/watch, youtube.com/live, youtube.com/live_chat or youtu.be link",
                 ));
             }
         };
@@ -115,22 +118,27 @@ pub(crate) fn video_id(video: &str) -> Option<&str> {
         return Some("");
     }
     let id = if video.contains('/') {
-        let rest = video
-            .strip_prefix("https://")
-            .or_else(|| video.strip_prefix("http://"))
+        // The scheme and host match in any case, as URLs do; the path and ID don't.
+        let rest = strip_prefix_ci(video, "https://")
+            .or_else(|| strip_prefix_ci(video, "http://"))
             .unwrap_or(video);
         let (host, path) = rest.split_once('/')?;
-        let host = host.strip_prefix("www.").unwrap_or(host);
-        let host = host.strip_prefix("m.").unwrap_or(host);
+        let host = strip_prefix_ci(host, "www.").unwrap_or(host);
+        let host = strip_prefix_ci(host, "m.").unwrap_or(host);
         let (path, query) = path.split_once('?').unwrap_or((path, ""));
         let path = path.split('#').next().unwrap_or(path);
         let query = query.split('#').next().unwrap_or(query);
         let from_query = || query.split('&').find_map(|pair| pair.strip_prefix("v="));
-        match (host, path.trim_end_matches('/')) {
-            ("youtu.be", id) => id,
-            ("youtube.com", "watch" | "live_chat") => from_query()?,
-            ("youtube.com", path) => path.strip_prefix("live/")?,
-            _ => return None,
+        let path = path.trim_end_matches('/');
+        if host.eq_ignore_ascii_case("youtu.be") {
+            path
+        } else if host.eq_ignore_ascii_case("youtube.com") {
+            match path {
+                "watch" | "live_chat" => from_query()?,
+                path => path.strip_prefix("live/")?,
+            }
+        } else {
+            return None;
         }
     } else {
         video
@@ -143,6 +151,13 @@ pub(crate) fn video_id(video: &str) -> Option<&str> {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
     valid.then_some(id)
+}
+
+/// `s` without `prefix`, matched in any ASCII case.
+fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
+    let head = s.get(..prefix.len())?;
+    head.eq_ignore_ascii_case(prefix)
+        .then(|| &s[prefix.len()..])
 }
 
 #[cfg(test)]
@@ -179,6 +194,13 @@ mod tests {
             ("abc&x=1", None),
             ("abc def", None),
             ("https://youtu.be/", None),
+            // The scheme and host in any case; the ID keeps its own.
+            (
+                "HTTPS://WWW.YouTube.com/watch?v=dQw4w9WgXcQ",
+                Some("dQw4w9WgXcQ"),
+            ),
+            ("Youtu.Be/dQw4w9WgXcQ", Some("dQw4w9WgXcQ")),
+            ("https://youtube.com/WATCH?v=dQw4w9WgXcQ", None),
         ] {
             assert_eq!(video_id(video), id, "{video}");
         }

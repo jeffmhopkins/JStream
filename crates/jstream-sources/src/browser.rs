@@ -18,6 +18,15 @@ use std::sync::Arc;
 /// The kind's ID.
 const BROWSER: &str = "browser";
 
+/// Whether sources of `kind` open their page in the injected [`BrowserBackend`]
+/// (`browser` and its presets), so a host that sets the backend late must build them
+/// again.
+///
+/// [`BrowserBackend`]: crate::BrowserBackend
+pub fn opens_browser(kind: &str) -> bool {
+    kind == BROWSER || kind == crate::youtube_chat::KIND
+}
+
 /// The longest `url` setting, in characters.
 const MAX_URL_CHARS: u32 = 8192;
 
