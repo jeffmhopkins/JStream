@@ -33,7 +33,8 @@ allow = [
 # this entry as not encountered; it records the decision for when that changes.
 # BSL-1.0 (Boost) is permissive in the same way as MIT (R-DEP-001): keep the notice in
 # source distributions, nothing for binaries. Allowed for this one crate, a hash that
-# Leptos's `server_fn` always depends on (ADR-0045).
+# Leptos's `server_fn` always depends on. A license decision is the maintainer's
+# (ADR-0043); this entry rests on his decision on PR #250.
 exceptions = [
     { crate = "assert_no_alloc", allow = ["BSD-1-Clause"] },
     { crate = "xxhash-rust", allow = ["BSL-1.0"] },

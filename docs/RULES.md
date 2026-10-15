@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:b60399007c57e381", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
+verified = { hash = "b3:b60399007c57e381", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: stale only via ARCH#protocol's transport bullet (browser client); R-API rules untouched and unaffected" }
 -->
 
 <a id="R-API-001"></a>

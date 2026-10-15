@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e7b7ebef15e3424e", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B6-f #210 mock groups and CLI placement, D7b #231) into U0: took main's text and stamp, re-read; main's mock/CLI changes and U0's browser client and token subprotocol text both hold" }
+verified = { hash = "b3:b6bcfb6b534f4521", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: open question 2 now names ADR-0045's subprotocols and the no-token Basic path, and still says the server accepts only Authorization today (true on main); server code unchanged" }
 -->
 
 ### Listening and admission

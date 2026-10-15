@@ -103,7 +103,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:5d536e43c7440e3c", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
+verified = { hash = "b3:86e4c1f1ce342936", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: M2's first bullet now says Leptos is confirmed by ADR-0045 (which supersedes ADR-0002 and keeps its web-UI decision); depends_on moved to ADR-0045; rest of M2 unchanged" }
 -->
 
 - Leptos confirmed ([ADR-0045](docs/adr/0045-leptos-web-ui.md)).

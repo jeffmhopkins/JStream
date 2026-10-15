@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:3f5592fcc6b24d0e", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B6-f #210 mock groups and CLI placement, D7b #231) into U0: took main's text and stamp, re-read; main's mock/CLI changes and U0's browser client and token subprotocol text both hold" }
+verified = { hash = "b3:35555a987eba6743", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: contents list adds the wasm32 WsControl (ws_web.rs), ws_config.rs shared by both clients, and WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; the browser-not-yet line is gone; runtime note covers the page event loop" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:bf201fa390b1c0dd", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B6-f #210 mock groups and CLI placement, D7b #231) into U0: took main's text and stamp, re-read; main's mock/CLI changes and U0's browser client and token subprotocol text both hold" }
+verified = { hash = "b3:a41752f5660619f4", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: WebSocket client section covers the web-sys transport (ws and wss), futures-channel completion, token subprotocols and the no-token path via HTTP Basic carrying the token, browser failure reasons, untested-in-browser note; open question 3 settled by ADR-0045" }
 -->
 
 ### The trait
@@ -233,8 +233,9 @@ pulls `web-sys`.
   `Sec-WebSocket-Protocol`: `jstream` and `jstream.token.<token>`
   ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). The server selects `jstream`; the
   browser client fails the connection if it selects anything else. With an empty token
-  the browser client offers no subprotocol and relies on the credentials the browser
-  already sends for the engine's origin (HTTP Basic, when the engine served the page). A token that isn't an
+  the browser client offers no token subprotocol: the browser's cached HTTP Basic
+  credentials, whose password is the control token, carry it instead (when the engine
+  served the page behind Basic). A token that isn't an
   HTTP token (RFC 7230 `tchar`s) can't be a subprotocol and fails `connect`; the
   daemon's tokens are hex. `jstream-server` doesn't accept the subprotocol yet, so a
   browser connects only to an engine that does. The caller supplies the token (the CLI

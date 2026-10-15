@@ -15,7 +15,7 @@
 //! origin (HTTP Basic, when the engine served the page behind it). The browser sets
 //! `Origin` to the page's own and handles `wss://` itself.
 //!
-//! Docs: crates/jstream-control/README.md#design, docs/adr/0006-mcp-full-access.md
+//! Docs: crates/jstream-control/README.md#design, docs/adr/0006-mcp-full-access.md, docs/adr/0045-leptos-web-ui.md
 
 use crate::WS_PROTOCOL;
 use crate::control::{BoxFuture, Control, EventStream};

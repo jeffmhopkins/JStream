@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:eee68208a93fb7b3", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
+verified = { hash = "b3:4d2d232d9f0f4f13", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: depends_on moved from superseded ADR-0002 to ADR-0045, which keeps the same web-UI decision; diagram's jstream-ui (Leptos to WASM) client unchanged" }
 -->
 
 ```
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:1b409ee708c3c06c", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
+verified = { hash = "b3:1b409ee708c3c06c", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: jstream-ui row moves from — to layer 3 with ADR-0045, matching crates/jstream-ui/Cargo.toml (layer 3, depends on control L2 and protocol L1); lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -519,7 +519,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:729d7fe284553797", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B6-f #210 mock groups and CLI placement, D7b #231) into U0: took main's text and stamp, re-read; main's mock/CLI changes and U0's browser client and token subprotocol text both hold" }
+verified = { hash = "b3:367c38ec6d63278e", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: Transport bullet adds the browser WsControl with the token as a subprotocol (ADR-0045) and that jstream-server doesn't accept it yet, true on main; rest unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

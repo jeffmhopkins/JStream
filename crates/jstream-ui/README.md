@@ -43,16 +43,17 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ffd52884027add84", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B6-f #210 mock groups and CLI placement, D7b #231) into U0: took main's text and stamp, re-read; main's mock/CLI changes and U0's browser client and token subprotocol text both hold" }
+verified = { hash = "b3:f72de6946f04549f", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: new section; connect form (page-derived URL, in-memory token, empty token when Basic carries it), Session context, event task and generation, grid shell and native MockEngine tests match app.rs, session.rs, style.css" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
   URL defaults to the page's own host with the API path (`ws://` for an `http:` page,
   `wss://` for an `https:` one), because the daemon serves the UI from the port the API
   is on. The token stays in memory: the page never stores it or writes it to the
-  console, and the field is a password field. It may be left empty when the browser
-  already sends credentials to the engine (the daemon serving the page behind HTTP
-  Basic); the connection then carries those. How the daemon hands the token to a
+  console, and the field is a password field. It may be left empty when the daemon
+  served the page behind HTTP Basic with the token as the password: the browser's
+  cached Basic credentials then carry the token on the upgrade, and no token
+  subprotocol is sent. How the daemon hands the token to a
   browser (pairing) is not decided yet. A failed connect shows the transport's reason;
   a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin
   and an unreachable engine read the same.
@@ -79,7 +80,7 @@ verified = { hash = "b3:ffd52884027add84", by = "agent:claude@session_01SHnfsdCu
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:d9a09ce6278bbd14", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
+verified = { hash = "b3:1ea0cbddc4084706", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: new section; trunk commands, wasm-bindgen CLI matching Cargo.lock, create_nonce placeholder and the CI wasm job (pinned, checksummed trunk and wasm-bindgen, clippy wasm32) match Trunk.toml, index.html and ci.yml" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
