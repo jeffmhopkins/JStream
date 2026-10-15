@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:f8fec75ecf0af180", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:d8b5dad861ddbab3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V1 pack kinds landed under src/filter/pack; filters are still pointed to Filters and the chain runtime is still not here; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c17ddc66af14c910", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:e707a2cfffd85237", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V1 pack kinds; passes, resources and placement unchanged, filter draws are per apply_filter as Filters says; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:70c4b4131cfd19bb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Group modules (pack, aspect, multipass, assets) and the descriptor test described as built" }
+verified = { hash = "b3:19fa28b5f9ebce24", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Added the V1 pack paragraph (seven kinds, their settings, colour space and scroll offset decisions); harness text and not-wired note still hold" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -320,7 +320,35 @@ kinds.
 
 **The kinds.** Each group documents its kinds here as it lands.
 
-The single-pass pack (V1): not yet.
+The single-pass pack (V1, `src/filter/pack/`): one draw each, keeping the input's
+size. The colour kinds and sharpen work on straight sRGB-encoded colour, as OBS does, so
+OBS's numbers carry over; each decodes back to premultiplied linear light on the way out.
+
+- `color_correction`: `gamma` (−3..3; above 0 brightens, OBS's exponent mapping),
+  `contrast` (−4..4), `brightness` (−1..1), `saturation` (−1..5; −1 is greyscale,
+  BT.709 weights), `hue_shift` (°, a rotation about the grey axis), `multiply` (an RGB
+  colour) and `opacity` (%). Gamma first, then one affine matrix built on the CPU, then
+  a clamp to 0..1 and opacity. Every default is neutral.
+- `chroma_key`: `key_color_type` (green, blue, magenta or custom `key_color`),
+  `similarity`, `smoothness` and `spill` on OBS's 1–1000 scale. The distance is in
+  BT.709 limited-range CbCr, averaged over the 3×3 texels around each pixel as OBS's v2
+  does; spill desaturates towards luma.
+- `color_key`: `key_color`, `similarity`, `smoothness` (1–1000), by RGB distance.
+- `luma_key`: `luma_min`, `luma_max` and a smoothing width for each (0..1). A zero
+  width is a hard edge that keeps the limit itself, so the defaults keep black and white.
+  Each key multiplies the input's alpha, so stacked keys only remove more.
+- `sharpen`: an unsharp mask, `amount` (0..4) away from the mean of the
+  `(2 radius + 1)²` box, `radius` 1..3 px. It works on premultiplied encoded colour and
+  clamps colour to alpha, so a transparent edge stays clean.
+- `rounded_corners`: `radius` (px, clamped to half the shorter side), `border_width`
+  (px) and `border_color` (with alpha). A signed distance antialiases over one pixel;
+  outside is transparent; the border sits inside the frame, drawn over the picture.
+- `scroll`: `speed_x`, `speed_y` (px/s; positive moves right and down), `loop_x`,
+  `loop_y`. The offset is clock seconds times speed, worked out in `f64` on the CPU and
+  wrapped to the image, so it stays exact however long the clock runs (the shader's
+  `f32` `frame.time` would drift). Sampling is bilinear by hand: a looping axis wraps
+  across its seam; off, the area the picture leaves is transparent. A new speed jumps
+  to where that speed puts the picture at the current time.
 
 Aspect ratio (V1a): not yet.
 

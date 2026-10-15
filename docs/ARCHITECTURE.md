@@ -714,7 +714,7 @@ verified = { hash = "b3:2f74f99cfb552b17", by = "agent:claude@session_01BL6HM3DJ
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:9ba79b329d2ac3c8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:04a0bc1f1209c967", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V1 pack kinds; filters still draw premultiplied Rgba16Float to Rgba16Float via apply_filter and the chain runtime is still unbuilt; holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
