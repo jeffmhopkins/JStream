@@ -11,8 +11,9 @@
 
 use crate::{
     Batch, Crop, Edit, EntityKind, Finite32, ItemId, ItemInfo, ItemTransform, KindCategory,
-    KindDescriptor, OutputId, OutputInfo, OutputKind, ProtocolError, Query, QueryResult, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneSummary, SourceId, SourceInfo, SourceKind, Vec2,
+    KindDescriptor, OutputId, OutputInfo, OutputKind, ProtocolError, Query, QueryResult,
+    RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneSummary, SourceId, SourceInfo,
+    SourceKind, Vec2,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -37,8 +38,8 @@ pub fn kinds() -> Vec<KindDescriptor> {
 /// The batch that builds the fixture collection from an empty one: scenes `b` then `a`
 /// (created `a` first, then reordered), source `cam` placed twice in `a` (the second
 /// placement moved, cropped, hidden and reordered to the bottom), and scene `b` nested in
-/// `a` through the scene source `b_src`, and the RTMP outputs `yt` and `tw` (`tw`'s
-/// target changed after it was created).
+/// `a` through the scene source `b_src`, the RTMP outputs `yt` and `tw` (`tw`'s
+/// target changed after it was created), and the recording output `rec`.
 ///
 /// Sources and outputs are created in the opposite order of their IDs, so reads that
 /// order them by ID can't pass by echoing creation order.
@@ -103,6 +104,10 @@ pub fn collection() -> Batch {
                 target: RtmpTarget::Generic {
                     url: TWITCH_URL.into(),
                 },
+            },
+            Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: recording().kind,
             },
         ],
         expected_rev: Some(Rev(0)),
@@ -378,6 +383,40 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 "is missing the application name (the path after the host)",
             ),
         ),
+        // Recording paths are checked the same way on every platform.
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record("Videos/show.mp4"),
+            }),
+            invalid(
+                "edits.0.kind.path",
+                "must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record("C:\\Videos\\..\\show.mp4"),
+            }),
+            invalid("edits.0.kind.path", "must not contain a `..` segment"),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record("/home/me/Videos/"),
+            }),
+            invalid("edits.0.kind.path", "must end in a file name"),
+        ),
+        (
+            Batch::single(Edit::OutputSetTarget {
+                output_id: OutputId::new("rec"),
+                target: RtmpTarget::Generic {
+                    url: "rtmp://host/app".into(),
+                },
+            }),
+            invalid("edits.0.output_id", "the output is not an RTMP output"),
+        ),
         // A delete inside the batch applies, the second fails, and the output is back.
         (
             Batch {
@@ -409,6 +448,20 @@ fn rtmp(url: &str) -> OutputKind {
     }
 }
 
+fn record(path: &str) -> OutputKind {
+    OutputKind::Record {
+        path: path.into(),
+        container: RecordContainer::Mp4,
+    }
+}
+
+fn recording() -> OutputInfo {
+    OutputInfo {
+        output_id: OutputId::new("rec"),
+        kind: record("/home/me/Videos/show.mp4"),
+    }
+}
+
 fn youtube() -> OutputInfo {
     OutputInfo {
         output_id: OutputId::new("yt"),
@@ -419,6 +472,7 @@ fn youtube() -> OutputInfo {
 /// The collection's outputs, ordered by ID.
 fn outputs() -> Vec<OutputInfo> {
     vec![
+        recording(),
         OutputInfo {
             output_id: OutputId::new("tw"),
             kind: rtmp(TWITCH_URL),

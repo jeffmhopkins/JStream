@@ -26,7 +26,7 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "b3:4a2a35ad897d4408", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Re-read against DOCS#verification, which now adds the merge-main command and its paragraph: the check/verify duty, no-dates rule and hash bullets here are unaffected and still hold" }
+verified = { hash = "b3:5ee4dd8447bd0ddc", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Edited: the hash bullet now names docs merge-main as an exception (it keeps main's committed stamp), and a new bullet says to merge main with it and re-verify what it lists; matches merge.rs and DOCS#verification" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one
@@ -37,7 +37,11 @@ verified = { hash = "b3:4a2a35ad897d4408", by = "agent:claude@session_01ApfNxzxA
 - New external URL → register it in `docs/external.toml`. Repeated value → `docs/facts.toml`.
 - New crate root → add its `//! Docs:` line.
 - Never type a `hash` by hand. Only `docs verify` writes it (apart from the one-time
-  `docs rehash` migration of ADR-0039, which never restamps a stale section).
+  `docs rehash` migration of ADR-0039, which never restamps a stale section, and
+  `docs merge-main`, which only keeps main's committed stamp).
+- To bring `main` into your branch, run `cargo xtask docs merge-main`. It resolves
+  conflicts between two `verified` stamps and leaves every other conflict to you. Then
+  re-read and verify each section it lists as stale.
 
 <a id="pr-loop"></a>
 ## The PR loop (you are a builder)
@@ -93,6 +97,7 @@ Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo de
 `cargo xtask docs check`, `cargo xtask docs verify`, `cargo xtask docs for`,
 `cargo xtask docs generate` (rewrites `@generated` blocks, e.g. ADR status banners),
 `cargo xtask docs log <DOC[#anchor]>` (history from git), `cargo xtask docs review <DOC>`
-(doc-level TTL review),
+(doc-level TTL review), `cargo xtask docs merge-main` (merges `origin/main`, resolving
+stamp-only conflicts),
 `cargo xtask lint-deps` and `cargo xtask governance --base origin/main` (lists your
 governance changes).
