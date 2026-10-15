@@ -115,3 +115,107 @@ fn the_mixer_follows_edits_and_undo_and_meters_tick() {
     assert!(drain(&mut events).is_empty());
     block_on(control.call(reset)).expect("reset with no mixer");
 }
+
+/// A `when_shown` source is heard only while the Program mix shows it: a scene switch,
+/// an item shown or hidden, and undo each move its input's activity gain (ADR-0028).
+#[test]
+fn when_shown_audio_follows_the_program() {
+    let clip = jstream_protocol::KindDescriptor {
+        kind_id: "clip".into(),
+        category: jstream_protocol::KindCategory::Source,
+        name: "Clip".into(),
+        version: 1,
+        video: true,
+        audio: true,
+        params: vec![],
+    };
+    let engine = Engine::new().with_extra_kinds(vec![clip]);
+    let control = connected(&engine);
+    let mut mixer = Mixer::new(MixerConfig::default()).expect("mixer");
+    let format = AudioFormat::new(48_000, ChannelLayout::Stereo, SampleFormat::F32Interleaved)
+        .expect("format");
+    let (_producer, input) = mixer.add_input(format).expect("input");
+    let (_metering, meters) = MasterMetering::new(48_000).expect("meters");
+    let _detach = engine.attach_mixer(MixerHandles {
+        control: mixer.control(),
+        master: mixer.bus(),
+        meters,
+    });
+    // `a` goes on program as the first scene; the clip is placed in it.
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            Edit::SourceCreate {
+                source_id: SourceId::new("clip"),
+                name: "Clip".into(),
+                kind: SourceKind::Builtin {
+                    kind: "clip".into(),
+                },
+                settings: Default::default(),
+                duplicated_from: None,
+            },
+            Edit::ItemAdd {
+                scene_id: SceneId::new("a"),
+                item_id: jstream_protocol::ItemId::new("a1"),
+                source_id: SourceId::new("clip"),
+                transform: None,
+                geometry: None,
+                opacity: None,
+                blend: None,
+            },
+        ]),
+    )
+    .expect("created");
+    engine.set_audio_input(SourceId::new("clip"), input.clone());
+    assert_eq!(input.activity_gain(), 1.0, "shown on program");
+
+    let switch = |scene: &str| {
+        block_on(control.call(Call::Action {
+            action: Action::SceneSwitch {
+                scene_id: SceneId::new(scene),
+            },
+        }))
+        .expect("switched");
+    };
+    switch("b");
+    assert_eq!(input.activity_gain(), 0.0, "off program");
+    batch(
+        &control,
+        edits(vec![Edit::ItemAdd {
+            scene_id: SceneId::new("b"),
+            item_id: jstream_protocol::ItemId::new("b1"),
+            source_id: SourceId::new("clip"),
+            transform: None,
+            geometry: None,
+            opacity: None,
+            blend: None,
+        }]),
+    )
+    .expect("placed in b");
+    assert_eq!(input.activity_gain(), 1.0, "placed on program");
+    batch(
+        &control,
+        edits(vec![Edit::ItemSetVisible {
+            item_id: jstream_protocol::ItemId::new("b1"),
+            scene_id: None,
+            visible: false,
+        }]),
+    )
+    .expect("hidden");
+    assert_eq!(input.activity_gain(), 0.0, "a hidden item shows nothing");
+    block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo)))).expect("undo");
+    assert_eq!(input.activity_gain(), 1.0, "undo shows it again");
+    block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Redo)))).expect("redo");
+    assert_eq!(input.activity_gain(), 0.0, "redo hides it");
+    // Deleting the program scene moves program to `a`, which shows the clip.
+    batch(
+        &control,
+        edits(vec![Edit::SceneDelete {
+            scene_id: SceneId::new("b"),
+        }]),
+    )
+    .expect("deleted");
+    assert_eq!(input.activity_gain(), 1.0, "program moved to a");
+}
