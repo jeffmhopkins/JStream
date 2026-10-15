@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:e5050d24ba6da830", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#183 canvas/geometry) into ADR-0042: text is main's (placement and canvas-size undo wording); this PR's only covered change is lib.rs's Docs: line, so the section holds" }
+verified = { hash = "b3:6b00b92fe44d07dc", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5ac402bfdf52cf07", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#183 canvas/geometry) into ADR-0042: text is main's (snapshot canvas from State::canvas, geometry drawing); this PR's only covered change is lib.rs's Docs: line, so the section holds" }
+verified = { hash = "b3:35252def9891785f", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
 -->
 
 ### Engine and sessions
