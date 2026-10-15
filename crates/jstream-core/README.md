@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f96e761c279c4f3b", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: tests-only edits in core (Backends.video_devices, CaptureStats.frames_undecodable literals); drops table still reads frames_skipped only for capture_frames, which is what drops.rs does (decode failures are not reported in stats.tick yet)" }
+verified = { hash = "b3:d4b92d735debef67", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#225 C4b follow-up, #192 D2, #227) into B2-f3: main changed no core design prose; re-read the mock references (differential script, internal for unimplemented calls) against the control Mock undo bullet; hold" }
 -->
 
 ### Engine and sessions
