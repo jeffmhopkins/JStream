@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:4bc18407be5e9459", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#331 write-side shutdown) into #143: took main's stamp; re-read; Transport bullet's write-side-only shutdown (#243) and Tests paragraph match transport.rs and tests.rs; stale only via ARCH#threading, where this PR's rewrap/marker wording names nothing in this crate; holds" }
+verified = { hash = "b3:601bcfa5a827b67f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#360, #299 D6, #381) into #143: took main's stamp; re-read; stale via ARCH#threading marker wording from this PR; outputs text names no threading marker; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
