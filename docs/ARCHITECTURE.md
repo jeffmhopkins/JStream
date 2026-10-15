@@ -757,7 +757,14 @@ a layer the caller keeps, so a frame allocates no texture for it. The caller wal
 nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see
-[Threads › State to RT threads](#threading)). Still outside this crate: the render
+[Threads › State to RT threads](#threading)). On the GPU path the engine's render
+thread composites on the platform's `GpuContext`, and capture moves onto it through
+`Capture::on_context`: each captured texture is imported once into the cache and
+sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
+and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
+Without a context, or a capture that can deliver on it, the engine keeps CPU frames
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
+composite is still read back to the CPU for the encoder. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
 the output path below.
 

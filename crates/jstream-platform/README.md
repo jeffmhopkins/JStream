@@ -51,6 +51,9 @@ Contents:
   drains Windows.Graphics.Capture's pool to the newest frame the same way.
   `CaptureStats` counts captured and skipped frames, and the compressed frames a
   `CaptureDecoder` rejected (`frames_undecodable`, always 0 for display capture).
+  `Capture::on_context` returns the backend on a `GpuContext`'s device, whose captures
+  deliver `Gpu` frames, or `None` (the default) when it has no GPU path; the engine
+  then keeps CPU frames.
 - **Video capture devices** (webcams and capture cards,
   [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
@@ -126,11 +129,11 @@ Contents:
   `Send`/`Sync` bounds above.
 
 **Not yet:** a platform that consumes GPU frames (Windows capture delivers them through
-`WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet),
-an engine that opens `Backends::video_devices` (the field is filled, with
-`MfVideoDevices` on Windows and `MfMjpegDecoder` as its `CaptureDecoder`, but no source
-uses it, so `stats.tick` doesn't report `frames_undecodable`), an MJPEG `Codec` variant,
-and encoder selection by GPU adapter.
+`WgcCapture::on_gpu`, and the engine composites them, but its encoders and virtual
+camera don't take them yet), an engine that opens `Backends::video_devices` (the field
+is filled, with `MfVideoDevices` on Windows and `MfMjpegDecoder` as its
+`CaptureDecoder`, but no source uses it, so `stats.tick` doesn't report
+`frames_undecodable`), an MJPEG `Codec` variant, and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames
@@ -143,8 +146,8 @@ The design for frames that stay on the GPU, which ARCH's pipeline needs (capture
 Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene on
-that device when the engine has one, and opens its own (software adapter first) when it
-does not; it does not write the NV12 encode target. The encoders' GPU input comes next.
+that device when the engine has one, sampling capture frames there, and opens its own
+(software adapter first) when it does not; it does not write the NV12 encode target. The encoders' GPU input comes next.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -243,9 +246,10 @@ the same reason.
 -->
 
 - **GPU frames.** Designed and typed in [GPU frames](#gpu-frames) above. Windows capture
-  delivers them; nothing consumes them yet. Capture reaches the context through a Windows
-  constructor, `WgcCapture::on_gpu(&GpuContext)`, so the trait shapes are unchanged. How
-  the encoders reach it is still open in
+  delivers them and the engine composites them; the encoders don't take them yet. The
+  engine reaches the capture on the context through `Capture::on_context`, a default
+  method (Windows answers with `WgcCapture::on_gpu`), so other backends are unchanged.
+  How the encoders reach it is still open in
   [jstream-platform-windows](../jstream-platform-windows/README.md#open-questions).
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.
   **Proposed default:** backends downmix any other layout to stereo, and new layouts
