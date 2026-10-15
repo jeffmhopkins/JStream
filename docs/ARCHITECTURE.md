@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:b6eb190733ef752d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#310 merge of main (#309 Q3, #295, #237, #286): took main's stamp; re-read table; kept main's jstream-ui-e2e row and this PR's jstream-outputs row (vcam output runs in jstream-core's runtime, matching runtime/vcam.rs and the outputs manifest summary); holds" }
+verified = { hash = "b3:be99f2b5127112ec", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#310 merge of main (#350 K2): took main's stamp; re-read the table: main's new layer-0 jstream-anim row and this PR's jstream-outputs row (vcam output runs in jstream-core's runtime, matches the outputs Cargo.toml summary) both present; holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -132,6 +132,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 |---|---|---|---|
 | 0 | `jstream-types` | IDs, math (Vec/Mat/Transform3D), color, rational time, units | no |
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
+| 0 | `jstream-anim` | Keyframe-scene model ([ADR-0049](adr/0049-keyframe-scene-model-and-evaluation.md)): a variant's overrides and their inverses, effective values over the live parent, and the switch plan between keyframes; generic over geometry, no dependencies | no |
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
