@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:03c444bb6cb7b1b1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1 (B1): re-read the whole section against handle.rs and mixer.rs: MasterControl/OutputTapControl API bullet (master(), add_output_tap, output_block pts minus tap latency, None until the tap has run, 16-tap limit), latency_frames and pts including the master chain, poll writing the post-master master bus and bus_block as the pre-master monitor tap, the error list (TooManyOutputTaps, removed output tap) against error.rs, and the new master-chain/output-tap tests bullet against mixer.rs tests" }
+verified = { hash = "b3:cab93ffe9cf6a487", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -165,7 +165,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:699277ef64ec49a9", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1: re-read; only change is mixer.rs output_block returning None until a tap has run (Tap.pts is Option) and the MAX_BUSES <= 32 const assert on the feeds mask; section's master chain and output tap paragraphs still hold" }
+verified = { hash = "b3:387c9b98aac2c785", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

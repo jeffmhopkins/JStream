@@ -107,6 +107,34 @@ pub async fn action(control: &dyn Control, action: Action) -> Result<(), String>
         .map_err(|error| describe(&error))
 }
 
+/// Starts or stops each of `outputs`, one after another. One output's failure doesn't
+/// keep the others from being tried: every output is attempted, and the error names
+/// each one that failed, with its reason.
+pub async fn start_or_stop_all(
+    control: &dyn Control,
+    outputs: Vec<OutputId>,
+    start: bool,
+) -> Result<(), String> {
+    let verb = if start { "start" } else { "stop" };
+    let mut failures = Vec::new();
+    for output_id in outputs {
+        let name = output_id.to_string();
+        let call = if start {
+            Action::OutputStart { output_id }
+        } else {
+            Action::OutputStop { output_id }
+        };
+        if let Err(reason) = action(control, call).await {
+            failures.push(format!("couldn't {verb} {name}: {reason}"));
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; "))
+    }
+}
+
 /// Sends one query and returns its result.
 async fn query(control: &dyn Control, query: Query) -> Result<QueryResult, String> {
     match control.call(Call::Query { query }).await {
@@ -420,19 +448,11 @@ impl Panel {
         });
     }
 
-    /// Starts or stops each of `outputs`, one after another, stopping at the first
-    /// failure.
+    /// Starts or stops each of `outputs`, attempting every one and reporting each
+    /// failure ([`start_or_stop_all`]).
     fn start_or_stop(self, outputs: Vec<OutputId>, start: bool) {
         self.run(move |session| async move {
-            for output_id in outputs {
-                let call = if start {
-                    Action::OutputStart { output_id }
-                } else {
-                    Action::OutputStop { output_id }
-                };
-                action(&*session.control, call).await?;
-            }
-            Ok(())
+            start_or_stop_all(&*session.control, outputs, start).await
         });
     }
 }
@@ -610,9 +630,9 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
         });
     };
     // The key goes from the field straight into a `SecretString`, and the field is
-    // emptied before the call is sent.
-    let save_key = move |event: leptos::ev::SubmitEvent| {
-        event.prevent_default();
+    // emptied before the call is sent. A button click or Enter saves it, not a form
+    // submit, so the browser has no form submission to offer saving as a password.
+    let save_key = move || {
         let Some(field) = key_field.get_untracked() else {
             return;
         };
@@ -723,25 +743,34 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                 </select>
             </label>
             <Show when=is_rtmp>
-                <form class="key" on:submit=save_key>
+                <div class="key">
                     <span class="key-status">
                         {move || if key_set() { "Stream key: set" } else { "Stream key: not set" }}
                     </span>
                     <input
                         type="password"
+                        name="stream-key-entry"
                         node_ref=key_field
-                        autocomplete="new-password"
+                        autocomplete="off"
                         spellcheck="false"
                         aria-label="Stream key"
                         placeholder=move || {
                             if key_set() { "Type a new key to replace it" } else { "Paste the stream key" }
                         }
+                        on:keydown=move |event| {
+                            if event.key() == "Enter" {
+                                event.prevent_default();
+                                save_key();
+                            }
+                        }
                     />
-                    <button type="submit">"Save key"</button>
+                    <button type="button" class="primary" on:click=move |_| save_key()>
+                        "Save key"
+                    </button>
                     <button type="button" disabled=move || !key_set() on:click=clear_key>
                         "Clear"
                     </button>
-                </form>
+                </div>
             </Show>
             <div class="buttons">
                 <Show
@@ -839,7 +868,7 @@ fn NewOutputForm(panel: Panel) -> impl IntoView {
 mod tests {
     use super::{
         Health, NewKind, OutputRow, create_edit, describe_kind, go_live_targets, live_outputs,
-        load, next_output_id, start_blocker, status, take_key,
+        load, next_output_id, start_blocker, start_or_stop_all, status, take_key,
     };
     use jstream_control::protocol::{
         Action, DropCounts, Edit, OutputId, OutputInfo, OutputKind, OutputState, RtmpTarget,
@@ -974,6 +1003,77 @@ mod tests {
     fn new_ids_skip_taken_ones() {
         let taken = [OutputId::new("output-1"), OutputId::new("output-3")];
         assert_eq!(next_output_id(&taken).as_str(), "output-2");
+    }
+
+    /// Go live tries every output: one that fails doesn't keep the rest from starting,
+    /// and each failure is reported (#257).
+    #[test]
+    fn go_live_attempts_every_output_and_reports_each_failure() {
+        let engine = MockEngine::new();
+        let control = engine.connect();
+        let hello = jstream_control::protocol::Hello {
+            protocol: jstream_control::protocol::PROTOCOL_VERSION,
+            client_name: "test".into(),
+        };
+        now(control.hello(hello)).expect("hello");
+        let real = OutputId::new("real");
+        now(super::edit(
+            &control,
+            create_edit(real.clone(), NewKind::Rtmp, "rtmp://h/app"),
+        ))
+        .expect("create");
+        let targets = vec![
+            OutputId::new("ghost-1"),
+            real.clone(),
+            OutputId::new("ghost-2"),
+        ];
+
+        let problem = now(start_or_stop_all(&control, targets, true)).expect_err("two fail");
+        assert!(problem.contains("couldn't start ghost-1"), "{problem}");
+        assert!(problem.contains("couldn't start ghost-2"), "{problem}");
+        assert!(!problem.contains("couldn't start real"), "{problem}");
+        let loaded = now(load(&control)).expect("load");
+        assert_eq!(loaded.outputs[0].state, OutputState::Active);
+
+        now(start_or_stop_all(&control, vec![real], false)).expect("stop");
+        let loaded = now(load(&control)).expect("load");
+        assert_eq!(loaded.outputs[0].state, OutputState::Stopped);
+    }
+
+    /// Secret fields (the stream key, the control token) sit in no `<form>` and opt out
+    /// of autocomplete, so the browser has no form submission to offer saving as a
+    /// password (#257).
+    #[test]
+    fn secret_fields_are_outside_forms_and_opt_out_of_autocomplete() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let password = concat!("type=", "\"password\"");
+        let off = concat!("autocomplete=", "\"off\"");
+        let mut seen = 0;
+        for file in ["app.rs", "panels/outputs.rs"] {
+            let text = std::fs::read_to_string(src.join(file)).expect("read source");
+            assert!(!text.contains(concat!("new-", "password")), "{file}");
+            let lines: Vec<&str> = text.lines().collect();
+            let mut in_form = false;
+            for (n, line) in lines.iter().enumerate() {
+                if line.contains(concat!("<", "form")) {
+                    in_form = true;
+                }
+                if line.contains(concat!("</", "form>")) {
+                    in_form = false;
+                }
+                if line.contains(password) {
+                    seen += 1;
+                    assert!(!in_form, "{file}:{}: password field in a form", n + 1);
+                    let input = lines[n..].iter().take_while(|line| !line.contains("/>"));
+                    assert!(
+                        input.clone().any(|line| line.contains(off)),
+                        "{file}:{}: no autocomplete=off",
+                        n + 1
+                    );
+                }
+            }
+        }
+        assert_eq!(seen, 2, "the stream key and the control token");
     }
 
     #[test]
