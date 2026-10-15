@@ -392,7 +392,9 @@ impl Engine {
             let mut state = lock(&self.shared.state);
             let state = &mut *state;
             let inputs = state.audio.inputs();
-            state.routing.attach(mixer, state.graph.state(), &inputs)
+            state
+                .routing
+                .attach(mixer, state.graph.state(), state.studio.program(), &inputs)
         };
         let shared = Arc::clone(&self.shared);
         Box::new(move || lock(&shared.state).routing.detach(generation))
@@ -1773,7 +1775,6 @@ impl State {
         self.outputs.sync(self.graph.state());
         self.live.sync(self.graph.state());
         self.audio.sync(self.graph.state());
-        self.route_audio();
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -1784,6 +1785,8 @@ impl State {
         // Edits that deleted the program scene, or created the first scene, move
         // program before the mix is planned; that event follows their `state.changed`.
         let moved = self.studio.reconcile(self.graph.state());
+        // After program is reconciled: a scene edit can change what is shown.
+        self.route_audio();
         self.publish_render();
         self.subscribers.emit(
             &Event::StateChanged {
@@ -1923,6 +1926,9 @@ impl State {
         };
         self.studio.switch(scene_id, running);
         let end_ms = self.publish_render();
+        // The new scene's `when_shown` audio follows at the switch, ramping over one
+        // mixer block; it doesn't follow the transition's timing yet (D29).
+        self.route_audio();
         self.emit_studio(
             client_id,
             request_id,
@@ -1990,7 +1996,8 @@ impl State {
     /// inputs included.
     fn route_audio(&mut self) {
         let inputs = self.audio.inputs();
-        self.routing.sync(self.graph.state(), &inputs);
+        self.routing
+            .sync(self.graph.state(), self.studio.program(), &inputs);
     }
 
     /// Emits a `meters.tick` if the program mixer runs, first routing any audio source

@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:f4ed6c1cbc2b73d2", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; unaffected" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +56,6 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c320c9aeb178f6b3", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (D5 audio #240, #331): re-read main's audio text beside T1's transition/preview text and merged the sentences both sides edited (contents lists, state.get, file, rebuild order, touched sets, tool nouns, version line); T1 now documents protocol 0.20 since D5 took 0.19; CLI usage also notes the transition edits aren't in the CLI; holds" }
 -->
 
 ### Listening and admission
@@ -133,6 +131,10 @@ the default:
 | `max_connections` | 32 open WebSocket connections | An upgrade that passes the checks above gets 503 and no session. The slot is taken just before the upgrade and freed when the connection ends. |
 | `header_read_timeout` | 10 s from accept to an accepted upgrade request | The connection is dropped, unanswered. |
 | `handshake_timeout` | 10 s from accept to a successful `hello` | The connection is closed with close code 1008 (see *Sessions*). |
+
+`Server::bind` refuses a zero limit or timeout, and a zero `max_mcp_sessions` or
+`mcp_idle_timeout` (see *MCP over streamable HTTP*), with `ServerError::InvalidLimit` before opening the
+socket, since the server would refuse or drop everything.
 
 The header-read timeout is kept on the socket, by the listener (`listener.rs`), since
 hyper's own isn't reachable through `axum::serve`: until the upgrade handler accepts a
@@ -244,11 +246,18 @@ task speaks the envelope
 
 `serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
 open connection (close code 1001), so their clients' pending and later calls fail with
-`Disconnected` and their event streams end. Whenever the server closes a connection,
-it first ends the session's event subscription, then sends what the outbox still holds
-before the close frame. A client that doesn't take them within a short timeout
-(`CLOSE_TIMEOUT`) is dropped without one, so a client that stopped reading can't keep
-its connection or session open.
+`Disconnected` and their event streams end. A connection handles nothing it reads once
+the server is shutting down, so a call sent after the shutdown is never answered. It
+returns once every WebSocket connection has finished closing (as below), so a host that
+exits right after it doesn't cut a close short. Whenever the server closes a
+connection, it first ends the session's event subscription, then sends what the outbox
+still holds before the close frame, then reads and drops what the client still sends
+until the client's own close frame or the end of the stream, and only then closes the
+socket. Closing it with client data unread would make the kernel reset the connection,
+and on macOS and Windows a reset discards what the client hasn't read yet, the close
+frame and last replies included. A client that doesn't finish this within a short
+timeout (`CLOSE_TIMEOUT`) is dropped, so a client that stopped reading can't keep its
+connection or session open, nor hold up the shutdown.
 
 ### MCP over streamable HTTP
 
