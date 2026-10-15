@@ -7,6 +7,7 @@
 //! in tests.
 
 use std::fmt;
+use std::sync::atomic::{Ordering, compiler_fence};
 
 use crate::PlatformError;
 
@@ -48,14 +49,30 @@ pub trait StreamKeyStore: Send + Sync {
 /// A secret, such as a stream key, on its way to or from the credential store.
 ///
 /// It never prints: its `Debug` is `"***"` and it has no `Display`. The only way to read
-/// it is [`expose`](Self::expose).
-#[derive(Clone, PartialEq, Eq)]
+/// it is [`expose`](Self::expose). It isn't `Clone`, so the only copies are the ones a
+/// caller makes from `expose`, and its bytes are overwritten with zeros when it is
+/// dropped. That is best effort: a copy a caller made, or one left behind when the
+/// `String` given to [`new`](Self::new) grew, is not reached.
 pub struct Secret(String);
 
 impl Secret {
     /// Wraps `secret`.
     pub fn new(secret: impl Into<String>) -> Self {
         Self(secret.into())
+    }
+
+    /// Wraps a secret a store returned as bytes. Takes ownership so nothing is copied.
+    ///
+    /// # Errors
+    /// `Unsupported` when the bytes aren't UTF-8; the bytes are zeroed first, and the
+    /// error names neither them nor their length.
+    pub fn from_utf8(bytes: Vec<u8>) -> Result<Self, PlatformError> {
+        String::from_utf8(bytes).map(Self).map_err(|err| {
+            wipe(err.into_bytes());
+            PlatformError::Unsupported {
+                what: "a stored secret that isn't UTF-8".into(),
+            }
+        })
     }
 
     /// The secret itself. Never log it or put it in an error.
@@ -70,6 +87,20 @@ impl fmt::Debug for Secret {
     }
 }
 
+impl Drop for Secret {
+    fn drop(&mut self) {
+        wipe(std::mem::take(&mut self.0).into_bytes());
+    }
+}
+
+/// Overwrites `bytes` with zeros before they are freed. `black_box` and the fence keep
+/// the compiler from dropping the writes as dead stores.
+fn wipe(mut bytes: Vec<u8>) {
+    bytes.iter_mut().for_each(|b| *b = 0);
+    std::hint::black_box(&bytes);
+    compiler_fence(Ordering::SeqCst);
+}
+
 #[cfg(test)]
 mod tests {
     use super::Secret;
@@ -80,6 +111,19 @@ mod tests {
         let debug = format!("{secret:?} {:?}", Some(&secret));
         assert!(!debug.contains("abcd"), "{debug}");
         assert_eq!(secret.expose(), "abcd-1234");
+    }
+
+    #[test]
+    fn bytes_from_a_store_must_be_utf8_and_are_never_named() {
+        let secret = Secret::from_utf8(b"live_abc".to_vec()).expect("UTF-8");
+        assert_eq!(secret.expose(), "live_abc");
+        let err = Secret::from_utf8(vec![b'k', 0xFF, b'y'])
+            .expect_err("not UTF-8")
+            .to_string();
+        assert_eq!(
+            err,
+            "not supported by this backend: a stored secret that isn't UTF-8"
+        );
     }
 
     #[test]

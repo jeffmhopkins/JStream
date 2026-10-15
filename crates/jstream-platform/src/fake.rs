@@ -921,14 +921,19 @@ impl StreamKeyStore for MemoryKeyStore {
     fn set(&self, output_id: &str, key: &Secret) -> Result<(), PlatformError> {
         let mut state = lock(&self.state);
         Self::check(&state, "MemoryKeyStore::set")?;
-        state.keys.insert(output_id.to_owned(), key.clone());
+        state
+            .keys
+            .insert(output_id.to_owned(), Secret::new(key.expose()));
         Ok(())
     }
 
     fn get(&self, output_id: &str) -> Result<Option<Secret>, PlatformError> {
         let state = lock(&self.state);
         Self::check(&state, "MemoryKeyStore::get")?;
-        Ok(state.keys.get(output_id).cloned())
+        Ok(state
+            .keys
+            .get(output_id)
+            .map(|key| Secret::new(key.expose())))
     }
 
     fn clear(&self, output_id: &str) -> Result<(), PlatformError> {
