@@ -470,6 +470,7 @@ mod tests {
             &[Edit::SceneCreate {
                 scene_id: SceneId::new("s"),
                 name: "S".into(),
+                role: None,
             }],
             &[Edit::SceneDelete {
                 scene_id: SceneId::new("s"),

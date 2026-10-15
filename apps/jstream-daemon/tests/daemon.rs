@@ -286,6 +286,7 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     let applied = timely(control.call(Call::Batch(Batch::single(Edit::SceneCreate {
         scene_id: SceneId::new("main"),
         name: "Main".to_owned(),
+        role: None,
     }))))
     .await
     .expect("applied");
@@ -303,6 +304,11 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         }
         other => panic!("expected state.changed, got {other:?}"),
     }
+    // The first scene went on program.
+    assert!(matches!(
+        timely(events.next()).await,
+        Some(Event::StudioChanged { .. })
+    ));
     let listed = timely(control.call(Call::Query {
         query: Query::SceneList,
     }))

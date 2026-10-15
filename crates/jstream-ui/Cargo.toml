@@ -1,0 +1,27 @@
+[package]
+name = "jstream-ui"
+version = "0.0.0"
+description = "The JStream web UI: a Leptos app compiled to WASM that drives the engine over its WebSocket API."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 3
+summary = "Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# Reading the engine's event stream.
+futures-util.workspace = true
+# The WebSocket client: the browser's `WebSocket` on wasm32 (ADR-0045).
+jstream-control = { workspace = true, features = ["ws"] }
+jstream-protocol.workspace = true
+leptos.workspace = true
+
+[dev-dependencies]
+jstream-control = { workspace = true, features = ["mock"] }

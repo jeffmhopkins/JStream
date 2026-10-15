@@ -53,10 +53,75 @@ const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
          C and assembly for the primitives (no media code). Used by jstream-outputs for rtmps://",
     ),
     (
+        "prettyplease",
+        None,
+        "`links = \"prettyplease03\"` only enforces one version per graph; its build script prints \
+         cfg declarations and checks that key, and compiles nothing. Reached through leptos_macro \
+         (jstream-ui, ADR-0045)",
+    ),
+    (
         "wasm-bindgen-shared",
         None,
         "`links = \"wasm_bindgen\"` only enforces one version per graph; its build script sets \
          environment variables and compiles nothing. Reached through wgpu's wasm32-only dependencies",
+    ),
+    // Tauri 2 (jstream-desktop, ADR-0045), a dependency on Windows only. `cargo metadata`
+    // lists every platform's packages, so most of these are never built for Windows.
+    (
+        "tauri",
+        None,
+        "`links = \"Tauri\"` only enforces one version per graph; its build script writes the \
+         ACL and permission files and compiles nothing (jstream-desktop)",
+    ),
+    (
+        "vswhom-sys",
+        None,
+        "build-depends on `cc` for a small C++ file that asks Windows where Visual Studio is, \
+         so embed-resource can run the resource compiler; under tauri-build, at build time only. \
+         Nothing of it is linked into the app (jstream-desktop)",
+    ),
+    (
+        "atk-sys",
+        None,
+        "`links = \"atk-1.0\"`: bindings to the system's ATK through pkg-config, compiling no C. \
+         Linux only, under Tauri's WebKitGTK webview; never built (jstream-desktop uses Tauri on Windows only)",
+    ),
+    (
+        "gdk-sys",
+        None,
+        "`links = \"gdk-3\"`: bindings to the system's GDK through pkg-config, compiling no C. \
+         Linux only, under Tauri's WebKitGTK webview; never built (jstream-desktop uses Tauri on Windows only)",
+    ),
+    (
+        "gtk-sys",
+        None,
+        "`links = \"gtk-3\"`: bindings to the system's GTK through pkg-config, compiling no C. \
+         Linux only, under Tauri's WebKitGTK webview; never built (jstream-desktop uses Tauri on Windows only)",
+    ),
+    (
+        "webkit2gtk-sys",
+        None,
+        "`links = \"web_kit2\"`: bindings to the system's WebKitGTK through pkg-config, compiling \
+         no C. Linux only, under Tauri; never built (jstream-desktop uses Tauri on Windows only)",
+    ),
+    (
+        "objc2-exception-helper",
+        None,
+        "build-depends on `cc` for a few lines of Objective-C that catch exceptions. macOS only, \
+         under Tauri's tao and wry; never built (jstream-desktop uses Tauri on Windows only)",
+    ),
+    (
+        "iana-time-zone-haiku",
+        None,
+        "build-depends on `cc` for a small C++ shim. Haiku only, under chrono (serde_with under \
+         tauri-utils); never built",
+    ),
+    (
+        "defmt",
+        None,
+        "`links = \"defmt\"` only enforces one version per graph; an optional logging backend of \
+         jiff for embedded targets, listed through serde_with under tauri-utils; compiles nothing \
+         and is never built here",
     ),
 ];
 

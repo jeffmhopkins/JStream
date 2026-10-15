@@ -225,6 +225,7 @@ fn handshake_list_and_call_round_trip() {
             "send",
             "source",
             "state",
+            "studio",
             "video"
         ]
     );
@@ -334,7 +335,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(17));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(18));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -607,21 +608,23 @@ fn events_report_every_change_with_a_cursor() {
         json!([
             {"seq": 1, "event": {"type": "state.changed", "rev": 1,
                                  "client_id": "mock_1", "request_id": "req_1"}},
-            {"seq": 2, "event": {"type": "output.state_changed",
-                                 "output_id": "out_rec", "state": "starting"}},
+            {"seq": 2, "event": {"type": "studio.changed", "program_scene": "s",
+                                 "client_id": "mock_1", "request_id": "req_1"}},
             {"seq": 3, "event": {"type": "output.state_changed",
+                                 "output_id": "out_rec", "state": "starting"}},
+            {"seq": 4, "event": {"type": "output.state_changed",
                                  "output_id": "out_rec", "state": "active"}},
-            {"seq": 4, "event": {"type": "state.changed", "rev": 7, "client_id": "ui_1"}}
+            {"seq": 5, "event": {"type": "state.changed", "rev": 7, "client_id": "ui_1"}}
         ])
     );
     assert_eq!(
         (read["next"].clone(), read["dropped"].clone()),
-        (json!(4), json!(0))
+        (json!(5), json!(0))
     );
     // Reading from a cursor returns only what came after it; reading never says `hello`.
-    let again = read_events(&f, Some(2));
-    assert_eq!(again["events"][0]["seq"], 3);
-    assert_eq!(read_events(&f, Some(4))["events"], json!([]));
+    let again = read_events(&f, Some(3));
+    assert_eq!(again["events"][0]["seq"], 4);
+    assert_eq!(read_events(&f, Some(5))["events"], json!([]));
     assert_eq!(f.hello_names(), ["agent-x"]);
 }
 

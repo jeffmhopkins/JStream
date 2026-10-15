@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:8225afda4d2a3793", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 3: audio_sources sync now drops an off source's status at once; Audio sources bullet still holds; re-read" }
+verified = { hash = "b3:52b8953a31427243", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; actions list both scene.switch/studio.get and audio.reset_loudness; tests line unions studio and audio routing tests; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -70,6 +70,9 @@ state machine. Contents:
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
   compositor.
+- **Studio** (`studio.rs`): which scene is on program, runtime state under the
+  collection lock that `scene.switch` sets and `studio.get` reads
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox, composites
   the program mix from the render snapshot the control side publishes
@@ -146,15 +149,16 @@ state machine. Contents:
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
   outputs, refused files left
   as they were, a failed save that the next change recovers, and concurrent sessions
-  leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
-  dev-dependency) driving the engine in-process. The audio routing (`audio.rs` and
+  leaving the latest collection and no temporary file), `scene.switch` and the program
+  scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
+  that follows program, and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
+  engine in-process. The audio routing (`audio.rs` and
   `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
   batches and undo, `meters.tick` while a mixer is attached and none after,
   `audio.reset_loudness`, and the master's true peak and loudness; `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
   off closes its input and its meter and turning it on opens them again. The parity
-  tests add the
-  fixture's `mic` kind, which no built-in kind matches.
+  tests add the fixture's `mic` kind, which no built-in kind matches.
 
 Not here yet: live values, `when_shown`'s activity
 gain (D6), the audio and outputs snapshots, a GPU encode target, and
@@ -170,7 +174,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:85c3c72bee59ba75", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 3: Not yet line says the mixer has filter chains since D7b and the routing sets none yet; status of an off source drops at once (sync); re-read, holds" }
+verified = { hash = "b3:6782649b1303756a", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; State has routing and studio; program scene text is main's, audio routing is D5's; both hold against engine.rs" }
 -->
 
 ### Engine and sessions
@@ -266,8 +270,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), and
-  `audio.reset_loudness` (see *Audio routing*), which succeeds whether or not the
-  mixer runs.
+  `scene.switch` (see *Program scene* below), and `audio.reset_loudness` (see *Audio
+  routing*), which succeeds whether or not the mixer runs.
+- **`studio.get`** reads the program scene under the collection lock.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -328,14 +333,31 @@ collection lock:
 - **Not steps:** actions (outputs, stream keys), queries and history calls. Live
   values are not built.
 
+### Program scene
+
+The program scene is runtime state in `studio.rs`, under the collection lock beside the
+outputs' state, not in the graph
+([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). `scene.switch`
+sets it (`not_found` for a scene the collection doesn't have) and emits
+`studio.changed`, with no `rev` change; a switch to the scene already on program emits
+nothing. After every applied batch, undo and redo the engine reconciles it: the collection's first
+scene goes on program when it is created, a deleted program scene gives way to the
+first scene left (or none), and a reorder never moves it. A scene's `role` changes none
+of this: a group is a scene here, and can go on program. A batch, undo or redo that moves
+program emits `studio.changed` right after its `state.changed`, naming the same request. The
+mock applies the same rules, and the differential script holds the two to each other.
+Program is not saved in the collection file, so an engine that loads one (a restart) starts
+with its first scene on program. The program mix, on the render thread and in
+`video.snapshot`, draws the program scene, and a switch re-plans it, so the next frame
+shows the new scene: a cut. Only a cut exists; transitions and the preview scene come
+later.
+
 ### Snapshots
 
 `video.snapshot` returns the program mix as a PNG
-([jstream-protocol › Design](../jstream-protocol/README.md#design)). Until studio
-state exists, that scene is the first one in display order. `Program` will follow
-`program_scene` once studio mode is built
-([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)); that state is M2
-([ROADMAP › M2](../../ROADMAP.md#m2)). An empty collection is an opaque black canvas.
+([jstream-protocol › Design](../jstream-protocol/README.md#design)): the program
+scene, read under the collection lock when the shot is copied, so a snapshot after a
+`scene.switch` shows the new scene. An empty collection is an opaque black canvas.
 
 The canvas is the collection's (`State::canvas`, default 1920×1080, changed by
 `canvas.set_size`), copied into the shot with the items, so every scene of a snapshot,
@@ -365,8 +387,9 @@ draws nothing.
 
 **The render snapshot.** `snapshot::plan` copies the program scene, the scenes it
 reaches, the frames they place and the passes that draw them (`schedule`, made once
-here) into an immutable `Shot`. The engine re-plans after every applied batch, undo
-and redo, every `set_source_frame`, a collection file's load, a live source's build
+here) into an immutable `Shot`. The program scene is the one `scene.switch` put on
+program (*Program scene*). The engine re-plans after every applied batch, undo
+and redo, a `scene.switch` that moves program, every `set_source_frame`, a collection file's load, a live source's build
 and a live source's next frame (see *Live sources*), under the collection lock, and
 `RenderHub::publish` stores
 it through `arc-swap` as the next render generation only when it draws something new
@@ -821,8 +844,9 @@ lock is held, as its final `stats.tick` already requires. The master's meters ar
 atomics the mixer thread writes and the sampler reads, with no lock. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The render snapshot is published under the collection
-lock (which makes the control side its one writer) and loaded by the render and
-snapshot threads with no lock at all. A stream's poll takes only its queue's lock. No lock
+lock (which makes the control side its one writer) and loaded by the render thread
+with no lock at all. `video.snapshot` reads it under the collection lock and the
+snapshot thread only receives it. A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
@@ -863,7 +887,7 @@ Every agent action goes to the audit log
 the time, `client_id`, the client's name from its latest `hello` (`client_name`, cut
 to 128 bytes; `client_id`s restart at `client_1` with the engine, so the name is what
 says which agent acted across restarts), the session's `request_id`, the call (`batch`,
-`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id`, the `rev` before and
+`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id` or `scene_id` (`scene.switch`), the `rev` before and
 after, the result (`ok` or the error code), and `replayed` for a batch, undo or redo whose
 idempotency key had already been applied. It holds no argument of any call: no names,
 settings, URLs or keys, so `output.set_key` records only that action on that output
@@ -917,7 +941,7 @@ temporary `.<name>.<pid>.tmp` beside the file, flushed to disk, renamed over it,
 Unix the directory flushed too; on Unix it is mode `0600`. A failed save is logged at
 `error` with the path and `rev`, removes the temporary file, and leaves the call's
 result as it is: the change stays applied and the next change saves again. Undo
-history and idempotency keys are not saved.
+history, idempotency keys and the program scene are not saved (see *Program scene*).
 
 `jstream-daemon`'s `--collection` option turns this on
 ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
@@ -952,7 +976,7 @@ history and idempotency keys are not saved.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:604723c7a58c44ee", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of D7b: took D7b's collector sentence; re-read, the audio sources thread still takes no engine lock (only its own, wanted and Routed); holds" }
+verified = { hash = "b3:7933b977af6f0427", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; mixer thread meters the master block and routing attaches once the stage is up; main's text otherwise; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

@@ -70,6 +70,10 @@ pub enum Query {
     /// sends. Outputs have no display order of their own.
     #[serde(rename = "output.list")]
     OutputList,
+    /// Reads the studio state: which scene is on program. It is runtime state, not
+    /// collection state (ADR-0030), so the result carries no `rev`.
+    #[serde(rename = "studio.get")]
+    StudioGet,
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
@@ -121,6 +125,7 @@ impl Query {
             Query::KindList => "kind.list",
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
+            Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
@@ -208,11 +213,11 @@ pub enum QueryResult {
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
         /// Every audio bus, ordered by ID, the master among them. Missing (from a
-        /// server older than 0.16) parses as empty.
+        /// server older than 0.18) parses as empty.
         #[serde(default)]
         buses: Vec<BusInfo>,
         /// Every send, ordered by bus, then by source. Missing (from a server older
-        /// than 0.16) parses as empty.
+        /// than 0.18) parses as empty.
         #[serde(default)]
         sends: Vec<SendInfo>,
     },
@@ -250,6 +255,13 @@ pub enum QueryResult {
         rev: Rev,
         /// The outputs, ordered by ID.
         outputs: Vec<OutputInfo>,
+    },
+    /// The result of `studio.get`. Studio state is runtime state, so it carries no `rev`.
+    #[serde(rename = "studio.get")]
+    StudioGet {
+        /// The scene on program. Omitted only while the collection has no scene.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        program_scene: Option<SceneId>,
     },
     /// The result of `encoder.list`.
     #[serde(rename = "encoder.list")]
@@ -296,6 +308,7 @@ impl QueryResult {
             QueryResult::KindList { .. } => "kind.list",
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
+            QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
@@ -337,7 +350,7 @@ pub struct SourceInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicated_from: Option<SourceId>,
     /// Its audio settings, for an audio source: one whose kind produces audio, or a
-    /// `scene` source. Omitted for every other source, and by a server older than 0.16.
+    /// `scene` source. Omitted for every other source, and by a server older than 0.18.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audio: Option<SourceAudio>,
 }

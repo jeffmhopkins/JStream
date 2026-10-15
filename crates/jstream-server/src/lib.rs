@@ -6,7 +6,10 @@
 //! how many connections are open at once and how long a connection has to send its
 //! upgrade request and complete its handshake. When the host turns it on
 //! (`ServerConfig::mcp`), it also serves MCP's streamable-HTTP transport at [`MCP_PATH`],
-//! behind the same checks, with one MCP session per `initialize`. Layer 4.
+//! behind the same checks, with one MCP session per `initialize`. When the host names a
+//! directory (`ServerConfig::ui_dir`), it serves the web UI's files from it at every
+//! other path, behind the same checks, with a browser's `Basic` credentials carrying the
+//! token. Layer 4.
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-server/README.md#purpose, crates/jstream-server/README.md#design, docs/adr/0006-mcp-full-access.md
 
@@ -20,6 +23,7 @@ mod mcp;
 mod session;
 #[cfg(test)]
 mod tests;
+mod ui;
 
 pub use config::{ServerConfig, Token};
 pub use error::ServerError;
@@ -34,7 +38,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
 use gate::Gate;
 use gate::Refusal;
-use jstream_control::Control;
+use jstream_control::{Control, WS_PROTOCOL};
 use listener::{Accepted, Limited};
 use mcp::Mcp;
 use std::future::Future;
@@ -45,6 +49,7 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::{Semaphore, watch};
 use tracing::Instrument;
+use ui::Ui;
 
 /// Opens one `Control` session for each accepted connection. A connection's session is
 /// dropped when it closes.
@@ -75,6 +80,8 @@ struct App {
     handshake_timeout: Duration,
     /// The MCP sessions, when `ServerConfig::mcp` is on.
     mcp: Option<Mcp>,
+    /// The web UI's files, when `ServerConfig::ui_dir` is set.
+    ui: Option<Ui>,
 }
 
 impl Server {
@@ -84,6 +91,7 @@ impl Server {
     /// [`ServerError::InvalidHost`] before anything is opened, since it could never match.
     pub async fn bind(config: ServerConfig, connector: Connector) -> Result<Server, ServerError> {
         gate::check_extra_hosts(&config.extra_hosts)?;
+        let ui = config.ui_dir.as_deref().map(Ui::new).transpose()?;
         let bind_error = |source| ServerError::Bind {
             addr: config.bind,
             source,
@@ -104,6 +112,7 @@ impl Server {
             )),
             handshake_timeout: config.handshake_timeout,
             mcp,
+            ui,
         });
         Ok(Server {
             listener,
@@ -133,6 +142,15 @@ impl Server {
             .map(|_| format!("http://{}{MCP_PATH}", self.local_addr))
     }
 
+    /// The web UI's URL on this server, e.g. `http://127.0.0.1:4455/`, when
+    /// [`ServerConfig::ui_dir`] is set.
+    pub fn ui_url(&self) -> Option<String> {
+        self.app
+            .ui
+            .as_ref()
+            .map(|_| format!("http://{}/", self.local_addr))
+    }
+
     /// Serves until the listener fails.
     pub async fn serve(self) -> Result<(), ServerError> {
         self.serve_with_shutdown(std::future::pending()).await
@@ -155,6 +173,9 @@ impl Server {
         let mut router = Router::new().route(WS_PATH, get(upgrade));
         if app.mcp.is_some() {
             router = router.route(MCP_PATH, any(mcp::handle));
+        }
+        if app.ui.is_some() {
+            router = router.fallback(ui::handle);
         }
         let router = router.with_state(app);
         let signal = async move {
@@ -211,7 +232,10 @@ async fn upgrade(
         (app.connector)()
     });
     let shutdown = app.shutdown.clone();
+    // A browser client offers `jstream` beside the token's subprotocol and fails the
+    // connection unless one is selected; the token's is never echoed.
     upgrade
+        .protocols([WS_PROTOCOL])
         .max_message_size(MAX_MESSAGE_BYTES)
         .on_upgrade(move |socket| {
             async move {

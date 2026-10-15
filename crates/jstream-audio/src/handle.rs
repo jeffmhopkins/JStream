@@ -9,6 +9,7 @@ use std::sync::atomic::Ordering;
 use crate::rt::bus::{BusShared, MASTER_ID};
 use crate::rt::chain::{FilterParams, FilterSpec};
 use crate::rt::cmd::{ChainTarget, ControlPlane};
+use crate::rt::host::HostMemory;
 use crate::rt::input::InputShared;
 use crate::rt::ring::FrameRing;
 use crate::rt::shared::db_to_gain;
@@ -53,7 +54,8 @@ impl BusId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FilterId(u64);
 
-/// Edits and removes one filter in an input's or a bus's chain. Cheap to clone.
+/// Edits and removes one filter in an input's, a bus's, the master's or an output tap's
+/// chain. Cheap to clone.
 #[derive(Clone, Debug)]
 pub struct FilterControl {
     id: u64,
@@ -68,8 +70,9 @@ impl FilterControl {
         FilterId(self.id)
     }
 
-    /// The latency the filter adds to its chain, frames (the limiter's look-ahead; 0 for
-    /// the others). Fixed when it was built.
+    /// The latency the filter adds to its chain, frames (the limiter's look-ahead, a
+    /// CLAP filter's pipeline depth plus its plugin's latency; 0 for the others). Fixed
+    /// when it was built.
     pub fn latency_frames(&self) -> usize {
         self.latency
     }
@@ -101,6 +104,22 @@ fn insert_filter(
     spec: FilterSpec,
 ) -> Result<FilterControl, AudioError> {
     let (id, latency) = plane.add_filter(target, index, spec)?;
+    Ok(FilterControl {
+        id,
+        target,
+        latency,
+        plane: Arc::clone(plane),
+    })
+}
+
+/// Adds the CLAP filter whose host uses `memory` at `index` in `target`'s chain.
+fn insert_host_filter(
+    plane: &Arc<ControlPlane>,
+    target: ChainTarget,
+    index: usize,
+    memory: HostMemory,
+) -> Result<FilterControl, AudioError> {
+    let (id, latency) = plane.add_host_filter(target, index, memory)?;
     Ok(FilterControl {
         id,
         target,
@@ -168,6 +187,26 @@ impl InputControl {
         spec: FilterSpec,
     ) -> Result<FilterControl, AudioError> {
         insert_filter(&self.plane, ChainTarget::Input(self.id.0), index, spec)
+    }
+
+    /// Adds a CLAP filter at `index` in the input's chain (clamped to its end):
+    /// the mixer's side of the plugin host that uses `memory`
+    /// (docs/adr/0035-clap-plugins-out-of-process.md). The block must be initialised
+    /// for this mixer's rate and block size and its host ready. The mixer never waits
+    /// on the host; a block that isn't back in time is bypassed and counted in the
+    /// block's status. Its latency is the pipeline depth plus the plugin's. Its
+    /// parameters travel through the block's parameter ring, not
+    /// [`FilterControl::set`].
+    ///
+    /// # Errors
+    /// As [`Self::add_filter`], and [`AudioError::InvalidConfig`] for a block that isn't
+    /// initialised for this mixer or whose host isn't ready.
+    pub fn insert_host_filter(
+        &self,
+        index: usize,
+        memory: HostMemory,
+    ) -> Result<FilterControl, AudioError> {
+        insert_host_filter(&self.plane, ChainTarget::Input(self.id.0), index, memory)
     }
 
     /// Removes this input. The mixer drops it on its next block and the ring is freed
@@ -355,6 +394,22 @@ impl BusControl {
         insert_filter(&self.plane, target, index, spec)
     }
 
+    /// [`InputControl::insert_host_filter`] for the bus's chain.
+    ///
+    /// # Errors
+    /// As [`InputControl::insert_host_filter`].
+    pub fn insert_host_filter(
+        &self,
+        index: usize,
+        memory: HostMemory,
+    ) -> Result<FilterControl, AudioError> {
+        let target = ChainTarget::Bus {
+            slot: self.id.slot,
+            id: self.id.id,
+        };
+        insert_host_filter(&self.plane, target, index, memory)
+    }
+
     /// This bus's id, for [`InputControl::set_send`].
     pub fn id(&self) -> BusId {
         self.id
@@ -412,6 +467,122 @@ pub struct BusStats {
     pub skipped_frames: u64,
 }
 
+/// The master chain (docs/adr/0027-program-master-and-output-chains.md): its filters run
+/// on every bus that feeds an output, the master bus and every bus an output tap reads,
+/// after that bus's own chain and fader. Monitoring ([`Mixer::bus_block`]) is before it.
+/// Each such bus runs its own copy, so filter state never mixes buses. Cheap to clone.
+///
+/// [`Mixer::bus_block`]: crate::Mixer::bus_block
+#[derive(Clone, Debug)]
+pub struct MasterControl {
+    plane: Arc<ControlPlane>,
+}
+
+impl MasterControl {
+    pub(crate) fn new(plane: Arc<ControlPlane>) -> Self {
+        Self { plane }
+    }
+
+    /// Adds a filter at the end of the master chain, one copy per bus. Allocates the
+    /// copies on the caller; a bus added later gets its own copy with the filter's
+    /// current settings.
+    ///
+    /// # Errors
+    /// The same as [`InputControl::add_filter`].
+    pub fn add_filter(&self, spec: FilterSpec) -> Result<FilterControl, AudioError> {
+        self.insert_filter(usize::MAX, spec)
+    }
+
+    /// Adds a filter at `index` in the master chain (clamped to the end).
+    ///
+    /// # Errors
+    /// The same as [`InputControl::add_filter`].
+    pub fn insert_filter(
+        &self,
+        index: usize,
+        spec: FilterSpec,
+    ) -> Result<FilterControl, AudioError> {
+        insert_filter(&self.plane, ChainTarget::Master, index, spec)
+    }
+}
+
+/// One mixer's output tap. Opaque: [`OutputTapControl::id`] produces one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct OutputTapId(pub(crate) u64);
+
+/// Controls one output tap: an output's own view of one bus after the master chain,
+/// through the tap's own filter chain (ADR-0027's per-output audio chain). An output
+/// with a tap encodes its audio from [`Mixer::output_block`] instead of sharing the
+/// master bus's encode. Cheap to clone.
+///
+/// [`Mixer::output_block`]: crate::Mixer::output_block
+#[derive(Clone, Debug)]
+pub struct OutputTapControl {
+    id: OutputTapId,
+    bus: BusId,
+    plane: Arc<ControlPlane>,
+}
+
+impl OutputTapControl {
+    pub(crate) fn new(id: OutputTapId, bus: BusId, plane: Arc<ControlPlane>) -> Self {
+        Self { id, bus, plane }
+    }
+
+    /// This tap's id, for [`Mixer::output_block`](crate::Mixer::output_block).
+    pub fn id(&self) -> OutputTapId {
+        self.id
+    }
+
+    /// The bus it reads.
+    pub fn bus(&self) -> BusId {
+        self.bus
+    }
+
+    /// Adds a filter at the end of the tap's chain. Its latency moves the tap's blocks'
+    /// presentation time, not the other outputs'.
+    ///
+    /// # Errors
+    /// The same as [`InputControl::add_filter`].
+    pub fn add_filter(&self, spec: FilterSpec) -> Result<FilterControl, AudioError> {
+        self.insert_filter(usize::MAX, spec)
+    }
+
+    /// Adds a filter at `index` in the tap's chain (clamped to the end).
+    ///
+    /// # Errors
+    /// The same as [`InputControl::add_filter`].
+    pub fn insert_filter(
+        &self,
+        index: usize,
+        spec: FilterSpec,
+    ) -> Result<FilterControl, AudioError> {
+        insert_filter(&self.plane, ChainTarget::OutputTap(self.id.0), index, spec)
+    }
+
+    /// [`InputControl::insert_host_filter`] for the tap's chain.
+    ///
+    /// # Errors
+    /// As [`InputControl::insert_host_filter`].
+    pub fn insert_host_filter(
+        &self,
+        index: usize,
+        memory: HostMemory,
+    ) -> Result<FilterControl, AudioError> {
+        insert_host_filter(
+            &self.plane,
+            ChainTarget::OutputTap(self.id.0),
+            index,
+            memory,
+        )
+    }
+
+    /// Removes the tap; its filters go with it. False when it was already removed, or
+    /// the command queue is full (the tap stays).
+    pub fn remove(&self) -> bool {
+        self.plane.remove_tap(self.id.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::BusId;
@@ -439,6 +610,10 @@ mod tests {
         assert!(b.bus_block(own.id()).is_none());
         assert!(a.bus_block(own.id()).is_some());
         assert!(b.bus_block(BusId::MASTER).is_some());
+        assert!(matches!(
+            b.add_output_tap(own.id()),
+            Err(crate::AudioError::Removed)
+        ));
         assert_eq!(a.bus().id(), BusId::MASTER);
     }
 }

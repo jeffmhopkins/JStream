@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:2c69731959ec2693", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of B9: took main's text, re-read; events buffer keeps newest stats.tick and meters.tick; holds" }
+verified = { hash = "b3:81c8c6dbf76dc975", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; meters kept beside stats.tick; holds" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:c0b16793ff793adf", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of B9: tool nouns now audio, bus, canvas, delete, encoder, history, item, kind, output, scene, send, source, state, video (17 tools, tests count 17); tools.snap regenerated" }
+verified = { hash = "b3:63ddb84aa5503bee", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; tool list now includes studio (from tools.snap) with audio, bus and send; holds" }
 -->
 
 ### Tools
@@ -60,7 +60,7 @@ below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |

@@ -95,6 +95,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every\noutput that shows program) shows it from the next frame. The program scene is\nruntime state, not collection state (ADR-0030): the switch changes no `rev`, is\nnever undone, and emits `studio.changed`, which `studio.get` reads back. Switching\nto the scene already on program succeeds and emits nothing. Fails with\n`not_found` for a scene not in the collection.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to put on program."
+            },
+            "type": {
+              "const": "scene.switch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -647,6 +665,17 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "Display name.",
               "type": "string"
             },
+            "role": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneRole"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What the scene is for (ADR-0024 §1). Omitted means `scene`."
+            },
             "scene_id": {
               "$ref": "#/$defs/SceneId",
               "description": "The new scene's ID, chosen by the client. Rejected if it exists."
@@ -710,7 +739,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
+          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create` with its role (omitted for `scene`), then\n`scene.reorder` to its old display position (unless it was last), then each\ndeleted item's `item.remove` inverse, from bottom to top.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -1793,6 +1822,46 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "output_id",
             "state"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The scene on program changed: after a `scene.switch`, or after a batch, undo or\nredo deleted the program scene (program moves to the first remaining scene) or\ncreated the collection's first scene (it goes on program). Studio state is runtime state\n(ADR-0030), so the event carries no `rev`; a `state.changed` for the same edits\ncomes first.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose request caused it."
+            },
+            "program_scene": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene now on program. Omitted when the collection has no scene left."
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RequestId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "That client's request ID, so it can match the event to its own response."
+            },
+            "type": {
+              "const": "studio.changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "client_id"
           ],
           "type": "object"
         },
@@ -2883,6 +2952,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Reads the studio state: which scene is on program. It is runtime state, not\ncollection state (ADR-0030), so the result carries no `rev`.",
+          "properties": {
+            "type": {
+              "const": "studio.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the collection's encoder profiles, ordered by ID.",
           "properties": {
             "type": {
@@ -3072,7 +3154,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "properties": {
             "buses": {
               "default": [],
-              "description": "Every audio bus, ordered by ID, the master among them. Missing (from a\nserver older than 0.16) parses as empty.",
+              "description": "Every audio bus, ordered by ID, the master among them. Missing (from a\nserver older than 0.18) parses as empty.",
               "items": {
                 "$ref": "#/$defs/BusInfo"
               },
@@ -3115,7 +3197,7 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "sends": {
               "default": [],
-              "description": "Every send, ordered by bus, then by source. Missing (from a server older\nthan 0.16) parses as empty.",
+              "description": "Every send, ordered by bus, then by source. Missing (from a server older\nthan 0.18) parses as empty.",
               "items": {
                 "$ref": "#/$defs/SendInfo"
               },
@@ -3244,6 +3326,30 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "rev",
             "outputs"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `studio.get`. Studio state is runtime state, so it carries no `rev`.",
+          "properties": {
+            "program_scene": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene on program. Omitted only while the collection has no scene."
+            },
+            "type": {
+              "const": "studio.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         },
@@ -3505,7 +3611,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "oneOf": [
         {
           "const": "scene",
-          "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+          "description": "A scene of its own, listed in the scene list. Scenes are created with this role\nunless `scene.create` names another.",
           "type": "string"
         },
         {
@@ -3699,7 +3805,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "null"
             }
           ],
-          "description": "Its audio settings, for an audio source: one whose kind produces audio, or a\n`scene` source. Omitted for every other source, and by a server older than 0.16."
+          "description": "Its audio settings, for an audio source: one whose kind produces audio, or a\n`scene` source. Omitted for every other source, and by a server older than 0.18."
         },
         "duplicated_from": {
           "anyOf": [
@@ -4182,5 +4288,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.16"
+  "title": "JStream protocol 0.18"
 }

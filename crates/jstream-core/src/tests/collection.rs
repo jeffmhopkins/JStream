@@ -2,12 +2,14 @@
 //! every change atomically.
 
 use super::{
-    add, batch, block_on, connected, create, edits, query, rtmp_output, scene_ids, webcam,
+    add, batch, block_on, connected, create, edits, query, rtmp_output, scene_ids, switch_call,
+    webcam,
 };
 use crate::{CollectionFileError, Engine};
 use jstream_control::Control;
 use jstream_protocol::{
     Batch, Call, Edit, HistoryCall, HistoryOp, OutputId, OutputState, Query, QueryResult, Rev,
+    SceneId,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -114,6 +116,27 @@ fn changes_are_saved_and_load_in_a_new_engine() {
         Some(Rev(3))
     );
     assert_eq!(files(&dir), ["scenes.json"]);
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// Program is not saved: a loaded collection's first scene is on program, whichever
+/// scene was on it before the restart (ADR-0030).
+#[test]
+fn a_loaded_collection_puts_its_first_scene_on_program() {
+    let dir = temp_dir("program");
+    let path = dir.join("scenes.json");
+    {
+        let control = connected(&open(&path));
+        batch(&control, edits(vec![create("a"), create("b")])).expect("scenes");
+        block_on(control.call(switch_call("b"))).expect("switch");
+    }
+    let control = connected(&open(&path));
+    match query(&control, Query::StudioGet).expect("studio.get") {
+        QueryResult::StudioGet { program_scene } => {
+            assert_eq!(program_scene, Some(SceneId::new("a")));
+        }
+        other => panic!("not a studio result: {other:?}"),
+    }
     let _ = fs::remove_dir_all(dir);
 }
 
