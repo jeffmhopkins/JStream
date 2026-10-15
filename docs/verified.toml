@@ -537,7 +537,7 @@ stamp = { hash = "b3:7b6e5ed3dd8380e8" }
 stamp = { hash = "b3:35328ace37395ff8" }
 
 ["CRATE-jstream-audio#purpose"."body"]
-stamp = { hash = "b3:d2965ce172ed31e3", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; main's master chain and output taps kept, D5's note that core's mixer thread meters the master block holds; holds" }
+stamp = { hash = "b3:c14e3114d974adb4", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240 squashed) into D6: main's text plus D6's set_activity_gain bullet and activity-gain line; holds against handle.rs and rt/mixer.rs" }
 
 ["CRATE-jstream-audio#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-audio"]
 stamp = { hash = "b3:308082ece28cb86f" }
@@ -567,7 +567,7 @@ stamp = { hash = "b3:a1c0f0586e004c59" }
 stamp = { hash = "b3:418e944950d88c36" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/handle.rs"]
-stamp = { hash = "b3:e8876259efed0a08" }
+stamp = { hash = "b3:a7c82544adbbbe92" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/lib.rs"]
 stamp = { hash = "b3:f37d5c5d3c4b273c" }
@@ -609,10 +609,10 @@ stamp = { hash = "b3:0b9d1aeb21625025" }
 stamp = { hash = "b3:7b96e0548bba48b1" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/input.rs"]
-stamp = { hash = "b3:b603b36bb0fdeaf6" }
+stamp = { hash = "b3:ffc3e5d893199674" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/mixer.rs"]
-stamp = { hash = "b3:ae595ddbd4fd34cd" }
+stamp = { hash = "b3:f4c6231c788aae0b" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/mod.rs"]
 stamp = { hash = "b3:69ca57b1048cdd53" }
@@ -639,13 +639,13 @@ stamp = { hash = "b3:3e63f714aef88590" }
 stamp = { hash = "b3:c06e0c67b9b83617" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/tests/no_alloc.rs"]
-stamp = { hash = "b3:7a01e590515649ab" }
+stamp = { hash = "b3:0ebe67af161ddd4e" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/tests/sim.rs"]
 stamp = { hash = "b3:e5a6edbd7802a068" }
 
 ["CRATE-jstream-audio#realtime"."body"]
-stamp = { hash = "b3:cbd999243b184680", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; D5 tag check now also covers add_output_tap (another mixer's bus is Removed), text updated to say so; master chain/tap text is main's; holds" }
+stamp = { hash = "b3:b6e44fd4493acdd6", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: main's text plus D6's 'activity gains' in the mixer thread's work; holds" }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:27f72f3f6ef95752" }
@@ -681,10 +681,10 @@ stamp = { hash = "b3:0b9d1aeb21625025" }
 stamp = { hash = "b3:7b96e0548bba48b1" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/input.rs"]
-stamp = { hash = "b3:b603b36bb0fdeaf6" }
+stamp = { hash = "b3:ffc3e5d893199674" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/mixer.rs"]
-stamp = { hash = "b3:ae595ddbd4fd34cd" }
+stamp = { hash = "b3:f4c6231c788aae0b" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/mod.rs"]
 stamp = { hash = "b3:69ca57b1048cdd53" }
@@ -849,7 +849,7 @@ stamp = { hash = "b3:d7db1d06b04d10fc" }
 stamp = { hash = "b3:edefe86e076ea4e3" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:e871b8093499fdfc", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at #295 (clock swap re-plan): re-read against both sides: clock swap re-plans live sources; audio sources and routing text unchanged and still hold" }
+stamp = { hash = "b3:f8d3caba075c6078", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:4b7f99a329a36029" }
@@ -869,8 +869,11 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
 stamp = { hash = "b3:82b99f798fcea13a" }
 
+["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
+stamp = { hash = "b3:5e06b48ac662790f" }
+
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio.rs"]
-stamp = { hash = "b3:20260025c8918906" }
+stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio_sources.rs"]
 stamp = { hash = "b3:c6131e778a1cca80" }
@@ -885,7 +888,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:d525a6484a5f51a6" }
+stamp = { hash = "b3:6b18d551fed7d8b0" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -897,7 +900,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:29301fe6ecd05436" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:44c1ed6ec16b544c" }
+stamp = { hash = "b3:06fe384b67b62cfe" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:9ceafdfcc04ac858" }
@@ -939,7 +942,7 @@ stamp = { hash = "b3:4fa634e0a92724f8" }
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio_routing.rs"]
-stamp = { hash = "b3:e1c34ebdd4596151" }
+stamp = { hash = "b3:732249ad50d11c2c" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
@@ -951,13 +954,16 @@ stamp = { hash = "b3:c9688aabcb558c82" }
 stamp = { hash = "b3:cc39789a9b4f72e9" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:d04f58013d21a7e1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at #295 (clock swap re-plan): re-read against both sides: main's clock-swap text is about live sources' timing, not audio routing; D5's audio bullets hold" }
+stamp = { hash = "b3:5609012e8331a22f", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
 
+["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/activity.rs"]
+stamp = { hash = "b3:5e06b48ac662790f" }
+
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio.rs"]
-stamp = { hash = "b3:20260025c8918906" }
+stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio_sources.rs"]
 stamp = { hash = "b3:c6131e778a1cca80" }
@@ -972,7 +978,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:d525a6484a5f51a6" }
+stamp = { hash = "b3:6b18d551fed7d8b0" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -984,7 +990,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:29301fe6ecd05436" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:44c1ed6ec16b544c" }
+stamp = { hash = "b3:06fe384b67b62cfe" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:9ceafdfcc04ac858" }
@@ -1026,7 +1032,7 @@ stamp = { hash = "b3:4fa634e0a92724f8" }
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio_routing.rs"]
-stamp = { hash = "b3:e1c34ebdd4596151" }
+stamp = { hash = "b3:732249ad50d11c2c" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
@@ -1071,10 +1077,10 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:9199dc0f5b8e802e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at #295 (clock swap re-plan): re-read against both sides: daemon text is main's; names no audio routing; holds" }
+stamp = { hash = "b3:9199dc0f5b8e802e", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: depends on core#design, which only gained the activity-gain text; daemon text names no audio routing; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:e871b8093499fdfc" }
+stamp = { hash = "b3:f8d3caba075c6078" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:2c41053918072ae6" }
