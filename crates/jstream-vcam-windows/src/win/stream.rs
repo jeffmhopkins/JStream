@@ -1,7 +1,8 @@
 //! The one video stream (VCamSample's `MediaStream`): `IMFMediaStream2`, plus
 //! `IKsControl` and `IMFAttributes`. 1920x1080 at 30 fps, offered as NV12 and RGB32.
-//! Each `RequestSample` builds one system-memory sample on the calling thread from
-//! [`super::frames::FrameSource`].
+//! Each `RequestSample` takes the next 30 fps slot ([`crate::pace`]) and builds one
+//! system-memory sample from [`super::frames::FrameSource`]: on the calling thread when
+//! the slot is due, otherwise from a Media Foundation timer work item.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -103,6 +104,9 @@ struct StreamState {
     source: Option<IMFMediaSource>,
     /// Paces `RequestSample` to the stream's frame rate.
     pacer: Pacer,
+    /// Bumped whenever the stream starts, stops, changes state or shuts down, so a
+    /// delayed sample from an earlier run is dropped rather than delivered into this one.
+    run: u64,
 }
 
 /// Holds a Media Foundation start-up for the stream's lifetime, so its timer work items
@@ -131,6 +135,8 @@ impl Drop for MfStarted {
 struct Deliver {
     stream: ComObject<MediaStream>,
     token: Option<IUnknown>,
+    /// The stream's run when the slot was reserved.
+    run: u64,
 }
 
 impl IMFAsyncCallback_Impl for Deliver_Impl {
@@ -141,7 +147,7 @@ impl IMFAsyncCallback_Impl for Deliver_Impl {
 
     fn Invoke(&self, _result: Ref<IMFAsyncResult>) -> Result<()> {
         guard("Stream::Deliver", || {
-            self.stream.deliver(self.token.as_ref())
+            self.stream.deliver(self.token.as_ref(), self.run)
         })
     }
 }
@@ -176,6 +182,7 @@ impl MediaStream {
                 queue,
                 source: Some(source),
                 pacer: Pacer::new(FPS),
+                run: 0,
             }),
             frames: Mutex::new(FrameSource::new()),
             _mf: MfStarted::new()?,
@@ -197,6 +204,7 @@ impl MediaStream {
             return Err(MF_E_SHUTDOWN.into());
         }
         st.state = MF_STREAM_STATE_RUNNING;
+        st.run += 1;
         st.pacer.reset();
         log("Stream: started");
         // SAFETY: the PROPVARIANT outlives the call, which copies it.
@@ -216,6 +224,7 @@ impl MediaStream {
             return Ok(());
         }
         st.state = MF_STREAM_STATE_STOPPED;
+        st.run += 1;
         log("Stream: stopped");
         // SAFETY: the PROPVARIANT outlives the call, which copies it.
         unsafe {
@@ -232,6 +241,7 @@ impl MediaStream {
     pub(crate) fn shutdown(&self) {
         let mut st = lock(&self.state);
         st.shutdown = true;
+        st.run += 1;
         st.source = None;
         // SAFETY: plain call on a live COM object.
         let _ = unsafe { st.queue.Shutdown() };
@@ -247,11 +257,12 @@ impl MediaStream {
     }
 
     /// Builds one sample and queues it as `MEMediaSample` with the request's `token`. A
-    /// stream that stopped or shut down since the request drops it.
-    fn deliver(&self, token: Option<&IUnknown>) -> Result<()> {
+    /// request from an earlier `run` (the stream stopped, restarted, changed state or shut
+    /// down since) is dropped.
+    fn deliver(&self, token: Option<&IUnknown>, run: u64) -> Result<()> {
         let queue = {
             let st = lock(&self.state);
-            if st.shutdown || st.state != MF_STREAM_STATE_RUNNING {
+            if st.shutdown || st.state != MF_STREAM_STATE_RUNNING || st.run != run {
                 return Ok(());
             }
             st.queue.clone()
@@ -341,7 +352,7 @@ impl IMFMediaStream_Impl for MediaStream_Impl {
 
     fn RequestSample(&self, token: Ref<IUnknown>) -> Result<()> {
         guard("Stream::RequestSample", || {
-            let wait = {
+            let (wait, run) = {
                 let mut st = lock(&self.state);
                 if st.shutdown {
                     return Err(MF_E_SHUTDOWN.into());
@@ -349,17 +360,18 @@ impl IMFMediaStream_Impl for MediaStream_Impl {
                 if st.state != MF_STREAM_STATE_RUNNING {
                     return Err(MF_E_MEDIA_SOURCE_WRONGSTATE.into());
                 }
-                st.pacer.reserve(Instant::now())
+                (st.pacer.reserve(Instant::now()), st.run)
             };
             let token = token.as_ref().cloned();
             if wait < Duration::from_millis(1) {
-                return self.deliver(token.as_ref());
+                return self.deliver(token.as_ref(), run);
             }
             // Whole milliseconds, rounded up, so a sample is never early.
             let ms = i64::try_from(wait.as_micros().div_ceil(1000)).unwrap_or(i64::MAX);
             let callback: IMFAsyncCallback = Deliver {
                 stream: self.to_object(),
                 token,
+                run,
             }
             .into();
             // SAFETY: plain call; a negative timeout is a delay in milliseconds. The work
@@ -377,7 +389,10 @@ impl IMFMediaStream2_Impl for MediaStream_Impl {
             if st.shutdown {
                 return Err(MF_E_SHUTDOWN.into());
             }
-            st.state = value;
+            if st.state != value {
+                st.state = value;
+                st.run += 1;
+            }
             Ok(())
         })
     }

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:decdb500e53981ab", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#193: new Pacing bullet matches pace.rs (30 fps slots, reset on Start) and stream.rs (due now -> immediate, else MFScheduleWorkItem); Tests paragraph names the pacer; GetService no longer logged, matches Log bullet" }
+verified = { hash = "b3:94bc36b1c6c84705", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#229 B1/B2: intro now names the sample pacer among the cross-platform parts (matches lib.rs); Pacing bullet says a timed sample from an earlier run is dropped (StreamState.run in stream.rs)" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -22,8 +22,8 @@ the [`jstream-vcam-proto`](../jstream-vcam-proto/README.md#purpose) contract. La
 and one of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001));
 it depends only on layer-0 crates and Microsoft's `windows` bindings
 ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). On other platforms it
-builds only its pixel helpers and its control-block trust rule, which are tested
-everywhere.
+builds only its pixel helpers, the sample pacer and the control-block trust rule,
+which are tested everywhere.
 
 Ported from spike S2 (a Rust port of VCamSample's design), which proved this path on
 Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
@@ -44,7 +44,8 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
 - **Pacing.** Each `RequestSample` takes the next slot on a 30 fps schedule (`pace`). A
   request whose slot is due is answered at once; a later one is answered from a Media
   Foundation timer work item (`MFScheduleWorkItem`), so the caller's thread never blocks
-  and clients that ask faster than the frame rate get samples no faster.
+  and clients that ask faster than the frame rate get samples no faster. A timed sample
+  whose stream has since stopped, restarted or shut down is dropped.
 - **Trust.** The block is written by another process. A block found in a session's
   namespace is used only if that session is active (at the console, or an active remote
   connection) and the mapping's owner is the session's logged-on user, SYSTEM or
