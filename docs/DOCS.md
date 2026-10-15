@@ -280,13 +280,18 @@ That means:
 - **Propagation is exactly one hop.** A dependent's `dep:` entry hashes its target's
   text, but not the target's covered files. A verify changes only the ledger, which no
   section can cover, so it never makes another section stale.
-- **Parallel PRs only conflict on an input both changed.** `docs verify` rewrites only
-  the entries whose input changed (they take its `by` and `note`; the others keep theirs),
-  and every entry is its own line with a blank line after it, so PRs that change different
-  files of a crate change different lines and merge cleanly, with the section fresh. Two
-  PRs that change the same input conflict on its entry: neither re-read the combination,
-  so the section has to be re-read after merging `main`. A re-read with no input changed
-  records its `by` and `note` on the `body` entry.
+- **Parallel PRs conflict on an input both changed.** `docs verify` rewrites only the
+  entries whose input changed (they take its `by` and `note`; the others keep theirs).
+  Every entry is a `["DOC-ID#anchor"."<input>"]` header, which never changes while the
+  input exists, then one `stamp` line and a blank line. The headers anchor git's diff, so
+  PRs that change, add or remove different inputs of a section (a new file next to one
+  the other PR edited included) merge cleanly, with the section fresh. Two PRs that change
+  the same input conflict on its `stamp` line: neither re-read the combination, so the
+  section has to be re-read after merging `main`. Structural changes right next to each
+  other can conflict too: one PR adding an input just before one the other removes, or
+  both removing neighbouring inputs. Every such conflict is resolved the same way
+  (`docs merge-main` below), and leaves the section stale, never falsely fresh. A re-read
+  with no input changed records its `by` and `note` on the `body` entry.
 - **The ledger is generated.** Only `docs verify` (and `docs migrate`) writes it, in
   sorted, canonical form; `docs check` fails on any other form, and on an inline
   `verified` key in an `@section` block. A stamp for a section that no longer needs one
@@ -402,6 +407,9 @@ holds**. The note says what was checked and why it still holds, e.g.:
   against the diff. A note that doesn't engage with what changed is a blocking finding.
   A stock-phrase list alone is too easy to game.
 - A false verification is a bug, and gets fixed and noted like one.
+- A later `docs verify` of the same section in the same PR replaces the `by` and `note`
+  of every entry whose input changed since `main`, so its note must cover the PR's whole
+  change to those inputs, not only the last commit: it is the one the reviewer reads.
 - The sweep is to report each section's verify-to-edit ratio from git (not built yet,
   see [Time-based review](#ttl)). A section that gets
   re-verified far more often than it is edited has `covers` that are too broad, so

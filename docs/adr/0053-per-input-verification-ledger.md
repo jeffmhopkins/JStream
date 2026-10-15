@@ -51,18 +51,23 @@ does.
    covers is unchanged ([DOCS › Hash-bound verification](../DOCS.md#verification)). A
    section is fresh when its entries name exactly its current inputs with their current
    hashes.
-2. **Stamps live in `docs/verified.toml`, not in `@section` blocks.** One table per section
-   (`["DOC-ID#anchor"]`), sorted, with a blank line after every entry, so that changes to
-   different entries never touch adjacent lines and git merges them. Only
+2. **Stamps live in `docs/verified.toml`, not in `@section` blocks.** Every entry is a
+   `["DOC-ID#anchor"."<input>"]` table header, one `stamp` line (`hash`, and `by` and
+   `note` when `docs verify` wrote it) and a blank line, sorted by section and input. The
+   header doesn't change while the input exists, so it anchors git's diff: changing,
+   adding or removing different entries, even neighbouring ones, merges cleanly. Only
    `cargo xtask docs verify` writes it, in that canonical form, which `docs check` enforces.
    An inline `verified` line fails `docs check`. No section can cover the ledger.
 3. **`docs verify` writes only what changed.** Entries whose input still has the recorded
    hash keep their `by` and `note`; changed and new inputs get this verification's; removed
    inputs are dropped. With nothing changed, the `body` entry takes the new `by` and `note`,
    so the re-read is still recorded.
-4. **Two PRs conflict only on an input both changed.** Then neither re-read the combination,
-   and its entry conflicts, as the whole stamp did before. `docs merge-main` takes main's
-   side of any ledger conflict and reports the section stale, as it did for inline stamps.
+4. **Two PRs conflict on an input both changed.** Then neither re-read the combination,
+   and its `stamp` line conflicts, as the whole stamp did before. Structural changes right
+   next to each other can conflict too (one PR adding an input just before one the other
+   removes, or both removing neighbouring inputs). `docs merge-main` takes main's side of
+   any ledger conflict and reports the section stale, as it did for inline stamps; a
+   branch entry lost that way only ever makes a section stale, never falsely fresh.
 5. **One-time migration.** `cargo xtask docs migrate` moves each inline stamp whose hash
    still matches into the ledger, with its `by` and `note` on `body`, and drops one that no
    longer matches, so that section is stale until someone re-reads it. It replaces
@@ -72,12 +77,19 @@ does.
 <a id="consequences"></a>
 ## Consequences
 - PRs that touch different files of a crate no longer conflict on its README, and the
-  re-verification after merging `main` that a stamp conflict forced is gone for them.
+  re-verification after merging `main` that a stamp conflict forced is gone for them. A
+  fixture test merges ledger edits with git itself to hold the layout to this.
 - A doc can now reach `main` verified against each of two changes but not re-read against
   both together, when they changed different inputs. Interactions between such changes are
   what review of the second PR and later edits catch, as for code that merges cleanly.
-- The note of a verification is repeated on every entry it wrote. The ledger is one large
-  generated file (about 2,000 lines); a PR's diff of it is a few lines per section it
+- A clean merge can, in a contrived case, leave a section stale on `main`, making the
+  `docs` check red until someone re-verifies it: one PR adds a covered file whose
+  neighbours survive while the other narrows `covers` so that file is excluded. It fails
+  loudly; it is never falsely fresh.
+- The note of a verification is repeated on every entry it wrote, and a second verify in
+  the same PR replaces it on entries whose input changed again
+  ([DOCS › Verification notes](../DOCS.md#notes)). The ledger is one large generated
+  file (about 3,000 lines); a PR's diff of it is a few lines per section it
   re-verified, and the reviewer reads those entries as the PR's verifications.
 - `docs log` reads verifications from the ledger's history as well as the old inline lines;
   the migration commit shows as a restamp.

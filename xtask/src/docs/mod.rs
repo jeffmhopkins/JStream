@@ -734,7 +734,7 @@ mod tests {
         let written =
             std::fs::read_to_string(f.0.join(ledger::PATH)).expect("invariant: just written");
         assert!(
-            written.contains("\"file:src/b.rs\" = { hash = \"b3:"),
+            written.contains("[\"T#a\".\"file:src/b.rs\"]\nstamp = { hash = \"b3:"),
             "{written}"
         );
     }
@@ -1194,7 +1194,7 @@ mod tests {
         };
         let mut files = REGISTRIES.to_vec();
         let (a, s) = (sec("A", "a", "About src."), sec("S", "s", "Stale."));
-        let orphan = "# x\n\n[\"GONE#x\"]\n\nbody = { hash = \"b3:1\" }\n";
+        let orphan = "# x\n\n[\"GONE#x\".body]\nstamp = { hash = \"b3:1\" }\n";
         files.extend([
             ("src/x.rs", "x"),
             ("A.md", a.as_str()),

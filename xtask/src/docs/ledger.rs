@@ -2,10 +2,14 @@
 //!
 //! A section's stamp is one entry per input (its own text, each covered file, each
 //! `depends_on` target), each with the hash that input had when someone last re-read the
-//! section against a change to it. Every entry is its own line with a blank line after it,
-//! so two PRs that change different inputs of one section change different lines, and git
-//! (GitHub's merge included) merges them without a conflict. Two PRs that change the same
-//! input still conflict on its line, as they should: neither re-read the combination.
+//! section against a change to it. Every entry is a table header naming the section and
+//! input, one `stamp` line, and a blank line. The header never changes while the input
+//! exists, so it anchors git's diff: two PRs that change, add or remove different inputs of
+//! one section touch different lines, and git (GitHub's merge included) merges them without
+//! a conflict. Two PRs that change the same input still conflict on its `stamp` line, as
+//! they should: neither re-read the combination. Only structural changes right next to each
+//! other (one PR adding an input just before one the other removes, or both removing
+//! neighbouring inputs) can also conflict.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -20,8 +24,8 @@ pub(crate) const PATH: &str = "docs/verified.toml";
 
 const HEADER: &str = "\
 # Verification stamps: one entry per section input (docs/DOCS.md#verification, ADR-0053).
-# Written by `cargo xtask docs verify`; never edit by hand. The blank line after each entry
-# lets parallel PRs that re-verify different inputs of a section merge without a conflict.
+# Written by `cargo xtask docs verify`; never edit by hand. One header, one line and a
+# blank line per entry let parallel PRs that re-verify different inputs merge cleanly.
 ";
 
 /// One input's stamp: its hash when last verified, and who verified it and why, when this
@@ -53,7 +57,16 @@ impl Ledger {
                 .as_table()
                 .ok_or_else(|| format!("`{section}` must be a table of entries"))?;
             let mut stamp = Stamp::new();
-            for (key, e) in t {
+            for (key, wrapper) in t {
+                let w = wrapper
+                    .as_table()
+                    .ok_or_else(|| format!("`{section}` entry `{key}` must be a table"))?;
+                if let Some(k) = w.keys().find(|k| k.as_str() != "stamp") {
+                    return Err(format!("`{section}` entry `{key}`: unknown key `{k}`"));
+                }
+                let e = w
+                    .get("stamp")
+                    .ok_or_else(|| format!("`{section}` entry `{key}` has no `stamp`"))?;
                 let field = |k: &str| -> Result<Option<String>, String> {
                     match e.get(k) {
                         None => Ok(None),
@@ -65,7 +78,7 @@ impl Ledger {
                 };
                 let e_table = e
                     .as_table()
-                    .ok_or_else(|| format!("`{section}` entry `{key}` must be a table"))?;
+                    .ok_or_else(|| format!("`{section}` entry `{key}`: `stamp` must be a table"))?;
                 if let Some(k) = e_table
                     .keys()
                     .find(|k| !["hash", "by", "note"].contains(&k.as_str()))
@@ -96,14 +109,19 @@ impl Ledger {
         }
     }
 
-    /// The canonical text: sections and entries sorted, one entry per line, each followed
-    /// by a blank line.
+    /// The canonical text: sections and entries sorted; each entry a `[section.input]`
+    /// header, its `stamp` line and a blank line.
     pub(crate) fn render(&self) -> String {
         let mut out = HEADER.to_owned();
         for (section, stamp) in &self.sections {
-            let _ = write!(out, "\n[{}]\n", toml_str(section));
             for (key, e) in stamp {
-                let _ = write!(out, "\n{} = {{ hash = {}", toml_str(key), toml_str(&e.hash));
+                let _ = write!(
+                    out,
+                    "\n[{}.{}]\nstamp = {{ hash = {}",
+                    toml_str(section),
+                    toml_str(key),
+                    toml_str(&e.hash)
+                );
                 if let (Some(by), Some(note)) = (&e.by, &e.note) {
                     let _ = write!(out, ", by = {}, note = {}", toml_str(by), toml_str(note));
                 }
@@ -194,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn render_parses_back_and_puts_a_blank_line_after_every_entry() {
+    fn render_parses_back_with_a_header_line_and_blank_per_entry() {
         let mut l = Ledger::default();
         l.sections.insert(
             "B#b".into(),
@@ -220,10 +238,19 @@ mod tests {
         let text = l.render();
         assert_eq!(Ledger::parse(&text), Ok(l.clone()));
         let body: Vec<&str> = text.lines().skip_while(|x| x.starts_with('#')).collect();
-        for pair in body.windows(2) {
-            assert!(pair[0].is_empty() || pair[1].is_empty(), "{text}");
+        for entry in body.chunks(3) {
+            assert!(entry[0].is_empty(), "{text}");
+            assert!(
+                entry[1].starts_with('[') && entry[1].ends_with(']'),
+                "{text}"
+            );
+            assert!(entry[2].starts_with("stamp = { hash = "), "{text}");
         }
-        assert!(text.find("[\"A#a\"]") < text.find("[\"B#b\"]"), "{text}");
+        assert_eq!(body.len(), 3 * 3, "{text}");
+        assert!(
+            text.find("[\"A#a\".\"body\"]") < text.find("[\"B#b\".\"body\"]"),
+            "{text}"
+        );
         assert_eq!(Ledger::parse(&l.render()).map(|p| p.render()), Ok(text));
     }
 
@@ -232,17 +259,19 @@ mod tests {
         for (bad, why) in [
             ("x = 1", "table of entries"),
             ("[\"A#a\"]\nbody = 1", "must be a table"),
+            ("[\"A#a\".body]\nother = 1", "unknown key"),
+            ("[\"A#a\".body]\nstamp = 1", "`stamp` must be a table"),
             (
-                "[\"A#a\"]\nbody = { by = \"a\", note = \"n\" }",
+                "[\"A#a\".body]\nstamp = { by = \"a\", note = \"n\" }",
                 "no `hash`",
             ),
             (
-                "[\"A#a\"]\nbody = { hash = \"h\", by = \"a\" }",
+                "[\"A#a\".body]\nstamp = { hash = \"h\", by = \"a\" }",
                 "go together",
             ),
-            ("[\"A#a\"]\nbody = { hash = \"\" }", "non-empty"),
+            ("[\"A#a\".body]\nstamp = { hash = \"\" }", "non-empty"),
             (
-                "[\"A#a\"]\nbody = { hash = \"h\", extra = \"x\" }",
+                "[\"A#a\".body]\nstamp = { hash = \"h\", extra = \"x\" }",
                 "unknown key",
             ),
         ] {
@@ -298,5 +327,91 @@ mod tests {
         );
         assert_eq!(again["body"].by.as_deref(), Some("agent:third"));
         assert_eq!(again["file:a"], new["file:a"]);
+    }
+
+    /// The layout's promise, checked with git itself: on one section, two branches that
+    /// change, add or remove *different* inputs (including an input next to one the other
+    /// branch changes) merge cleanly; two that change the same input conflict.
+    #[test]
+    fn parallel_changes_to_different_inputs_merge_cleanly_in_git() {
+        type Entries = Vec<(&'static str, &'static str)>;
+        let ledger = |entries: &[(&str, &str)]| {
+            let mut l = Ledger::default();
+            l.sections.insert(
+                "S#s".into(),
+                restamp(
+                    None,
+                    &inputs(entries),
+                    "agent:x",
+                    "same note on every entry",
+                ),
+            );
+            l.render()
+        };
+        let base = [
+            ("body", "b3:0"),
+            ("file:a", "b3:1"),
+            ("file:b", "b3:2"),
+            ("file:c", "b3:3"),
+        ];
+        let with = |edit: &dyn Fn(&mut Entries)| {
+            let mut e = base.to_vec();
+            edit(&mut e);
+            e.sort_unstable();
+            ledger(&e)
+        };
+        let change = |k: &'static str| {
+            with(&move |e: &mut Entries| {
+                for x in e.iter_mut().filter(|x| x.0 == k) {
+                    x.1 = "b3:9";
+                }
+            })
+        };
+        let add = |k: &'static str| with(&move |e: &mut Entries| e.push((k, "b3:8")));
+        let remove = |k: &'static str| with(&move |e: &mut Entries| e.retain(|x| x.0 != k));
+        let dir = std::env::temp_dir().join(format!("xtask-ledger-git-{}", std::process::id()));
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .expect("invariant: git runs")
+        };
+        let merges = |a: &str, b: &str| -> bool {
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).expect("invariant: temp dir is writable");
+            let commit = |text: &str, branch: &str| {
+                std::fs::write(dir.join("v.toml"), text).expect("invariant: writable");
+                git(&["checkout", "-q", "-B", branch]);
+                git(&["add", "v.toml"]);
+                git(&["commit", "-q", "-m", branch]);
+            };
+            git(&["init", "-q"]);
+            commit(&ledger(&base), "base");
+            commit(a, "one");
+            git(&["checkout", "-q", "base"]);
+            commit(b, "two");
+            git(&["merge-tree", "--write-tree", "one", "two"])
+                .status
+                .success()
+        };
+        for (what, a, b) in [
+            ("change a, change b", change("file:a"), change("file:b")),
+            ("change body, change a", change("body"), change("file:a")),
+            ("add aa, change b", add("file:aa"), change("file:b")),
+            ("add aa, change a", add("file:aa"), change("file:a")),
+            ("remove b, change c", remove("file:b"), change("file:c")),
+            ("remove b, change a", remove("file:b"), change("file:a")),
+            ("add aa, add bb", add("file:aa"), add("file:bb")),
+            ("add aa, remove c", add("file:aa"), remove("file:c")),
+        ] {
+            assert!(merges(&a, &b), "{what} must merge cleanly");
+        }
+        assert!(
+            !merges(&change("file:a"), &with(&|e: &mut Entries| e[1].1 = "b3:7")),
+            "changing the same input must conflict"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
