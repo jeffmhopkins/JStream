@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:8856d9130337d3e9", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): 0.10 adds the history call kind, two error codes and optional cause, all additive; no rule text changed" }
+verified = { hash = "b3:cb38b4c732d1ef9a", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1: stale via ARCH Persistence's Collections bullet; R-API-001..003 text unchanged and the new collection file follows R-API-003 (schema_version 1, migration table, v1 fixture test)" }
 -->
 
 <a id="R-API-001"></a>
