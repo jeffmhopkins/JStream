@@ -127,7 +127,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:90e8506b5ddc7f34", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#171 B8) into B2: re-read; daemon still injects no audit sink, and each MCP session's own undo history matches core's per-client history" }
+verified = { hash = "b3:08495d0ef9e119af", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3 at 0.11: re-read; daemon text names no protocol minor or placement and B3 does not touch the daemon" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
