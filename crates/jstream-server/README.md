@@ -51,7 +51,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:d23e08ac2bfc874a", by = "agent:claude@session_01Gkayyrtq9Ahc5U37dAfdoB", note = "Re-read for #137: test-only change (shutdown tests wait on counted conditions instead of fixed sleeps; CLOSE_TIMEOUT made pub(crate) for the test). No behaviour change; the section still matches; Sessions' shutdown and CLOSE_TIMEOUT paragraph unchanged" }
+verified = { hash = "b3:35accb29f97858a6", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Re-read after merging main: #137's shutdown tests (CLOSE_TIMEOUT pub(crate)) and B4's new kind queries both leave admission, limits, sessions and forwarding unchanged; the server forwards protocol messages opaquely" }
 -->
 
 ### Listening and admission

@@ -491,7 +491,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5386153a7678a890", by = "agent:claude@session_01Gkayyrtq9Ahc5U37dAfdoB", note = "Re-read for #137: test-only change (shutdown tests wait on counted conditions instead of fixed sleeps; CLOSE_TIMEOUT made pub(crate) for the test). No behaviour change; the section still matches; envelope and transport bullets unaffected" }
+verified = { hash = "b3:3613679e50569fcf", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Re-read after merging main (#137, #145, #151, #152): queries bullet carries B4's kind.list/kind.describe and the envelope, transport and events bullets still match; #137 was test-only for the server" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
