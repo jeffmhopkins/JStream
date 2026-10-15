@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3b871b3e02d00f5a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: re-read; connecting, session, events, outputs and secrets bullets unaffected by live values" }
+verified = { hash = "b3:12f136b3cbc5c410", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 cascade from control#design; MockEngine testing line holds; no batch check order claim" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

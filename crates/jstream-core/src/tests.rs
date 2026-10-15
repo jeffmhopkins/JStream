@@ -1007,6 +1007,12 @@ fn the_engine_answers_like_the_mock() {
         Call::Query {
             query: Query::LiveList,
         },
+        // `ends_gesture` is checked before `expected_rev`.
+        Call::Batch(
+            Batch::single(moved("iz", 6.0))
+                .expecting(Rev(0))
+                .ending_gesture(GestureId::new("nope")),
+        ),
         Call::Batch(Batch::single(moved("iz", 6.0)).ending_gesture(GestureId::new("g1"))),
         Call::Batch(Batch::single(moved("iz", 7.0)).ending_gesture(GestureId::new("g1"))),
         live("g3", vec![moved("iz", 1.0)]),

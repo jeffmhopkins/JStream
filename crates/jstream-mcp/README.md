@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:05c4051204adf2c7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main (B9 delete.plan, B10 scene.switch, B6-r, C5, D7b, D8, CL1, U0-U5, #186 and more): re-read this PR's additions against main's merged text; they sit beside scene.switch/studio, delete.plan and the audio work without contradiction; main's text holds" }
+verified = { hash = "b3:5a08431db2dc28ae", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 B3: events.rs still the bounded numbered buffer; contents list holds" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:1bf13d82a0ee10da", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: cascade from ARCH#mcp's tools.snap size line (205 -> 210 KB); this section names no size; holds" }
+verified = { hash = "b3:6d77c5dc6166d4ab", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 B3: events paragraph rewritten; live.changed now merges in place into the newest unread event of its gesture, only across live.changed for other parameters, keeping its seq, so seq is contiguous and dropped exact; matches Buffer::supersede/read and the new eviction test" }
 -->
 
 ### Tools
@@ -190,12 +190,12 @@ outside the buffer, and every read returns it as `stats`; an agent still sees th
 counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
 counted in `dropped`. `live.changed` arrives up to 30 times a second per gesture while
 someone drags, so it would push other events out too. Each carries the newest values
-of what changed, so a newer one stands for the newest buffered one of the same gesture
-when only `live.changed` events follow that one: the feed takes the older one out,
-merges its values under the newer ones, and buffers the result with the next `seq`. A
-drag holds one buffered event, every other event keeps its order, and the left-out
-`seq` is not counted in `dropped`, since nothing it said is lost. The oldest buffered
-event is never taken out, so `dropped` stays exact. A read drains
+of what changed, so a newer one can stand in for an older one of the same gesture: the
+feed merges the newer values over the older event's, in place, when no read has returned
+that event yet, only `live.changed` events follow it, and none of those sets a parameter
+the newer one sets. The merged event keeps its `seq`, so the numbers stay contiguous,
+`dropped` stays exact, nothing a reader has seen changes, and every value keeps its
+order. An unread drag holds one buffered event. A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 

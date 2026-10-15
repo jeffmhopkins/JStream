@@ -241,7 +241,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8b33181d0a48c6e0", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main (B9 delete.plan, B10 scene.switch, B6-r, C5, D7b, D8, CL1, U0-U5, #186 and more): re-read this PR's additions against main's merged text; they sit beside scene.switch/studio, delete.plan and the audio work without contradiction; main's text holds" }
+verified = { hash = "b3:773b64392ca9934d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 cascade from control#design; mock bullets concern the --mock feature, not batch check order; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

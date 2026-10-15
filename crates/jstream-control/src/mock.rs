@@ -491,16 +491,7 @@ impl State {
         {
             return Ok(result.clone());
         }
-        // Same order as `jstream_graph::Graph::apply`: the revision check comes first.
-        let current = self.collection.rev;
-        if let Some(expected) = batch.expected_rev
-            && expected != current
-        {
-            return Err(ProtocolError::RevConflict { expected, current });
-        }
-        if batch.edits.is_empty() {
-            return Err(ProtocolError::EmptyBatch);
-        }
+        // The engine checks `ends_gesture` before the graph's own checks.
         if let Some(gesture_id) = &batch.ends_gesture
             && !self
                 .gestures
@@ -510,6 +501,16 @@ impl State {
                 "ends_gesture",
                 format!("the client has no open gesture `{gesture_id}`"),
             ));
+        }
+        // Same order as `jstream_graph::Graph::apply`: the revision check comes first.
+        let current = self.collection.rev;
+        if let Some(expected) = batch.expected_rev
+            && expected != current
+        {
+            return Err(ProtocolError::RevConflict { expected, current });
+        }
+        if batch.edits.is_empty() {
+            return Err(ProtocolError::EmptyBatch);
         }
         let (rev, inverse) = self.apply(batch.edits)?;
         self.history.record_batch(client_id, rev, inverse);

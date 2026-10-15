@@ -528,7 +528,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1ad4aeb866299c24", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main (B9 delete.plan, B10 scene.switch, B6-r, C5, D7b, D8, CL1, U0-U5, #186 and more): re-read this PR's additions against main's merged text; they sit beside scene.switch/studio, delete.plan and the audio work without contradiction; main's text holds" }
+verified = { hash = "b3:8f7a836041334fcd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2: mock now checks ends_gesture before expected_rev like the engine; protocol section names no check order; Live values bullet holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -655,7 +655,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:e3ac012b4ee71974", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: re-read; tools.snap measured 210636 bytes after regenerating on the merged tree, so about 210 KB; tool list carries delete, live and studio" }
+verified = { hash = "b3:1a9ef994bfaac915", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 B3: drag-merge sentence rewritten to the in-place, unread-only rule with no seq gaps; tools.snap size unchanged at about 210 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -667,8 +667,9 @@ verified = { hash = "b3:e3ac012b4ee71974", by = "agent:claude@session_01WG1uLVaz
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
   apart: each read returns the newest tick as `stats` (running totals), so it can't
   evict the state and output events and its drop counts stay visible. A drag's
-  `live.changed` events are merged into the newest buffered one of their gesture while
-  only `live.changed` events follow it, so a drag holds one buffered event.
+  `live.changed` events are merged, in place, into the newest one of their gesture that
+  no read has returned yet, while only `live.changed` events for other parameters follow
+  it, so an unread drag holds one buffered event and `seq` has no gaps.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
   The first cut does not do this yet: each tool carries its ops' full schemas (about 210 KB

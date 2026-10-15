@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:fc60322fe66ec929", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main (B9 delete.plan, B10 scene.switch, B6-r, C5, D7b, D8, CL1, U0-U5, #186 and more): re-read this PR's additions against main's merged text; they sit beside scene.switch/studio, delete.plan and the audio work without contradiction; main's text holds" }
+verified = { hash = "b3:a3db87fd74092474", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 N4: only the mock's batch check order changed; purpose and contents hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:5eaf8d71ceab0b7f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main (B9 delete.plan, B10 scene.switch, B6-r, C5, D7b, D8, CL1, U0-U5, #186 and more): re-read this PR's additions against main's merged text; they sit beside scene.switch/studio, delete.plan and the audio work without contradiction; main's text holds" }
+verified = { hash = "b3:1fca380161cfcf33", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 N4: live-values bullet now says ends_gesture is checked after the idempotency key and before expected_rev, as in MockControl::batch and Engine; differential script row added" }
 -->
 
 ### The trait
@@ -187,7 +187,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `item.set_geometry` or `item.set_crop`, at most 16 open gestures per client, then each
   value as a batch edit named `values.<n>`), takeover of a parameter another gesture
   holds, `live.cancel` (a no-op for a gesture that isn't open), `live.list`, a batch's
-  `ends_gesture` (`invalid_argument` unless the client has it open), live values
+  `ends_gesture` (`invalid_argument` unless the client has it open, checked after the
+  idempotency key and before `expected_rev`, as the engine does), live values
   dropped with their item, and a session's gestures expiring when its `MockControl` is
   dropped. It emits `live.changed` with each `live.set`'s values and `live.ended` after
   the commit's `state.changed`. With no render thread and no clock, it doesn't coalesce

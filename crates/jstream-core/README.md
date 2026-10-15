@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:a78df7118ece81bf", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main (B9 delete.plan, B10 scene.switch, B6-r, C5, D7b, D8, CL1, U0-U5, #186 and more): re-read this PR's additions against main's merged text; they sit beside scene.switch/studio, delete.plan and the audio work without contradiction; main's text holds" }
+verified = { hash = "b3:ce5b9872090287da", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2: only tests.rs gained a differential row; tests bullet holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -167,7 +167,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:46cf96e32cbaa588", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main (B9 delete.plan, B10 scene.switch, B6-r, C5, D7b, D8, CL1, U0-U5, #186 and more): re-read this PR's additions against main's merged text; they sit beside scene.switch/studio, delete.plan and the audio work without contradiction; main's text holds" }
+verified = { hash = "b3:747bc0401e501a0d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 N3: release timing reworded: checked at once, then when jstream-live next wakes (within 1/30 s if sleeping) and every 4 ms after, matching live_tick/live_ticker and RELEASE_POLL" }
 -->
 
 ### Engine and sessions
@@ -354,8 +354,9 @@ the render parameter channel, never through the collection:
   values move to the releasing list with the render generation current after the
   commit (the generation of the snapshot that carries it), and leave the channel once
   `RenderHub::caught_up` says the render thread holds that generation or is stopped.
-  That is checked at once and then every 4 ms by `jstream-live`, so the render thread
-  never waits and no frame shows the value from before the gesture in between
+  That is checked at once, then by `jstream-live` when it next wakes (within one
+  coalescing interval, 1/30 s, if it was already sleeping) and every 4 ms after that,
+  so the render thread never waits and no frame shows the value from before the gesture in between
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading), "Live-value handover").
 - **Cancel and expiry.** `live.cancel` and a session's end (`InProcessControl`'s drop)
   send the gesture's unsent values, then `live.ended` (`cancelled` or `expired`), and
