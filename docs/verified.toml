@@ -147,10 +147,13 @@ stamp = { hash = "b3:74636e2565276acc" }
 stamp = { hash = "b3:1f10a420e9f6a9bc" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/Cargo.toml"]
-stamp = { hash = "b3:5a7c9b80875ea235" }
+stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:f719dde317481bce" }
+stamp = { hash = "b3:99bce65cb31e7d4f", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
+stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:071eeba73136670c" }
@@ -666,7 +669,7 @@ stamp = { hash = "b3:0ebe67af161ddd4e" }
 stamp = { hash = "b3:e5a6edbd7802a068" }
 
 ["CRATE-jstream-audio#realtime"."body"]
-stamp = { hash = "b3:b6e44fd4493acdd6", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: main's text plus D6's 'activity gains' in the mixer thread's work; holds" }
+stamp = { hash = "b3:044226cbcf228628", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph (input_push 1024 / 940-941 frames) holds against benches/mix.rs" }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:27f72f3f6ef95752" }
@@ -1287,7 +1290,7 @@ stamp = { hash = "b3:99e633ebddadb039" }
 stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
 ["CRATE-jstream-encode#design"."body"]
-stamp = { hash = "b3:a0353286f83c8702", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: Sharing paragraph now says jstream-core keys its registry by the protocol encoder profile (id and settings) and maps it to platform configs; Not yet drops encoder profiles in the protocol" }
+stamp = { hash = "b3:469ca075b74bfbaf", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Performance bullet matches benches/session.rs" }
 
 ["CRATE-jstream-encode#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -2091,7 +2094,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:af178dd41ff64ab0" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/Cargo.toml"]
-stamp = { hash = "b3:5a7c9b80875ea235" }
+stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Cargo.toml only adds the criterion dev-dependency and the composite bench target" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:071eeba73136670c" }
@@ -2130,7 +2133,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:e262bbf38ca8d7b4", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 golden geometry tests) into E1: the E1 layer/cache test list and B3's golden tests are both in tests.rs; holds" }
+stamp = { hash = "b3:d6b297a7651495df", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph matches benches/composite.rs (every item rotated, CI panics without an adapter)" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
