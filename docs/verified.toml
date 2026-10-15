@@ -153,7 +153,7 @@ stamp = { hash = "b3:1f10a420e9f6a9bc" }
 stamp = { hash = "b3:42604b9f922a7f66", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:8d18d5d74c5b4751", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:3922a050f5b7ff9f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:071eeba73136670c" }
@@ -173,11 +173,26 @@ stamp = { hash = "b3:219665bab5be0284" }
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
 stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/cube.rs"]
+stamp = { hash = "b3:4fbf0fc27f382ab8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/lut.rs"]
+stamp = { hash = "b3:f74f8b947b05084f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/lut.wgsl"]
+stamp = { hash = "b3:32de71cbef77317f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/mask.rs"]
+stamp = { hash = "b3:23c562c85cd4b01a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/mask.wgsl"]
+stamp = { hash = "b3:284ed7b2350b9984", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/mod.rs"]
-stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:f7b7defe2ff1d080", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c5bee118d442bcc6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:fbca0ef344cd2b3b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -189,7 +204,7 @@ stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:a2d4c23669d329f3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:8fb80602e8c7465e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -201,7 +216,7 @@ stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:f1de9efc6510e1ea" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/image.rs"]
-stamp = { hash = "b3:0edf4c378e3b8335" }
+stamp = { hash = "b3:9903f99e9df0e620", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
 stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -216,7 +231,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f6e6a1787b97c3c6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:210b5d2344b89e5b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["ARCH#mcp"."body"]
 stamp = { hash = "b3:6ab9abcd91d73d3b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376 ledger, #350): filter in the noun list; tools.snap about 209 KB; holds" }
@@ -2114,11 +2129,26 @@ stamp = { hash = "b3:219665bab5be0284" }
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
 stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/cube.rs"]
+stamp = { hash = "b3:4fbf0fc27f382ab8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/lut.rs"]
+stamp = { hash = "b3:f74f8b947b05084f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/lut.wgsl"]
+stamp = { hash = "b3:32de71cbef77317f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/mask.rs"]
+stamp = { hash = "b3:23c562c85cd4b01a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/mask.wgsl"]
+stamp = { hash = "b3:284ed7b2350b9984", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/mod.rs"]
-stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:f7b7defe2ff1d080", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c5bee118d442bcc6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:fbca0ef344cd2b3b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -2130,7 +2160,7 @@ stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:a2d4c23669d329f3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:8fb80602e8c7465e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -2142,7 +2172,7 @@ stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:f1de9efc6510e1ea" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/image.rs"]
-stamp = { hash = "b3:0edf4c378e3b8335" }
+stamp = { hash = "b3:9903f99e9df0e620", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/lib.rs"]
 stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -2157,10 +2187,10 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f6e6a1787b97c3c6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:210b5d2344b89e5b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:58b3c6a69e2f588f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "#300 N1/N2: staging now follows a successful encode, right before the submit (compositor.rs apply_filter); frame.time's precision and daily jump stated as prelude.wgsl now says. Rest re-read against filter/; holds" }
+stamp = { hash = "b3:6659ef7ab6b21719", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199" }
@@ -2171,11 +2201,26 @@ stamp = { hash = "b3:10fc5503702046a4" }
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
 stamp = { hash = "b3:9beac28bc6ebea4c" }
 
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/cube.rs"]
+stamp = { hash = "b3:4fbf0fc27f382ab8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/lut.rs"]
+stamp = { hash = "b3:f74f8b947b05084f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/lut.wgsl"]
+stamp = { hash = "b3:32de71cbef77317f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/mask.rs"]
+stamp = { hash = "b3:23c562c85cd4b01a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/mask.wgsl"]
+stamp = { hash = "b3:284ed7b2350b9984", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/mod.rs"]
-stamp = { hash = "b3:12b48a3adcb917db" }
+stamp = { hash = "b3:f7b7defe2ff1d080", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c5bee118d442bcc6" }
+stamp = { hash = "b3:fbca0ef344cd2b3b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e" }
@@ -2187,7 +2232,7 @@ stamp = { hash = "b3:0f2d37ae9ca699fd" }
 stamp = { hash = "b3:b3aefcc2353c922c" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:a2d4c23669d329f3" }
+stamp = { hash = "b3:8fb80602e8c7465e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:a12814fa76dae1f4" }
@@ -2234,11 +2279,26 @@ stamp = { hash = "b3:219665bab5be0284" }
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
 stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/cube.rs"]
+stamp = { hash = "b3:4fbf0fc27f382ab8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/lut.rs"]
+stamp = { hash = "b3:f74f8b947b05084f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/lut.wgsl"]
+stamp = { hash = "b3:32de71cbef77317f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/mask.rs"]
+stamp = { hash = "b3:23c562c85cd4b01a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/mask.wgsl"]
+stamp = { hash = "b3:284ed7b2350b9984", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
+
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/mod.rs"]
-stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:f7b7defe2ff1d080", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c5bee118d442bcc6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:fbca0ef344cd2b3b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -2250,7 +2310,7 @@ stamp = { hash = "b3:0f2d37ae9ca699fd", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:a2d4c23669d329f3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:8fb80602e8c7465e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -2262,7 +2322,7 @@ stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:f1de9efc6510e1ea" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/image.rs"]
-stamp = { hash = "b3:0edf4c378e3b8335" }
+stamp = { hash = "b3:9903f99e9df0e620", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
 stamp = { hash = "b3:43adb6486ca0222d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -2277,7 +2337,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f6e6a1787b97c3c6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:210b5d2344b89e5b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-render#testing"."body"]
 stamp = { hash = "b3:03454b8447e1be4f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -2292,7 +2352,7 @@ stamp = { hash = "b3:7db1a4e21a6cee80" }
 stamp = { hash = "b3:e2b28a2df72d9e17" }
 
 ["CRATE-jstream-render#testing"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f6e6a1787b97c3c6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
+stamp = { hash = "b3:210b5d2344b89e5b", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v3 group's last verification holds" }
 
 ["CRATE-jstream-server#design"."body"]
 stamp = { hash = "b3:2c41053918072ae6", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): stale through cascade; text unchanged and names no persistence detail; holds" }
