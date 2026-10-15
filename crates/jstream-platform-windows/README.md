@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:f646c29340c49e1d", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose unchanged; ARCH#threading change (recording sink) doesn't touch the Windows backends" }
+verified = { hash = "b3:96e13dacf00dc62d", by = "agent:claude@session_01HGK7agjEsYDqGN4QkkiUjA", note = "G3a: added the WindowsVcam bullet (format, start, one producer per session, publish, heartbeat, stop, threads) against src/vcam; Not yet and Tests updated; other bullets unchanged; crate-map row, threading and RULES unsafe still hold" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -180,6 +180,41 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Not yet:** the D3D11 side. Capture and the encoders don't take GPU frames yet; see
     [Open questions](#open-questions).
 
+- **`WindowsVcam`** (`VcamSink`), the virtual camera's engine side
+  ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). It is the producer of
+  the [`jstream-vcam-proto`](../jstream-vcam-proto/README.md#purpose) contract that the
+  [`jstream-vcam-windows`](../jstream-vcam-windows/README.md#purpose) media source reads
+  inside Frame Server:
+  - **Format:** only the contract's, 1920x1080 BGRA at 30 fps (`offered_format`); any
+    other `VcamFormat` is `Unsupported`. Frames are system-memory BGRA
+    (`VideoSurface::Cpu`, any stride); GPU frames are `Unsupported` until the D3D11 side
+    of the GPU path exists.
+  - **Start:** the media source must already be registered machine-wide, so `start`
+    checks for its `HKLM` class key first and is `Unsupported` without it (registering
+    is the app's `--register-vcam` step). It then creates, on a D3D11 device of its own
+    on the default hardware adapter, a ring of three shared BGRA textures and a shared
+    fence, plus the control block. They are named in **this session's namespace**,
+    because a non-elevated engine can't create `Global\` objects
+    ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)), and secured with the
+    contract's DACL for this user. Last, it creates the camera with
+    `MFCreateVirtualCamera` for the current user and this session, and starts it.
+  - **One producer per session:** a live control block with a fresh heartbeat in this
+    session (another engine, or another sink in this process) makes `start`
+    `InvalidState`. A stale one, left by a producer that died, is re-initialised as the
+    contract says: marked empty, rewritten, then marked live.
+  - **Publish:** each frame is copied into its ring slot (`UpdateSubresource`), the
+    fence is signalled with the frame's number, and the number is published as
+    `latest_frame`. It never waits on the DLL, which may have died.
+  - **Liveness:** a heartbeat thread refreshes the block's heartbeat every 200 ms while
+    the sink is started, so a pause in `publish` freezes the camera on its last frame
+    instead of switching to the DLL's colour bars. Stopping, dropping the sink or the
+    process ending lets the DLL fall back to them.
+  - **Stop:** removes the camera, stops the heartbeat, marks the block stopped and
+    releases the objects. Dropping a started sink does the same.
+  - **Threads:** like the codecs, a started sink keeps Media Foundation started and
+    the process MTA alive, so it may be driven from threads that never initialised COM.
+    Start it from a thread that isn't an STA.
+
 - **`WindowsCredentials`**, the OS credential store for stream keys and OAuth tokens
   ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence),
   [R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `exists` and `delete` on
@@ -208,15 +243,16 @@ The code is ported from spikes S1 to S3. This first cut has:
     `CredFree`. Nothing here logs, and errors carry no secret or its length.
 
 **Not yet:** Media Foundation video decoders, the D3D11 side of the GPU path (capture
-into shared textures, encoders taking `VideoSurface::Gpu`), the virtual-camera sink, and
+into shared textures, encoders and the virtual camera taking `VideoSurface::Gpu`), and
 a `Backends` constructor, which needs all of them.
 
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
 packet flags, positions across a device move), the capture helpers (BGRA to NV12 with
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the H.264
-helpers (configuration check, NV12 packing, `pts` mapping) and the credential helpers
-(target names of both kinds, blob limits, zeroing) run on every platform. The QPC clock
+helpers (configuration check, NV12 packing, `pts` mapping), the credential helpers
+(target names of both kinds, blob limits, zeroing) and the virtual camera's format and
+frame checks run on every platform. The QPC clock
 test, the start-race test (a destroyed message-only window maps to `NotFound`), the
 credential limits check, the credential round trip (a uniquely named credential
 written, replaced, read and deleted in the real store, a non-UTF-8 one refused on read,
@@ -228,9 +264,14 @@ audio devices, no Media Foundation, no GPU and no display
 target, stages it and checks that the shared fence passes the staged value. The capture
 tests list the displays, capture the primary display for a second, checking the
 frames' format and `pts`, and start a capture of a destroyed window, which must be
-`NotFound`. Run them on a Windows machine with a microphone, speakers, a
+`NotFound`. The virtual-camera test starts `WindowsVcam`, opens the camera's own media
+source through a source reader in RGB32, and publishes a solid colour until Frame Server
+serves it back; it also checks that a second producer is refused and that the block is
+stopped after `stop`. Run them on a Windows machine with a microphone, speakers, a
 display and a DX12 GPU with a hardware H.264 encoder:
-`cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
+`cargo test -p jstream-platform-windows --features hw-tests -- --ignored`. The
+virtual-camera test also needs the `jstream-vcam-windows` DLL registered
+([its Hardware check](../jstream-vcam-windows/README.md#hardware-check)).
 
 <a id="open-questions"></a>
 ## Open questions
