@@ -25,17 +25,20 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError, TrySendError, bounded};
 
 use super::bus::{BusShared, MAX_BUSES};
 use super::chain::{Chain, Kernel};
-use super::cmd::{COMMAND_CAP, MAX_INPUTS};
+use super::cmd::{COMMAND_CAP, MAX_INPUTS, MasterKernels};
 use super::input::InputShared;
 use super::ring::FrameRing;
+use super::tap::{MAX_OUTPUT_TAPS, Tap};
 use crate::error::AudioError;
 
 /// Objects that can wait to be freed. Every input sends at most two of each kind (one
 /// from the mixer, one from the producer), every bus one (from the mixer), every input
-/// and bus its chain, every removed filter itself, and the
-/// mixer applies at most a command queue's worth of changes per block, so a few blocks'
-/// worth fits with room to spare.
-const QUEUE_CAP: usize = 6 * MAX_INPUTS + 4 * MAX_BUSES + 4 * COMMAND_CAP;
+/// and bus its chain (a bus also its master chain), every output tap itself, every
+/// removed filter itself (a master filter one copy per bus), and the mixer applies at
+/// most a command queue's worth of changes per block, so a few blocks' worth fits with
+/// room to spare.
+const QUEUE_CAP: usize =
+    6 * MAX_INPUTS + 6 * MAX_BUSES + 2 * MAX_OUTPUT_TAPS + (4 + MAX_BUSES) * COMMAND_CAP;
 
 /// How long the collector sleeps between drains. Freeing late costs only memory.
 const POLL: Duration = Duration::from_millis(10);
@@ -46,6 +49,8 @@ enum Retired {
     Bus(Arc<BusShared>),
     Chain(Box<Chain>),
     Kernel(Box<Kernel>),
+    Kernels(MasterKernels),
+    Tap(Tap),
 }
 
 /// Hands shared objects to one mixer's collector thread. Cloned into each holder.
@@ -107,6 +112,15 @@ impl Retirer {
         self.hand_off(Retired::Kernel(kernel));
     }
 
+    /// A master filter's list of copies, emptied or not.
+    pub(crate) fn kernels(&self, kernels: MasterKernels) {
+        self.hand_off(Retired::Kernels(kernels));
+    }
+
+    pub(crate) fn tap(&self, tap: Tap) {
+        self.hand_off(Retired::Tap(tap));
+    }
+
     fn hand_off(&self, item: Retired) {
         match self.tx.try_send(item) {
             Ok(()) => {}
@@ -134,6 +148,8 @@ fn collect(rx: &Receiver<Retired>) {
                 Ok(Retired::Bus(bus)) => drop(bus),
                 Ok(Retired::Chain(chain)) => drop(chain),
                 Ok(Retired::Kernel(kernel)) => drop(kernel),
+                Ok(Retired::Kernels(kernels)) => drop(kernels),
+                Ok(Retired::Tap(tap)) => drop(tap),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => return,
             }

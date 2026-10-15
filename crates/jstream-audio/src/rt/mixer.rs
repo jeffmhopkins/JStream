@@ -4,15 +4,19 @@
 //!
 //! **Signal order** (docs/adr/0028-audio-model-v2.md): per input, ring → filter chain
 //! → fader and mute → each send's gain → bus sum. Per bus, sum → filter chain → fader
-//! and mute → output. Sends are post-fader.
+//! and mute → output (the monitor tap, [`Mixer::bus_block`]). Sends are post-fader.
+//! Then (docs/adr/0027-program-master-and-output-chains.md), on each bus that feeds an
+//! output: → master chain (each bus its own copy) → the master bus's block, and each
+//! output tap on the bus → the tap's chain → [`Mixer::output_block`].
 //!
 //! **Latency compensation.** After its chain, each input is delayed to the longest
 //! input chain's latency and each bus to the longest bus chain's, so the paths line up.
 //! A block's `pts` is the media time of the input it was computed from: its first frame
 //! minus that total latency ([`Mixer::latency_frames`]). A `Delay` filter adds no
 //! latency, so its audio from media time `t` is stamped `t` plus its delay: ADR-0028's
-//! deliberate shift. The master bus (slot 0) is the block [`Mixer::mix`] writes out;
-//! every bus's last block is also readable with [`Mixer::bus_block`].
+//! deliberate shift. The master chain's latency is the same on every bus and is
+//! subtracted too; an output tap's chain latency only from that tap's stamp. The master
+//! bus (slot 0) after the master chain is the block [`Mixer::mix`] writes out.
 //!
 //! **Time line.** Engine frame `n` is media time `n / rate` (the media clock's zero,
 //! docs/adr/0014-media-clock.md). A block is the frames `[n, n + block)`; its pts is `n`
@@ -46,13 +50,16 @@ use jstream_media::{MediaTime, Rounding, Timebase};
 
 use super::bus::{BusShared, MASTER_ID, MAX_BUSES, NO_BUS};
 use super::chain::Chain;
-use super::cmd::{self, ChainTarget, Command, ControlPlane};
+use super::cmd::{self, ChainTarget, Command, ControlPlane, MasterKernels};
 use super::input::InputShared;
 use super::retire::Retirer;
 use super::ring::FrameRing;
 use super::shared::levels;
+use super::tap::{MAX_OUTPUT_TAPS, Tap};
 use crate::error::AudioError;
-use crate::handle::{BusControl, BusId, InputControl, InputId};
+use crate::handle::{
+    BusControl, BusId, InputControl, InputId, MasterControl, OutputTapControl, OutputTapId,
+};
 
 /// How the mixer is set up. Fixed for the mixer's lifetime.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -145,6 +152,10 @@ struct BusSlot {
     /// The fader gain applied at the end of the previous block.
     gain_now: f32,
     chain: Box<Chain>,
+    /// This bus's copy of the master chain, run while the bus feeds an output.
+    master: Box<Chain>,
+    /// Whether the master chain ran on the previous block.
+    fed: bool,
 }
 
 /// Adds and removes inputs and buses while [`Mixer::poll`] runs on another thread.
@@ -173,10 +184,16 @@ pub struct Mixer {
     scratch: Box<[[f32; 2]]>,
     /// Each bus slot's sum, then its output: `block_frames` frames per slot.
     acc: Box<[[f32; 2]]>,
+    /// Each bus slot's output after the master chain, for the buses that feed an
+    /// output: `block_frames` frames per slot.
+    post: Box<[[f32; 2]]>,
+    taps: Vec<Tap>,
     /// The longest input chain's latency, frames: every input is delayed to it.
     input_latency: usize,
     /// The longest bus chain's latency, frames: every bus is delayed to it.
     bus_latency: usize,
+    /// The master chain's latency, frames: the same on every bus.
+    master_latency: usize,
 }
 
 impl Mixer {
@@ -199,6 +216,7 @@ impl Mixer {
             retirer,
             config.sample_rate,
             config.ring_frames,
+            config.block_frames,
         ));
         let master = Arc::new(BusShared::new());
         let mut buses: Box<[Option<BusSlot>]> = (0..MAX_BUSES).map(|_| None).collect();
@@ -207,6 +225,8 @@ impl Mixer {
             shared: Arc::clone(&master),
             gain_now: 1.0,
             chain: Box::new(Chain::new(config.sample_rate)?),
+            master: Box::new(Chain::new(config.sample_rate)?),
+            fed: false,
         });
         Ok(Self {
             config,
@@ -219,8 +239,11 @@ impl Mixer {
             position: None,
             scratch: vec![[0.0; 2]; config.block_frames].into_boxed_slice(),
             acc: vec![[0.0; 2]; MAX_BUSES * config.block_frames].into_boxed_slice(),
+            post: vec![[0.0; 2]; MAX_BUSES * config.block_frames].into_boxed_slice(),
+            taps: Vec::with_capacity(MAX_OUTPUT_TAPS),
             input_latency: 0,
             bus_latency: 0,
+            master_latency: 0,
         })
     }
 
@@ -273,8 +296,8 @@ impl Mixer {
         Ok(bus)
     }
 
-    /// The master bus's control handle. Its output is the block [`Self::mix`] and
-    /// [`Self::poll`] write.
+    /// The master bus's control handle. Its output, after the master chain, is the
+    /// block [`Self::mix`] and [`Self::poll`] write.
     pub fn bus(&self) -> BusControl {
         BusControl::new(
             BusId::MASTER,
@@ -283,9 +306,41 @@ impl Mixer {
         )
     }
 
-    /// Bus `bus`'s output for the last block mixed (interleaved stereo, post-fader), or
-    /// silence before the first. `None` when the mixer does not hold that bus: it was
-    /// removed, or the mixer has not applied its addition yet.
+    /// The master chain's control handle: its filters run on every bus that feeds an
+    /// output (the master bus, and every bus an output tap reads), after the bus's own
+    /// chain and fader.
+    pub fn master(&self) -> MasterControl {
+        self.control().master()
+    }
+
+    /// Adds an output tap on `bus` and installs it before returning. While
+    /// [`Self::poll`] runs on another thread, use [`MixerControl::add_output_tap`].
+    ///
+    /// # Errors
+    /// The same as [`MixerControl::add_output_tap`].
+    pub fn add_output_tap(&mut self, bus: BusId) -> Result<OutputTapControl, AudioError> {
+        let tap = self.control().add_output_tap(bus)?;
+        self.apply_commands();
+        Ok(tap)
+    }
+
+    /// Output tap `tap`'s last block (interleaved stereo: its bus after the master chain
+    /// and the tap's own chain) with its presentation time: the block's
+    /// [`pts`](Block::pts) minus the tap chain's latency. `None` when the mixer does not
+    /// hold that tap (it was removed, or the mixer has not applied its addition yet), or
+    /// has not mixed a block since it was added.
+    pub fn output_block(&self, tap: OutputTapId) -> Option<(MediaTime, &[f32])> {
+        let tap = self.taps.iter().find(|t| t.id == tap.0)?;
+        Some((
+            MediaTime::new(tap.pts?, self.timebase),
+            tap.block.as_flattened(),
+        ))
+    }
+
+    /// Bus `bus`'s output for the last block mixed (interleaved stereo, post-fader,
+    /// before the master chain: the monitor tap), or silence before the first. `None`
+    /// when the mixer does not hold that bus: it was removed, or the mixer has not
+    /// applied its addition yet.
     pub fn bus_block(&self, bus: BusId) -> Option<&[f32]> {
         let slot = self.buses.get(bus.slot)?.as_ref()?;
         if slot.id != bus.id {
@@ -298,11 +353,11 @@ impl Mixer {
     }
 
     /// The filter chains' latency, frames: the longest input chain's plus the longest
-    /// bus chain's, as of the last block mixed or command applied. Each block's `pts`
-    /// is its first frame minus this, so it changes when a filter with latency is added
-    /// or removed.
+    /// bus chain's plus the master chain's, as of the last block mixed or command
+    /// applied. Each block's `pts` is its first frame minus this, so it changes when a
+    /// filter with latency is added or removed.
     pub fn latency_frames(&self) -> usize {
-        self.input_latency + self.bus_latency
+        self.input_latency + self.bus_latency + self.master_latency
     }
 
     /// The configuration.
@@ -371,8 +426,11 @@ impl Mixer {
             buses,
             scratch,
             acc,
+            post,
+            taps,
             input_latency,
             bus_latency,
+            master_latency,
             ..
         } = self;
         let (input_latency, bus_latency) = (*input_latency, *bus_latency);
@@ -414,25 +472,66 @@ impl Mixer {
             let target = bus.shared.gain.effective();
             apply_gain(sum, bus.gain_now, target);
             bus.gain_now = target;
-            for f in sum.iter_mut() {
-                for s in f.iter_mut() {
-                    if !s.is_finite() {
-                        *s = 0.0;
-                    }
-                }
-            }
+            zero_non_finite(sum);
             let (peak, rms) = levels(sum);
             bus.shared.meter.publish(peak, rms);
             bus.shared.blocks.add(1);
         }
+        // The master chain, on each bus that feeds an output: the master and every
+        // bus an output tap reads. `acc` keeps the pre-master output for monitoring.
+        let reads = |buses: &[Option<BusSlot>], tap: &Tap| {
+            buses
+                .get(tap.slot)
+                .and_then(Option::as_ref)
+                .is_some_and(|bus| bus.id == tap.bus)
+        };
+        // One bit per bus slot.
+        const _: () = assert!(MAX_BUSES <= 32);
+        let mut feeds = 1u32;
+        for tap in taps.iter() {
+            if reads(buses, tap) {
+                feeds |= 1 << tap.slot;
+            }
+        }
+        for (k, ((bus, sum), post)) in buses
+            .iter_mut()
+            .zip(acc.chunks_exact(n))
+            .zip(post.chunks_exact_mut(n))
+            .enumerate()
+        {
+            let Some(bus) = bus else { continue };
+            if feeds & (1 << k) == 0 {
+                bus.fed = false;
+                continue;
+            }
+            if !bus.fed {
+                // It last ran blocks ago, if ever: start from silence.
+                bus.master.reset();
+                bus.fed = true;
+            }
+            post.copy_from_slice(sum);
+            bus.master.process(post, 0);
+            zero_non_finite(post);
+        }
         // Slot 0 is the master.
-        out.copy_from_slice(acc[..n].as_flattened());
+        out.copy_from_slice(post[..n].as_flattened());
+        let pts = frame.saturating_sub((input_latency + bus_latency + *master_latency) as i64);
+        for tap in taps.iter_mut() {
+            if reads(buses, tap) {
+                tap.block
+                    .copy_from_slice(&post[tap.slot * n..(tap.slot + 1) * n]);
+            } else {
+                tap.block.fill([0.0; 2]);
+            }
+            tap.chain.process(&mut tap.block, 0);
+            zero_non_finite(&mut tap.block);
+            tap.pts = Some(pts.saturating_sub(tap.chain.latency() as i64));
+        }
         self.position = Some(end);
-        let latency = (input_latency + bus_latency) as i64;
         Ok(Block {
             frame,
             frames: n,
-            pts: MediaTime::new(frame.saturating_sub(latency), self.timebase),
+            pts: MediaTime::new(pts, self.timebase),
         })
     }
 
@@ -480,6 +579,7 @@ impl Mixer {
                     id,
                     shared,
                     chain,
+                    master,
                 } => match self.buses.get_mut(slot) {
                     Some(entry @ None) => {
                         let gain_now = shared.gain.effective();
@@ -488,12 +588,15 @@ impl Mixer {
                             shared,
                             gain_now,
                             chain,
+                            master,
+                            fed: false,
                         });
                     }
                     // The control plane only hands out free slots; refuse anything else.
                     _ => {
                         self.plane.retirer().bus(shared);
                         self.plane.retirer().chain(chain);
+                        self.plane.retirer().chain(master);
                     }
                 },
                 Command::RemoveBus { slot, id } => self.retire_bus(slot, id),
@@ -511,14 +614,48 @@ impl Mixer {
                         self.plane.retirer().kernel(kernel);
                     }
                 }
+                Command::AddMasterFilter { index, id, kernels } => {
+                    self.add_master_filter(index, id, kernels);
+                }
+                Command::RemoveFilter {
+                    target: ChainTarget::Master,
+                    id,
+                } => {
+                    for bus in self.buses.iter_mut().flatten() {
+                        if let Some(kernel) = bus.master.remove(id) {
+                            self.plane.retirer().kernel(kernel);
+                        }
+                    }
+                }
                 Command::RemoveFilter { target, id } => {
                     if let Some(kernel) = self.chain_mut(target).and_then(|c| c.remove(id)) {
                         self.plane.retirer().kernel(kernel);
                     }
                 }
+                Command::EditFilter {
+                    target: ChainTarget::Master,
+                    id,
+                    params,
+                } => {
+                    for bus in self.buses.iter_mut().flatten() {
+                        bus.master.edit(id, &params);
+                    }
+                }
                 Command::EditFilter { target, id, params } => {
                     if let Some(chain) = self.chain_mut(target) {
                         chain.edit(id, &params);
+                    }
+                }
+                Command::AddTap(tap) => {
+                    if self.taps.len() >= MAX_OUTPUT_TAPS {
+                        self.plane.retirer().tap(tap);
+                    } else {
+                        self.taps.push(tap);
+                    }
+                }
+                Command::RemoveTap(id) => {
+                    if let Some(index) = self.taps.iter().position(|tap| tap.id == id) {
+                        self.plane.retirer().tap(self.taps.swap_remove(index));
                     }
                 }
             }
@@ -537,7 +674,32 @@ impl Mixer {
                 .map(|bus| bus.chain.latency())
                 .max()
                 .unwrap_or(0);
+            // Every bus's copy holds the same filters; the master bus always exists.
+            self.master_latency = self.buses[0].as_ref().map_or(0, |bus| bus.master.latency());
         }
+    }
+
+    /// Inserts each bus's copy of a new master filter into that bus's master chain. A
+    /// copy for a bus that has gone, or a chain that is full, goes to the collector, as
+    /// does the emptied list.
+    fn add_master_filter(&mut self, index: usize, id: u64, mut kernels: MasterKernels) {
+        for (bus, entry) in self.buses.iter_mut().zip(kernels.iter_mut()) {
+            let Some((bus_id, kernel)) = entry.take() else {
+                continue;
+            };
+            let refused = match bus {
+                Some(bus) if bus.id == bus_id => bus.master.insert(index, id, kernel).err(),
+                _ => Some(kernel),
+            };
+            if let Some(kernel) = refused {
+                self.plane.retirer().kernel(kernel);
+            }
+        }
+        // Copies past the last bus slot, which the control plane never builds.
+        for kernel in kernels.iter_mut().filter_map(Option::take) {
+            self.plane.retirer().kernel(kernel.1);
+        }
+        self.plane.retirer().kernels(kernels);
     }
 
     /// The chain a filter command names, if its input or bus is installed.
@@ -554,6 +716,13 @@ impl Mixer {
                 .as_mut()
                 .filter(|bus| bus.id == id)
                 .map(|bus| &mut *bus.chain),
+            ChainTarget::OutputTap(id) => self
+                .taps
+                .iter_mut()
+                .find(|tap| tap.id == id)
+                .map(|tap| &mut *tap.chain),
+            // Master commands go to every bus's copy instead.
+            ChainTarget::Master => None,
         }
     }
 
@@ -567,6 +736,7 @@ impl Mixer {
         if let Some(bus) = entry.take() {
             self.plane.retirer().bus(bus.shared);
             self.plane.retirer().chain(bus.chain);
+            self.plane.retirer().chain(bus.master);
         }
     }
 
@@ -610,15 +780,35 @@ impl Drop for Mixer {
                     self.plane.retirer().chain(chain);
                 }
                 Ok(Command::Remove(id)) => self.retire_id(id),
-                Ok(Command::AddBus { shared, chain, .. }) => {
+                Ok(Command::AddBus {
+                    shared,
+                    chain,
+                    master,
+                    ..
+                }) => {
                     self.plane.retirer().bus(shared);
                     self.plane.retirer().chain(chain);
+                    self.plane.retirer().chain(master);
                 }
                 Ok(Command::RemoveBus { slot, id }) => self.retire_bus(slot, id),
                 Ok(Command::AddFilter { kernel, .. }) => self.plane.retirer().kernel(kernel),
-                Ok(Command::RemoveFilter { .. } | Command::EditFilter { .. }) => {}
+                Ok(Command::AddMasterFilter { mut kernels, .. }) => {
+                    for kernel in kernels.iter_mut().filter_map(Option::take) {
+                        self.plane.retirer().kernel(kernel.1);
+                    }
+                    self.plane.retirer().kernels(kernels);
+                }
+                Ok(Command::AddTap(tap)) => self.plane.retirer().tap(tap),
+                Ok(
+                    Command::RemoveFilter { .. }
+                    | Command::EditFilter { .. }
+                    | Command::RemoveTap(_),
+                ) => {}
                 Err(_) => break,
             }
+        }
+        for tap in self.taps.drain(..) {
+            self.plane.retirer().tap(tap);
         }
         for slot in self.inputs.drain(..) {
             self.plane.retirer().ring(slot.ring);
@@ -628,6 +818,7 @@ impl Drop for Mixer {
         for bus in self.buses.iter_mut().filter_map(Option::take) {
             self.plane.retirer().bus(bus.shared);
             self.plane.retirer().chain(bus.chain);
+            self.plane.retirer().chain(bus.master);
         }
     }
 }
@@ -662,6 +853,41 @@ impl MixerControl {
             shared,
             Arc::clone(&self.plane),
         ))
+    }
+
+    /// The master chain's control handle, as [`Mixer::master`].
+    pub fn master(&self) -> MasterControl {
+        MasterControl::new(Arc::clone(&self.plane))
+    }
+
+    /// Adds an output tap on `bus` while the mixer is running: the bus after the master
+    /// chain, through the tap's own filter chain, for an output with its own audio
+    /// encode. The mixer installs it at the start of its next [`Mixer::poll`] or
+    /// [`Mixer::mix`] and runs the master chain on `bus` from then on. Allocates its
+    /// block and chain on the caller.
+    ///
+    /// # Errors
+    /// [`AudioError::Removed`] when `bus` was removed, [`AudioError::TooManyOutputTaps`]
+    /// past 16 taps, and [`AudioError::CommandQueueFull`] when the mixer has not yet
+    /// applied a full queue of changes.
+    pub fn add_output_tap(&self, bus: BusId) -> Result<OutputTapControl, AudioError> {
+        let id = self.plane.add_tap(bus.slot, bus.id)?;
+        Ok(OutputTapControl::new(
+            OutputTapId(id),
+            bus,
+            Arc::clone(&self.plane),
+        ))
+    }
+}
+
+/// Replaces any non-finite sample with 0.
+fn zero_non_finite(frames: &mut [[f32; 2]]) {
+    for f in frames.iter_mut() {
+        for s in f.iter_mut() {
+            if !s.is_finite() {
+                *s = 0.0;
+            }
+        }
     }
 }
 
@@ -1174,6 +1400,134 @@ mod tests {
         let blk = m.mix(41_920, &mut out).unwrap();
         assert_eq!(m.latency_frames(), 0);
         assert_eq!(blk.pts.ticks(), 41_920);
+    }
+
+    /// ADR-0027: the master chain runs after each bus that feeds an output (the master
+    /// and every tapped bus), each with its own copy; monitoring hears the bus before
+    /// it; a bus added later gets the master filters with their current settings.
+    #[test]
+    fn the_master_chain_runs_on_buses_that_feed_outputs() {
+        use crate::{FilterParams, FilterSpec};
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        feed(&mut a, 0.5, 0.5, 1.0);
+        let aux = m.add_bus().unwrap();
+        ca.set_send(aux.id(), 1.0);
+        let untapped = m.add_bus().unwrap();
+        ca.set_send(untapped.id(), 1.0);
+        let master = m
+            .master()
+            .add_filter(FilterSpec::Gain { gain_db: -6.0 })
+            .unwrap();
+        let tap = m.add_output_tap(aux.id()).unwrap();
+        assert_eq!(tap.bus(), aux.id());
+        let mut out = vec![0.0; 960];
+        m.mix(40_000, &mut out).unwrap();
+        let blk = m.mix(40_480, &mut out).unwrap();
+        let g6 = 10f32.powf(-6.0 / 20.0);
+        assert_frames(&out, [0.5 * g6; 2], "the master bus after the master chain");
+        assert_frames(m.bus_block(BusId::MASTER).unwrap(), [0.5; 2], "monitoring");
+        assert_frames(m.bus_block(aux.id()).unwrap(), [0.5; 2], "aux monitoring");
+        assert_frames(m.bus_block(untapped.id()).unwrap(), [0.5; 2], "untapped");
+        let (pts, block) = m.output_block(tap.id()).unwrap();
+        assert_frames(block, [0.5 * g6; 2], "aux after the master chain");
+        assert_eq!(pts, blk.pts);
+
+        master.set(FilterParams::Gain { gain_db: -12.0 }).unwrap();
+        let late = m.add_bus().unwrap();
+        ca.set_send(late.id(), 1.0);
+        let late_tap = m.add_output_tap(late.id()).unwrap();
+        m.mix(40_960, &mut out).unwrap();
+        m.mix(41_440, &mut out).unwrap();
+        let g12 = 10f32.powf(-12.0 / 20.0);
+        assert_frames(&out, [0.5 * g12; 2], "after the edit");
+        assert_frames(m.output_block(tap.id()).unwrap().1, [0.5 * g12; 2], "aux");
+        let late_block = m.output_block(late_tap.id()).unwrap().1;
+        assert_frames(late_block, [0.5 * g12; 2], "a bus added after the edit");
+
+        assert!(master.remove());
+        m.mix(41_920, &mut out).unwrap();
+        assert_frames(&out, [0.5; 2], "master filter removed");
+        assert_frames(m.output_block(late_tap.id()).unwrap().1, [0.5; 2], "late");
+    }
+
+    /// An output tap's own chain changes only that tap's blocks, and its latency only
+    /// that tap's presentation time; the master chain's latency moves every output's.
+    #[test]
+    fn an_output_tap_has_its_own_chain_and_stamp() {
+        use crate::FilterSpec;
+        use crate::filter::LimiterParams;
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, _ca) = m.add_input(stereo48()).unwrap();
+        feed(&mut a, 0.5, 0.5, 1.0);
+        let limiter = |lookahead_ms| FilterSpec::Limiter {
+            lookahead_ms,
+            params: LimiterParams::default(),
+        };
+        let tap = m.add_output_tap(BusId::MASTER).unwrap();
+        // Installed, but no block yet: nothing to read, and no stamp.
+        assert!(m.output_block(tap.id()).is_none());
+        tap.add_filter(FilterSpec::Gain { gain_db: -6.0 }).unwrap();
+        assert_eq!(tap.add_filter(limiter(5.0)).unwrap().latency_frames(), 240);
+        assert_eq!(
+            m.master()
+                .add_filter(limiter(2.0))
+                .unwrap()
+                .latency_frames(),
+            96
+        );
+        let mut out = vec![0.0; 960];
+        m.mix(40_000, &mut out).unwrap();
+        let blk = m.mix(40_480, &mut out).unwrap();
+        assert_eq!(m.latency_frames(), 96);
+        assert_eq!(blk.pts.ticks(), 40_480 - 96);
+        assert_frames(&out, [0.5; 2], "the master output");
+        let (pts, block) = m.output_block(tap.id()).unwrap();
+        assert_eq!(pts.ticks(), 40_480 - 96 - 240);
+        let g6 = 10f32.powf(-6.0 / 20.0);
+        assert_frames(block, [0.5 * g6; 2], "the tap");
+
+        assert!(tap.remove());
+        assert!(!tap.remove());
+        m.mix(40_960, &mut out).unwrap();
+        assert!(m.output_block(tap.id()).is_none());
+        assert!(matches!(
+            tap.add_filter(FilterSpec::Gain { gain_db: 0.0 }),
+            Err(AudioError::Removed)
+        ));
+    }
+
+    /// A tap reads silence once its bus is removed, a tap can't be added to a removed
+    /// bus, and there are at most 16 taps.
+    #[test]
+    fn output_taps_follow_their_bus_and_are_limited() {
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        feed(&mut a, 0.5, 0.5, 1.0);
+        let aux = m.add_bus().unwrap();
+        ca.set_send(aux.id(), 1.0);
+        let tap = m.add_output_tap(aux.id()).unwrap();
+        let mut out = vec![0.0; 960];
+        m.mix(40_000, &mut out).unwrap();
+        m.mix(40_480, &mut out).unwrap();
+        assert_frames(m.output_block(tap.id()).unwrap().1, [0.5; 2], "aux");
+        assert!(aux.remove());
+        m.mix(40_960, &mut out).unwrap();
+        assert_frames(m.output_block(tap.id()).unwrap().1, [0.0; 2], "removed bus");
+        assert!(matches!(
+            m.add_output_tap(aux.id()),
+            Err(AudioError::Removed)
+        ));
+        let mut taps = vec![tap];
+        for _ in 1..MAX_OUTPUT_TAPS {
+            taps.push(m.add_output_tap(BusId::MASTER).unwrap());
+        }
+        assert!(matches!(
+            m.add_output_tap(BusId::MASTER),
+            Err(AudioError::TooManyOutputTaps)
+        ));
+        assert!(taps.pop().unwrap().remove());
+        m.add_output_tap(BusId::MASTER).unwrap();
     }
 
     /// ADR-0028: a delay filter's output is stamped later by its delay. It has no

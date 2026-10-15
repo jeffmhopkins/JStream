@@ -16,7 +16,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | ADR | Title | Status | Tier | Superseded by |
 |---|---|---|---|---|
 | [ADR-0001](0001-library-first-engine.md) | Library-first engine with thin hosts | accepted | — |  |
-| [ADR-0002](0002-web-ui-everywhere.md) | One web UI for desktop and browser | accepted | — |  |
+| [ADR-0002](0002-web-ui-everywhere.md) | One web UI for desktop and browser | superseded | — | [ADR-0045](0045-leptos-web-ui.md) |
 | [ADR-0003](0003-media-stack-and-codecs.md) | Rust media stack on OS codecs, no FFmpeg | superseded | — | [ADR-0031](0031-source-types-and-decoding-scope.md) |
 | [ADR-0004](0004-wgpu-with-native-interop.md) | wgpu compositor with native interop | accepted | — |  |
 | [ADR-0005](0005-plugins-wgsl-and-wasm.md) | Extensibility through WGSL effects and WASM plugins | superseded | — | [ADR-0035](0035-clap-plugins-out-of-process.md) |
@@ -43,6 +43,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0027](0027-program-master-and-output-chains.md) | Program master, per-output chains and the privacy screen | accepted | maintainer |  |
 | [ADR-0028](0028-audio-model-v2.md) | Audio model v2: bus matrix with faders, scene-following audio, keys, meters | accepted | maintainer |  |
 | [ADR-0029](0029-transitions.md) | Transitions | accepted | maintainer |  |
+| [ADR-0030](0030-studio-state-and-scene-switching.md) | Studio state and scene switching | accepted | agent |  |
 | [ADR-0031](0031-source-types-and-decoding-scope.md) | Source types for v1 and decoding scope | accepted | maintainer |  |
 | [ADR-0032](0032-live-edits-and-undo.md) | Live parameter edits and undo on the wire | accepted | agent |  |
 | [ADR-0034](0034-youtube-interaction-scope-v2.md) | YouTube interaction scope v2 | superseded | maintainer | [ADR-0041](0041-youtube-interaction-scope-v3.md) |
@@ -55,4 +56,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0041](0041-youtube-interaction-scope-v3.md) | YouTube interaction scope v3: one sign-in | accepted | maintainer |  |
 | [ADR-0042](0042-narrow-hot-architecture-sections.md) | Narrow the hot architecture sections: manifest views, app entry points, threading model | accepted | maintainer |  |
 | [ADR-0043](0043-narrow-maintainer-tier.md) | Decision tiers v2: the maintainer decides product-level calls only | accepted | maintainer |  |
+| [ADR-0044](0044-pairing-remote-browsers.md) | Pairing remote browsers with a one-time code | accepted | maintainer |  |
+| [ADR-0045](0045-leptos-web-ui.md) | One web UI on Leptos, confirmed for M2 | accepted | agent |  |
 <!-- @generated end adr-index -->

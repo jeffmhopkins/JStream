@@ -6,7 +6,8 @@
 //! the outputs' runtime state and an in-memory stand-in for the stream-key store, and
 //! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
-//! stream-key actions, `state.changed` and `output.state_changed` events, and per-client
+//! stream-key actions, `scene.switch` and the program scene it sets (`studio.get`),
+//! `state.changed`, `studio.changed` and `output.state_changed` events, and per-client
 //! undo and redo. Each [`MockEngine::connect`] opens one client session. It does no
 //! persistence or real output work.
 //!
@@ -219,6 +220,10 @@ struct State {
     /// How many sessions have completed `hello`; numbers the client IDs.
     clients: u64,
     subscribers: Vec<Weak<Mutex<Queue>>>,
+    /// The scene on program: runtime state, not counted by `rev`. Follows the engine's
+    /// rules (ADR-0030): the first scene created goes on program, and a deleted program
+    /// scene gives way to the first scene left.
+    program: Option<SceneId>,
 }
 
 /// How many undo steps each client keeps unless [`MockEngine::with_history_limit`]
@@ -405,6 +410,7 @@ struct Source {
 struct Scene {
     id: SceneId,
     name: String,
+    role: SceneRole,
     /// Bottom to top.
     items: Vec<ItemId>,
 }
@@ -432,7 +438,7 @@ impl State {
         match call {
             Call::Batch(batch) => self.batch(client_id, request_id, batch),
             Call::History(call) => self.history(client_id, request_id, &call),
-            Call::Action { action } => self.action(action),
+            Call::Action { action } => self.action(client_id, request_id, action),
             Call::Query { query } => self.query(query),
             _ => Err(unimplemented_by_mock("this kind of call")),
         }
@@ -551,7 +557,7 @@ impl State {
     }
 
     /// What follows every applied batch, undo and redo: the outputs follow the
-    /// collection, and `state.changed` is emitted.
+    /// collection, `state.changed` is emitted, and the program scene is reconciled.
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -565,6 +571,27 @@ impl State {
             client_id: client_id.clone(),
             request_id: Some(request_id.clone()),
             cause,
+        });
+        // Edits that deleted the program scene, or created the first scene, move
+        // program; that event follows their `state.changed` (ADR-0030).
+        let kept = self
+            .program
+            .as_ref()
+            .is_some_and(|id| self.collection.scene_index(id).is_some());
+        if !kept {
+            let first = self.collection.scenes.first().map(|scene| scene.id.clone());
+            if first != self.program {
+                self.program = first;
+                self.emit_program(client_id, request_id);
+            }
+        }
+    }
+
+    fn emit_program(&mut self, client_id: &ClientId, request_id: &RequestId) {
+        self.emit(Event::StudioChanged {
+            program_scene: self.program.clone(),
+            client_id: client_id.clone(),
+            request_id: Some(request_id.clone()),
         });
     }
 
@@ -593,8 +620,21 @@ impl State {
         });
     }
 
-    fn action(&mut self, action: Action) -> Result<CallResult, ProtocolError> {
+    fn action(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        action: Action,
+    ) -> Result<CallResult, ProtocolError> {
         let (output_id, start) = match action {
+            Action::SceneSwitch { scene_id } => {
+                self.collection.existing_scene(&scene_id)?;
+                if self.program.as_ref() != Some(&scene_id) {
+                    self.program = Some(scene_id);
+                    self.emit_program(client_id, request_id);
+                }
+                return Ok(CallResult::Action {});
+            }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
             Action::OutputSetKey { output_id, key } => {
@@ -652,7 +692,7 @@ impl State {
                     .map(|scene| SceneSummary {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
-                        role: SceneRole::Scene,
+                        role: scene.role,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                     })
                     .collect(),
@@ -694,7 +734,7 @@ impl State {
                     .map(|scene| SceneInfo {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
-                        role: SceneRole::Scene,
+                        role: scene.role,
                         items: self.collection.item_infos(scene),
                     })
                     .collect(),
@@ -704,6 +744,9 @@ impl State {
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
                 outputs: self.collection.output_infos(),
+            },
+            Query::StudioGet => QueryResult::StudioGet {
+                program_scene: self.program.clone(),
             },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,
@@ -778,7 +821,11 @@ impl Collection {
         running: &BTreeSet<OutputId>,
     ) -> Result<Vec<Edit>, ProtocolError> {
         let inverse = match edit {
-            Edit::SceneCreate { scene_id, name } => {
+            Edit::SceneCreate {
+                scene_id,
+                name,
+                role,
+            } => {
                 check_id(scene_id.as_str(), at, "scene_id")?;
                 check_name(&name, at)?;
                 if self.scene_index(&scene_id).is_some() {
@@ -787,6 +834,7 @@ impl Collection {
                 self.scenes.push(Scene {
                     id: scene_id.clone(),
                     name,
+                    role: role.unwrap_or_default(),
                     items: Vec::new(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
@@ -798,6 +846,14 @@ impl Collection {
                 vec![Edit::SceneRename {
                     scene_id,
                     name: old,
+                }]
+            }
+            Edit::SceneSetRole { scene_id, role } => {
+                let index = self.existing_scene(&scene_id)?;
+                let old = std::mem::replace(&mut self.scenes[index].role, role);
+                vec![Edit::SceneSetRole {
+                    scene_id,
+                    role: old,
                 }]
             }
             Edit::SceneDelete { scene_id } => {
@@ -825,6 +881,7 @@ impl Collection {
                 let mut inverse = vec![Edit::SceneCreate {
                     scene_id: scene.id.clone(),
                     name: scene.name,
+                    role: (!scene.role.is_scene()).then_some(scene.role),
                 }];
                 // Re-created scenes are appended, so only a scene that wasn't last moves back.
                 if index != self.scenes.len() {
@@ -916,6 +973,11 @@ impl Collection {
                     index: wire_index(from)?,
                 }]
             }
+            Edit::ItemMove {
+                item_id,
+                scene_id,
+                index,
+            } => self.move_item(item_id, scene_id, index, at)?,
             Edit::ItemSetTransform {
                 item_id,
                 scene_id,
@@ -1233,6 +1295,56 @@ impl Collection {
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
+    }
+
+    /// Applies `item.move` with `jstream-graph`'s checks in its order: the item, the
+    /// scene, the index (one past the top is allowed in another scene), then the cycle.
+    /// Returns its inverse: `item.move` back to its previous scene and index.
+    fn move_item(
+        &mut self,
+        item_id: ItemId,
+        scene_id: SceneId,
+        index: u32,
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let (from_scene_id, source_id) = {
+            let item = self.existing_item(&item_id)?;
+            (item.scene_id.clone(), item.source_id.clone())
+        };
+        let from = self.existing_scene(&from_scene_id)?;
+        let to = self.existing_scene(&scene_id)?;
+        let slots = self.scenes[to].items.len() + usize::from(to != from);
+        let to_index = check_index(index, slots, at, "positions in the scene")?;
+        if let Some(Source {
+            kind: SourceKind::Scene { scene_id: nested },
+            ..
+        }) = self.sources.get(&source_id)
+            && self.contains(nested, &scene_id)
+        {
+            return Err(invalid(
+                at,
+                "scene_id",
+                format!(
+                    "moving item `{item_id}` (source `{source_id}`) into scene `{scene_id}` \
+                     would create a cycle"
+                ),
+            ));
+        }
+        let from_index = self.scenes[from]
+            .items
+            .iter()
+            .position(|id| *id == item_id)
+            .unwrap_or_default();
+        self.scenes[from].items.remove(from_index);
+        self.scenes[to].items.insert(to_index, item_id.clone());
+        if let Some(item) = self.items.get_mut(&item_id) {
+            item.scene_id = scene_id;
+        }
+        Ok(vec![Edit::ItemMove {
+            item_id,
+            scene_id: from_scene_id,
+            index: wire_index(from_index)?,
+        }])
     }
 
     /// Creates a source and returns the edit that undoes it.
@@ -1786,7 +1898,7 @@ mod tests {
         EncoderProfileId, EntityKind, Event, Hello, HistoryCall, HistoryDirection, HistoryOp,
         IdempotencyKey, ItemId, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
         PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, Rev, RtmpTarget,
-        SceneId, SecretString, Settings, SourceId, SourceKind, parity,
+        SceneId, SceneRole, SecretString, Settings, SourceId, SourceKind, parity,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -1837,6 +1949,7 @@ mod tests {
         Edit::SceneCreate {
             scene_id: SceneId::new(scene),
             name: scene.to_uppercase(),
+            role: None,
         }
     }
 
@@ -2287,10 +2400,16 @@ mod tests {
                 direction: HistoryDirection::Undo
             })
         );
+        let mut programs = Vec::new();
         let causes: Vec<_> = drain(&mut events)
             .into_iter()
-            .map(|event| match event {
-                Event::StateChanged { rev, cause, .. } => (rev, cause),
+            .filter_map(|event| match event {
+                Event::StateChanged { rev, cause, .. } => Some((rev, cause)),
+                // Program follows undo and redo too (ADR-0030).
+                Event::StudioChanged { program_scene, .. } => {
+                    programs.push(program_scene);
+                    None
+                }
                 other => panic!("unexpected event: {other:?}"),
             })
             .collect();
@@ -2303,6 +2422,8 @@ mod tests {
                 (Rev(6), Some(HistoryDirection::Undo)),
             ]
         );
+        let b = Some(SceneId::new("b"));
+        assert_eq!(programs, [b.clone(), None, b, None]);
     }
 
     /// Each client undoes only its own steps, a new batch clears what it could redo, and
@@ -2609,6 +2730,7 @@ mod tests {
             rejected(Edit::SceneCreate {
                 scene_id: SceneId::new(""),
                 name: "x".into(),
+                role: None,
             }),
             Some(ProtocolError::invalid_argument(
                 "edits.0.scene_id",
@@ -2637,6 +2759,226 @@ mod tests {
         };
         assert_eq!(field(duplicate), "edits.0.new_source_id");
         assert_eq!(engine.rev(), Rev(1));
+    }
+
+    /// Protocol 0.12's groups: `scene.set_role` and `item.move`, with the checks
+    /// `jstream-graph` makes in its order.
+    #[test]
+    fn groups_and_item_move_follow_the_graph_rules() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let group = Edit::SourceCreate {
+            source_id: SourceId::new("g_src"),
+            name: "Group".into(),
+            kind: SourceKind::Scene {
+                scene_id: SceneId::new("g"),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        };
+        let setup = Batch {
+            edits: vec![
+                create("a"),
+                create("g"),
+                webcam(),
+                add("a", "i1", "webcam"),
+                add("a", "i2", "webcam"),
+                Edit::SceneSetRole {
+                    scene_id: SceneId::new("g"),
+                    role: SceneRole::Group,
+                },
+                group,
+                add("a", "gi", "g_src"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let roles = |control: &dyn Control| match query(control, Query::SceneList) {
+            Ok(QueryResult::SceneList { scenes, .. }) => scenes
+                .into_iter()
+                .map(|s| (s.scene_id.to_string(), s.role))
+                .collect::<Vec<_>>(),
+            other => panic!("not a scene list: {other:?}"),
+        };
+        assert_eq!(
+            roles(&*control),
+            [
+                ("a".into(), SceneRole::Scene),
+                ("g".into(), SceneRole::Group)
+            ]
+        );
+        let items = |control: &dyn Control, scene: &str| match query(
+            control,
+            Query::ItemList {
+                scene_id: SceneId::new(scene),
+            },
+        ) {
+            Ok(QueryResult::ItemList { items, .. }) => items
+                .into_iter()
+                .map(|i| i.item_id.to_string())
+                .collect::<Vec<_>>(),
+            other => panic!("not an item list: {other:?}"),
+        };
+        let mv = |item: &str, scene: &str, index: u32| Edit::ItemMove {
+            item_id: ItemId::new(item),
+            scene_id: SceneId::new(scene),
+            index,
+        };
+
+        // Grouping: both webcam items into the group; an empty scene takes index 0, and
+        // one past the top of another scene is allowed.
+        let grouped = Batch {
+            edits: vec![mv("i1", "g", 0), mv("i2", "g", 1)],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, grouped), Ok(Rev(2)));
+        assert_eq!(items(&*control, "a"), ["gi"]);
+        assert_eq!(items(&*control, "g"), ["i1", "i2"]);
+
+        // Within its own scene a move is a reorder.
+        assert_eq!(
+            batch(&*control, Batch::single(mv("i2", "g", 0))),
+            Ok(Rev(3))
+        );
+        assert_eq!(items(&*control, "g"), ["i2", "i1"]);
+
+        let rejected = |edit: Edit| {
+            batch(&*control, Batch::single(edit))
+                .expect_err("rejected")
+                .protocol()
+                .cloned()
+        };
+        let field = |edit: Edit| match rejected(edit) {
+            Some(ProtocolError::InvalidArgument { field, .. }) => field,
+            other => panic!("expected invalid_argument, got {other:?}"),
+        };
+        // Within its own scene one past the top is out of range; in another it isn't,
+        // but two past is.
+        assert_eq!(field(mv("i1", "g", 2)), "edits.0.index");
+        assert_eq!(field(mv("i1", "a", 2)), "edits.0.index");
+        // The group's own placement moved into the group would make it contain itself.
+        assert_eq!(field(mv("gi", "g", 0)), "edits.0.scene_id");
+        assert_eq!(
+            rejected(mv("nope", "g", 0)),
+            Some(ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: "nope".into(),
+            })
+        );
+        assert_eq!(
+            rejected(mv("i1", "nope", 0)),
+            Some(ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "nope".into(),
+            })
+        );
+        assert_eq!(
+            rejected(Edit::SceneSetRole {
+                scene_id: SceneId::new("nope"),
+                role: SceneRole::Group,
+            }),
+            Some(ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "nope".into(),
+            })
+        );
+        assert_eq!(engine.rev(), Rev(3));
+
+        // A moved item keeps its ID and properties, and its placement edits now name
+        // its new scene as its own.
+        let hide = Edit::ItemSetVisible {
+            item_id: ItemId::new("i1"),
+            scene_id: Some(SceneId::new("g")),
+            visible: false,
+        };
+        assert_eq!(batch(&*control, Batch::single(hide)), Ok(Rev(4)));
+        let back = Batch {
+            edits: vec![
+                mv("i1", "a", 0),
+                Edit::SceneSetRole {
+                    scene_id: SceneId::new("g"),
+                    role: SceneRole::Scene,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, back), Ok(Rev(5)));
+        assert_eq!(items(&*control, "a"), ["i1", "gi"]);
+        match query(
+            &*control,
+            Query::ItemList {
+                scene_id: SceneId::new("a"),
+            },
+        ) {
+            Ok(QueryResult::ItemList { items, .. }) => assert!(!items[0].visible),
+            other => panic!("not an item list: {other:?}"),
+        }
+        assert_eq!(
+            roles(&*control),
+            [
+                ("a".into(), SceneRole::Scene),
+                ("g".into(), SceneRole::Scene)
+            ]
+        );
+    }
+
+    /// Undo and redo of grouping: `item.move` returns to its scene and index,
+    /// `scene.set_role` to its previous role, and deleting a group scene comes back as a
+    /// group, as `jstream-graph`'s inverses do.
+    #[test]
+    fn undo_and_redo_restore_groups_and_moves() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let setup = Batch {
+            edits: vec![
+                create("a"),
+                create("g"),
+                webcam(),
+                add("a", "i1", "webcam"),
+                add("a", "i2", "webcam"),
+                add("a", "i3", "webcam"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let before = state(&*control);
+        let mv = |item: &str, scene: &str, index: u32| Edit::ItemMove {
+            item_id: ItemId::new(item),
+            scene_id: SceneId::new(scene),
+            index,
+        };
+        let group = Batch {
+            edits: vec![
+                Edit::SceneSetRole {
+                    scene_id: SceneId::new("g"),
+                    role: SceneRole::Group,
+                },
+                // The middle item first, so its inverse names index 1 of three.
+                mv("i2", "g", 0),
+                mv("i1", "g", 0),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, group), Ok(Rev(2)));
+        let grouped = state(&*control);
+        assert_ne!(grouped, before);
+        assert_eq!(undo(&*control), Ok((Rev(3), Rev(2), 1, 1)));
+        assert_eq!(state(&*control), before);
+        assert_eq!(redo(&*control), Ok((Rev(4), Rev(2), 2, 0)));
+        assert_eq!(state(&*control), grouped);
+
+        // Deleting the group scene (and its items) comes back as a group, with its items.
+        let delete = Batch::single(Edit::SceneDelete {
+            scene_id: SceneId::new("g"),
+        });
+        assert_eq!(batch(&*control, delete), Ok(Rev(5)));
+        assert_eq!(undo(&*control), Ok((Rev(6), Rev(5), 2, 1)));
+        assert_eq!(state(&*control), grouped);
     }
 
     #[test]
@@ -2691,7 +3033,8 @@ mod tests {
             poll_event(&mut leaving_events, Waker::noop()),
             Poll::Ready(None)
         );
-        assert_eq!(drain(&mut staying_events).len(), 2);
+        // The unknown event, `state.changed`, and `studio.changed` for the first scene.
+        assert_eq!(drain(&mut staying_events).len(), 3);
     }
 
     #[test]
@@ -2761,7 +3104,8 @@ mod tests {
         assert_eq!(batch(&*control, Batch::single(create("b"))), Ok(Rev(2)));
         assert_eq!(batch(&*control, keyed.clone()), Ok(Rev(1)));
         assert_eq!(engine.rev(), Rev(2));
-        assert_eq!(drain(&mut events).len(), 2, "a retry emits nothing");
+        // Two `state.changed`, and `studio.changed` for the first scene.
+        assert_eq!(drain(&mut events).len(), 3, "a retry emits nothing");
         // Keys are per client: another client's identical key is a new batch.
         let other = connected(&engine);
         let error = batch(&*other, keyed).expect_err("scene a exists");
@@ -2819,8 +3163,13 @@ mod tests {
             Event::StateChanged {
                 rev: Rev(1),
                 client_id: ClientId::new("mock_2"),
-                request_id: Some(response.id),
+                request_id: Some(response.id.clone()),
                 cause: None,
+            },
+            Event::StudioChanged {
+                program_scene: Some(SceneId::new("a")),
+                client_id: ClientId::new("mock_2"),
+                request_id: Some(response.id),
             },
             changed(OutputState::Starting),
             changed(OutputState::Active),
