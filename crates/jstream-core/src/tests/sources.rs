@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 /// Pillow's 4x4 animated WebP from `jstream-sources`' tests: red for 100 ms, green for
 /// 200 ms, then blue at alpha 128 for 300 ms, twice.
@@ -230,6 +231,51 @@ fn an_animated_image_advances_on_the_clock() {
     clock.advance(2_000);
     engine.replan();
     assert_eq!(colour(&engine), (2, 128), "blue at alpha 128");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// #224: a re-plan timed on the old clock must not hold an animation back on the new one.
+#[test]
+fn an_animation_keeps_advancing_after_a_clock_swap() {
+    let dir = temp_dir("clock-swap");
+    fs::write(dir.join("anim.webp"), ANIMATED).expect("the image");
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    // The old clock is far ahead, so its next frame is due long after the new clock's
+    // zero.
+    let old = FakeClock::new(Timebase::MILLIS);
+    old.advance(1_000_000);
+    engine.set_source_clock(Arc::new(old));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "anim.webp".into(),
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("gif", "image", settings(&[("file", file.to_value())])),
+            add("a", "i1", "gif"),
+        ]),
+    )
+    .expect("created");
+    assert_eq!(colour(&engine), (0, 0xff), "red first");
+
+    let new = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(new.clone()));
+    new.advance(100);
+    // Only the sources' own thread re-plans here; it checks the clock at least once a
+    // second.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while colour(&engine) != (1, 0xff) {
+        assert!(
+            Instant::now() < deadline,
+            "green at 100 ms on the new clock"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
     let _ = fs::remove_dir_all(dir);
 }
 
