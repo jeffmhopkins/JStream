@@ -54,7 +54,9 @@ use crate::drops::{
 use crate::engine::Engine;
 use crate::lock;
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
-use crate::runtime::{Collector, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader};
+use crate::runtime::{
+    Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
+};
 use crate::snapshot::{self, CaptureFrame, GpuKey, Shot};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
@@ -378,9 +380,9 @@ impl Drop for Program {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
         join("render", self.render.take());
-        join("collector", self.collector.take());
         join("mixer", self.mixer.take());
-        // Ends once the render and mixer threads have dropped their senders.
+        // These end once the render and mixer threads have dropped their senders.
+        join("collector", self.collector.take());
         join("program watch", self.forward.take());
         join("stats", self.ticker.take());
         // After the threads stop, so the latch sees their final counters.
@@ -740,10 +742,12 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             return Err(err);
         }
     };
+    let mixer_collector = collector.clone();
     let render = spawn("jstream-render", {
         let job = RenderJob {
             capture,
-            reader: RenderReader::new(Arc::clone(&parts.render), collector),
+            reader: RenderReader::new(Arc::clone(&parts.render), collector.clone()),
+            collector,
             open: Arc::clone(&parts.draw),
             clock: Arc::clone(&parts.clock),
             inputs: video_inputs,
@@ -757,11 +761,12 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         };
         move || render_thread(job)
     });
-    // The render job owns the collector's only sender, so the collector ends with the
-    // render thread (or here, if that thread never started).
+    // The render and mixer threads own the collector's senders, so the collector ends
+    // once both have (or here, if they never started).
     let render = match render {
         Ok(handle) => handle,
         Err(err) => {
+            drop(mixer_collector);
             drop(fail_tx);
             stop_and_join(&stop, vec![collector_thread, forward]);
             return Err(err);
@@ -771,7 +776,8 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         let clock = Arc::clone(&parts.clock);
         let stop = Arc::clone(&stop);
         let fail = fail_tx;
-        move || mixer_thread(mixer, clock, audio_inputs, format, stop, fail)
+        let collector = mixer_collector;
+        move || mixer_thread(mixer, clock, audio_inputs, format, stop, fail, &collector)
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -1079,6 +1085,9 @@ fn stream_info(size: FrameSize, origin: MediaTime, profile: &EncoderProfile) -> 
 struct RenderJob {
     capture: Box<dyn CaptureStream>,
     reader: RenderReader,
+    /// Takes the input of a session that has finished, so the render thread never drops
+    /// the last reference to it (R-RT-003).
+    collector: Collector,
     open: OpenDraw,
     clock: Arc<dyn MediaClock>,
     /// The sessions to push frames into, as they are opened.
@@ -1189,6 +1198,7 @@ fn render_loop(job: RenderJob) {
     let RenderJob {
         mut capture,
         mut reader,
+        collector,
         open,
         clock,
         inputs,
@@ -1294,7 +1304,9 @@ fn render_loop(job: RenderJob) {
         }
         drops.publish(capture_drops(frames.capture).saturating_add(render_tick_drops(skipped)));
         if !frames.shown.is_empty() {
-            targets.retain(|input| push_frame(input, size, due, &frames.shown));
+            push_each(&mut targets, &collector, Garbage::Video, |input| {
+                push_frame(input, size, due, &frames.shown)
+            });
         }
         next = match due.checked_add(period) {
             Ok(next) => Some(next),
@@ -1416,6 +1428,27 @@ fn push_frame(input: &VideoInput, size: FrameSize, pts: MediaTime, rgba: &[u8]) 
     }
 }
 
+/// Pushes into every session in `targets` with `push`, which says whether the session
+/// still takes input. A finished one goes to the collector rather than being dropped
+/// here: once its session has dropped, this is the last reference to the session's
+/// shared state and input channel, and freeing them is not a real-time thread's job
+/// (R-RT-003). The order of `targets` does not matter.
+fn push_each<T>(
+    targets: &mut Vec<T>,
+    collector: &Collector,
+    garbage: fn(T) -> Garbage,
+    mut push: impl FnMut(&T) -> bool,
+) {
+    let mut i = 0;
+    while i < targets.len() {
+        if push(&targets[i]) {
+            i += 1;
+        } else {
+            collector.free(garbage(targets.swap_remove(i)));
+        }
+    }
+}
+
 /// The mixer thread's boundary: a panic is caught and reported as fatal. The encoders
 /// then get no more audio, so the outputs cannot keep running.
 fn mixer_thread(
@@ -1425,9 +1458,18 @@ fn mixer_thread(
     format: AudioFormat,
     stop: Arc<AtomicBool>,
     fail: Sender<PipelineEvent>,
+    collector: &Collector,
 ) {
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
-        mixer_loop(mixer, clock.as_ref(), &inputs, format, &stop, &fail);
+        mixer_loop(
+            mixer,
+            clock.as_ref(),
+            &inputs,
+            format,
+            &stop,
+            &fail,
+            collector,
+        );
     }));
     if let Err(panic) = result {
         report(
@@ -1448,6 +1490,7 @@ fn mixer_loop(
     format: AudioFormat,
     stop: &AtomicBool,
     fail: &Sender<PipelineEvent>,
+    collector: &Collector,
 ) {
     let samples_len = mixer.config().block_frames.saturating_mul(2);
     let mut samples = vec![0.0f32; samples_len];
@@ -1462,15 +1505,18 @@ fn mixer_loop(
                 // clone is forced by that API. `Full` is counted by the session.
                 // `Closed` means the session finished; the outputs on it report an
                 // early end themselves.
-                targets.retain(|input| {
-                    match AudioBuffer::new(format, block.pts, samples.clone()) {
+                push_each(
+                    &mut targets,
+                    collector,
+                    Garbage::Audio,
+                    |input| match AudioBuffer::new(format, block.pts, samples.clone()) {
                         Ok(buffer) => !matches!(input.push(buffer), Err(PushError::Closed)),
                         Err(err) => {
                             rejected = Some(err);
                             true
                         }
-                    }
-                });
+                    },
+                );
                 if let Some(err) = rejected {
                     report(fail, format!("mixer block rejected: {err}"));
                     break 'mix;

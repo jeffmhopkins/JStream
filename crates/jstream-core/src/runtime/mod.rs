@@ -24,5 +24,5 @@ pub(crate) use publish::tests::serve as serve_rtmp;
 pub use publish::{
     LinkState, LivePublish, OpenPublish, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
 };
-pub(crate) use render::{Collector, RenderHub, RenderReader, RenderSnapshot};
+pub(crate) use render::{Collector, Garbage, RenderHub, RenderReader, RenderSnapshot};
 pub(crate) use sink::Destination;
