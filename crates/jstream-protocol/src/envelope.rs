@@ -136,7 +136,7 @@ pub enum CallResult {
     Action {
         /// What the action returns, for the actions that return something
         /// (`youtube.sign_in`, the YouTube broadcast actions). Omitted for the others,
-        /// and missing from a server older than 0.15.
+        /// and missing from a server older than 0.18.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         result: Option<ActionResult>,
     },
@@ -203,6 +203,7 @@ mod tests {
                 Batch::single(Edit::SceneCreate {
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
+                    role: None,
                 })
                 .expecting(Rev(4)),
             ),

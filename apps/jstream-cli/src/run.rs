@@ -282,6 +282,9 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
         | Action::OutputClearKey { output_id } => {
             writeln!(out, "{} accepted for {output_id} ({id})", action.name())?;
         }
+        Action::SceneSwitch { scene_id } => {
+            writeln!(out, "{} accepted for {scene_id} ({id})", action.name())?;
+        }
         other => writeln!(out, "{} accepted ({id})", other.name())?,
     }
     Ok(())
@@ -312,10 +315,11 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                 vec![
                     scene.scene_id.to_string(),
                     scene.name.clone(),
+                    wire_name(&scene.role),
                     scene.item_count.to_string(),
                 ]
             });
-            table(out, "", &["ID", "NAME", "ITEMS"], rows.collect())?;
+            table(out, "", &["ID", "NAME", "ROLE", "ITEMS"], rows.collect())?;
         }
         QueryResult::OutputStatus {
             output_id,
@@ -340,6 +344,10 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             writeln!(out, "rev {rev}")?;
             write_outputs(out, "", outputs)?;
         }
+        QueryResult::StudioGet { program_scene } => match program_scene {
+            Some(scene_id) => writeln!(out, "program: {scene_id}")?,
+            None => writeln!(out, "program: none (no scenes)")?,
+        },
         QueryResult::SourceList { rev, sources } => {
             writeln!(out, "rev {rev}")?;
             write_sources(out, "", sources)?;
@@ -378,7 +386,8 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                 writeln!(out, "no scenes")?;
             }
             for scene in scenes {
-                writeln!(out, "scene {} ({}):", scene.scene_id, scene.name)?;
+                let role = wire_name(&scene.role);
+                writeln!(out, "{role} {} ({}):", scene.scene_id, scene.name)?;
                 write_items(out, "  ", &scene.items)?;
             }
             writeln!(out, "outputs:")?;
@@ -534,6 +543,21 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
         }
         Event::OutputStateChanged { output_id, state } => {
             writeln!(out, "output.state_changed {output_id} {}", wire_name(state))?;
+        }
+        Event::StudioChanged {
+            program_scene,
+            client_id,
+            request_id,
+        } => {
+            match program_scene {
+                Some(scene_id) => write!(out, "studio.changed program {scene_id}")?,
+                None => write!(out, "studio.changed program none")?,
+            }
+            write!(out, " by {client_id}")?;
+            if let Some(request_id) = request_id {
+                write!(out, " ({request_id})")?;
+            }
+            writeln!(out)?;
         }
         Event::EventsDropped { count } => {
             writeln!(out, "events.dropped {count}")?;

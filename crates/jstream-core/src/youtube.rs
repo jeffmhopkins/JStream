@@ -655,10 +655,7 @@ fn failed(err: YoutubeError) -> ProtocolError {
 }
 
 fn invalid(field: &str, reason: &str) -> ProtocolError {
-    ProtocolError::InvalidArgument {
-        field: field.into(),
-        reason: reason.into(),
-    }
+    ProtocolError::invalid_argument(field, reason)
 }
 
 fn broadcast_info(broadcast: Broadcast) -> BroadcastInfo {

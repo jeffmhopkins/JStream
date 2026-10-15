@@ -2,7 +2,8 @@
 //! server, the web UI, the HTTP server) talks to the engine, whether the engine runs in the
 //! same process or behind an authenticated WebSocket. Layer 2: depends only on
 //! `jstream-protocol`, WASM-safe, no runtime requirement on callers. The `ws` feature adds
-//! `WsControl`, the WebSocket client (native targets), which runs its own.
+//! `WsControl`, the WebSocket client: on native targets it runs its own runtime, and on
+//! `wasm32` it wraps the browser's `WebSocket`.
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-control/README.md#purpose, crates/jstream-control/README.md#design, docs/adr/0001-library-first-engine.md
 
@@ -14,13 +15,21 @@ mod error;
 mod mock;
 #[cfg(all(feature = "ws", not(target_arch = "wasm32")))]
 mod ws;
+#[cfg(feature = "ws")]
+mod ws_config;
+#[cfg(all(feature = "ws", target_arch = "wasm32"))]
+mod ws_web;
 
 pub use control::{BoxFuture, Control, EventStream, MaybeSendSync};
 pub use error::ControlError;
 #[cfg(any(test, feature = "mock"))]
 pub use mock::{MockControl, MockEngine};
 #[cfg(all(feature = "ws", not(target_arch = "wasm32")))]
-pub use ws::{WsConfig, WsControl};
+pub use ws::WsControl;
+#[cfg(feature = "ws")]
+pub use ws_config::{WS_PROTOCOL, WS_TOKEN_PROTOCOL_PREFIX, WsConfig};
+#[cfg(all(feature = "ws", target_arch = "wasm32"))]
+pub use ws_web::WsControl;
 
 /// The path of the engine's WebSocket API, shared by the server that mounts it and the
 /// client that connects to it.

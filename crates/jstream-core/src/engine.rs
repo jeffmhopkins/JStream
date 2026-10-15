@@ -7,11 +7,12 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::audio_sources::AudioSources;
 use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
-use crate::history::{History, Touched};
+use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
@@ -21,6 +22,7 @@ use crate::runtime::{
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::studio::Studio;
 use crate::youtube::{Youtube, YoutubeSetup};
 use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
@@ -212,11 +214,12 @@ impl Engine {
     /// that can't be written fails here rather than at the first change.
     ///
     /// Every applied batch, undo and redo then replaces the file atomically before its
-    /// call returns, so a client that has its `rev` knows the file holds it. A failed
-    /// save is logged at `error` and leaves the call's result as it is: the change is
-    /// applied, and the next change saves again. The `rev` is saved too, so revisions
+    /// call returns, so the client whose call it was knows the file holds its `rev`. A
+    /// failed save is logged at `error` and leaves the call's result as it is: the change
+    /// is applied, and the next change saves again. The `rev` is saved too, so revisions
     /// keep increasing across restarts and an `expected_rev` from before one can't
-    /// match a different state. Undo history and idempotency keys are not saved.
+    /// match a different state. Undo history, idempotency keys and the program scene are
+    /// not saved: the loaded collection's first scene goes on program.
     ///
     /// # Errors
     /// [`CollectionFileError`] when the file can't be read, holds no loadable
@@ -235,11 +238,16 @@ impl Engine {
             let state = &mut *state;
             state.graph = graph;
             state.outputs.sync(state.graph.state());
+            // Program is not saved: the loaded collection's first scene goes on it, with
+            // no event, as no client is connected yet (ADR-0030).
+            state.studio = Studio::default();
+            state.studio.reconcile(state.graph.state());
             // `collection` asset references are relative to the file's folder.
             state
                 .live
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
+            state.audio.sync(state.graph.state());
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             *file = Some(opened);
@@ -939,6 +947,7 @@ impl Engine {
                     Arc::clone(&lock(&host.draw)),
                     *lock(&host.open_timeout),
                     Arc::clone(&state.render),
+                    state.audio.wanted(),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1248,6 +1257,15 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
         Arc::clone(&lock(&self.shared.state).render)
+    }
+
+    /// How the program stage fares with audio source `source_id`, for tests.
+    #[cfg(test)]
+    pub(crate) fn audio_status(
+        &self,
+        source_id: &SourceId,
+    ) -> Option<crate::audio_sources::AudioStatus> {
+        lock(&self.shared.state).audio.status(source_id)
     }
 
     /// Waits until the live sources have built everything asked of them, for tests.
@@ -1667,12 +1685,16 @@ struct State {
     /// A running `jstream-sources` source for each source whose kind produces frames
     /// (C1b). An item shows its source's stored frame if it has one, else this.
     live: LiveSources,
+    /// The audio-only sources the program stage records, one mixer input each (C5).
+    audio: AudioSources,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
     render: Arc<RenderHub>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
+    /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
+    studio: Studio,
 }
 
 impl State {
@@ -1685,7 +1707,7 @@ impl State {
     ) -> Result<CallResult, ProtocolError> {
         match call {
             Call::Batch(batch) => self.batch(client_id, request_id, &batch, wake),
-            Call::Action { action } => self.action(action, wake),
+            Call::Action { action } => self.action(client_id, request_id, action, wake),
             Call::Query { query } => self.query(&query),
             Call::History(history) => self.history(client_id, request_id, &history, wake),
             _ => Err(not_implemented("this kind of call")),
@@ -1720,8 +1742,12 @@ impl State {
             batch.expected_rev,
             &self.outputs.running(),
         )?;
-        self.history
-            .record_batch(client_id, applied.rev, &batch.edits, applied.inverse.edits);
+        self.history.record_batch(
+            client_id,
+            applied.rev,
+            applied.touched,
+            applied.inverse.edits,
+        );
         let result = CallResult::Batch { rev: applied.rev };
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, result.clone());
@@ -1803,8 +1829,10 @@ impl State {
                 return Err(error);
             }
         };
-        let now = Touched::of(&step.edits, &applied.inverse.edits);
-        if let Some(found) = self.history.conflict(client_id, &step, Some(&now)) {
+        if let Some(found) = self
+            .history
+            .conflict(client_id, &step, Some(&applied.touched))
+        {
             let error = conflict(found);
             self.history.dropped();
             return Err(error);
@@ -1817,6 +1845,7 @@ impl State {
             step,
             applied.rev,
             applied.inverse.edits,
+            applied.touched,
         );
         let (undo_depth, redo_depth) = self.history.depths(client_id);
         let result = CallResult::History {
@@ -1841,7 +1870,8 @@ impl State {
 
     /// What follows every applied batch, undo and redo: the outputs follow the
     /// collection, a deleted source's stored frame goes (unless the same edits made a
-    /// new source under its id), and `state.changed` is emitted.
+    /// new source under its id), `state.changed` is emitted, and the program scene is
+    /// reconciled (ADR-0030).
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -1853,6 +1883,7 @@ impl State {
     ) {
         self.outputs.sync(self.graph.state());
         self.live.sync(self.graph.state());
+        self.audio.sync(self.graph.state());
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -1860,6 +1891,9 @@ impl State {
                 self.frames.remove(source_id);
             }
         }
+        // Edits that deleted the program scene, or created the first scene, move
+        // program before the mix is planned; that event follows their `state.changed`.
+        let moved = self.studio.reconcile(self.graph.state());
         self.publish_render();
         self.subscribers.emit(
             &Event::StateChanged {
@@ -1870,16 +1904,29 @@ impl State {
             },
             wake,
         );
+        if moved {
+            self.emit_studio(client_id, request_id, wake);
+        }
     }
 
     fn action(
         &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
         action: Action,
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
+            Action::SceneSwitch { scene_id } => {
+                if self.studio.switch(self.graph.state(), &scene_id)? {
+                    // The program mix shows the new scene from the next frame: a cut.
+                    self.publish_render();
+                    self.emit_studio(client_id, request_id, wake);
+                }
+                return Ok(CallResult::Action { result: None });
+            }
             other => return Err(not_implemented(other.name())),
         };
         for state in self.outputs.transition(&output_id, start)? {
@@ -1894,7 +1941,8 @@ impl State {
         Ok(CallResult::Action { result: None })
     }
 
-    /// Collection reads go to `Graph::query`; `output.status` reads the outputs.
+    /// Collection reads go to `Graph::query`; `output.status` reads the outputs and
+    /// `studio.get` the studio state.
     fn query(&self, query: &Query) -> Result<CallResult, ProtocolError> {
         let result = match self.graph.query(query) {
             Some(result) => result?,
@@ -1909,15 +1957,31 @@ impl State {
                     encoder_sessions: 0,
                     hardware_sessions: 0,
                 },
+                Query::StudioGet => QueryResult::StudioGet {
+                    program_scene: self.studio.program().cloned(),
+                },
                 other => return Err(not_implemented(other.name())),
             },
         };
         Ok(CallResult::Query { result })
     }
 
+    /// `studio.changed` with the scene now on program, caused by `request_id`.
+    fn emit_studio(&mut self, client_id: &ClientId, request_id: &RequestId, wake: &mut Vec<Waker>) {
+        self.subscribers.emit(
+            &Event::StudioChanged {
+                program_scene: self.studio.program().cloned(),
+                client_id: client_id.clone(),
+                request_id: Some(request_id.clone()),
+            },
+            wake,
+        );
+    }
+
     /// Re-plans the program mix at the current time and publishes it if it draws
     /// something new. A source's stored frame wins over its live one. The live sources
-    /// are told when the plan's next frame change is due, to re-plan then.
+    /// are told when the plan's next frame change is due, to re-plan then. The mix shows
+    /// the program scene (ADR-0030).
     fn publish_render(&mut self) {
         let Self {
             graph,
@@ -1925,13 +1989,15 @@ impl State {
             frame_versions,
             live,
             render,
+            studio,
             ..
         } = self;
         let now = live.now();
-        let (shot, wake) = snapshot::plan_with(graph, &mut |id| match frames.get(id) {
-            Some(frame) => Some((frame.clone(), None)),
-            None => live.frame(id, now, frame_versions),
-        });
+        let (shot, wake) =
+            snapshot::plan_with(graph, studio.program(), &mut |id| match frames.get(id) {
+                Some(frame) => Some((frame.clone(), None)),
+                None => live.frame(id, now, frame_versions),
+            });
         render.publish(shot);
         live.wake_at(wake);
     }
@@ -1983,10 +2049,7 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
     } else {
         return Ok(());
     };
-    Err(ProtocolError::InvalidArgument {
-        field: "key".into(),
-        reason: reason.into(),
-    })
+    Err(ProtocolError::invalid_argument("key", reason))
 }
 
 fn no_key_store() -> ProtocolError {

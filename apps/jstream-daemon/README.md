@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:9c3cf659bf5fda8a", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#225 Backends.video_devices) into A3: build.rs bullet now says it delay-loads the Media Foundation DLLs; delay_load.rs test bullet checks the backends' DLLs are delayed and none is a load-time import; other contents hold" }
+verified = { hash = "b3:483779712b0c3581", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: round 1 B1 wording kept (server serves ui_dir, daemon has no flag yet); holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -28,17 +28,21 @@ core and server ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)).
 Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Startup** (`main.rs`): parses the command line, creates the log directory, installs
   the crash-report hook and the log subscriber (stderr and the log files, filtered by
-  `--log-level` or `RUST_LOG`), loads or creates the token, runs the tokio runtime,
+  `--log-level` or `RUST_LOG`), opens the audit log, loads or creates the token, runs
+  the tokio runtime,
   prints where it listens, and maps failures to exit codes.
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
-- **Serving** (`serve.rs`): builds the engine (with its placeholder outputs; on
-  Windows a live one, [Design](#design)), installs the signal handlers that stop it,
-  then binds the server with MCP on.
+- **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
+  file and the placeholder outputs; on Windows a live one, [Design](#design)), installs
+  the signal handlers that stop it, then binds the server with MCP on.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
+- **Virtual camera registration** (`register.rs`, Windows only): `--register-vcam`
+  registers the media source DLL shipped beside the daemon, and startup logs a warning
+  when the registration names another folder ([Design](#design)).
 - **Build script** (`build.rs`): delay-loads the Media Foundation DLLs on Windows
   (MSVC), so that check can run at all.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
@@ -53,10 +57,11 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   headers to check that the backends' Media Foundation DLLs are delay-loaded and none
   is a load-time import).
 
-Not here yet: serving the web UI (it waits on `jstream-server`,
-[jstream-server › Design](../../crates/jstream-server/README.md#design)),
-`--collection` (the engine can load and save a collection file, but the daemon doesn't
-wire it yet), a default port and a default token file
+Not here yet: serving the web UI (`jstream-server` serves one from
+`ServerConfig::ui_dir`, [jstream-server › Design](../../crates/jstream-server/README.md#design),
+but the daemon has no flag for it yet),
+YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
+default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
 Why a crate: it is a host binary of its own (ADR-0020 ships `jstream-daemon.exe` next
@@ -67,7 +72,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:548561c153a39b06", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#225) into A3 plus review N2: --help exit 3 now names the AAC encoder too, matching the exit-code table and the Media Foundation bullet; options and Going live bullets unchanged and hold" }
+verified = { hash = "b3:71f39c73730f3eae", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 B2: exit-code 0 row now includes a successful --register-vcam; N1: Virtual camera bullet says an already-current registration keeps the file's ACL as it is" }
 -->
 
 ```sh
@@ -82,9 +87,11 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 |---|---|
 | `--token-file <path>` | The control token file. Default: the `JSTREAM_TOKEN_FILE` environment variable, which `jstream-cli` reads too. One of them is required. |
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
+| `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding the empty collection, if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
-| `--log-dir <dir>` | Where the log files and crash reports go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
+| `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
+| `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
 | `-V`, `--version` | Prints the daemon and protocol versions. |
 | `-h`, `--help` | Prints the help. |
 
@@ -123,7 +130,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   to a bug report yourself. What it holds is in [Design](#design).
 - **Stopping.** Ctrl-C (SIGINT) or SIGTERM on Unix, Ctrl-C or Ctrl-Break on Windows:
   it stops accepting connections, closes the open ones (their clients see
-  `Disconnected`, and event streams end) and exits 0. The engine's state is lost.
+  `Disconnected`, and event streams end) and exits 0. Without `--collection` the
+  engine's state is lost.
 - **Going live (Windows).** `output.create` with an RTMP(S) server URL, then
   `output.set_key` (stored in Windows Credential Manager), then `output.start`
   connects and streams. A start fails with `action_failed` and a reason that says what
@@ -137,12 +145,38 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   and before touching the token file. If Media Foundation is there but has no AAC
   encoder, it does the same with `error: Media Foundation's AAC encoder is not
   installed: …`. Listing the codecs fails with exit 1.
-- `--collection` is refused with a usage error that says it is not supported yet.
+- **Virtual camera (Windows).** `jstream-daemon --register-vcam` registers
+  `jstream_vcam_windows.dll` from the daemon's own folder machine-wide, as the Windows
+  camera Frame Server requires. From a normal prompt it shows one UAC prompt and runs
+  itself elevated, without a window. It prints `virtual camera: registered <dll>`, adding
+  the old path when the registration named another folder, or `virtual camera: already
+  registered (<dll>)` without asking for elevation, leaving the registration and the
+  file's ACL as they are (a DLL registered with `regsvr32`, or rebuilt in place, keeps
+  whatever ACL it has). A missing DLL, a declined prompt or a
+  failed registration exits 1; from an administrator prompt the error says what failed.
+  At startup the daemon logs a warning when the registration names another folder (a
+  moved install), and an `info` line when there is none. Elsewhere `--register-vcam`
+  fails with exit 1.
+- **Collection file.** With `--collection`, the engine loads the file at startup
+  (upgrading an older version) and replaces it atomically after every applied batch,
+  undo and redo, before the call returns. A file that can't be read, holds no
+  collection the engine can load, or can't be created is a startup failure (exit 1)
+  naming the file and what is wrong, and the file is left as it is. A save that fails
+  later is logged at `error` and retried with the next change; the call still
+  succeeds. Undo history is not saved. Nothing stops two daemons from using the same
+  file: each saves over the other's changes, so give each its own.
+- **Audit log.** Every batch, undo, redo and action, by any client, is one JSON line
+  in `audit.jsonl` in the log directory: the time, the client's ID and `hello` name,
+  the call and its edits by name, the output an action names, the `rev` before and
+  after, and the result code. Never a call's arguments, so never a stream key
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). When it would pass 8 MiB it becomes
+  `audit.1.jsonl`, replacing the one before. A log that can't be opened is a startup
+  failure (exit 1).
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Stopped by a signal, or printed the help or version |
-| 1 | Failed: the log directory or a log file can't be created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -151,7 +185,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:3f4ebe523243548b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#207 bounded output.stop), protocol 0.15 still one past main's 0.14: stamp conflict only; #207 text re-read, Y3 adds no daemon code" }
+verified = { hash = "b3:92f86eaf7ab1e31c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: stamp only, stale through core#design; daemon still has no with_youtube" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -195,6 +229,26 @@ verified = { hash = "b3:3f4ebe523243548b", by = "agent:claude@session_016BkTSqJ3
   linker warning LNK4199, which CI's `-D warnings` turns into an error.
   `tests/delay_load.rs` checks the built binary's import tables, so CI's Windows job
   proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib imports.
+- **Virtual camera registration** (`register.rs`). `--register-vcam` is a separate mode
+  that exits without serving, so it creates no logs or token. The registry and ACL work
+  is `jstream-platform-windows`'s (`register_vcam`), because the daemon has no `unsafe`.
+  A non-elevated daemon doesn't write: it relaunches itself elevated with the same fixed
+  argument (`run_elevated`), then reads the registration back, so success is judged by
+  what the registry holds rather than by the hidden child's output. A registration that
+  already names this DLL is left alone, so repeating the command never prompts. The
+  startup check (`log_status`) only logs: the daemon serves without the camera, and
+  `WindowsVcam::start` refuses to start an unregistered camera on its own.
+- **Collection file and audit log** (`serve.rs`, `main.rs`). The daemon only passes
+  them to the engine: `Engine::with_collection_file` loads and saves the collection,
+  and `with_audit` takes a `jstream_core::AuditFile`, whose writer thread appends
+  entries off the engine's locks, so a slow disk never delays a call
+  ([jstream-core › Design](../../crates/jstream-core/README.md#design)). The `--output`
+  placeholders are declared outputs, which a loaded collection never removes, so they
+  are added after the load only for reading order. The audit log lives in the log
+  directory, which the daemon already creates (user-only on Unix) and which `--log-dir`
+  moves, rather than in a directory of its own. Its entries are written as they come;
+  on a graceful stop the writer finishes the queue when the engine is dropped. Without `--collection` nothing is saved, as before
+  ([Open questions](#open-questions), 6).
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server
   answers MCP at `/mcp` on the same port, with its default MCP session cap and idle
   timeout. Each MCP session is one more engine client through the same `Connector`, so
@@ -316,3 +370,7 @@ verified = { hash = "b3:3f4ebe523243548b", by = "agent:claude@session_016BkTSqJ3
    code as question 2, which will also handle ADR-0020's `portable` marker (state in a
    folder beside the exe). Until then the daemon reads `APPDATA`, `HOME` and
    `XDG_DATA_HOME` itself, and `--log-dir` overrides them.
+6. **Default collection file.** Without `--collection` the collection is not saved.
+   A default (in the data directory, as [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)
+   places collections) would make every run persist, but needs the same settings code as
+   question 2 to find that directory, and a way to start from scratch.

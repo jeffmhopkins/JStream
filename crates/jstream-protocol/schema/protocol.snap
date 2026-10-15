@@ -193,6 +193,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             "to"
           ],
           "type": "object"
+        },
+        {
+          "description": "Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every\noutput that shows program) shows it from the next frame. The program scene is\nruntime state, not collection state (ADR-0030): the switch changes no `rev`, is\nnever undone, and emits `studio.changed`, which `studio.get` reads back. Switching\nto the scene already on program succeeds and emits nothing. Fails with\n`not_found` for a scene not in the collection.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to put on program."
+            },
+            "type": {
+              "const": "scene.switch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -339,6 +357,29 @@ source: crates/jstream-protocol/src/fixtures.rs
       },
       "required": [
         "edits"
+      ],
+      "type": "object"
+    },
+    "Blocker": {
+      "description": "One reference that stops a `scene.delete` or `source.delete`: the object that refers\nto the target, and the field of that object that holds the reference.\n\n```json\n{\"entity\": \"source\", \"id\": \"webcam\", \"field\": \"settings.mask\"}\n```",
+      "properties": {
+        "entity": {
+          "$ref": "#/$defs/EntityKind",
+          "description": "What kind of object refers to the target: an `item` that places a source, or a\n`source` that shows a scene or whose settings refer to the target."
+        },
+        "field": {
+          "description": "The field of that object that refers to the target, as a dotted path into its\nquery form: `source_id` for an item, `kind.scene_id` for a `scene` source, and\n`settings.<param>` for a settings reference.",
+          "type": "string"
+        },
+        "id": {
+          "description": "That object's ID.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "field"
       ],
       "type": "object"
     },
@@ -634,7 +675,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "What the action returns, for the actions that return something\n(`youtube.sign_in`, the YouTube broadcast actions). Omitted for the others,\nand missing from a server older than 0.15."
+              "description": "What the action returns, for the actions that return something\n(`youtube.sign_in`, the YouTube broadcast actions). Omitted for the others,\nand missing from a server older than 0.18."
             }
           },
           "required": [
@@ -794,6 +835,47 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "DeleteTarget": {
+      "description": "What a `delete.plan` deletes: a scene or a source.",
+      "oneOf": [
+        {
+          "description": "A scene.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to delete."
+            },
+            "type": {
+              "const": "scene",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A source.",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source to delete."
+            },
+            "type": {
+              "const": "source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "DropCounts": {
       "description": "Running totals of frames and packets the pipeline has dropped since the engine\nstarted (R-RT-004).\n\nEach field sums one kind of drop across every stage that counts it. A stage that\ndoes not count that kind contributes nothing. Totals only grow: a client computes\nan interval by subtracting the previous tick.\n\nSilence a stage inserts to cover a gap (an audio underrun, a device gap, encoder\ngap-fill) is not a drop and is not included.\n\nA missing field parses as 0, so a counter added in a later minor version can be left\nout by an older sender (R-API-001). Unknown fields are ignored.",
       "properties": {
@@ -851,6 +933,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             "name": {
               "description": "Display name.",
               "type": "string"
+            },
+            "role": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneRole"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What the scene is for (ADR-0024 §1). Omitted means `scene`."
             },
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -915,7 +1008,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
+          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create` with its role (omitted for `scene`), then\n`scene.reorder` to its old display position (unless it was last), then each\ndeleted item's `item.remove` inverse, from bottom to top.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -1788,6 +1881,46 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "output_id",
             "state"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The scene on program changed: after a `scene.switch`, or after a batch, undo or\nredo deleted the program scene (program moves to the first remaining scene) or\ncreated the collection's first scene (it goes on program). Studio state is runtime state\n(ADR-0030), so the event carries no `rev`; a `state.changed` for the same edits\ncomes first.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose request caused it."
+            },
+            "program_scene": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene now on program. Omitted when the collection has no scene left."
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RequestId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "That client's request ID, so it can match the event to its own response."
+            },
+            "type": {
+              "const": "studio.changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "client_id"
           ],
           "type": "object"
         },
@@ -2926,6 +3059,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Reads the studio state: which scene is on program. It is runtime state, not\ncollection state (ADR-0030), so the result carries no `rev`.",
+          "properties": {
+            "type": {
+              "const": "studio.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the collection's encoder profiles, ordered by ID.",
           "properties": {
             "type": {
@@ -2998,6 +3144,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The batch that deletes a scene or source together with everything that refers to\nit, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`\nlists those `blockers`). The plan removes the items that place a deleted source,\ndeletes the `scene` sources that show a deleted scene (and their items), and sets\nsettings references to the target to `null`, keeping the sources that hold them.\nThe client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/DeleteTarget",
+              "description": "What to delete."
+            },
+            "type": {
+              "const": "delete.plan",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "target"
           ],
           "type": "object"
         }
@@ -3307,6 +3471,30 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `studio.get`. Studio state is runtime state, so it carries no `rev`.",
+          "properties": {
+            "program_scene": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene on program. Omitted only while the collection has no scene."
+            },
+            "type": {
+              "const": "studio.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `encoder.list`.",
           "properties": {
             "encoders": {
@@ -3403,6 +3591,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "streams"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `delete.plan`.",
+          "properties": {
+            "edits": {
+              "description": "The edits, in order: `item.remove` for the items that place a deleted source,\n`source.set_settings` setting each reference to a deleted object to `null`,\n`source.delete` for the `scene` sources that show a deleted scene, and last the\ndelete of the target itself.",
+              "items": {
+                "$ref": "#/$defs/Edit"
+              },
+              "type": "array"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the plan was made at. Send `edits` with this `expected_rev`, so\nthe batch is refused if the state changed since."
+            },
+            "type": {
+              "const": "delete.plan",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "rev",
+            "edits"
           ],
           "type": "object"
         }
@@ -3596,7 +3810,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "oneOf": [
         {
           "const": "scene",
-          "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+          "description": "A scene of its own, listed in the scene list. Scenes are created with this role\nunless `scene.create` names another.",
           "type": "string"
         },
         {
@@ -4139,6 +4353,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "A field had a value the engine can't accept.",
           "properties": {
+            "blockers": {
+              "description": "When a `scene.delete` or `source.delete` is refused because other objects still\nrefer to its target: every one of those references, in a stable order. The\n`delete.plan` query returns the batch that removes them with the target. Empty\notherwise, and then omitted. Missing (from a server older than 0.15)\nparses as empty.",
+              "items": {
+                "$ref": "#/$defs/Blocker"
+              },
+              "type": "array"
+            },
             "code": {
               "const": "invalid_argument",
               "type": "string"
@@ -4294,5 +4515,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.15"
+  "title": "JStream protocol 0.18"
 }

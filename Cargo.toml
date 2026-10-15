@@ -10,6 +10,9 @@ publish = false
 
 [workspace.dependencies]
 # Shared dependency versions live here (R-DEP-003). Member crates use `dep.workspace = true`.
+# Coverage rasterising of glyph outlines for the text source (ADR-0031: pure-Rust font
+# crates). No dependencies; `std` is its only default feature.
+ab_glyph_rasterizer = { version = "0.1", default-features = false, features = ["std"] }
 anyhow = "1"
 # The render snapshot (ARCH › Threads, "State to RT threads"): the control side swaps an
 # immutable snapshot that the render thread loads without a lock. No dependencies.
@@ -24,6 +27,9 @@ blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 # A send on a bounded channel does not allocate. `std` is the only feature.
 crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
 futures-core = { version = "0.3", default-features = false }
+# One-shot and unbounded channels for the browser WebSocket client (`jstream-control`'s
+# `ws` feature on wasm32), which has no tokio. Already in the tree through Leptos.
+futures-channel = { version = "0.3", default-features = false, features = ["std"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 # OS randomness (the daemon's control token). Already in the tree through tungstenite's
 # `rand`, so the version matches it.
@@ -35,6 +41,8 @@ globset = { version = "0.4", default-features = false }
 # WebP decoding (still and animated) for the image source (ADR-0031).
 image-webp = { version = "0.2", default-features = false }
 insta = { version = "1", default-features = false }
+# JavaScript built-ins (`Array`) for the browser WebSocket client. Part of wasm-bindgen.
+js-sys = { version = "0.3", default-features = false, features = ["std"] }
 jstream-audio = { path = "crates/jstream-audio" }
 jstream-control = { path = "crates/jstream-control" }
 jstream-core = { path = "crates/jstream-core" }
@@ -56,6 +64,9 @@ jstream-youtube = { path = "crates/jstream-youtube" }
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.
 png = { version = "0.18", default-features = false }
+# The web UI framework (ADR-0045): client-side rendering only, no server functions or
+# hydration. Its `csr` feature also turns on `getrandom`'s browser backend.
+leptos = { version = "0.8", default-features = false, features = ["csr"] }
 pulldown-cmark = { version = "0.13", default-features = false }
 # SHA-256 and the OS random source for OAuth PKCE (`jstream-youtube`). Already in the tree
 # as rustls' crypto provider (R-DEP-006), so this adds no crate; no default features.
@@ -71,6 +82,20 @@ rustls-native-certs = "0.8"
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 serde = { version = "1", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
+# Font parsing and glyph outlines for the text source (ADR-0031: pure-Rust font crates),
+# from Google's fontations. Pulls in `read-fonts`, `font-types`, `bytemuck`, `yoke` and
+# `once_cell`, plus derive macros at build time. Chosen over `ab_glyph` and `fontdue`
+# because their `ttf-parser` is unmaintained (RUSTSEC-2026-0192). No default features:
+# `autohint_shaping` only serves the autohinter, which is not used.
+skrifa = { version = "0.48", default-features = false, features = ["std"] }
+# The desktop app's window and webview (ADR-0045): WebView2 on Windows through `wry`.
+# No default features: no compression of embedded assets (the app embeds none), no
+# dynamic ACL, and no Linux `x11`/`dbus`; `wry` is the webview runtime, and
+# `common-controls-v6` gives native dialogs the current Windows look.
+tauri = { version = "2.12", default-features = false, features = ["wry", "common-controls-v6"] }
+# Tauri's build script: generates the app context from `tauri.conf.json` and embeds the
+# Windows resources (icon, manifest).
+tauri-build = { version = "2.7", default-features = false, features = ["config-json"] }
 thiserror = { version = "2", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false }
 # No TLS feature: plain `ws://` only, so no `rustls`/`ring` in the tree yet.
@@ -82,6 +107,11 @@ tracing = { version = "0.1", default-features = false, features = ["std"] }
 # The daemon's subscriber: `fmt` to stderr, filtered by `Targets` parsed from `RUST_LOG`.
 # No `env-filter` (it pulls in `regex`), `ansi` or `tracing-log`.
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# Rust/JavaScript bindings for the browser builds (`jstream-control`'s wasm32 WebSocket
+# client, `jstream-ui`). Already in the tree through wgpu's wasm32 dependencies.
+wasm-bindgen = { version = "0.2", default-features = false, features = ["std"] }
+# Web API bindings; each crate enables the interfaces it uses.
+web-sys = { version = "0.3", default-features = false, features = ["std"] }
 # GPU (ADR-0004): pinned exactly, because wgpu-hal interop can change between releases;
 # the version spike S1 proved the Windows interop on. Backends are picked per crate.
 wgpu = { version = "=30.0.1", default-features = false, features = ["std"] }

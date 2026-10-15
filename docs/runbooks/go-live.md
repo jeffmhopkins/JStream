@@ -17,7 +17,7 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:847c096affe4cfe0", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "New runbook: prerequisites match daemon Usage (exit 3 for missing Media Foundation, token file created then reused, parent dir must exist) and R-SEC-001 for the key" }
+verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +36,7 @@ verified = { hash = "b3:847c096affe4cfe0", by = "agent:claude@session_01PHLTrve4
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:17acf6cf9c88824b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#233, #203 mock undo, #234 runbook), protocol 0.15 still one past main's 0.14: stale through cli#usage; the steps use output create/start/set-key, which Y3 doesn't change" }
+verified = { hash = "b3:02f21b412c9e05d9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: stale through cli#usage; output commands unchanged by Y3" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -91,15 +91,15 @@ $cli = 'target\release\jstream-cli.exe'
    Check: the state goes `stopping`, then `stopped`, and the service sees the stream
    end. Then press Ctrl-C in the daemon's terminal. It prints `stopped` and exits 0.
 8. **Clean up** if this was a test: `output clear-key live` removes the key from
-   Credential Manager. The output itself is gone when the daemon stops, because the
-   daemon doesn't save a collection yet.
+   Credential Manager. The output itself is gone when the daemon stops, unless it
+   was started with `--collection <file>`, which saves it for the next run.
 
 <a id="smoke"></a>
 ## Smoke script
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:8e47eecdceecb1bb", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#233, #203 mock undo, #234 runbook), protocol 0.15 still one past main's 0.14: stale through cli#usage; smoke script's CLI commands unchanged by Y3" }
+verified = { hash = "b3:8d5b0cd16377274b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: stale through cli#usage; smoke script's commands unchanged by Y3" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
