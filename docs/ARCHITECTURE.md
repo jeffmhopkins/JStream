@@ -525,7 +525,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:aaac99f989c1452f", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+verified = { hash = "b3:74d27819755c5784", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 241 N2/N6: only the mock's cycle reason text and a rustdoc changed; nothing in the protocol summary describes them; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

@@ -809,7 +809,7 @@ impl Collection {
     ///
     /// It follows the rules `jstream-graph` enforces for the same edits (existence,
     /// unique IDs, no deleting what is still referenced, index bounds, no nesting
-    /// cycles from `item.add` or `item.set_source`, `duplicated_from` never naming the
+    /// cycles from `item.add`, `item.move` or `item.set_source`, `duplicated_from` never naming the
     /// source itself, no deleting a running output, RTMP server URLs), with the same error
     /// codes and `edits.<at>.<field>` paths. It describes no kinds, so it doesn't check
     /// settings, fill in defaults, or follow settings references when it looks for
@@ -917,13 +917,13 @@ impl Collection {
             } => {
                 check_id(item_id.as_str(), at, "item_id")?;
                 let index = self.existing_scene(&scene_id)?;
-                let Some(Source { kind, .. }) = self.sources.get(&source_id) else {
+                if !self.sources.contains_key(&source_id) {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
-                };
+                }
                 if self.items.contains_key(&item_id) {
                     return Err(already_exists(EntityKind::Item, item_id.as_str()));
                 }
-                self.check_nesting(&scene_id, kind, at)?;
+                self.check_nesting(&scene_id, &source_id, at)?;
                 let transform = match (transform, geometry) {
                     (Some(_), Some(_)) => {
                         return Err(invalid(
@@ -1026,10 +1026,10 @@ impl Collection {
             }
             Edit::ItemSetSource { item_id, source_id } => {
                 let scene_id = self.existing_item(&item_id)?.scene_id.clone();
-                let Some(Source { kind, .. }) = self.sources.get(&source_id) else {
+                if !self.sources.contains_key(&source_id) {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
-                };
-                self.check_nesting(&scene_id, kind, at)?;
+                }
+                self.check_nesting(&scene_id, &source_id, at)?;
                 let item = self.existing_item(&item_id)?;
                 let old = std::mem::replace(&mut item.source_id, source_id);
                 vec![Edit::ItemSetSource {
@@ -1316,18 +1316,13 @@ impl Collection {
         let to = self.existing_scene(&scene_id)?;
         let slots = self.scenes[to].items.len() + usize::from(to != from);
         let to_index = check_index(index, slots, at, "positions in the scene")?;
-        if let Some(Source {
-            kind: SourceKind::Scene { scene_id: nested },
-            ..
-        }) = self.sources.get(&source_id)
-            && self.contains(nested, &scene_id)
-        {
+        if let Some(cycle) = self.nesting_cycle(&scene_id, &source_id) {
             return Err(invalid(
                 at,
                 "scene_id",
                 format!(
                     "moving item `{item_id}` (source `{source_id}`) into scene `{scene_id}` \
-                     would create a cycle"
+                     would create a cycle: {cycle}"
                 ),
             ));
         }
@@ -1449,43 +1444,75 @@ impl Collection {
             .collect()
     }
 
-    /// Rejects placing a source of `kind` in scene `scene_id` (`item.add`,
-    /// `item.set_source`) if the scene would then contain itself.
+    /// Rejects placing `source_id` in scene `scene_id` (`item.add`, `item.set_source`)
+    /// if the scene would then contain itself, naming the cycle as `jstream-graph` does.
     fn check_nesting(
         &self,
         scene_id: &SceneId,
-        kind: &SourceKind,
+        source_id: &SourceId,
         at: usize,
     ) -> Result<(), ProtocolError> {
-        match kind {
-            SourceKind::Scene { scene_id: nested } if self.contains(nested, scene_id) => {
-                Err(invalid(
-                    at,
-                    "source_id",
-                    format!("placing scene `{nested}` in scene `{scene_id}` would create a cycle"),
-                ))
-            }
-            _ => Ok(()),
+        match self.nesting_cycle(scene_id, source_id) {
+            Some(cycle) => Err(invalid(
+                at,
+                "source_id",
+                format!(
+                    "placing source `{source_id}` in scene `{scene_id}` would create a cycle: {cycle}"
+                ),
+            )),
+            None => Ok(()),
         }
     }
 
-    /// Whether scene `outer` is `inner` or shows it, directly or through nested scene
-    /// sources. The collection never holds a cycle, so the walk terminates.
-    fn contains(&self, outer: &SceneId, inner: &SceneId) -> bool {
+    /// If placing `source_id` in scene `scene_id` would make the scene contain itself,
+    /// the cycle as `jstream-graph` names it (`scene `a` -> source `sb` -> scene `b` ->
+    /// source `sa` -> scene `a``), else `None`. Like `jstream-graph`, it takes the first
+    /// path a depth-first walk finds, items in stacking order; it follows only `scene`
+    /// sources, not settings references.
+    fn nesting_cycle(&self, scene_id: &SceneId, source_id: &SourceId) -> Option<String> {
+        let Some(Source {
+            kind: SourceKind::Scene { scene_id: nested },
+            ..
+        }) = self.sources.get(source_id)
+        else {
+            return None;
+        };
+        let mut path = vec![
+            format!("scene `{scene_id}`"),
+            format!("source `{source_id}`"),
+        ];
+        self.scene_path(nested, scene_id, &mut path)
+            .then(|| path.join(" -> "))
+    }
+
+    /// Pushes the chain from scene `outer` to scene `inner` (both included) onto `path`
+    /// if `outer` is `inner` or shows it, directly or through nested scene sources. The
+    /// collection never holds a cycle, so the walk terminates.
+    fn scene_path(&self, outer: &SceneId, inner: &SceneId, path: &mut Vec<String>) -> bool {
+        path.push(format!("scene `{outer}`"));
         if outer == inner {
             return true;
         }
-        let Some(index) = self.scene_index(outer) else {
-            return false;
-        };
-        self.scenes[index].items.iter().any(|item_id| {
-            self.items
-                .get(item_id)
-                .and_then(|item| self.sources.get(&item.source_id))
-                .is_some_and(|source| {
-                    matches!(&source.kind, SourceKind::Scene { scene_id } if self.contains(scene_id, inner))
-                })
-        })
+        if let Some(index) = self.scene_index(outer) {
+            for item_id in &self.scenes[index].items {
+                let Some(item) = self.items.get(item_id) else {
+                    continue;
+                };
+                if let Some(Source {
+                    kind: SourceKind::Scene { scene_id },
+                    ..
+                }) = self.sources.get(&item.source_id)
+                {
+                    path.push(format!("source `{}`", item.source_id));
+                    if self.scene_path(scene_id, inner, path) {
+                        return true;
+                    }
+                    path.pop();
+                }
+            }
+        }
+        path.pop();
+        false
     }
 
     fn scene_index(&self, scene_id: &SceneId) -> Option<usize> {
@@ -2633,6 +2660,74 @@ mod tests {
             panic!("not a source list");
         };
         assert!(sources.iter().all(|s| s.duplicated_from.is_none()));
+    }
+
+    /// Cycle reasons name the cycle path in `jstream-graph`'s words, for `item.add` and
+    /// `item.move` alike (the cases of its `three_cycles_are_rejected_even_within_one_batch`
+    /// and `move_is_cycle_checked`).
+    #[test]
+    fn cycle_reasons_name_the_path_like_the_graph() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let scene_source = |source: &str, scene: &str| Edit::SourceCreate {
+            source_id: SourceId::new(source),
+            name: source.to_uppercase(),
+            kind: SourceKind::Scene {
+                scene_id: SceneId::new(scene),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        };
+        let edits = |edits: Vec<Edit>| Batch {
+            edits,
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        let setup = edits(vec![
+            create("a"),
+            create("b"),
+            create("c"),
+            scene_source("sa", "a"),
+            scene_source("sb", "b"),
+            scene_source("sc", "c"),
+        ]);
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let rejected = |rejected: Batch| match batch(&*control, rejected) {
+            Err(ControlError::Protocol(wire)) => match wire.error {
+                ProtocolError::InvalidArgument { field, reason, .. } => (field, reason),
+                other => panic!("expected invalid_argument, got {other:?}"),
+            },
+            other => panic!("expected an error, got {other:?}"),
+        };
+        assert_eq!(
+            rejected(edits(vec![
+                add("a", "ab", "sb"),
+                add("b", "bc", "sc"),
+                add("c", "ca", "sa"),
+            ])),
+            (
+                "edits.2.source_id".to_owned(),
+                "placing source `sa` in scene `c` would create a cycle: scene `c` -> source `sa` \
+                 -> scene `a` -> source `sb` -> scene `b` -> source `sc` -> scene `c`"
+                    .to_owned()
+            )
+        );
+        let setup = edits(vec![add("a", "ab", "sb"), add("c", "ca", "sa")]);
+        assert_eq!(batch(&*control, setup), Ok(Rev(2)));
+        let mv = Edit::ItemMove {
+            item_id: ItemId::new("ca"),
+            scene_id: SceneId::new("b"),
+            index: 0,
+        };
+        assert_eq!(
+            rejected(edits(vec![mv])),
+            (
+                "edits.0.scene_id".to_owned(),
+                "moving item `ca` (source `sa`) into scene `b` would create a cycle: scene `b` \
+                 -> source `sa` -> scene `a` -> source `sb` -> scene `b`"
+                    .to_owned()
+            )
+        );
     }
 
     /// `item.set_source` keeps the item and is cycle checked like `item.add`.
