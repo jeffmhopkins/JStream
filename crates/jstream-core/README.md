@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:0b14bb91f4448a5e", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
+verified = { hash = "b3:86d3414603a379d6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324 ports #306's test-only fix (by-itself animation test on a FakeClock) for the Windows CI failure; re-read Contents and Tests list: no claim about that test or its clock; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -182,7 +182,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6a6b734392eb6709", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#360, #299 D6, #381) into #324: took main's stamp; re-read; main's D6 activity-gain text; stale via depends_on control#design, where this PR adds the browser client's error-event handling and its e2e tests; core's engine and session text doesn't touch the browser client; holds" }
+verified = { hash = "b3:04e5c2ca65d0b064", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324 ports #306's test-only change in src/tests/sources.rs; re-read Live sources and the plan/next_change/re-plan paragraph; live.rs unchanged; fake clock already a dev-dependency; holds" }
 -->
 
 ### Engine and sessions
