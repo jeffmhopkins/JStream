@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:0b14bb91f4448a5e", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
+verified = { hash = "b3:600b951398f3f0ad", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at D6 (#299): D6's activity-gain contents and tests text is main's; C10's waveform/spectrum AudioScope line and scope test still hold beside it" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -184,7 +184,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9b817c7bfb94016b", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
+verified = { hash = "b3:44658da5476d1f40", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at D6 (#299): D6's activity-gain bullet and routing sync are main's; C10's Live sources painter text and Locking sources-thread text hold beside them" }
 -->
 
 ### Engine and sessions
@@ -868,7 +868,9 @@ begins and raises the stop flag; the output thread, once it sees the flag, sends
 the encoders queued until then and tells the target that deadline
 (`LivePublish::stop_by`; the default does nothing). Once it passes, or a send fails
 while stopping, the thread drops the packets still queued, counts them in
-`output_packets`, and calls `finish`. A failure while stopping is logged, not
+`output_packets`, and calls `finish`. It checks the deadline before each of a pass's
+video and audio sends, so a slow target keeps it past the deadline by one send at
+most. A failure while stopping is logged, not
 reported: the output is already on its way to `stopped`. The stop does not count on
 the target honoring the deadline (#138): it waits for a publishing output thread
 only until the deadline plus 500 ms (`OUTPUT_GRACE`), then returns without it and
@@ -1043,7 +1045,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:451ebf1322acd85d", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at D5 (#240): mixer thread paragraph now says it meters each master block and pushes it into the audio scope; mixer_loop takes Mixing (mixer, metering) and MixOut (inputs, format, scope); holds" }
+verified = { hash = "b3:0f11a4a64328885b", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10: stop-drain paragraph now says the output thread checks the deadline before each of a pass's video and audio sends, so a slow target overruns by one send at most (inside OUTPUT_GRACE); matches output_loop; rest of the runtime text holds after merging D6" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
