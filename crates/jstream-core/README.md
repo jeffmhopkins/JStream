@@ -853,7 +853,9 @@ begins and raises the stop flag; the output thread, once it sees the flag, sends
 the encoders queued until then and tells the target that deadline
 (`LivePublish::stop_by`; the default does nothing). Once it passes, or a send fails
 while stopping, the thread drops the packets still queued, counts them in
-`output_packets`, and calls `finish`. A failure while stopping is logged, not
+`output_packets`, and calls `finish`. It checks the deadline before each of a pass's
+video and audio sends, so a slow target keeps it past the deadline by one send at
+most. A failure while stopping is logged, not
 reported: the output is already on its way to `stopped`. The stop does not count on
 the target honoring the deadline (#138): it waits for a publishing output thread
 only until the deadline plus 500 ms (`OUTPUT_GRACE`), then returns without it and
