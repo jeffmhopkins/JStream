@@ -21,7 +21,6 @@ needs the sanitizer flags only nightly accepts.
 ## Targets
 <!-- @section
 covers = ["fuzz/fuzz_targets/**"]
-verified = { hash = "b3:9715d9a5160f0d87", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r3: amf0 header reworded (N2) to the property it asserts; README row unchanged and still accurate" }
 -->
 
 No target may panic, overflow or run out of memory on any input. Most also check a
@@ -46,7 +45,6 @@ fuzz; the `mux` target covers the parsing the muxers do on their way in.
 ## Running
 <!-- @section
 covers = ["fuzz/Cargo.toml", "fuzz/seed.sh"]
-verified = { hash = "b3:41d6d36341f48281", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r3: Cargo.toml now also forbids unsafe_code and denies undocumented_unsafe_blocks (B1); commands, seeds and layout unchanged" }
 -->
 
 ```sh

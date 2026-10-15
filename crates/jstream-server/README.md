@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:95f30483b18b5d83", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294 round 2: lib.rs serve_with_shutdown now waits for connections, session.rs finishes the closing handshake; contents list and layering unchanged; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +56,6 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:74a6728cdae2ec52", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294 merge of main at 94fb25d: shutdown paragraph matches lib.rs (waits on shutdown.closed, bounded) and session.rs (no request handled once stopping, reads to the client's close frame within CLOSE_TIMEOUT)" }
 -->
 
 ### Listening and admission
