@@ -6,10 +6,12 @@ use crate::{Connector, Server, ServerConfig, Token};
 use futures_util::{SinkExt, StreamExt};
 use jstream_control::protocol::{
     Action, Batch, Call, CallResult, ClientId, Edit, Event, Hello, OutputId, OutputState,
-    PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId,
-    ServerMessage,
+    PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Response, Rev,
+    SceneId, ServerMessage, Welcome,
 };
-use jstream_control::{Control, ControlError, EventStream, MockEngine, WsConfig, WsControl};
+use jstream_control::{
+    BoxFuture, Control, ControlError, EventStream, MockEngine, WsConfig, WsControl,
+};
 use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -30,6 +32,12 @@ struct Harness {
     authority: String,
     /// How many sessions the connector has opened.
     sessions: Arc<AtomicUsize>,
+    /// How many of those sessions the server still holds: a session is dropped when its
+    /// connection task has ended.
+    open: Arc<AtomicUsize>,
+    /// How many events the server's sessions have taken from the engine, over all
+    /// connections.
+    taken: Arc<AtomicUsize>,
     stop: Option<oneshot::Sender<()>>,
 }
 
@@ -48,11 +56,19 @@ fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) ->
         Err(error) => panic!("runtime: {error}"),
     };
     let sessions = Arc::new(AtomicUsize::new(0));
-    let counter = Arc::clone(&sessions);
+    let open = Arc::new(AtomicUsize::new(0));
+    let taken = Arc::new(AtomicUsize::new(0));
+    let counters = (Arc::clone(&sessions), Arc::clone(&open), Arc::clone(&taken));
     let engine = engine.clone();
     let connector: Connector = Arc::new(move || {
-        counter.fetch_add(1, Ordering::SeqCst);
-        Box::new(engine.connect())
+        let (sessions, open, taken) = &counters;
+        sessions.fetch_add(1, Ordering::SeqCst);
+        open.fetch_add(1, Ordering::SeqCst);
+        Box::new(Tracked {
+            inner: engine.connect(),
+            open: Arc::clone(open),
+            taken: Arc::clone(taken),
+        })
     });
     let mut config = match Token::new(TOKEN) {
         Ok(token) => ServerConfig::new(token),
@@ -79,7 +95,41 @@ fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) ->
         url,
         authority,
         sessions,
+        open,
+        taken,
         stop: Some(stop),
+    }
+}
+
+/// A mock session that counts, for the [`Harness`], the events the server takes from it
+/// and whether the server still holds it. These are what the shutdown tests wait on,
+/// rather than on wall-clock time, which a loaded machine stretches (#137).
+struct Tracked {
+    inner: jstream_control::MockControl,
+    open: Arc<AtomicUsize>,
+    taken: Arc<AtomicUsize>,
+}
+
+impl Control for Tracked {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        self.inner.hello(hello)
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        self.inner.call(call)
+    }
+
+    fn events(&self) -> EventStream {
+        let taken = Arc::clone(&self.taken);
+        Box::pin(self.inner.events().inspect(move |_| {
+            taken.fetch_add(1, Ordering::SeqCst);
+        }))
+    }
+}
+
+impl Drop for Tracked {
+    fn drop(&mut self) {
+        self.open.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -92,6 +142,16 @@ impl Harness {
                 Err(_) => panic!("timed out"),
             }
         })
+    }
+
+    /// Waits until `condition` holds, checking every 10 ms (and failing the test after
+    /// 10 s, like [`Self::run`]).
+    fn wait_until(&self, mut condition: impl FnMut() -> bool) {
+        self.run(async {
+            while !condition() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        });
     }
 
     fn connect(&self) -> Result<WsControl, ControlError> {
@@ -785,11 +845,13 @@ fn shutdown_drops_a_client_that_stopped_reading() {
     for n in 0..10_000 {
         engine.emit(numbered(n));
     }
-    // Let the connection fill the socket and queue the rest, then shut down and wait
-    // past the timeout.
-    harness.run(async { tokio::time::sleep(Duration::from_millis(300)).await });
+    // Once the connection has taken every event, it has filled the socket and queued
+    // the rest. Before that, a shutdown would find little queued and could finish its
+    // close in time, which is what made this test fail under CPU load (#137).
+    harness.wait_until(|| harness.taken.load(Ordering::SeqCst) >= 10_000);
     harness.shut_down();
-    harness.run(async { tokio::time::sleep(Duration::from_secs(3)).await });
+    // The server gives up on the connection once the close timeout has passed.
+    harness.wait_until(|| harness.open.load(Ordering::SeqCst) == 0);
     let closed = harness.run(async {
         loop {
             match slow.next().await {
@@ -816,28 +878,30 @@ fn closing_a_connection_drops_its_event_subscription() {
     // A second connection that reads, so shutdown has more than the stuck client to close.
     let _steady = harness.session();
     let mut slow = slow_client(&harness);
-    harness.run(async { tokio::time::sleep(Duration::from_millis(50)).await });
-    assert_eq!(engine.subscriber_count(), 2);
+    harness.wait_until(|| engine.subscriber_count() == 2);
     for n in 0..10_000 {
         engine.emit(numbered(n));
     }
-    harness.run(async { tokio::time::sleep(Duration::from_millis(300)).await });
+    // Both connections have taken every event: the stuck one's writer is blocked (see
+    // the test above).
+    harness.wait_until(|| harness.taken.load(Ordering::SeqCst) >= 20_000);
     assert_eq!(
         engine.subscriber_count(),
         2,
         "both connections are still subscribed while the server is up"
     );
+    let stopped = std::time::Instant::now();
     harness.shut_down();
-    // Inside the close timeout (2s), and without reading: reading would unblock the
-    // writer and let the close finish. The reading client has already been closed, so
-    // a count of 1 here would be the stuck connection's subscription still live.
-    harness.run(async { tokio::time::sleep(Duration::from_millis(500)).await });
-    assert_eq!(
-        engine.subscriber_count(),
-        0,
-        "the closing connection's subscription is already gone"
+    // Without reading: reading would unblock the writer and let the close finish.
+    harness.wait_until(|| engine.subscriber_count() == 0);
+    // The stuck connection is held for the close timeout after the shutdown, so a count
+    // that fell sooner fell because the subscription was dropped, not because the
+    // connection task ended.
+    assert!(
+        stopped.elapsed() < crate::session::CLOSE_TIMEOUT,
+        "the closing connection's subscription lasted until the close timeout"
     );
-    harness.run(async { tokio::time::sleep(Duration::from_secs(3)).await });
+    harness.wait_until(|| harness.open.load(Ordering::SeqCst) == 0);
     let closed = harness.run(async {
         loop {
             match slow.next().await {
@@ -1333,6 +1397,15 @@ fn mcp_sessions_end_and_unknown_ones_are_not_found() {
     let reply = harness.http("GET", &[("Authorization", &bearer)], "");
     assert_eq!(reply.status, 405);
     assert_eq!(reply.header("allow"), Some("POST, DELETE"));
+
+    // An `initialize` on an open session replaces it.
+    let old = harness.mcp_session("agent");
+    let reply = harness.mcp(Some(&old), &mcp_initialize("agent"));
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let new = reply.header("mcp-session-id").map(str::to_owned);
+    assert!(new.as_ref().is_some_and(|new| *new != old), "{new:?}");
+    let reply = harness.mcp(Some(&old), &mcp_create_scene("main", None));
+    assert_eq!(reply.status, 404, "the old session ended: {}", reply.body);
 
     let bad = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}});
     let reply = harness.mcp(None, &bad);

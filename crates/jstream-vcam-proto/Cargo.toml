@@ -1,0 +1,16 @@
+[package]
+name = "jstream-vcam-proto"
+version = "0.0.0"
+description = "The versioned shared-memory contract between the engine and the virtual camera DLL."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 0
+summary = "Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls"
+unsafe_allowed = false
+
+[lints]
+workspace = true

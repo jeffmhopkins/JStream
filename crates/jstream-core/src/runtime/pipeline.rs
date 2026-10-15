@@ -11,6 +11,10 @@
 //! the publish watcher settles `failed` instead of leaving an output `active` with a
 //! dead stage (R-RT-006). The output thread also reports there when the publish link
 //! goes down and comes back, which the watcher turns into `reconnecting` and `active`.
+//!
+//! A stop gives the output thread [`STOP_DRAIN`] to send what the encoders have
+//! queued. Past that deadline it abandons the rest, counts it as dropped and closes
+//! the publish target, so a peer that has stopped reading cannot hold `output.stop`.
 
 use std::any::Any;
 use std::panic::{self, AssertUnwindSafe};
@@ -18,7 +22,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use jstream_audio::{BusControl, InputControl, Mixer, MixerConfig};
 use jstream_encode::{
@@ -62,6 +66,11 @@ pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 /// Composite errors in a row that the render thread rides out by repeating the last
 /// frame. One more reports the output failed: one second at the base rate.
 const MAX_DRAW_ERRORS: u32 = 30;
+/// How long a stop lets the output thread send the packets still queued, counted from
+/// the moment it sees the stop flag. What is left after that is dropped and counted, and
+/// the publish target is told the same deadline ([`LivePublish::stop_by`]), so a stalled
+/// peer cannot hold `output.stop` much longer than this.
+pub(crate) const STOP_DRAIN: Duration = Duration::from_secs(2);
 
 /// Composites one frame on the render thread: the captured RGBA8 frame, or black when
 /// there is none yet, at `size`, read back as RGBA8 into `out` (replacing its contents).
@@ -70,9 +79,27 @@ pub(crate) type DrawFn =
     Box<dyn FnMut(FrameSize, Option<&[u8]>, &mut Vec<u8>) -> Result<(), String>>;
 
 /// Opens the render thread's [`DrawFn`], on that thread. The engine's opens the wgpu
-/// compositor on the software adapter ([`gpu_draw`]). The crate's tests inject a CPU
-/// one so the pipeline runs without an adapter.
+/// compositor on the software adapter ([`gpu_draw`]). Tests inject [`cpu_draw`] (or a
+/// variant) so the pipeline runs without an adapter.
 pub(crate) type OpenDraw = Arc<dyn Fn() -> Result<DrawFn, String> + Send + Sync>;
+
+/// A CPU stand-in for [`gpu_draw`]: it copies the captured RGBA8 frame, or fills black
+/// when there is none, which is what this cut's one-item composite produces. Tests use
+/// it to run the pipeline without a wgpu adapter
+/// ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
+pub(crate) fn cpu_draw() -> OpenDraw {
+    Arc::new(|| {
+        let draw: DrawFn = Box::new(|size: FrameSize, rgba: Option<&[u8]>, out: &mut Vec<u8>| {
+            out.clear();
+            match rgba {
+                Some(rgba) => out.extend_from_slice(rgba),
+                None => out.resize(size.width() as usize * size.height() as usize * 4, 0),
+            }
+            Ok(())
+        });
+        Ok(draw)
+    })
+}
 
 /// A fake Annex-B encoder does not emit SPS/PPS. FLV still needs a decoder
 /// configuration, so the tagger is given the mux crate's baseline sets.
@@ -199,11 +226,16 @@ pub(crate) struct Running {
     _streams: Vec<Box<dyn AudioStream>>,
     stats: Arc<PipelineStats>,
     capture_drops: DropSnapshot,
+    /// Declared after `_streams` (fields drop in order), so the input rings outlive
+    /// both producers and the mixer and are freed here, not on a real-time thread
+    /// (docs/RULES.md#R-RT-003).
     mic: InputControl,
     desktop: InputControl,
     bus: BusControl,
-    /// Packets the muxer rejected. Distinct from the encode subscriber queues.
-    mux_drops: Arc<AtomicU64>,
+    /// Packets the output thread dropped itself: the muxer rejected them, or the stop's
+    /// drain deadline ([`STOP_DRAIN`]) passed before they were sent. Distinct from the
+    /// encode subscriber queues.
+    output_drops: Arc<AtomicU64>,
     /// Tags the publish target dropped while its link was down, as it last reported.
     link_drops: Arc<AtomicU64>,
     drop_guard: Option<DropGuard>,
@@ -237,7 +269,7 @@ impl Running {
     /// Dropping the run removes the sources, which latches their totals, and joins
     /// the sampler.
     pub(crate) fn arm_stats(&mut self, engine: &Engine) {
-        let mux = Arc::clone(&self.mux_drops);
+        let own = Arc::clone(&self.output_drops);
         let link = Arc::clone(&self.link_drops);
         let ids = vec![
             engine.add_drop_source(self.capture_drops.clone()),
@@ -248,7 +280,7 @@ impl Running {
             engine.add_drop_source(AudioBusDrops::new(self.bus.clone())),
             engine.add_drop_source(FnDropSource::new(move || {
                 output_packet_drops(
-                    mux.load(Ordering::Relaxed)
+                    own.load(Ordering::Relaxed)
                         .saturating_add(link.load(Ordering::Relaxed)),
                 )
             })),
@@ -373,11 +405,14 @@ pub(crate) fn launch(
 ) -> Result<Running, String> {
     let (size, capture) = open_capture(&parts)?;
     let format = engine_format()?;
+    // Bindings drop in reverse pattern order, so on an early return the streams (and
+    // their producers) go before the input controls, and the rings are freed here
+    // rather than on a real-time thread (docs/RULES.md#R-RT-003).
     let OpenedAudio {
-        mixer,
-        streams,
         mic,
         desktop,
+        mixer,
+        streams,
     } = open_audio(&parts, format)?;
     let bus = mixer.bus();
     let period = frame_period(parts.clock.timebase())?;
@@ -387,7 +422,7 @@ pub(crate) fn launch(
     let video = Arc::new(open_video(&parts, size)?);
     let audio = Arc::new(open_audio_encoder(&parts, format)?);
     let capture_drops = DropSnapshot::new();
-    let mux_drops = Arc::new(AtomicU64::new(0));
+    let output_drops = Arc::new(AtomicU64::new(0));
     let link_drops = Arc::new(AtomicU64::new(0));
     // The mixer timestamps its first block `latency` before the clock, so the FLV
     // origin sits that far back. Later blocks and frames stay at or after it.
@@ -432,7 +467,7 @@ pub(crate) fn launch(
     };
     let output = match spawn("jstream-output", {
         let stats = Arc::clone(&stats);
-        let mux = Arc::clone(&mux_drops);
+        let own = Arc::clone(&output_drops);
         let link = Arc::clone(&link_drops);
         let stop = Arc::clone(&stop);
         move || {
@@ -442,7 +477,7 @@ pub(crate) fn launch(
                 video: video_sub,
                 audio: audio_sub,
                 stats,
-                mux_drops: mux,
+                output_drops: own,
                 link_drops: link,
                 stop,
                 fail: fail_tx,
@@ -471,7 +506,7 @@ pub(crate) fn launch(
         mic,
         desktop,
         bus,
-        mux_drops,
+        output_drops,
         link_drops,
         drop_guard: None,
         ticker: None,
@@ -1031,7 +1066,7 @@ struct OutputJob {
     video: Subscription,
     audio: Subscription,
     stats: Arc<PipelineStats>,
-    mux_drops: Arc<AtomicU64>,
+    output_drops: Arc<AtomicU64>,
     link_drops: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
     fail: Sender<PipelineEvent>,
@@ -1042,6 +1077,13 @@ struct OutputJob {
 /// session closed), is fatal and goes to the failure channel. A lost link is not an
 /// error: the publish target drops and counts tags while it reconnects, and this
 /// loop reports each change of its [`LinkState`] on the same channel.
+///
+/// Once it sees the stop flag, the loop keeps sending what the encoders queued for at
+/// most [`STOP_DRAIN`], and tells the publish target that deadline. When the deadline
+/// passes, or a send fails while stopping, it drops the packets still queued, counts
+/// them in `output_drops`, and finishes the target, which past the deadline closes
+/// without its goodbye. A failure while stopping is logged, not reported: the output
+/// is already on its way to `stopped`.
 fn output_loop(job: OutputJob) {
     let OutputJob {
         mut publish,
@@ -1049,7 +1091,7 @@ fn output_loop(job: OutputJob) {
         video,
         audio,
         stats,
-        mux_drops,
+        output_drops,
         link_drops,
         stop,
         fail: fail_tx,
@@ -1069,6 +1111,9 @@ fn output_loop(job: OutputJob) {
     let mut audio_done = false;
     let mut failed: Option<String> = None;
     let mut link = LinkState::Active;
+    // Set when the loop first sees `stop`: when the drain gives up.
+    let mut drain: Option<Instant> = None;
+    let mut abandoned = false;
     // An end after `stop` is our own teardown; any other end is a failure.
     let ended = |kind: &str, end: StreamEnd| -> Option<String> {
         if stop.load(Ordering::Acquire) {
@@ -1079,10 +1124,19 @@ fn output_loop(job: OutputJob) {
         }
     };
     while failed.is_none() && (!video_done || !audio_done) {
+        if drain.is_none() && stop.load(Ordering::Acquire) {
+            let deadline = Instant::now() + STOP_DRAIN;
+            publish.stop_by(deadline);
+            drain = Some(deadline);
+        }
+        if drain.is_some_and(|deadline| Instant::now() >= deadline) {
+            abandoned = true;
+            break;
+        }
         if !video_done {
             match video.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
-                    if let Err(err) = forward(&mut publish, &mut tagger, &packet, &mux_drops) {
+                    if let Err(err) = forward(&mut publish, &mut tagger, &packet, &output_drops) {
                         failed = Some(err);
                     }
                 }
@@ -1096,7 +1150,7 @@ fn output_loop(job: OutputJob) {
         if failed.is_none() && !audio_done {
             match audio.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
-                    if let Err(err) = forward(&mut publish, &mut tagger, &packet, &mux_drops) {
+                    if let Err(err) = forward(&mut publish, &mut tagger, &packet, &output_drops) {
                         failed = Some(err);
                     }
                 }
@@ -1120,12 +1174,40 @@ fn output_loop(job: OutputJob) {
         link_drops.store(publish.dropped(), Ordering::Relaxed);
     }
     if let Some(err) = failed {
-        report(&fail_tx, err);
+        if stop.load(Ordering::Acquire) {
+            tracing::warn!(error = %err, "publishing failed while stopping");
+            abandoned = true;
+        } else {
+            report(&fail_tx, err);
+        }
+    }
+    if abandoned {
+        let left = discard(&video, video_done).saturating_add(discard(&audio, audio_done));
+        output_drops.fetch_add(left, Ordering::Relaxed);
+        tracing::warn!(
+            packets = left,
+            "stop did not drain the output in time; dropped the packets still queued"
+        );
     }
     link_drops.store(publish.dropped(), Ordering::Relaxed);
     if let Err(err) = publish.finish() {
         tracing::error!(error = %err, "publish finish failed");
     }
+}
+
+/// Takes and counts the packets queued on `sub` without sending them. Nothing when
+/// the stream has already ended (`done`). An encoder still running can queue a few
+/// more while this drains; they are taken and counted too, so the count can include
+/// packets queued just after the deadline (#136 review N1).
+fn discard(sub: &Subscription, done: bool) -> u64 {
+    let mut count: u64 = 0;
+    if done {
+        return count;
+    }
+    while let Ok(Some(_)) = sub.try_recv() {
+        count = count.saturating_add(1);
+    }
+    count
 }
 
 /// Tells the watcher when the publish link has changed from `last`, and returns
@@ -1154,12 +1236,12 @@ fn forward(
     publish: &mut Box<dyn LivePublish>,
     tagger: &mut FlvTagger,
     packet: &jstream_media::Packet,
-    mux_drops: &AtomicU64,
+    output_drops: &AtomicU64,
 ) -> Result<(), String> {
     match tagger.push(packet) {
         Ok(tags) => publish_tags(publish, &tags),
         Err(err) => {
-            mux_drops.fetch_add(1, Ordering::Relaxed);
+            output_drops.fetch_add(1, Ordering::Relaxed);
             tracing::warn!(error = %err, "dropping a packet the muxer rejected");
             Ok(())
         }

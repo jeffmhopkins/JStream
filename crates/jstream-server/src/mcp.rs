@@ -8,7 +8,8 @@
 //!   SSE stream: every MCP request it serves completes on its own.
 //! - **Sessions.** An `initialize` (the handshake-based revisions) opens a new session: a
 //!   new `jstream_mcp::Server` over a new `Control` session from the [`Connector`], whose
-//!   ID comes back in `Mcp-Session-Id`. Later requests carrying that header go to it. A
+//!   ID comes back in `Mcp-Session-Id`. Later requests carrying that header go to it; an
+//!   `initialize` carrying it ends that session and opens a new one. A
 //!   request without the header (MCP 2026-07-28 is stateless) goes to one shared
 //!   stateless server, opened at its first request. An unknown or expired ID is `404`, so
 //!   the client initializes again.
@@ -239,6 +240,11 @@ async fn post(mcp: &Mcp, headers: &HeaderMap, body: Body, peer: SocketAddr) -> R
         return bad_request("the body is not UTF-8".into());
     };
     if is_initialize(message) {
+        // A client that handshakes again on its session replaces it, rather than
+        // leaving it to the idle timeout.
+        if let Some(id) = session_id {
+            mcp.end(id, "replaced by a new initialize");
+        }
         return initialize(mcp, message, peer).await;
     }
     let server = match session_id {

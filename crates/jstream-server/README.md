@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:550ebd004d4940cf", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1: contents list names mcp.rs and the MCP fields of ServerConfig; not-yet list drops MCP; checked against lib.rs, mcp.rs, config.rs" }
+verified = { hash = "b3:c890b3b9db54eb66", by = "agent:claude@session_01Gkayyrtq9Ahc5U37dAfdoB", note = "Re-read for #137: test-only change (shutdown tests wait on counted conditions instead of fixed sleeps; CLOSE_TIMEOUT made pub(crate) for the test). No behaviour change; the section still matches" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:aa0a35369d2d12d1", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1: new MCP over streamable HTTP subsection (answer table, sessions, limits, keep-alive) checked against mcp.rs and its tests; refusal reasons and MCP logging match gate.rs/mcp.rs; Dependencies adds jstream-mcp and getrandom; open question 3 updated" }
+verified = { hash = "b3:5b907571e1a851aa", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#150 shutdown tests) into #142: only verified lines conflicted, prose is unchanged on both sides; re-read: serve_with_shutdown and CLOSE_TIMEOUT behaviour unchanged by #150's test-only waits; message contents never logged, so set_key's key is not logged" }
 -->
 
 ### Listening and admission
@@ -186,7 +186,7 @@ forces a preflight. Each body is one JSON-RPC message, answered by a
 |---|---|
 | `POST`, a request | 200, `Content-Type: application/json`, the JSON-RPC reply. Never an SSE stream: every request this server serves completes on its own |
 | `POST`, a notification or a response | 202, no body |
-| `POST` `initialize` | a new session; on success its ID comes back in `Mcp-Session-Id`, and a failed `initialize` keeps none. 503 when `max_mcp_sessions` are open |
+| `POST` `initialize` | a new session; on success its ID comes back in `Mcp-Session-Id`, and a failed `initialize` keeps none. One that carries `Mcp-Session-Id` ends that session first. 503 when `max_mcp_sessions` are open |
 | `POST` with `Mcp-Session-Id` | served by that session; 404 if it is unknown or expired, so the client initializes again |
 | `POST` without `Mcp-Session-Id` | served by the one shared stateless server (MCP 2026-07-28 requests carry no session) |
 | `DELETE` with `Mcp-Session-Id` | ends that session: 204, or 404 if it is unknown |
@@ -242,7 +242,7 @@ alone.
   server) and `kind` (`session` or `stateless`), under which the engine session and
   `jstream-mcp`'s own spans nest. Opening one logs `mcp session opened` with the peer
   address, and ending one `mcp session ended` with the reason (`idle`, `deleted by the
-  client`, `initialize failed`). The session ID is never logged, nor any message.
+  client`, `replaced by a new initialize`, `initialize failed`). The session ID is never logged, nor any message.
 - A request that isn't a WebSocket upgrade is logged at `debug`, and so is a connection
   dropped by the header-read timeout. A connection closed by the handshake timeout logs
   `connection closed` at `info` with its code and reason, like any other close.

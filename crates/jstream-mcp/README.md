@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:8cc47fd1c8112f1d", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1: streamable HTTP is now served by jstream-server (feeds bodies to Server::handle); this crate's contents unchanged" }
+verified = { hash = "b3:4d29b5c889f24117", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 changed only a test golden (key_set) in src/tests.rs; server, tools, events, jsonrpc, stdio and error bullets unchanged" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:6398f85aca19efef", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1: Session and identity and Async and transports now say jstream-server serves /mcp with one Server per MCP session and concurrent requests; tools, revisions, results unchanged" }
+verified = { hash = "b3:efc099de4381eb41", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: the output tool gains the new ops through the generated table with no code change, as the Tools section says; tools.snap regenerated; revisions, results and logging unchanged" }
 -->
 
 ### Tools

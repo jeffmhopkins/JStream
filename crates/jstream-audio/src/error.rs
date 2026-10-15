@@ -5,8 +5,9 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum AudioError {
-    /// A [`MixerConfig`](crate::MixerConfig) field is out of range.
-    #[error("invalid mixer configuration: {what}")]
+    /// A [`MixerConfig`](crate::MixerConfig) field, or a meter's sample rate, is out of
+    /// range.
+    #[error("invalid audio configuration: {what}")]
     InvalidConfig {
         /// Which field, and the range it must be in.
         what: &'static str,

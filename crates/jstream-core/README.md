@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:e5668d1f25346387", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main into #135 plus with_backends rustdoc naming with_publish_opener (#135 N1): re-read intro, Engine, Runtime, Outputs and Tests bullets; both target kinds and the opener tests are described, nothing from main's side contradicts them" }
+verified = { hash = "b3:d852e03c5535905f", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#142 outputs and stream keys) into #133: prose is main's; re-read Engine, Outputs and Tests bullets (key store, output_kind, collection outputs); #133's change is only Running field and OpenedAudio binding order, which no bullet describes" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -30,10 +30,12 @@ The control plane is the scene graph, the sessions and `video.snapshot`.
 `with_publish_opener`). Without backends, an output action stays the placeholder
 state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
-  `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish` and
-  `with_publish_opener`;
+  `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
+  `with_publish_opener` and `with_key_store`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
-  frame of a source; `output_stats` reads the running pipeline. It holds the
+  frame of a source; `output_stats` reads the running pipeline; `output_kind` reads a
+  collection output's target. `output.set_key` and `output.clear_key` go to the
+  injected `StreamKeyStore`, never under the collection lock. It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys and the
   subscribers behind one lock, and the drop ledger behind another, and executes
   batches, actions and queries. The pipeline threads do not take the collection lock.
@@ -46,7 +48,8 @@ state machine. Contents:
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
 - **Session** (`session.rs`): `InProcessControl`, one client session.
 - **Events** (`events.rs`): the per-subscription queues behind `Control::events`.
-- **Outputs** (`outputs.rs`): the outputs' runtime state. The placeholder path steps
+- **Outputs** (`outputs.rs`): the outputs' runtime state, following the collection's
+  outputs after each batch and keeping the ones the host declared. The placeholder path steps
   `starting` to `active` at once. The pipeline path emits `starting`, then `active`
   or `failed`. Stop emits `stopping` then `stopped`. A stop during `starting` cancels
   that start and settles `stopped` only after its threads are gone. A lost RTMP
@@ -55,19 +58,26 @@ state machine. Contents:
   reconnecting, settles `failed`.
 - **Drop counts** (`drops.rs`): the sources a `stats.tick` sums. `output.start`
   registers the capture cell, both encode sessions, both mixer inputs, the mix
-  bus, and the muxer's and the publish link's packet drops, and a sampler thread
+  bus, and the packets the output thread drops (muxer rejects and what a stop's
+  drain abandons) and the publish link's, and a sampler thread
   emits a tick about once a second until the pipeline stops.
 - **Tests** (`tests.rs`, `tests/mcp.rs`, `tests/scenarios.rs`): the protocol rules through
   `InProcessControl`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on the software adapter, the pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
-  stage-failure, late-tick, teardown, final-tick and link-loss tests run without one),
-  `connect_rtmp` against a slow fake RTMP server on loopback and one that hangs up
-  and is reconnected to, a publish opener connecting that fake server on every start
-  (start, media, stop, twice) and one that cannot connect, overload drops from a
-  fake encoder and the mixer reported in `stats.tick`, and an MCP agent
-  (`jstream-mcp`, a dev-dependency) driving the engine in-process.
+  stage-failure, late-tick, teardown, final-tick, link-loss and stalled-stop tests run
+  without one),
+  `connect_rtmp` against a slow fake RTMP server on loopback, one that hangs up
+  and is reconnected to, and one that stops reading while a stop's deadline runs out,
+  a publish opener connecting that fake server on every start (start, media, stop,
+  twice) and one that cannot connect, overload drops from a
+  fake encoder and the mixer reported in `stats.tick`, render and mixer panics
+  reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
+  the hidden `Engine::with_cpu_compositor`), the output edits and the stream-key
+  actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
+  which captures the engine's traces), and an MCP agent (`jstream-mcp`, a
+  dev-dependency) driving the engine in-process.
 
 Not here yet: per-client undo, the audit log, persistence, settings, arc-swap
 snapshots, a GPU encode target, and the platform's Windows devices. See
@@ -82,7 +92,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a74e171ce9f258da", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Stale via ARCH#protocol/control design (I1 MCP over HTTP wording): InProcessControl and connector text unaffected; holds" }
+verified = { hash = "b3:cab2a58451ec8ea0", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#142) into #133: prose is main's; re-read Outputs, Stream keys and Pipeline/stop paragraphs; #133's drop order (InputControls after _streams) touches neither the output collection nor the key store and changes no described state, error or deadline" }
 -->
 
 ### Engine and sessions
@@ -162,10 +172,13 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   moved on (the key check comes first) and without an event. Only applied batches
   are remembered, so a retry of a failed batch is applied. Keys are kept for the
   engine's lifetime ([protocol open question 6](../jstream-protocol/README.md#open-questions)).
-- **Queries** that read the collection go to `Graph::query`; `output.status` reads the
-  outputs (`not_found` for an unknown one). `video.snapshot` is answered here, not by
+- **Queries** that read the collection go to `Graph::query`, `output.list` and the
+  `outputs` of `state.get` included; `output.status` reads the outputs' runtime state
+  (`not_found` for an unknown one) and fills `key_set` from the key store after the
+  collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
-- **Actions**: `output.start` and `output.stop` (see *Outputs* below).
+- **Actions**: `output.start` and `output.stop` (see *Outputs* below), and
+  `output.set_key` and `output.clear_key` (see *Stream keys* below).
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -260,6 +273,7 @@ What each stage contributes:
 | Audio encode session | the same input drops | `encode_blocks` |
 | Encode subscriber queue | `subscriber_drops` | `output_packets` |
 | Muxer | a packet the FLV tagger rejects | `output_packets` |
+| Stop drain | packets still queued when a stop's drain deadline passes, or when a send fails while stopping, dropped by the output thread | `output_packets` |
 | Publish link | tags the publish target dropped while its link was down (`LivePublish::dropped`; for RTMP, `ReconnectStats::dropped`), published by the output thread | `output_packets` |
 
 A render tick that falls a whole period or more behind the clock is not drawn late:
@@ -278,9 +292,27 @@ it is read, so it does not simulate mailbox skips.
 
 ### Outputs
 
-Outputs are runtime state, not collection state: they never change `rev`. Until the
-protocol has edits that configure outputs, the host declares them with
-`Engine::with_output(id)`; each starts `stopped`.
+An output's configuration is collection state (`output.create`, `output.set_target`,
+`output.delete`, kept by `jstream-graph`); whether it runs is runtime state, which never
+changes `rev`. After each applied batch the runtime states follow the collection: a
+created output starts `stopped`, and a deleted one is forgotten. The graph refuses to
+delete a running output (`invalid_argument`), so the batch passes it the running set.
+A host can also declare an output with `Engine::with_output(id)`, outside the
+collection: it starts `stopped`, has no target and stays known whatever the collection
+holds. A live host reads a collection output's target with `output_kind` when its
+publish opener runs; wiring that into the daemon is not done yet.
+
+**Stream keys.** `with_key_store` injects the OS credential store
+(`jstream_platform::StreamKeyStore`). `output.set_key` checks that the output is in the
+collection (`not_found`), then the key's shape (`invalid_argument`, field `key`: empty,
+over 1024 bytes, or with whitespace or control characters), then stores it under the
+output ID with no engine lock held. `output.clear_key` removes it and succeeds when
+there is none, even for an output no longer in the collection. With no store, or when
+the store refuses, both fail with `action_failed`. The key is write-only
+([R-SEC-001](../../docs/RULES.md#R-SEC-001)): every reason is fixed text, nothing logs
+the call's arguments, and no response, event or query carries it. The crate-root test
+`secrets_are_redacted` sets a key and checks the reply, `state.get`, `output.list`,
+`output.status`, the events and every span and event the engine traces.
 
 **Placeholder.** With no backends, the actions only move a state machine, as
 `jstream-control`'s mock does. The protocol defines an action's response as "accepted"
@@ -314,7 +346,8 @@ Failure emits `failed` and `action_failed`, and drops a one-shot publish target 
 the host sets another before retrying (an opener is kept). A second start while one pipeline is up, or
 while a start is still in flight, fails with `action_failed` and leaves that
 pipeline alone. `output.stop` on an `active` pipeline emits `stopping`, drops it
-outside the lock (its drop sets the stop flag and joins the threads), then emits
+outside the lock (its drop sets the stop flag and joins the threads; the output
+thread's drain is bounded, see the RTMP paragraph below), then emits
 `stopped`. `output.stop` during the in-flight start cancels that generation, emits
 `stopping`, waits until the start has dropped whatever it opened, then emits
 `stopped`. The start then answers `action_failed` and does not emit `active`. The
@@ -337,8 +370,8 @@ pipeline has joined. A stop's join also holds off a start of another output. The
 wait also ends if that teardown panics, so a later start is not left waiting on a
 join that already unwound. If the teardown panics during `output.stop`, the output
 settles `failed` instead of staying `stopping`, and the panic reaches the caller. A
-`finish` error, or an encoder stream ending, while a stop is tearing the session
-down is not a second failure.
+`finish` or send error, or an encoder stream ending, while a stop is tearing the
+session down is not a second failure.
 
 A lost connection is not fatal. After each pass the output thread reads the publish
 target's `LivePublish::link_state` (`Active` unless the target can lose its link,
@@ -386,11 +419,22 @@ the first and each reconnect attempt (built with
 `rtmp_connector` on the same URL and key), reads with a 10 s timeout through the
 handshake and the publish exchange (the publisher retries only interrupted reads, so
 a shorter timeout fails on a slow server), then drops the read timeout to 1 ms so
-`poll` does not block the output thread. Writes keep a 10 s timeout: a stop drains
-the queued packets before `finish`, so a peer that has stopped reading can hold
-`output.stop` for up to 10 s per blocked write, and a stalled write takes that long
-to count as a lost link. There is no shorter drain bound on stop yet. Its unit tests
-drive fake servers on loopback, one of which hangs up mid-stream.
+`poll` does not block the output thread. Writes keep a 10 s timeout while the output
+runs, so a stalled write takes that long to count as a lost link.
+
+A stop bounds its drain. When the output thread sees the stop flag it gives itself
+2 s (`STOP_DRAIN`) to send what the encoders queued and tells the target that
+deadline (`LivePublish::stop_by`; the default does nothing). Once it passes, or a send
+fails while stopping, the thread drops the packets still queued, counts them in
+`output_packets`, and calls `finish`. A failure while stopping is logged, not
+reported: the output is already on its way to `stopped`. `RtmpPublish` honors the
+deadline: each write's timeout is cut to the time left, a lost link is not
+reconnected, and past the deadline sends fail and `finish` drops the connection
+without the `FCUnpublish` … `deleteStream` goodbye. So a peer that has stopped
+reading holds `output.stop` for about 2 s, not 10 s per blocked write; a target that
+ignores `stop_by` can still add one blocked send. `connect_rtmp`'s unit tests drive
+fake servers on loopback: a slow one, one that hangs up mid-stream, and one that
+stops reading while the deadline runs out.
 
 ### Locking
 
@@ -449,4 +493,3 @@ revisions and error codes are logged, never a call's arguments
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): one scene, a CPU readback
   into the encoder, and the platform fakes in the test. `video.snapshot` still
   composites from frames the host injects with `set_source_frame`.
-- `R-SEC-001`'s `secrets_are_redacted` test: the engine holds no secret yet.
