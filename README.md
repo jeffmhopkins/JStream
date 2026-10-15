@@ -148,7 +148,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | G1 | vcam protocol crate | ✅ merged | #144 |
 | G2 | vcam media source DLL | 🧪 merged, Windows run pending: pacing rerun | #174, #195, #200, #229 |
 | G3a | vcam producer (engine side) | ✅ merged | #194 |
-| G3b | VirtualCam output kind | 🧪 merged, Windows run pending: WindowsVcam in the daemon's backends, then a camera run | #213 |
+| G3b | VirtualCam output kind | 🧪 merged, Windows run pending: camera run on Windows 11 | #213, #297 |
 | G3c | --register-vcam | 🧪 merged, Windows run pending: registration check with UAC | #235 |
 | G3d | Virtual camera in the UI and the desktop app | 🧪 merged, Windows run pending: a camera run from the desktop app | #316 |
 | P1 | Portable Windows zip | ⏳ planned |  |
