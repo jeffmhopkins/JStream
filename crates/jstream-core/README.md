@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:dae93cb7cb71d666", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#170 F2b recording, #174, #178, #187) into B8 #171: re-read; F2b's recording intro and Tests text and B8's Audit log bullet and audit tests coexist; nothing contradicts" }
+verified = { hash = "b3:7264fb2daaf15212", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#171 B8 audit log) into B2: re-read; Engine bullet lists with_audit and with_history_limit, Audit log bullet now covers undo and redo, tests list adds undo_and_redo_are_audited; Not-yet drops the audit log" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:83863f512d002b05", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#170 F2b) into B8 #171: F2b's Recording paragraph and B8's Audit log subsection coexist; a record output's path travels only in output.create, which the audit log records by name only, and output.start on it is audited like any action; Locking unchanged" }
+verified = { hash = "b3:78ac639e0515641a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#171 B8) into B2: re-read Audit log subsection; it now says undo and redo are recorded (history.undo/history.redo as the call, replayed for a keyed retry, rev before = own rev minus one) matching audit.rs sink_for/Pending; Undo and redo and Not yet unchanged" }
 -->
 
 ### Engine and sessions

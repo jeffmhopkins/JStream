@@ -147,9 +147,9 @@ impl Engine {
         self
     }
 
-    /// Records every batch, undo, redo and action this engine executes in `sink`, after the call
-    /// and with no engine lock held (see [`AuditSink`]). Without a sink nothing is
-    /// recorded. Every clone of the engine shares it.
+    /// Records every batch, undo, redo and action this engine executes in `sink`, after
+    /// the call and with no engine lock held (see [`AuditSink`]). Without a sink nothing
+    /// is recorded. Every clone of the engine shares it.
     #[must_use]
     pub fn with_audit(self, sink: Arc<dyn AuditSink>) -> Self {
         self.shared.audit.set(sink);

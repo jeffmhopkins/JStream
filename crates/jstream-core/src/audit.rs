@@ -1,6 +1,6 @@
-//! The audit log: one entry for every batch, undo, redo and action the engine executes, naming who
-//! sent it, what it was, the `rev` before and after, and how it ended (ADR-0006,
-//! ADR-0013).
+//! The audit log: one entry for every batch, undo, redo and action the engine executes,
+//! naming who sent it, what it was, the `rev` before and after, and how it ended
+//! (ADR-0006, ADR-0013, ADR-0032).
 //!
 //! Entries carry names, IDs, revisions and error codes only, never a call's arguments,
 //! so a stream key, a URL or a source's settings cannot reach the log (R-SEC-001).
