@@ -12,8 +12,8 @@
 use std::env;
 
 /// The Media Foundation DLLs the daemon imports from: `mfplat.dll` (`MfCodecs`,
-/// `MfVideoDevices`), `mf.dll` and `mfreadwrite.dll` (`MfVideoDevices`), and
-/// `mfsensorgroup.dll` (`WindowsVcam`), which N editions also lack and Windows 10 has
+/// `MfVideoDevices`, `MfMediaDecoders`), `mf.dll` (`MfVideoDevices`), `mfreadwrite.dll`
+/// (`MfVideoDevices`, `MfMediaDecoders`), and `mfsensorgroup.dll` (`WindowsVcam`), which N editions also lack and Windows 10 has
 /// without `MFCreateVirtualCamera` (`WindowsVcam::start` checks for it before calling
 /// it). Only DLLs the binary imports from belong here. The linker ignores one it doesn't
 /// with warning LNK4199, and that warning doesn't fail CI: rustc reports it through the
