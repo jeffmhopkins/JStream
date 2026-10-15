@@ -451,7 +451,7 @@ The PR shows before and after.
 <!-- @rule
 status = "active"
 enforced_by = ["ci:test"]
-applies_to = ["crates/**", "tests/**"]
+applies_to = ["crates/**", "apps/**", "tests/**"]
 -->
 Tests need no network, real devices or physical GPU, unless they are platform tests
 behind `hw-tests`.
