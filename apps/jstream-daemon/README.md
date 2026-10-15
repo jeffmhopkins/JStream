@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:abc18ea14b1f9630", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#307: re-read the whole section; delay-load bullet now says LNK4199 stays a warning (linker_messages ignores -D warnings, seen in CI windows test log), link-arg-bins reaches the bin's unit-test harness but not integration tests, and states what tests/delay_load.rs checks (its own DLL list, delay-import table yes, import table no) and what it misses" }
+verified = { hash = "b3:1d8ea2b531b3c4e4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#307 merge of main (#237, #309, #295, #331): took main's stamp; re-read whole section; this PR's delay-load bullet (link-arg-bins reaches the unit-test harness, LNK4199 not fatal via linker_messages, what tests/delay_load.rs checks and misses) kept and matches build.rs's DLL list; main's clock-swap sentence in core#design fits QpcClock via with_backends; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
