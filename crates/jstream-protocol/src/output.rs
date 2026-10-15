@@ -7,7 +7,7 @@
 //! an action (`output.set_key`) and never appears in the collection, in any result,
 //! event or error, or in a `Debug` print. A read reports only whether a key is set.
 
-use crate::id::OutputId;
+use crate::id::{EncoderProfileId, OutputId};
 use schemars::JsonSchema;
 use serde::de::{self, Unexpected, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -104,6 +104,10 @@ pub struct OutputInfo {
     pub output_id: OutputId,
     /// What it is and where it sends.
     pub kind: OutputKind,
+    /// The encoder profile it uses (`output.set_encoder`). Absent means the engine's
+    /// default, as from a server older than 0.13.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoder_profile: Option<EncoderProfileId>,
 }
 
 /// A secret string, such as a stream key, sent by a client to the engine.

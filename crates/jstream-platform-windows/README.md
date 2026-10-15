@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:3d908da78fcc9b94", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b cascade from ARCH#threading: re-read; WindowsVcam unchanged; Not yet (Backends constructor) still holds, wiring is G3c" }
+verified = { hash = "b3:6c99c33f843a3a38", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main into D7b: took main's stamp; re-read; stale only via ARCH#threading's Collector row (mixer collector frees removed buses and filter chains), which this crate doesn't rely on; holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -34,7 +34,13 @@ The code is ported from spikes S1 to S3. This first cut has:
   one time line ([ADR-0014](../../docs/adr/0014-media-clock.md)). `now` never decreases.
 - **`WasapiAudio`** (`AudioIo`):
   - **Listing** the active capture and render endpoints, with the console-role default
-    of each.
+    of each, and the running processes (a ToolHelp snapshot: each one's ID, its
+    parent's and its executable's file name), which process loopback can record.
+  - **Format query:** `input_format` returns the format a stream on a target would
+    have, without opening it: the format below for the target's endpoint (the current
+    default for a default target), found by activating a client and reading its mix
+    format, and 48 kHz stereo for process loopback of a running process (`NotFound`
+    for one that isn't).
   - **Streams** for every target the traits define: an input, the default input, loopback
     of an output or the default output, process loopback (a process and its children,
     through the virtual process-loopback device), an output and the default output.
@@ -196,6 +202,50 @@ The code is ported from spikes S1 to S3. This first cut has:
       size is then read again.
   - **Not yet:** video decoders, which report `Unsupported` until then.
 
+- **`MfVideoDevices`** (`VideoDevices`), webcams and capture cards through Media
+  Foundation's source reader ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)):
+  - **Devices:** the video capture devices Media Foundation enumerates. A device's
+    `DeviceId` is its symbolic link (its device interface path), which stays the same
+    across reboots and replugging into the same port; its name is the friendly name.
+  - **Paired audio:** the first active WASAPI capture endpoint in the same device
+    container (the configuration manager's container ID), so it is an ID `WasapiAudio`
+    opens. Devices built into the computer share one container, which pairs nothing: a
+    laptop's camera is not paired with its microphone array.
+  - **Formats:** the first video stream's native media types that the backend can
+    deliver, in the device's order: NV12 and I420 as they are, YUY2 (converted to NV12),
+    and MJPEG (decoded by the engine's `CaptureDecoder`). RGB, 10-bit and H.264 types are
+    left out. A type that repeats an earlier one's size, frame rate and encoding is
+    listed once, and the first is the one opened. Frame rates become frame periods
+    (`30000/1001` fps is `1001/30000`).
+  - **Streams:** `open` selects the native type with converters disabled, so the reader
+    delivers exactly that type, and reads it synchronously on its own capture thread.
+    `open` waits up to 5 s for the first read, so a device another application holds is
+    `Busy` there. A denied camera privacy setting is an `Os` error that says so. Raw
+    frames are copied (NV12, I420) or converted to NV12 (YUY2, with each chroma sample
+    averaging the two rows of its block) on that thread, into the same single-slot
+    mailbox as display capture. Their colour is what the type declares, else BT.601
+    below 720 lines and BT.709 from there, in limited range.
+  - **Threads:** `devices`, `formats` and `open` join the calling thread to the
+    multithreaded apartment for the call, as `WasapiAudio` does, and the capture thread
+    joins it for its lifetime. Each also starts Media Foundation; the thread releases the
+    reader, source and decoder before shutting it down.
+  - **Times:** a sample's `MFSampleExtension_DeviceReferenceSystemTime` (QPC in 100 ns,
+    `QpcClock`'s time line) when it has one; otherwise the reader's timestamp, anchored
+    to `QpcClock` at the first frame.
+  - **End of a stream:** a removed device, a reader error or end of stream ends the stream
+    with `DeviceLost`, as does a change of the device's format, so the engine reopens it.
+    A panic on the capture thread (the decoder's included) ends it with `InvalidState`.
+    Dropping the stream doesn't wait: the thread stops after its current read and then
+    releases the device and drops the decoder.
+  - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`: the first synchronous
+    MJPEG decoder MFT Media Foundation ranks (Microsoft's, on Windows), created on the
+    capture thread at the first frame and again if the size changes. It takes NV12
+    output when offered, else YUY2 converted to NV12. Decoded frames are BT.601 full
+    range, as JFIF defines, unless the decoder's type says otherwise. A frame it can't
+    decode is dropped and counted in `CaptureStats::frames_undecodable`.
+  - **Not yet:** every MJPEG frame is decoded, including ones the mailbox then replaces
+    before render takes them.
+
 - **`WindowsGpu`** (`GpuInterop`, [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)
   step 2, plus the D3D11 device that steps 1 and 5 will use; ported from spike S1):
   - **`open_device`** opens the DX12 wgpu device on the media adapter. That is the
@@ -230,7 +280,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     path would copy the engine's texture into the ring on the D3D11 side).
   - **Start:** the media source must already be registered machine-wide, so `start`
     checks for its `HKLM` class key first and is `Unsupported` without it (registering
-    is the app's `--register-vcam` step). It then creates, on a D3D11 device of its own
+    is `jstream-daemon --register-vcam`, through `register_vcam` below). It then creates, on a D3D11 device of its own
     on the default hardware adapter, a ring of three shared BGRA textures and a shared
     fence, plus the control block. They are named in **this session's namespace**,
     because a non-elevated engine can't create `Global\` objects
@@ -281,6 +331,37 @@ The code is ported from spikes S1 to S3. This first cut has:
     isn't UTF-8 is refused as `Unsupported`, without naming it. The copy Windows returns is zeroed before
     `CredFree`. Nothing here logs, and errors carry no secret or its length.
 
+- **`check_media_foundation`**, the Media Foundation check
+  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md#consequences)): Windows N and
+  KN editions ship without Media Foundation until the user installs the Media Feature
+  Pack, and Windows Server until it adds the Server Media Foundation feature. The check
+  loads `mfplat.dll` from System32 only and looks for `MFStartup`. If that fails, it
+  returns `PlatformError::MissingComponent`, and the registry's `EditionID` picks the
+  advice: the Media Feature Pack for an N edition (an ID ending in a capital `N`), the
+  server feature for an ID starting with `Server`, and both otherwise. The host must
+  call it before creating the backends, as `jstream-daemon`'s startup does.
+  - **Delay-loading:** the `windows` crate imports Media Foundation's DLLs when the
+    process loads, so on such a machine Windows refuses to start a binary that links a
+    Media Foundation backend before any check can run. That binary must delay-load each
+    DLL its backends import (MSVC `/DELAYLOAD:<dll>` with `delayimp.lib`) for the check
+    to report anything: `mfplat.dll` for `MfCodecs`; `mfplat.dll`, `mf.dll` and
+    `mfreadwrite.dll` for `MfVideoDevices`; `mfplat.dll` for `MfMjpegDecoder`;
+    `mfplat.dll` and `mfsensorgroup.dll` for `WindowsVcam`. The check itself never imports Media Foundation.
+
+- **`register_vcam`** and **`vcam_registration`**, the virtual camera's registration
+  ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)). Frame Server ignores
+  per-user registration, so `register_vcam` writes the media source's class machine-wide:
+  `HKLM\Software\Classes\CLSID\{clsid}` with `InprocServer32` naming the DLL and
+  `ThreadingModel = Both`, the path written last. It then adds a read-and-execute ACE for
+  LOCAL SERVICE, Frame Server's account, to the DLL file's DACL. It needs an elevated
+  process (`is_elevated`); `run_elevated` relaunches the current executable with the
+  `runas` verb, hidden, and waits for its exit code, which is the one UAC prompt (a
+  declined prompt is `InvalidState`). `vcam_registration` needs no elevation: it reads the
+  registered path and compares it with the DLL the host ships (`VCAM_DLL`, beside the
+  executable), ignoring case, `\\?\` and `/`. The answer is `Missing`, `Current` or
+  `Moved`, the last when a portable install was moved after registering. That comparison
+  is tested on every platform.
+
 **Not yet:** Media Foundation video decoders, encoders and the virtual camera taking
 `VideoSurface::Gpu`, and
 a `Backends` constructor, which needs all of them.
@@ -289,30 +370,41 @@ a `Backends` constructor, which needs all of them.
 packet flags, positions across a device move), the capture helpers (BGRA to NV12 with
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the H.264
-helpers (configuration check, NV12 packing, `pts` mapping), the GPU capture ring's slot choice (reuse, drop when full,
-release on resize), the credential helpers
-(target names of both kinds, blob limits, zeroing) and the virtual camera's format and
-frame checks run on every platform. The QPC clock
-test, the start-race test (a destroyed message-only window maps to `NotFound`), the
-credential limits check, the credential round trip (a uniquely named credential
-written, replaced, read and deleted in the real store, a non-UTF-8 one refused on read,
-deleted again on failure), the same through `StreamKeyStore`, and a refresh token
-through `OAuthTokenStore` beside a stream key of the same ID run on Windows. Tests against real devices, the OS encoder, the GPU and a display are platform
-tests: behind the `hw-tests` feature and `#[ignore]`d, because CI machines may have no
-audio devices, no Media Foundation, no GPU and no display
+helpers (configuration check, NV12 packing, `pts` mapping), the GPU capture ring's slot
+choice (reuse, drop when full, release on resize), the credential helpers (target names
+of both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
+the Media Foundation check's decision (edition kinds and the advice for each) and the
+video-device helpers (subtypes and frame rates to formats, repeats left out, colour
+fallbacks, NV12 and I420 copies, YUY2 to NV12, short buffers, audio pairing by container)
+run on every platform. The QPC clock test, the start-race test (a destroyed message-only
+window maps to `NotFound`), the credential limits check, the credential round trip (a
+uniquely named credential written, replaced, read and deleted in the real store, a
+non-UTF-8 one refused on read, deleted again on failure), the same through
+`StreamKeyStore`, a refresh token through `OAuthTokenStore` beside a stream key of the
+same ID, and the Media Foundation probe and edition read run on Windows. Tests against real devices, the OS encoder, the GPU and a
+display are platform tests: behind the `hw-tests` feature and `#[ignore]`d, because CI
+machines may have no audio devices, no Media Foundation, no GPU and no display
 ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
 target, stages it and checks that the shared fence passes the staged value. The capture
 tests list the displays, capture the primary display for a second, checking the
 frames' format and `pts`, start a capture of a destroyed window, which must be
-`NotFound`, and capture three times in a row in one process. The GPU capture tests read back twenty staged frames (each opaque, so a
+`NotFound`, and capture three times in a row in one process. The audio tests list the
+devices (one default each way), record the default input for a second on the media
+clock, play a quiet tone and record its loopback, check that `input_format` matches
+the opened stream for the default input and the default output's loopback, and find
+this process in the process list, record its process loopback and get `NotFound` for
+a process that isn't running. The GPU capture tests read back twenty staged frames (each opaque, so a
 read before the copy finished would show), refuse another device's queue, outlive the
 context, and hold every frame until the ring drops new ones, then release them. They
 need screen activity, so move the mouse while they run. The virtual-camera test starts
 `WindowsVcam`, opens the camera's own media source through a source reader (video
 processing on, RGB32 out), and publishes grey until Frame Server serves it back; it also
-checks that a second producer is refused and that the block is stopped after `stop`. Run
-them on a Windows machine with a microphone, speakers, a
-display and a DX12 GPU with a hardware H.264 encoder:
+checks that a second producer is refused and that the block is stopped after `stop`. The
+video-device tests list devices, formats and paired audio, capture an uncompressed format
+and the largest MJPEG format for two seconds each (checking size, format and `pts`), open
+a device twice (shared or `Busy`), and refuse an unknown device or format; an unplug test
+runs only when `JSTREAM_UNPLUG_TEST` is set. Run them on a Windows machine with a
+microphone, speakers, a display, a webcam and a DX12 GPU with a hardware H.264 encoder:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`. The
 virtual-camera test also needs the `jstream-vcam-windows` DLL registered
 ([its Hardware check](../jstream-vcam-windows/README.md#hardware-check)).

@@ -17,11 +17,18 @@ Options:
                        random token if it doesn't exist; reused if it does
   --port <port>        the port to listen on, on 127.0.0.1 (default: 0, any
                        free port; the URL is printed at startup)
+  --collection <path>  load the collection from this JSON file and save every
+                       change to it; created, empty, if it doesn't exist
+                       (default: none, the collection starts empty every run)
   --output <id>        add a stopped placeholder output (repeatable)
-  --log-dir <dir>      where log files and crash reports go (default: `logs`
-                       in the platform data directory); created if missing
+  --log-dir <dir>      where log files, crash reports and the audit log
+                       (audit.jsonl) go (default: `logs` in the platform data
+                       directory); created if missing
   --log-level <spec>   the log filter, as `target=level` directives and an
                        optional default level (default: RUST_LOG, else info)
+  --register-vcam      Windows: register the virtual camera (the DLL beside the
+                       daemon) for this machine, then exit. Asks for
+                       administrator rights once; takes no other options
   -V, --version        print the daemon and protocol versions
   -h, --help           print this help
 
@@ -30,7 +37,8 @@ with the token as `Authorization: Bearer`), then `listening on
 ws://127.0.0.1:<port>/api/v1/ws` once it serves, and runs until Ctrl-C (or SIGTERM).
 Clients: jstream-cli --url <that URL> --token-file <path>.
 
-Exit codes: 0 stopped by a signal, 1 failed to start or serve, 2 usage.
+Exit codes: 0 stopped by a signal, 1 failed to start or serve, 2 usage,
+3 Media Foundation or its AAC encoder is missing (Windows N editions).
 ";
 
 /// What the daemon serves.
@@ -40,6 +48,8 @@ pub struct Options {
     pub token_file: Option<String>,
     /// `--port`: `0` lets the OS pick a free one.
     pub port: u16,
+    /// `--collection`: the collection file. Without it the collection is not saved.
+    pub collection: Option<String>,
     /// `--output`: placeholder outputs, in the order given.
     pub outputs: Vec<OutputId>,
     /// `--log-dir`. Without it `main` uses `logs` in the platform data directory.
@@ -55,6 +65,8 @@ pub enum Invocation {
     Help,
     /// Print the versions.
     Version,
+    /// Register the virtual camera, then exit.
+    RegisterVcam,
     /// Run the engine and serve it.
     Serve(Options),
 }
@@ -63,12 +75,14 @@ pub enum Invocation {
 pub fn parse(args: &[String]) -> Result<Invocation, String> {
     let mut options = Options::default();
     let mut port = None;
+    let mut register_vcam = false;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || rest.next().ok_or_else(|| format!("`{arg}` needs a value"));
         match arg.as_str() {
             "-h" | "--help" => return Ok(Invocation::Help),
             "-V" | "--version" => return Ok(Invocation::Version),
+            "--register-vcam" => register_vcam = true,
             "--token-file" => {
                 let path = value()?;
                 if options.token_file.replace(path.clone()).is_some() {
@@ -98,15 +112,20 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                 }
             }
             "--collection" => {
-                return Err(
-                    "`--collection` is not supported yet: the engine has no persistence, \
-                     so it always starts with an empty collection"
-                        .to_owned(),
-                );
+                let path = value()?;
+                if options.collection.replace(path.clone()).is_some() {
+                    return Err(format!("`{arg}` given twice"));
+                }
             }
             other if other.starts_with('-') => return Err(format!("unknown option `{other}`")),
             other => return Err(format!("unexpected argument `{other}`")),
         }
+    }
+    if register_vcam {
+        if args.len() > 1 {
+            return Err("`--register-vcam` takes no other options".to_owned());
+        }
+        return Ok(Invocation::RegisterVcam);
     }
     options.port = port.unwrap_or(0);
     Ok(Invocation::Serve(options))
@@ -145,13 +164,14 @@ mod tests {
     fn options_are_read_in_any_order() {
         let options = serve(
             "--output out_1 --log-level debug --port 4455 --token-file /tmp/t \
-             --log-dir /tmp/logs --output out_2",
+             --collection /tmp/c.json --log-dir /tmp/logs --output out_2",
         );
         assert_eq!(
             options,
             Options {
                 token_file: Some("/tmp/t".to_owned()),
                 port: 4455,
+                collection: Some("/tmp/c.json".to_owned()),
                 outputs: vec![OutputId::new("out_1"), OutputId::new("out_2")],
                 log_dir: Some("/tmp/logs".to_owned()),
                 log_level: Some("debug".to_owned()),
@@ -174,6 +194,11 @@ mod tests {
         assert_eq!(error("--output"), "`--output` needs a value");
         assert_eq!(error("--log-dir"), "`--log-dir` needs a value");
         assert_eq!(error("--log-level"), "`--log-level` needs a value");
+        assert_eq!(error("--collection"), "`--collection` needs a value");
+        assert_eq!(
+            error("--collection a.json --collection b.json"),
+            "`--collection` given twice"
+        );
         assert_eq!(error("--log-dir a --log-dir b"), "`--log-dir` given twice");
         assert_eq!(
             error("--log-level info --log-level warn"),
@@ -200,12 +225,20 @@ mod tests {
         assert_eq!(error("serve"), "unexpected argument `serve`");
     }
 
-    /// ARCH plans `--collection`; until the engine persists anything it is refused by
-    /// name rather than reported as unknown.
     #[test]
-    fn collection_is_not_supported_yet() {
-        assert!(
-            error("--collection scenes.json").starts_with("`--collection` is not supported yet")
+    fn register_vcam_stands_alone() {
+        assert_eq!(
+            parse(&args("--register-vcam")),
+            Ok(Invocation::RegisterVcam)
         );
+        assert_eq!(
+            error("--register-vcam --port 1"),
+            "`--register-vcam` takes no other options"
+        );
+        assert_eq!(
+            error("--register-vcam --register-vcam"),
+            "`--register-vcam` takes no other options"
+        );
+        assert_eq!(parse(&args("--register-vcam --help")), Ok(Invocation::Help));
     }
 }

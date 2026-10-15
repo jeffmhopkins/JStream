@@ -3,7 +3,10 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod audio;
+mod collection;
 mod history;
+mod sources;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
@@ -69,6 +72,7 @@ fn create(scene: &str) -> Edit {
     Edit::SceneCreate {
         scene_id: SceneId::new(scene),
         name: scene.to_uppercase(),
+        role: None,
     }
 }
 
@@ -80,6 +84,7 @@ fn webcam() -> Edit {
             kind: "webcam".into(),
         },
         settings: Default::default(),
+        duplicated_from: None,
     }
 }
 
@@ -118,6 +123,14 @@ fn output_call(output: &str, start: bool) -> Call {
     }
 }
 
+fn switch_call(scene: &str) -> Call {
+    Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new(scene),
+        },
+    }
+}
+
 fn code(error: &ControlError) -> Option<&'static str> {
     error.protocol().map(ProtocolError::code)
 }
@@ -138,7 +151,8 @@ pub(crate) fn check_stale_expected_rev_is_rejected() {
     let user = connected(&engine);
     let mut events = agent.events();
     assert_eq!(batch(&user, Batch::single(create("a"))), Ok(Rev(1)));
-    assert_eq!(drain(&mut events).len(), 1);
+    // `state.changed`, and `studio.changed` for the first scene going on program.
+    assert_eq!(drain(&mut events).len(), 2);
 
     let stale = Batch::single(create("b")).expecting(Rev(0));
     let error = batch(&agent, stale).expect_err("conflict");
@@ -277,7 +291,10 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
     };
     assert_eq!(batch(&control, edits), Ok(Rev(1)));
     assert_eq!(engine.rev(), Rev(1));
-    assert_eq!(drain(&mut events).len(), 1, "one event per batch");
+    // One `state.changed` per batch; this one also put the first scene on program.
+    let first = drain(&mut events);
+    assert_eq!(first.len(), 2, "one event per batch, then studio.changed");
+    assert!(matches!(first[1], Event::StudioChanged { .. }));
 
     // The last edit fails, so none of them applies.
     let failing = Batch {
@@ -367,6 +384,7 @@ fn kinds_are_described_and_settings_checked() {
                 kind: "color".into(),
             },
             settings: serde_json::from_value(settings).expect("a settings map"),
+            duplicated_from: None,
         })
     };
     let error =
@@ -418,6 +436,9 @@ fn queries_match_the_parity_fixture() {
             output_id: OutputId::new("rec"),
             state: OutputState::Stopped,
             key_set: false,
+            encoder: None,
+            encoder_sessions: 0,
+            hardware_sessions: 0,
         })
     );
     let missing = query(
@@ -450,7 +471,8 @@ fn an_idempotent_retry_gets_the_original_result() {
         block_on(control.call(Call::Batch(keyed.clone().expecting(Rev(0))))).expect("retry");
     assert_eq!(retry.result, first.result);
     assert_eq!(engine.rev(), Rev(2));
-    assert_eq!(drain(&mut events).len(), 2, "a retry emits nothing");
+    // Two `state.changed`, and `studio.changed` for the first scene.
+    assert_eq!(drain(&mut events).len(), 3, "a retry emits nothing");
 
     // Keys are per client: another client's identical key is a new batch.
     let other = connected(&engine);
@@ -492,8 +514,13 @@ fn events_reach_every_subscriber_in_order() {
         Event::StateChanged {
             rev: Rev(1),
             client_id: agent.client_id().expect("agent"),
-            request_id: Some(by_agent.id),
+            request_id: Some(by_agent.id.clone()),
             cause: None,
+        },
+        Event::StudioChanged {
+            program_scene: Some(SceneId::new("a")),
+            client_id: agent.client_id().expect("agent"),
+            request_id: Some(by_agent.id),
         },
         Event::StateChanged {
             rev: Rev(2),
@@ -514,6 +541,114 @@ fn events_reach_every_subscriber_in_order() {
     // Queries emit nothing.
     query(&user, Query::StateGet).expect("state.get");
     assert_eq!(drain(&mut user_events), vec![]);
+}
+
+/// `scene.switch` puts a scene on program without an edit: no `rev`, `studio.changed`
+/// to every client, `studio.get` reads it back. The first scene goes on program by
+/// itself, a deleted program scene gives way to the first one left, and reordering
+/// scenes doesn't move it (ADR-0030).
+#[test]
+fn scene_switch_changes_program_without_an_edit() {
+    let engine = Engine::new();
+    let user = connected(&engine);
+    let agent = connected(&engine);
+    let mut events = user.events();
+    let program = |control: &dyn Control| match query(control, Query::StudioGet) {
+        Ok(QueryResult::StudioGet { program_scene }) => program_scene,
+        other => panic!("not a studio result: {other:?}"),
+    };
+    let switched =
+        |scene: &str, client: &InProcessControl, request: RequestId| Event::StudioChanged {
+            program_scene: Some(SceneId::new(scene)),
+            client_id: client.client_id().expect("connected"),
+            request_id: Some(request),
+        };
+    assert_eq!(program(&user), None);
+    assert_eq!(
+        code(&block_on(agent.call(switch_call("a"))).expect_err("no scene yet")),
+        Some("not_found")
+    );
+
+    let built = block_on(user.call(Call::Batch(Batch {
+        edits: vec![create("a"), create("b")],
+        expected_rev: None,
+        idempotency_key: None,
+    })))
+    .expect("scenes");
+    assert_eq!(
+        drain(&mut events),
+        vec![
+            Event::StateChanged {
+                rev: Rev(1),
+                client_id: user.client_id().expect("connected"),
+                request_id: Some(built.id.clone()),
+                cause: None,
+            },
+            switched("a", &user, built.id),
+        ]
+    );
+    assert_eq!(program(&agent), Some(SceneId::new("a")));
+
+    let switch = block_on(agent.call(switch_call("b"))).expect("switch");
+    assert_eq!(switch.result, CallResult::Action {});
+    assert_eq!(engine.rev(), Rev(1), "a switch is not an edit");
+    assert_eq!(drain(&mut events), vec![switched("b", &agent, switch.id)]);
+    assert_eq!(program(&user), Some(SceneId::new("b")));
+    // Switching to what is already on program succeeds and says nothing.
+    block_on(user.call(switch_call("b"))).expect("same scene");
+    assert_eq!(drain(&mut events), vec![]);
+    let error = block_on(user.call(switch_call("ghost"))).expect_err("unknown scene");
+    assert_eq!(
+        error.protocol(),
+        Some(&ProtocolError::NotFound {
+            entity: EntityKind::Scene,
+            id: "ghost".into(),
+        })
+    );
+    assert_eq!(drain(&mut events), vec![]);
+
+    // Reordering scenes leaves program where it is.
+    batch(
+        &user,
+        Batch::single(Edit::SceneReorder {
+            scene_id: SceneId::new("a"),
+            index: 1,
+        }),
+    )
+    .expect("reorder");
+    assert!(matches!(
+        drain(&mut events).as_slice(),
+        [Event::StateChanged { rev: Rev(2), .. }]
+    ));
+    assert_eq!(program(&user), Some(SceneId::new("b")));
+
+    // Deleting the program scene puts the first scene left on program, after the
+    // batch's own `state.changed`; deleting the last one leaves none.
+    let deleted = block_on(agent.call(Call::Batch(Batch::single(Edit::SceneDelete {
+        scene_id: SceneId::new("b"),
+    }))))
+    .expect("delete");
+    let seen = drain(&mut events);
+    assert!(matches!(seen[0], Event::StateChanged { rev: Rev(3), .. }));
+    assert_eq!(seen[1..], [switched("a", &agent, deleted.id)]);
+    batch(
+        &agent,
+        Batch::single(Edit::SceneDelete {
+            scene_id: SceneId::new("a"),
+        }),
+    )
+    .expect("delete the last");
+    assert!(matches!(
+        drain(&mut events).as_slice(),
+        [
+            Event::StateChanged { rev: Rev(4), .. },
+            Event::StudioChanged {
+                program_scene: None,
+                ..
+            }
+        ]
+    ));
+    assert_eq!(program(&user), None);
 }
 
 #[test]
@@ -611,6 +746,10 @@ fn streams_end_with_their_session_or_the_engine() {
         poll_event(&mut leaving_events, Waker::noop()),
         Poll::Ready(Some(Event::StateChanged { rev: Rev(1), .. }))
     ));
+    assert!(matches!(
+        poll_event(&mut leaving_events, Waker::noop()),
+        Poll::Ready(Some(Event::StudioChanged { .. }))
+    ));
     assert_eq!(
         poll_event(&mut leaving_events, Waker::noop()),
         Poll::Ready(None)
@@ -620,7 +759,8 @@ fn streams_end_with_their_session_or_the_engine() {
         poll_event(&mut leaving_events, Waker::noop()),
         Poll::Ready(None)
     );
-    assert_eq!(drain(&mut staying_events).len(), 2);
+    // Two `state.changed`, and `studio.changed` for the first scene.
+    assert_eq!(drain(&mut staying_events).len(), 3);
 
     // Subscriptions opened later see only later events.
     let mut late = staying.events();
@@ -682,13 +822,20 @@ fn concurrent_sessions_see_every_event_in_rev_order() {
 
     let total = u64::try_from(THREADS * BATCHES).expect("small");
     assert_eq!(engine.rev(), Rev(total));
+    // The first batch also puts its scene on program; no later one moves it.
+    let mut program_changes = 0;
     let revs: Vec<u64> = drain(&mut events)
         .into_iter()
-        .map(|event| match event {
-            Event::StateChanged { rev, .. } => rev.0,
+        .filter_map(|event| match event {
+            Event::StateChanged { rev, .. } => Some(rev.0),
+            Event::StudioChanged { .. } => {
+                program_changes += 1;
+                None
+            }
             other => panic!("unexpected event {other:?}"),
         })
         .collect();
+    assert_eq!(program_changes, 1);
     assert_eq!(revs, (1..=total).collect::<Vec<_>>());
 }
 
@@ -707,16 +854,24 @@ fn the_engine_answers_like_the_mock() {
                 request_id,
                 cause: None,
             },
+            Event::StudioChanged {
+                program_scene,
+                request_id,
+                ..
+            } => Event::StudioChanged {
+                program_scene,
+                client_id: ClientId::new("client"),
+                request_id,
+            },
             other => other,
         }
     }
     /// Error messages may differ between implementations; codes and fields may not.
     fn comparable(result: Result<CallResult, ControlError>) -> Result<CallResult, ProtocolError> {
         result.map_err(|error| match error.protocol() {
-            Some(ProtocolError::InvalidArgument { field, .. }) => ProtocolError::InvalidArgument {
-                field: field.clone(),
-                reason: String::new(),
-            },
+            Some(ProtocolError::InvalidArgument { field, .. }) => {
+                ProtocolError::invalid_argument(field.clone(), String::new())
+            }
             Some(ProtocolError::ActionFailed { .. }) => ProtocolError::ActionFailed {
                 reason: String::new(),
             },
@@ -731,6 +886,15 @@ fn the_engine_answers_like_the_mock() {
         Call::Batch(Batch::single(webcam())),
         Call::Batch(Batch::single(create("a")).expecting(Rev(1))),
         Call::Batch(Batch::single(add("a", "i9", "webcam")).expecting(Rev(2))),
+        // The parity collection reorders `b` first, so `b` goes on program: switching to
+        // `a` moves it, a second switch is a no-op, and deleting `a` below (`b` can't go
+        // while `a` nests it) moves it back to `b`.
+        switch_call("a"),
+        switch_call("a"),
+        switch_call("ghost"),
+        Call::Query {
+            query: Query::StudioGet,
+        },
         Call::Batch(Batch::single(Edit::SourceDelete {
             source_id: SourceId::new("webcam"),
         })),
@@ -747,6 +911,16 @@ fn the_engine_answers_like_the_mock() {
         Call::Batch(Batch::single(Edit::SceneDelete {
             scene_id: SceneId::new("a"),
         })),
+        Call::Query {
+            query: Query::StudioGet,
+        },
+        // Undoing the delete brings `a` back, and program stays on `b`.
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Undo,
+        )),
+        Call::Query {
+            query: Query::StudioGet,
+        },
         output_call("yt", true),
         output_call("yt", true),
         output_call("yt", false),
@@ -785,6 +959,16 @@ fn the_engine_answers_like_the_mock() {
     let mock_events: Vec<Event> = drain(&mut mock_events).into_iter().map(normalize).collect();
     assert_eq!(real_events, mock_events);
     assert!(real_events.len() >= 5);
+    let programs: Vec<_> = real_events
+        .iter()
+        .filter_map(|event| match event {
+            Event::StudioChanged { program_scene, .. } => {
+                Some(program_scene.as_ref().map(SceneId::as_str))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(programs, [Some("b"), Some("a"), Some("b")]);
 }
 
 /// Backends without a publish target do not start a pipeline and leave the output
@@ -828,7 +1012,9 @@ fn output_start_publishes_fake_audio_and_video() {
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_mux::flv::TagType;
     use jstream_platform::Backends;
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
     use std::sync::Arc;
 
     use crate::RecordingPublish;
@@ -838,6 +1024,7 @@ fn output_start_publishes_fake_audio_and_video() {
     let size = FrameSize::new(320, 180).expect("size");
     let backends = Backends {
         clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(FakeCapture::new(clock.clone(), size)),
         audio: Arc::new(audio.clone()),
         codecs: Arc::new(FakeCodecs),
@@ -912,7 +1099,9 @@ fn output_stop_during_start_cancels_the_pipeline() {
     use std::time::Duration;
 
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
     use jstream_platform::{Backends, Capture, CaptureTarget, PlatformError};
 
     struct Hold {
@@ -969,6 +1158,7 @@ fn output_stop_during_start_cancels_the_pipeline() {
     let release = Hold::new();
     let backends = Backends {
         clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(HoldCapture {
             inner: FakeCapture::new(clock, size),
             entered: Arc::clone(&entered),
@@ -1033,7 +1223,9 @@ fn output_publish_failure_settles_failed() {
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_mux::flv::FlvTag;
     use jstream_platform::Backends;
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
 
     use crate::{LivePublish, PublishError};
 
@@ -1069,6 +1261,7 @@ fn output_publish_failure_settles_failed() {
     let fail = Arc::new(AtomicBool::new(false));
     let backends = Backends {
         clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(FakeCapture::new(clock, size)),
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
@@ -1135,7 +1328,9 @@ fn output_start_returns_after_a_panicking_teardown() {
 
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_mux::flv::FlvTag;
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
     use jstream_platform::{
         AudioInputHandler, AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget,
         AudioStream, Backends, PlatformError,
@@ -1199,6 +1394,17 @@ fn output_start_returns_after_a_panicking_teardown() {
             self.inner.devices()
         }
 
+        fn processes(&self) -> Result<Vec<jstream_platform::AudioProcess>, PlatformError> {
+            self.inner.processes()
+        }
+
+        fn input_format(
+            &self,
+            target: &AudioInputTarget,
+        ) -> Result<jstream_media::AudioFormat, PlatformError> {
+            self.inner.input_format(target)
+        }
+
         fn open_input(
             &self,
             target: &AudioInputTarget,
@@ -1232,6 +1438,7 @@ fn output_start_returns_after_a_panicking_teardown() {
     let fail = Arc::new(AtomicBool::new(false));
     let backends = Backends {
         clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(FakeCapture::new(clock, size)),
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
@@ -1305,7 +1512,9 @@ fn dropping_the_engine_stops_the_pipeline() {
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_mux::flv::FlvTag;
     use jstream_platform::Backends;
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
 
     use crate::{LivePublish, PublishError};
 
@@ -1334,6 +1543,7 @@ fn dropping_the_engine_stops_the_pipeline() {
     let finished = Arc::new(AtomicBool::new(false));
     let backends = Backends {
         clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(FakeCapture::new(clock, size)),
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
@@ -1385,6 +1595,86 @@ fn output_state(control: &dyn Control, output: &str) -> OutputState {
         QueryResult::OutputStatus { state, .. } => state,
         other => panic!("not an output status: {other:?}"),
     }
+}
+
+/// Edits and stored frames republish the render snapshot only when the program mix
+/// changes. A `display` source shows the pipeline's capture until a frame is stored
+/// for it, and a frame for a source nothing on program shows publishes nothing.
+#[test]
+fn the_render_snapshot_follows_the_program_mix() {
+    let engine = Engine::new();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let generation = || hub.load().generation();
+    assert_eq!(generation(), 1);
+    let display = Edit::SourceCreate {
+        source_id: SourceId::new("screen"),
+        name: "Screen".into(),
+        kind: SourceKind::Builtin {
+            kind: "display".into(),
+        },
+        settings: Default::default(),
+        duplicated_from: None,
+    };
+    let edits = Batch {
+        edits: vec![create("main"), display, add("main", "shown", "screen")],
+        expected_rev: None,
+        idempotency_key: None,
+    };
+    batch(&control, edits).expect("batch");
+    assert_eq!(generation(), 2);
+    assert!(
+        hub.load().shot().uses_capture(),
+        "no stored frame: the capture"
+    );
+
+    engine
+        .set_source_frame(&SourceId::new("elsewhere"), 1, 1, &[0, 0, 0, 255])
+        .expect("frame");
+    assert_eq!(generation(), 2, "nothing on program shows that source");
+
+    engine
+        .set_source_frame(&SourceId::new("screen"), 1, 1, &[0, 0, 0, 255])
+        .expect("frame");
+    assert_eq!(generation(), 3);
+    assert!(!hub.load().shot().uses_capture(), "a stored frame wins");
+    engine
+        .set_source_frame(&SourceId::new("screen"), 1, 1, &[9, 9, 9, 255])
+        .expect("frame");
+    assert_eq!(generation(), 4, "a new frame is a new version");
+}
+
+/// The render thread's program mix follows program: a switch republishes it with the
+/// new scene, a switch to the scene already on program publishes nothing, and deleting
+/// the program scene moves the mix to the first scene left (ADR-0030).
+#[test]
+fn the_render_snapshot_follows_scene_switch() {
+    let engine = Engine::new();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let program = || hub.load().shot().program().map(|id| id.as_str().to_owned());
+    batch(&control, edits(vec![create("a"), create("b")])).expect("scenes");
+    assert_eq!(program().as_deref(), Some("a"));
+    let generation = hub.load().generation();
+
+    block_on(control.call(switch_call("b"))).expect("switch");
+    assert_eq!(program().as_deref(), Some("b"));
+    assert_eq!(hub.load().generation(), generation + 1);
+    block_on(control.call(switch_call("b"))).expect("same scene");
+    assert_eq!(
+        hub.load().generation(),
+        generation + 1,
+        "nothing new to draw"
+    );
+
+    batch(
+        &control,
+        Batch::single(Edit::SceneDelete {
+            scene_id: SceneId::new("b"),
+        }),
+    )
+    .expect("delete the program scene");
+    assert_eq!(program().as_deref(), Some("a"));
 }
 
 /// How long a GPU test's `output.start` waits for lavapipe or WARP to open. The
@@ -1499,7 +1789,10 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
     assert_eq!(built, Rev(1));
     assert!(matches!(
         drain(&mut events).as_slice(),
-        [Event::StateChanged { rev: Rev(1), .. }]
+        [
+            Event::StateChanged { rev: Rev(1), .. },
+            Event::StudioChanged { .. }
+        ]
     ));
     engine
         .set_source_frame(
@@ -1536,6 +1829,50 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
     assert_eq!(rev, Rev(2));
     assert_eq!(at(&rgba, width, 640, 360), [0, 0, 0, 255]);
 
+    // The snapshot follows program: a second scene shows only once it is switched to.
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                create("other"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("green"),
+                    name: "Green".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "webcam".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                add("other", "fill", "green"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        },
+    )
+    .expect("second scene");
+    engine
+        .set_source_frame(
+            &SourceId::new("green"),
+            1920,
+            1080,
+            &solid(1920, 1080, [0, 255, 0, 255]),
+        )
+        .expect("frame");
+    let before = skip(query(&control, Query::VideoSnapshot)).expect("adapter already opened");
+    let (_, width, rgba) = image(&before);
+    assert_eq!(
+        at(&rgba, width, 640, 360),
+        [0, 0, 0, 255],
+        "main is still on"
+    );
+    block_on(control.call(switch_call("other"))).expect("switch");
+    let after = skip(query(&control, Query::VideoSnapshot)).expect("adapter already opened");
+    let (rev, width, rgba) = image(&after);
+    assert_eq!(rev, Rev(3), "a switch is not an edit");
+    assert_eq!(at(&rgba, width, 640, 360), [0, 255, 0, 255]);
+    drain(&mut events);
+
     // A scene source is the inner scene's composite, placed in the program scene.
     let nested = Engine::new();
     let control = connected(&nested);
@@ -1554,6 +1891,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
                         scene_id: SceneId::new("inner"),
                     },
                     settings: Default::default(),
+                    duplicated_from: None,
                 },
                 add("program", "nest", "inner_src"),
             ],
@@ -1768,6 +2106,7 @@ fn deleting_a_source_drops_its_frame() {
 mod cpu_pipeline {
     use super::{
         batch, block_on, code, connected, drain, edits, output_call, output_state, output_steps,
+        query,
     };
     use crate::InProcessControl;
     use crate::runtime::{DrawFn, OpenDraw, cpu_draw};
@@ -1775,7 +2114,9 @@ mod cpu_pipeline {
     use jstream_control::{Control, EventStream};
     use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, PixelFormat, Timebase};
     use jstream_mux::flv::{FlvTag, TagType};
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
     use jstream_platform::{
         AudioDeviceInfo, AudioEncoder, AudioEncoderConfig, AudioInputHandler, AudioInputTarget,
         AudioIo, AudioOutputHandler, AudioOutputTarget, AudioStream, Backends, Capture,
@@ -1783,7 +2124,10 @@ mod cpu_pipeline {
         MediaClock, PlatformError, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig,
         VideoEncoder, VideoEncoderConfig, VideoSurface,
     };
-    use jstream_protocol::{Edit, Event, OutputId, OutputKind, OutputState, RecordContainer};
+    use jstream_protocol::{
+        Edit, EncoderProfile, EncoderProfileId, EncoderSessionInfo, Event, OutputId, OutputKind,
+        OutputState, Query, QueryResult, RateControl, RecordContainer,
+    };
     use std::panic::{self, AssertUnwindSafe};
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{Arc, Condvar, Mutex, mpsc};
@@ -1805,6 +2149,7 @@ mod cpu_pipeline {
         let size = FrameSize::new(64, 36).expect("size");
         let backends = Backends {
             clock: Arc::new(clock.clone()),
+            video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
             capture: Arc::new(FakeCapture::new(clock.clone(), size)),
             audio: Arc::new(audio.clone()),
             codecs: Arc::new(FakeCodecs),
@@ -1822,6 +2167,7 @@ mod cpu_pipeline {
     fn share(backends: &Backends) -> Backends {
         Backends {
             clock: Arc::clone(&backends.clock),
+            video_devices: Arc::clone(&backends.video_devices),
             capture: Arc::clone(&backends.capture),
             audio: Arc::clone(&backends.audio),
             codecs: Arc::clone(&backends.codecs),
@@ -1836,6 +2182,77 @@ mod cpu_pipeline {
             .with_backends(backends)
             .with_draw(draw)
             .with_publish(publish)
+    }
+
+    /// The render thread draws the render snapshot the control side published, without
+    /// the collection lock: a batch that changes the program mix reaches the next ticks.
+    /// The thread stamps the generation it adopted, and a stopped output holds no
+    /// gesture up. A batch that changes nothing the mix draws publishes nothing new.
+    #[test]
+    fn the_render_thread_adopts_published_snapshots() {
+        use super::{batch, create};
+        use jstream_protocol::{Batch, SceneId};
+
+        let fakes = fakes();
+        let seen: Arc<Mutex<Vec<Option<SceneId>>>> = Arc::default();
+        let draw: OpenDraw = {
+            let seen = Arc::clone(&seen);
+            Arc::new(move || {
+                let seen = Arc::clone(&seen);
+                let mut inner = (cpu_draw())()?;
+                let draw: DrawFn = Box::new(move |shot, size, capture, out| {
+                    seen.lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push(shot.program().cloned());
+                    inner(shot, size, capture, out)
+                });
+                Ok(draw)
+            })
+        };
+        let engine = engine(
+            share(&fakes.backends),
+            draw,
+            Box::new(RecordingPublish::new()),
+        );
+        let hub = engine.render_hub();
+        let last = || {
+            seen.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .last()
+                .cloned()
+        };
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || last() == Some(None)),
+            "the empty collection was drawn"
+        );
+        assert!(hub.caught_up(1) && !hub.caught_up(2));
+
+        let one = |edit| Batch {
+            edits: vec![edit],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        batch(&control, one(create("main"))).expect("scene.create");
+        assert_eq!(hub.load().generation(), 2);
+        let main = Some(SceneId::new("main"));
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || last() == Some(main.clone())),
+            "the next ticks draw the new program scene"
+        );
+        assert!(hub.caught_up(2) && !hub.caught_up(3));
+
+        // A second scene is not on program and nothing nests it.
+        batch(&control, one(create("spare"))).expect("scene.create");
+        assert_eq!(hub.load().generation(), 2, "nothing the mix draws changed");
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        assert!(
+            hub.caught_up(u64::MAX - 1),
+            "a stopped render thread holds nothing up"
+        );
     }
 
     /// Feeds both inputs and moves the clock on by 50 ms.
@@ -2228,9 +2645,9 @@ mod cpu_pipeline {
             Arc::new(move || {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())()?;
-                let draw: DrawFn = Box::new(move |size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(size, rgba, out)
+                    inner(shot, size, rgba, out)
                 });
                 Ok(draw)
             })
@@ -2362,11 +2779,9 @@ mod cpu_pipeline {
 
     // --- Item: a failed start's teardown does not overlap the next start.
 
-    /// Fails its first tag. `finish`, which the output thread calls after it has sent
-    /// that failure, opens `sent`.
-    struct FailFirstTag {
-        sent: Arc<Hold>,
-    }
+    /// Fails its first tag, the FLV header the output thread sends before the start
+    /// returns, so the start sees the failure.
+    struct FailFirstTag;
 
     impl LivePublish for FailFirstTag {
         fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
@@ -2378,7 +2793,6 @@ mod cpu_pipeline {
         }
 
         fn finish(&mut self) -> Result<(), PublishError> {
-            self.sent.signal();
             Ok(())
         }
     }
@@ -2417,6 +2831,17 @@ mod cpu_pipeline {
     impl AudioIo for SlowTeardownAudio {
         fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
             self.inner.devices()
+        }
+
+        fn processes(&self) -> Result<Vec<jstream_platform::AudioProcess>, PlatformError> {
+            self.inner.processes()
+        }
+
+        fn input_format(
+            &self,
+            target: &AudioInputTarget,
+        ) -> Result<jstream_media::AudioFormat, PlatformError> {
+            self.inner.input_format(target)
         }
 
         fn open_input(
@@ -2470,7 +2895,6 @@ mod cpu_pipeline {
         let tearing_down = Arc::new(AtomicBool::new(false));
         let overlapped = Arc::new(AtomicBool::new(false));
         let release = Arc::new(Hold::default());
-        let sent = Arc::new(Hold::default());
         fakes.backends.audio = Arc::new(SlowTeardownAudio {
             inner: fakes.audio.clone(),
             armed: Arc::new(AtomicBool::new(true)),
@@ -2482,22 +2906,7 @@ mod cpu_pipeline {
             tearing_down: Arc::clone(&tearing_down),
             overlapped: Arc::clone(&overlapped),
         });
-        // The compositor "opens" only once the output thread has reported the publish
-        // failure, so the start sees that failure right after `launch` returns.
-        let draw: OpenDraw = {
-            let sent = Arc::clone(&sent);
-            Arc::new(move || {
-                sent.wait();
-                (cpu_draw())()
-            })
-        };
-        let engine = engine(
-            share(&fakes.backends),
-            draw,
-            Box::new(FailFirstTag {
-                sent: Arc::clone(&sent),
-            }),
-        );
+        let engine = engine(share(&fakes.backends), cpu_draw(), Box::new(FailFirstTag));
         let status = connected(&engine);
         let mut events = status.events();
         let first = connected(&engine);
@@ -2577,6 +2986,17 @@ mod cpu_pipeline {
     impl AudioIo for PanicOnDropAudio {
         fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
             self.inner.devices()
+        }
+
+        fn processes(&self) -> Result<Vec<jstream_platform::AudioProcess>, PlatformError> {
+            self.inner.processes()
+        }
+
+        fn input_format(
+            &self,
+            target: &AudioInputTarget,
+        ) -> Result<jstream_media::AudioFormat, PlatformError> {
+            self.inner.input_format(target)
         }
 
         fn open_input(
@@ -2969,6 +3389,90 @@ mod cpu_pipeline {
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
     }
 
+    /// A publish target whose send, once `stalled`, blocks until `release` fires (or
+    /// 30 s pass) and ignores [`LivePublish::stop_by`]: a destination that neither
+    /// looks at the deadline nor can be cut short. Records when it returns.
+    struct BlockedPeer {
+        stalled: Arc<AtomicBool>,
+        sent: Arc<AtomicU64>,
+        release: mpsc::Receiver<()>,
+        returned: Arc<AtomicBool>,
+    }
+
+    impl LivePublish for BlockedPeer {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.stalled.load(Ordering::Acquire) {
+                let _ = self.release.recv_timeout(Duration::from_secs(30));
+                self.returned.store(true, Ordering::Release);
+            }
+            self.sent.fetch_add(1, Ordering::AcqRel);
+            Ok(())
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+    }
+
+    /// #138: a send that blocks for good, ignoring the stop deadline, cannot hold
+    /// `output.stop` either. The stop returns about `STOP_DRAIN` after it began and
+    /// settles `stopped`, before the send has returned; the output thread ends once it
+    /// does. Before, the stop waited out the blocked send (30 s here).
+    #[test]
+    fn a_send_that_ignores_the_stop_deadline_cannot_hold_output_stop() {
+        use crate::runtime::STOP_DRAIN;
+
+        let fakes = fakes();
+        let stalled = Arc::new(AtomicBool::new(false));
+        let sent = Arc::new(AtomicU64::new(0));
+        let returned = Arc::new(AtomicBool::new(false));
+        let (release, release_rx) = mpsc::channel();
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(BlockedPeer {
+                stalled: Arc::clone(&stalled),
+                sent: Arc::clone(&sent),
+                release: release_rx,
+                returned: Arc::clone(&returned),
+            }),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || sent.load(Ordering::Acquire)
+                >= 5),
+            "nothing was published"
+        );
+
+        stalled.store(true, Ordering::Release);
+        for _ in 0..10 {
+            pump(&fakes.clock, &fakes.audio);
+        }
+        drain(&mut events);
+
+        let started = Instant::now();
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        let took = started.elapsed();
+        let still_blocked = !returned.load(Ordering::Acquire);
+        // Lets the left-behind output thread end.
+        let _ = release.send(());
+        assert!(
+            took < STOP_DRAIN + Duration::from_secs(3),
+            "output.stop took {took:?} behind a send that ignores the deadline"
+        );
+        assert!(
+            still_blocked,
+            "the send returned before the stop did, so nothing was left behind"
+        );
+        assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
+    }
+
     // --- Item: a recording output writes fragmented MP4 to the path it names.
 
     /// A directory under the system temp dir, removed on drop.
@@ -3172,6 +3676,222 @@ mod cpu_pipeline {
         assert!(path.exists(), "the second start did not record");
     }
 
+    // --- Item: outputs that encode the same mix with the same profile share one
+    // encoder session (ADR-0027), so a recording can run while streaming.
+
+    /// The `yt` publish output and the `rec` recording output to `path`, on one engine.
+    fn streaming_and_recording(
+        fakes: &Fakes,
+        draw: OpenDraw,
+        publish: &RecordingPublish,
+        path: &std::path::Path,
+    ) -> (Engine, InProcessControl, EventStream) {
+        let engine = engine(share(&fakes.backends), draw, Box::new(publish.clone()));
+        let control = connected(&engine);
+        let events = control.events();
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: OutputKind::Record {
+                    path: path.to_str().expect("a UTF-8 temp path").into(),
+                    container: RecordContainer::Mp4,
+                },
+            }]),
+        )
+        .expect("output.create");
+        (engine, control, events)
+    }
+
+    /// `output.status` for `id`: its state, its encoder session, and the sessions open.
+    fn encoder_status(
+        control: &dyn Control,
+        id: &str,
+    ) -> (OutputState, Option<EncoderSessionInfo>, u32, u32) {
+        match query(
+            control,
+            Query::OutputStatus {
+                output_id: OutputId::new(id),
+            },
+        ) {
+            Ok(QueryResult::OutputStatus {
+                state,
+                encoder,
+                encoder_sessions,
+                hardware_sessions,
+                ..
+            }) => (state, encoder, encoder_sessions, hardware_sessions),
+            other => panic!("not an output status: {other:?}"),
+        }
+    }
+
+    fn video_tags(publish: &RecordingPublish) -> usize {
+        publish
+            .tags()
+            .iter()
+            .filter(|tag| tag.tag_type == TagType::Video)
+            .count()
+    }
+
+    /// Recording while streaming on the default profile opens one encoder session that
+    /// both outputs report sharing. Stopping the recording finishes its file and leaves
+    /// the stream running on the same session.
+    #[test]
+    fn a_recording_shares_the_streams_encoder() {
+        let dir = TempDir::new("shared");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &path);
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        for (id, other) in [("yt", "rec"), ("rec", "yt")] {
+            let (state, encoder, sessions, hardware) = encoder_status(&control, id);
+            assert_eq!(state, OutputState::Active, "{id}");
+            assert_eq!(
+                encoder,
+                Some(EncoderSessionInfo {
+                    profile_id: None,
+                    shared_with: vec![OutputId::new(other)],
+                    hardware: false,
+                }),
+                "{id}"
+            );
+            assert_eq!((sessions, hardware), (1, 0), "{id}");
+        }
+
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine
+                    .output_stats_of(&OutputId::new("rec"))
+                    .is_some_and(|stats| stats.video_subscriber.delivered >= 70)
+                    && video_tags(&publish) >= 70
+            }),
+            "media never reached both outputs"
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+
+        let (state, encoder, sessions, _) = encoder_status(&control, "yt");
+        assert_eq!(state, OutputState::Active);
+        assert_eq!(encoder.map(|encoder| encoder.shared_with), Some(vec![]));
+        assert_eq!(sessions, 1);
+        let before = video_tags(&publish);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || video_tags(&publish)
+                >= before + 30),
+            "the stream stopped with the recording"
+        );
+
+        let bytes = std::fs::read(&path).expect("the finished recording");
+        let found = boxes(&bytes);
+        assert_eq!(found.first().map(String::as_str), Some("ftyp"), "{found:?}");
+        assert_eq!(found.get(1).map(String::as_str), Some("moov"), "{found:?}");
+        assert!(found.iter().any(|name| name == "moof"), "{found:?}");
+
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+        assert_eq!(encoder_status(&control, "yt").2, 0);
+    }
+
+    /// A program-stage failure fails every output on it. A start after that waits for
+    /// the failed stage to go and opens a new one.
+    #[test]
+    fn a_render_panic_fails_every_output() {
+        let dir = TempDir::new("both-fail");
+        let fakes = fakes();
+        let armed = Arc::new(AtomicBool::new(false));
+        let draw: OpenDraw = {
+            let armed = Arc::clone(&armed);
+            Arc::new(move || {
+                let armed = Arc::clone(&armed);
+                let mut inner = (cpu_draw())()?;
+                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
+                    assert!(!armed.load(Ordering::Acquire), "compositor blew up");
+                    inner(shot, size, rgba, out)
+                });
+                Ok(draw)
+            })
+        };
+        let publish = RecordingPublish::new();
+        let (engine, control, _events) =
+            streaming_and_recording(&fakes, draw, &publish, &dir.join("show.mp4"));
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        assert!(pump_until(&fakes.clock, &fakes.audio, || readbacks(
+            &engine
+        ) >= 2));
+
+        armed.store(true, Ordering::Release);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                output_state(&control, "yt") == OutputState::Failed
+                    && output_state(&control, "rec") == OutputState::Failed
+                    && engine.output_stats().is_none()
+            }),
+            "a render panic left yt {:?} and rec {:?}",
+            output_state(&control, "yt"),
+            output_state(&control, "rec")
+        );
+
+        armed.store(false, Ordering::Release);
+        let engine = engine.with_publish(Box::new(RecordingPublish::new()));
+        std::fs::remove_file(dir.join("show.mp4")).ok();
+        block_on(control.call(output_call("yt", true))).expect("yt restart");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || readbacks(&engine) >= 2),
+            "the new program stage never drew"
+        );
+        assert_eq!(output_state(&control, "yt"), OutputState::Active);
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
+
+    /// Outputs on different profiles each get a session of their own.
+    #[test]
+    fn different_profiles_open_separate_sessions() {
+        let dir = TempDir::new("separate");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (_engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &path);
+        let mut profile = EncoderProfile::DEFAULT;
+        profile.video.rate_control = RateControl::Cbr { kbps: 6000 };
+        batch(
+            &control,
+            edits(vec![
+                Edit::EncoderCreate {
+                    profile_id: EncoderProfileId::new("hq"),
+                    name: "Recording".into(),
+                    profile,
+                },
+                Edit::OutputSetEncoder {
+                    output_id: OutputId::new("rec"),
+                    profile_id: Some(EncoderProfileId::new("hq")),
+                },
+            ]),
+        )
+        .expect("encoder edits");
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (_, yt, sessions, _) = encoder_status(&control, "yt");
+        let (_, rec, _, _) = encoder_status(&control, "rec");
+        assert_eq!(sessions, 2);
+        assert_eq!(
+            yt.map(|encoder| (encoder.profile_id, encoder.shared_with)),
+            Some((None, vec![]))
+        );
+        assert_eq!(
+            rec.map(|encoder| (encoder.profile_id, encoder.shared_with)),
+            Some((Some(EncoderProfileId::new("hq")), vec![]))
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
+
     // --- Item: the virtual camera publishes the program, video only.
 
     /// What a [`ScriptedVcam`] saw, shared with the test.
@@ -3179,8 +3899,8 @@ mod cpu_pipeline {
     struct VcamLog {
         starts: Vec<VcamFormat>,
         stops: u64,
-        /// The first pixel of every frame published, as given (BGRA).
-        pixels: Vec<[u8; 4]>,
+        /// The first and the middle pixel of every frame published, as given (BGRA).
+        pixels: Vec<([u8; 4], [u8; 4])>,
         started: bool,
         /// Refuse `start` with `Unsupported`.
         refuse: bool,
@@ -3224,8 +3944,13 @@ mod cpu_pipeline {
             let info = frame.info();
             assert_eq!(info.format, PixelFormat::Bgra8);
             assert_eq!(Some(info.size), log.starts.last().map(|f| f.size));
-            let row = frame.row(0, 0).expect("a first row");
-            log.pixels.push([row[0], row[1], row[2], row[3]]);
+            let pixel = |x: u32, y: u32| {
+                let row = frame.row(0, y).expect("a row");
+                let at = x as usize * 4;
+                [row[at], row[at + 1], row[at + 2], row[at + 3]]
+            };
+            let mid = (info.size.width() / 2, info.size.height() / 2);
+            log.pixels.push((pixel(0, 0), pixel(mid.0, mid.1)));
             Ok(())
         }
 
@@ -3244,39 +3969,48 @@ mod cpu_pipeline {
         }
     }
 
-    /// A draw that fills the canvas with one RGBA colour, so the test can tell the
-    /// camera got the composite, swizzled to BGRA.
+    /// A draw that fills the program frame with one RGBA colour, so the test can tell
+    /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
         Arc::new(move || {
-            let draw: DrawFn = Box::new(move |canvas: FrameSize, _, out: &mut Vec<u8>| {
+            let draw: DrawFn = Box::new(move |_, size: FrameSize, _, out: &mut Vec<u8>| {
                 out.clear();
-                for _ in 0..canvas.width() as usize * canvas.height() as usize {
+                for _ in 0..size.width() as usize * size.height() as usize {
                     out.extend_from_slice(&rgba);
                 }
-                Ok(())
+                Ok(None)
             });
             Ok(draw)
         })
     }
 
-    /// An engine whose backends have `vcam` (or none), a 64x36 canvas, and the virtual
-    /// camera output `cam` created through the protocol. No publish target or opener.
+    /// An engine whose backends have `vcam` (or none), a `canvas`, and the virtual
+    /// camera output `cam` created through the protocol. The program frame is the fake
+    /// capture's 64x36. No publish target or opener unless `publish` is given, for an
+    /// RTMP output `yt` beside it.
     fn vcam_engine(
         fakes: &Fakes,
         draw: OpenDraw,
         vcam: Option<Box<dyn VcamSink>>,
+        canvas: (u32, u32),
+        publish: Option<Box<dyn LivePublish>>,
     ) -> (Engine, InProcessControl, EventStream) {
         let mut backends = share(&fakes.backends);
         backends.vcam = vcam;
-        let engine = Engine::new().with_backends(backends).with_draw(draw);
+        let mut engine = Engine::new().with_backends(backends).with_draw(draw);
+        if let Some(publish) = publish {
+            engine = engine
+                .with_output(OutputId::new("yt"))
+                .with_publish(publish);
+        }
         let control = connected(&engine);
         let mut events = control.events();
         batch(
             &control,
             edits(vec![
                 Edit::CanvasSetSize {
-                    width: 64,
-                    height: 36,
+                    width: canvas.0,
+                    height: canvas.1,
                 },
                 Edit::OutputCreate {
                     output_id: OutputId::new("cam"),
@@ -3293,16 +4027,29 @@ mod cpu_pipeline {
         Some(Box::new(ScriptedVcam(Arc::clone(log))))
     }
 
+    fn start_output(control: &dyn Control, events: &mut EventStream, output: &str) {
+        block_on(control.call(output_call(output, true))).expect("output.start");
+        assert_eq!(
+            output_steps(events),
+            vec![OutputState::Starting, OutputState::Active]
+        );
+    }
+
     /// `output.start` on a virtual camera starts the platform's sink at the canvas
-    /// size, as BGRA at 30 fps, and publishes every composited frame to it with no
-    /// publish target and no audio. `output.stop` stops the camera, and the engine
+    /// size, as BGRA at 30 fps, and publishes every program frame to it with no
+    /// publish target, encoder or audio. `output.stop` stops the camera, and the engine
     /// keeps the sink, so the output starts again.
     #[test]
-    fn a_virtual_camera_publishes_the_canvas_until_stopped() {
+    fn a_virtual_camera_publishes_the_program_until_stopped() {
         let fakes = fakes();
         let log = Arc::new(Mutex::new(VcamLog::default()));
-        let (engine, control, mut events) =
-            vcam_engine(&fakes, solid([10, 20, 30, 255]), scripted(&log));
+        let (engine, control, mut events) = vcam_engine(
+            &fakes,
+            solid([10, 20, 30, 255]),
+            scripted(&log),
+            (64, 36),
+            None,
+        );
 
         for run in 1..=2u64 {
             start_output(&control, &mut events, "cam");
@@ -3330,24 +4077,83 @@ mod cpu_pipeline {
             assert_eq!(log.stops, run);
         }
         let log = log.lock().expect("vcam log");
-        let size = FrameSize::new(64, 36).expect("size");
         assert_eq!(log.starts.len(), 2);
         for format in &log.starts {
-            assert_eq!(format.size, size);
+            assert_eq!(format.size, FrameSize::new(64, 36).expect("size"));
             assert_eq!(format.pixel_format, PixelFormat::Bgra8);
             assert_eq!(format.frame_period, Timebase::new(1, 30).expect("1/30"));
         }
         assert!(
-            log.pixels.iter().all(|px| *px == [30, 20, 10, 255]),
+            log.pixels
+                .iter()
+                .all(|px| *px == ([30, 20, 10, 255], [30, 20, 10, 255])),
             "the frames are not the composite in BGRA"
         );
+    }
+
+    /// A canvas of another size than the program frame gets the frame fitted inside
+    /// it: a 64x36 frame on a 64x64 canvas is letterboxed in black.
+    #[test]
+    fn a_virtual_camera_fits_the_program_into_the_canvas() {
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog::default()));
+        let (_engine, control, mut events) = vcam_engine(
+            &fakes,
+            solid([10, 20, 30, 255]),
+            scripted(&log),
+            (64, 64),
+            None,
+        );
+        start_output(&control, &mut events, "cam");
+        assert!(pump_until(&fakes.clock, &fakes.audio, || {
+            !log.lock().expect("vcam log").pixels.is_empty()
+        }));
+        block_on(control.call(output_call("cam", false))).expect("output.stop");
+        let log = log.lock().expect("vcam log");
+        assert_eq!(log.starts[0].size, FrameSize::new(64, 64).expect("size"));
+        assert_eq!(log.pixels[0], ([0, 0, 0, 255], [30, 20, 10, 255]));
+    }
+
+    /// A virtual camera shares the program stage with a stream: both run at once, and
+    /// stopping the camera leaves the stream running.
+    #[test]
+    fn a_virtual_camera_runs_beside_a_stream() {
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog::default()));
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) = vcam_engine(
+            &fakes,
+            cpu_draw(),
+            scripted(&log),
+            (64, 36),
+            Some(Box::new(publish.clone())),
+        );
+        start_output(&control, &mut events, "yt");
+        start_output(&control, &mut events, "cam");
+        assert!(pump_until(&fakes.clock, &fakes.audio, || {
+            log.lock().expect("vcam log").pixels.len() >= 3
+                && publish
+                    .tags()
+                    .iter()
+                    .any(|tag| tag.tag_type == TagType::Video)
+        }));
+        block_on(control.call(output_call("cam", false))).expect("output.stop");
+        assert_eq!(log.lock().expect("vcam log").stops, 1);
+        assert_eq!(output_state(&control, "yt"), OutputState::Active);
+        let before = publish.tags().len();
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || publish.tags().len() > before),
+            "the stream stopped with the camera"
+        );
+        assert!(engine.output_stats().is_some());
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 
     /// Without a virtual camera in the backends, a start fails before `starting`.
     #[test]
     fn a_virtual_camera_needs_one_in_the_backends() {
         let fakes = fakes();
-        let (_engine, control, mut events) = vcam_engine(&fakes, cpu_draw(), None);
+        let (_engine, control, mut events) = vcam_engine(&fakes, cpu_draw(), None, (64, 36), None);
         let err = block_on(control.call(output_call("cam", true))).expect_err("refused");
         assert_eq!(code(&err), Some("action_failed"));
         assert!(err.to_string().contains("no virtual camera"), "{err}");
@@ -3364,7 +4170,8 @@ mod cpu_pipeline {
             refuse: true,
             ..VcamLog::default()
         }));
-        let (_engine, control, mut events) = vcam_engine(&fakes, cpu_draw(), scripted(&log));
+        let (_engine, control, mut events) =
+            vcam_engine(&fakes, cpu_draw(), scripted(&log), (64, 36), None);
 
         let err = block_on(control.call(output_call("cam", true))).expect_err("refused");
         assert_eq!(code(&err), Some("action_failed"));
@@ -3384,7 +4191,7 @@ mod cpu_pipeline {
     }
 
     /// A camera that fails a publish fails the output (R-RT-006), and the camera is
-    /// stopped and handed back.
+    /// stopped and handed back, so the output starts again.
     #[test]
     fn a_failed_virtual_camera_publish_fails_the_output() {
         let fakes = fakes();
@@ -3392,7 +4199,8 @@ mod cpu_pipeline {
             fail_after: Some(3),
             ..VcamLog::default()
         }));
-        let (engine, control, mut events) = vcam_engine(&fakes, cpu_draw(), scripted(&log));
+        let (engine, control, mut events) =
+            vcam_engine(&fakes, cpu_draw(), scripted(&log), (64, 36), None);
         start_output(&control, &mut events, "cam");
         assert!(
             pump_until(&fakes.clock, &fakes.audio, || {
@@ -3401,23 +4209,17 @@ mod cpu_pipeline {
             }),
             "the output did not fail"
         );
-        let log_now = log.lock().expect("vcam log");
-        assert_eq!(log_now.pixels.len(), 3);
-        assert!(!log_now.started, "the camera is still up");
-        drop(log_now);
+        {
+            let log = log.lock().expect("vcam log");
+            assert_eq!(log.pixels.len(), 3);
+            assert!(!log.started, "the camera is still up");
+        }
 
         log.lock().expect("vcam log").fail_after = None;
         drain(&mut events);
         start_output(&control, &mut events, "cam");
         block_on(control.call(output_call("cam", false))).expect("output.stop");
-    }
-
-    fn start_output(control: &dyn Control, events: &mut EventStream, output: &str) {
-        block_on(control.call(output_call(output, true))).expect("output.start");
-        assert_eq!(
-            output_steps(events),
-            vec![OutputState::Starting, OutputState::Active]
-        );
+        assert_eq!(log.lock().expect("vcam log").stops, 2);
     }
 }
 
@@ -3498,6 +4300,7 @@ fn output_edits_configure_the_collection() {
         vec![OutputInfo {
             output_id: OutputId::new("out_yt"),
             kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+            encoder_profile: None,
         }]
     );
     assert_eq!(
@@ -3521,6 +4324,7 @@ fn output_edits_configure_the_collection() {
             vec![OutputInfo {
                 output_id: OutputId::new("out_yt"),
                 kind: rtmp_output("rtmps://a.rtmps.youtube.com:443/live2"),
+                encoder_profile: None,
             }]
         ),
         other => panic!("not a state: {other:?}"),
@@ -3592,10 +4396,7 @@ fn stream_key_actions_report_without_naming_the_key() {
         let error = block_on(control.call(set_key("out_yt", key))).expect_err("bad key");
         assert_eq!(
             error.protocol(),
-            Some(&ProtocolError::InvalidArgument {
-                field: "key".into(),
-                reason: reason.into()
-            })
+            Some(&ProtocolError::invalid_argument("key", reason))
         );
         assert!(!leaks(&error), "{error:?}");
     }
@@ -3753,6 +4554,44 @@ pub(crate) fn check_secrets_are_redacted() {
     }
     let stored = store.get("out_yt").expect("get").expect("stored");
     assert_eq!(stored.expose(), KEY, "the key reached the store");
+}
+
+/// `scene.switch` is audited like every action, naming its scene, and a switch to an
+/// unknown scene with its error code (ADR-0030).
+#[test]
+fn scene_switch_is_audited() {
+    let audit = Arc::new(crate::AuditMemory::new());
+    let engine = Engine::new().with_audit(audit.clone());
+    let control = connected(&engine);
+    batch(&control, edits(vec![create("a"), create("b")])).expect("scenes");
+    block_on(control.call(switch_call("b"))).expect("switch");
+    block_on(control.call(switch_call("ghost"))).expect_err("unknown scene");
+
+    let entries = audit.entries();
+    let switches: Vec<_> = entries
+        .iter()
+        .skip(1)
+        .map(|e| {
+            (
+                e.call,
+                e.scene_id.as_ref().map(SceneId::as_str),
+                (e.rev_before.0, e.rev_after.0),
+                e.error,
+            )
+        })
+        .collect();
+    assert_eq!(
+        switches,
+        [
+            ("scene.switch", Some("b"), (1, 1), None),
+            ("scene.switch", Some("ghost"), (1, 1), Some("not_found")),
+        ]
+    );
+    assert!(
+        entries[1].to_json_line().contains(",\"scene_id\":\"b\","),
+        "{:?}",
+        entries[1].to_json_line()
+    );
 }
 
 /// The audit log gets one entry per batch and action, with the client and its latest

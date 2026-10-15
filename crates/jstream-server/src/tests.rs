@@ -237,6 +237,7 @@ fn create_scene(id: &str) -> Call {
     Call::Batch(Batch::single(Edit::SceneCreate {
         scene_id: SceneId::new(id),
         name: id.to_uppercase(),
+        role: None,
     }))
 }
 
@@ -368,6 +369,15 @@ fn a_batch_a_query_and_events_round_trip() {
             cause: None,
         })
     );
+    // The first scene went on program, by the same request.
+    assert_eq!(
+        next_event(&harness, &mut events),
+        Some(Event::StudioChanged {
+            program_scene: Some(SceneId::new("main")),
+            client_id: client_id.clone(),
+            request_id: Some(RequestId::new("req_1")),
+        })
+    );
 
     let query = Call::Query {
         query: Query::SceneList,
@@ -428,7 +438,9 @@ fn concurrent_calls_each_get_their_own_answer_and_event() {
     }
     by_request.sort();
     let mut seen = Vec::new();
-    for _ in names {
+    // One `state.changed` per batch, and one `studio.changed` for the first scene.
+    let mut program_changes = 0;
+    for _ in 0..=names.len() {
         match next_event(&harness, &mut events) {
             Some(Event::StateChanged {
                 rev,
@@ -439,9 +451,11 @@ fn concurrent_calls_each_get_their_own_answer_and_event() {
                 assert_eq!(from, client_id);
                 seen.push((id, rev));
             }
+            Some(Event::StudioChanged { .. }) => program_changes += 1,
             other => panic!("unexpected event {other:?}"),
         }
     }
+    assert_eq!(program_changes, 1);
     seen.sort();
     assert_eq!(seen, by_request);
 }
@@ -527,8 +541,8 @@ fn malformed_messages_get_malformed_errors() {
         }
         other => panic!("unexpected reply {other:?}"),
     }
-    // The wire form from the protocol README: the response and the event carry the
-    // client's own request ID.
+    // The wire form from the protocol README: the response and the events carry the
+    // client's own request ID, `studio.changed` (the first scene went on program) too.
     let hello = r#"{"type":"hello","protocol":{"major":0,"minor":5},"client_name":"raw"}"#;
     assert!(matches!(
         exchange(&harness, &mut socket, hello),
@@ -536,29 +550,36 @@ fn malformed_messages_get_malformed_errors() {
     ));
     let request = r#"{"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":0}}"#;
     let first = exchange(&harness, &mut socket, request);
-    let second = harness.run(async {
-        loop {
-            match socket.next().await {
-                Some(Ok(Message::Text(text))) => {
-                    match serde_json::from_str::<ServerMessage>(text.as_str()) {
-                        Ok(message) => return message,
-                        Err(error) => panic!("unreadable: {error}"),
+    let mut messages = vec![first];
+    for _ in 0..2 {
+        messages.push(harness.run(async {
+            loop {
+                match socket.next().await {
+                    Some(Ok(Message::Text(text))) => {
+                        match serde_json::from_str::<ServerMessage>(text.as_str()) {
+                            Ok(message) => return message,
+                            Err(error) => panic!("unreadable: {error}"),
+                        }
                     }
+                    Some(Ok(_)) => continue,
+                    other => panic!("no further message: {other:?}"),
                 }
-                Some(Ok(_)) => continue,
-                other => panic!("no second message: {other:?}"),
             }
-        }
-    });
+        }));
+    }
     let mut ids = Vec::new();
-    for message in [first, second] {
+    for message in messages {
         match message {
             ServerMessage::Response(response) => ids.push(("response", response.id)),
             ServerMessage::Event(event) => match event.event {
                 Event::StateChanged {
                     request_id: Some(id),
                     ..
-                } => ids.push(("event", id)),
+                } => ids.push(("state.changed", id)),
+                Event::StudioChanged {
+                    request_id: Some(id),
+                    ..
+                } => ids.push(("studio.changed", id)),
                 other => panic!("unexpected event {other:?}"),
             },
             other => panic!("unexpected message {other:?}"),
@@ -568,8 +589,9 @@ fn malformed_messages_get_malformed_errors() {
     assert_eq!(
         ids,
         [
-            ("event", RequestId::new("r1")),
-            ("response", RequestId::new("r1"))
+            ("response", RequestId::new("r1")),
+            ("state.changed", RequestId::new("r1")),
+            ("studio.changed", RequestId::new("r1"))
         ]
     );
 }
@@ -580,6 +602,8 @@ fn a_server_shutdown_disconnects_calls_and_ends_events() {
     let (control, _) = harness.session();
     let mut events = control.events();
     ok(harness.run(control.call(create_scene("main"))));
+    // `state.changed`, then `studio.changed` for the first scene.
+    assert!(next_event(&harness, &mut events).is_some());
     assert!(next_event(&harness, &mut events).is_some());
     harness.shut_down();
     assert_eq!(next_event(&harness, &mut events), None, "the stream ends");
@@ -754,6 +778,10 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
         next_event(&harness, &mut events),
         Some(Event::StateChanged { rev: Rev(1), .. })
     ));
+    assert!(matches!(
+        next_event(&harness, &mut events),
+        Some(Event::StudioChanged { .. })
+    ));
     // Time for the slow connection to drain the engine's queue into its outbox, which is
     // what overflows; reading too early would only make the drop smaller, never hide it
     // from the count below.
@@ -763,7 +791,8 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
     let (delivered, dropped, notices) = harness.run(async {
         let (mut delivered, mut dropped, mut notices) = (0u64, 0u64, 0u64);
         let mut last: Option<usize> = None;
-        while delivered + dropped < SENT as u64 + 1 {
+        // The numbered events, then the batch's `state.changed` and `studio.changed`.
+        while delivered + dropped < SENT as u64 + 2 {
             let text = match slow.next().await {
                 Some(Ok(Message::Text(text))) => text,
                 Some(Ok(_)) => continue,
@@ -790,6 +819,7 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
                         assert_eq!(rev, Rev(1));
                         delivered += 1;
                     }
+                    Event::StudioChanged { .. } => delivered += 1,
                     other => panic!("unexpected event {other:?}"),
                 },
                 other => panic!("unexpected message {other:?}"),
@@ -799,7 +829,7 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
     });
     assert!(dropped > 0, "the slow client's outbox never overflowed");
     assert!(notices >= 1);
-    assert_eq!(delivered + dropped, SENT as u64 + 1);
+    assert_eq!(delivered + dropped, SENT as u64 + 2);
 
     // Once it reads again, the slow client is served like any other.
     let query =

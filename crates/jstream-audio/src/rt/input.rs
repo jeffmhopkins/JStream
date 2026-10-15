@@ -41,6 +41,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use jstream_media::AudioFormat;
 use jstream_platform::{AudioInputHandler, AudioPacket, PlatformError};
 
+use super::bus::Sends;
 use super::continuity::{Continuity, PositionTracker};
 use super::control::{Ema, Pi};
 use super::downmix::Downmix;
@@ -74,7 +75,10 @@ const STAGE_FRAMES: usize = 256;
 /// What the audio thread and the control plane share for one input.
 #[derive(Debug)]
 pub(crate) struct InputShared {
+    /// The input's fader and mute, applied before its sends.
     pub(crate) gain: GainParam,
+    /// The input's row of the send matrix (post-fader).
+    pub(crate) sends: Sends,
     pub(crate) meter: Meter,
     pub(crate) packets: Counter,
     pub(crate) discontinuities: Counter,
@@ -101,6 +105,7 @@ impl InputShared {
     pub(crate) fn new() -> Self {
         Self {
             gain: GainParam::new(),
+            sends: Sends::new(),
             meter: Meter::default(),
             packets: Counter::default(),
             discontinuities: Counter::default(),

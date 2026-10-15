@@ -11,9 +11,9 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-platform/src/**"]
+covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:e912fde7286201d2", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b cascade from ARCH#threading: re-read; VcamSink trait and FakeVcamSink unchanged, Not yet (GPU frames) holds" }
+verified = { hash = "b3:2cc94e3bb7c4c313", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main into D7b: took main's stamp; re-read; stale only via ARCH#threading's Collector row (mixer collector frees removed buses and filter chains), which this crate doesn't rely on; holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -50,7 +50,8 @@ Contents:
   [ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading), and the render
   thread takes from it without blocking; `None` means "repeat the last frame". Spike S1
   drains Windows.Graphics.Capture's pool to the newest frame the same way.
-  `CaptureStats` counts captured and skipped frames.
+  `CaptureStats` counts captured and skipped frames, and the compressed frames a
+  `CaptureDecoder` rejected (`frames_undecodable`, always 0 for display capture).
 - **Video capture devices** (webcams and capture cards,
   [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
@@ -61,8 +62,11 @@ Contents:
   decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
   (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
   a frame it rejects is dropped and the stream goes on.
-- **Audio:** `AudioIo` (`Send + Sync`) lists devices and opens input (microphone,
-  output loopback, process loopback) and output streams. Each stream calls an
+- **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes
+  (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
+  format an input target would open in (`input_format`, so the engine can build the
+  handler for it before opening), and opens input (microphone, output loopback,
+  process loopback) and output streams. Each stream calls an
   engine-supplied `AudioInputHandler` or `AudioOutputHandler` on the backend's real-time
   audio thread, so handlers must not allocate, lock, block or log
   ([R-RT-001](../../docs/RULES.md#R-RT-001)). An `AudioPacket` carries interleaved `f32`
@@ -98,14 +102,18 @@ Contents:
   a separate trait from `StreamKeyStore`, so a token and a stream key never share a name.
   Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
   contain a token. `jstream-youtube` keeps its Google refresh token here.
-- **Injection:** `Backends`, a plain struct holding one platform's clock, capture, audio,
-  codec and GPU-interop backends and its optional virtual-camera sink.
+- **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
+  capture device, audio, codec and GPU-interop backends and its optional virtual-camera
+  sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
-  (`HRESULT`, `OSStatus`, `errno`).
+  (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
+  as Media Foundation on a Windows N edition) says what the user must install.
 - **Fakes** (`fake.rs`, feature `fake`): deterministic in-memory backends for engine and
   scenario tests ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): `FakeClock` (time moves
-  only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and
+  only when advanced), `FakeCapture`, `FakeAudioIo` (process loopback opens on the
+  processes a test lists with `set_processes`; `input_targets` says what each open
+  input records), `FakeCodecs` (correct timing and
   keyframe pattern, a forced keyframe restarting that pattern, placeholder payloads; the decoder returns frames in presentation
   order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
   (dropping it stops it; a test watches it through a `FakeVcamProbe`),
@@ -119,15 +127,17 @@ Contents:
   `Send`/`Sync` bounds above.
 
 **Not yet:** a platform that consumes GPU frames (Windows capture delivers them through
-`WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet), a platform implementation of `VideoDevices` (Media Foundation's source reader is
-C4b) and its place in `Backends`, an MJPEG `Codec` variant with a `CaptureDecoder` built
-from the platform's decoder, and encoder selection by GPU adapter.
+`WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet),
+an engine that opens `Backends::video_devices` (the field is filled, with
+`MfVideoDevices` on Windows and `MfMjpegDecoder` as its `CaptureDecoder`, but no source
+uses it, so `stats.tick` doesn't report `frames_undecodable`), an MJPEG `Codec` variant,
+and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:c3d24539251a03a3", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: section is main's (WgcCapture::on_gpu delivers GPU frames); B3 changes nothing in platform; holds" }
+verified = { hash = "b3:c6e56f3ac4e834a3", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: stale only via ARCH crate-map (jstream-ui row now layer 3); GPU frame design untouched" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

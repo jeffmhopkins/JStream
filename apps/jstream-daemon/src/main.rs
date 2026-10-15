@@ -5,20 +5,30 @@
 //! session per MCP session (ADR-0001: the app only wires the engine to its
 //! interfaces). It creates or reuses the user-only control token file (ADR-0006), logs
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
-//! and stops gracefully on Ctrl-C. Not yet: the web UI and `--collection`.
+//! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
+//! pipeline on the Windows backends and publishes over RTMP(S), after checking that
+//! Media Foundation is installed, and `--register-vcam` registers the virtual camera's
+//! media source (`register`). With `--collection` it loads the collection from a file
+//! and saves every change there, and it records every batch, undo, redo and action in an
+//! audit log next to its log files. Not yet: the web UI.
 //!
 //! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-daemon/README.md#purpose, apps/jstream-daemon/README.md#usage, apps/jstream-daemon/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0006-mcp-full-access.md
 
 #![forbid(unsafe_code)]
 
 mod args;
+// Windows runs it at startup; its decision is tested everywhere.
+#[cfg(any(windows, test))]
+mod components;
 mod crash;
 mod logs;
+mod register;
 mod serve;
 mod token;
 
 use anyhow::Context;
 use args::{Invocation, Options};
+use jstream_core::AuditFile;
 use jstream_protocol::PROTOCOL_VERSION;
 use std::io::{Write, stderr, stdout};
 use std::path::{Path, PathBuf};
@@ -34,6 +44,10 @@ const OK: u8 = 0;
 const FAILED: u8 = 1;
 /// The command line could not be parsed, or names no token file.
 const USAGE: u8 = 2;
+/// Windows lacks a component the engine needs: Media Foundation, on an N edition
+/// without the Media Feature Pack or a Windows Server without its feature.
+#[cfg(windows)]
+const MISSING_COMPONENT: u8 = 3;
 
 /// The environment variable naming the token file when `--token-file` is not given,
 /// the same one `jstream-cli` reads.
@@ -46,6 +60,9 @@ const LOG_ENV: &str = "RUST_LOG";
 enum Failure {
     Usage(String),
     Failed(anyhow::Error),
+    /// The message says what is missing and how to install it.
+    #[cfg(windows)]
+    MissingComponent(String),
 }
 
 impl From<anyhow::Error> for Failure {
@@ -76,6 +93,9 @@ fn main() -> ExitCode {
             "jstream-daemon {}, protocol {PROTOCOL_VERSION}\n",
             env!("CARGO_PKG_VERSION")
         )),
+        Ok(Invocation::RegisterVcam) => register::register()
+            .map_err(Failure::Failed)
+            .and_then(|message| print(&message)),
         Ok(Invocation::Serve(options)) => run(options),
         Err(message) => Err(Failure::Usage(format!(
             "{message}\n(run `jstream-daemon --help` for usage)"
@@ -91,6 +111,11 @@ fn main() -> ExitCode {
             // `{:#}` prints the whole chain of causes on one line.
             let _ = writeln!(stderr().lock(), "error: {error:#}");
             FAILED
+        }
+        #[cfg(windows)]
+        Err(Failure::MissingComponent(message)) => {
+            let _ = writeln!(stderr().lock(), "error: {message}");
+            MISSING_COMPONENT
         }
     };
     ExitCode::from(code)
@@ -159,6 +184,24 @@ fn init_logging(dir: &Path, filter: Targets) -> Result<(), Failure> {
     Ok(())
 }
 
+/// Checks that Windows has Media Foundation and its AAC encoder, before anything else
+/// calls into it. The binary delay-loads the Media Foundation DLLs (`build.rs`), so on
+/// an N edition without them the daemon still starts and gets here, and exits with
+/// advice instead of a loader error.
+#[cfg(windows)]
+fn check_media_foundation() -> Result<(), Failure> {
+    use jstream_platform::Codecs;
+    let missing = |error: jstream_platform::PlatformError| {
+        tracing::error!(%error, "a Windows component is missing");
+        Failure::MissingComponent(error.to_string())
+    };
+    jstream_platform_windows::check_media_foundation().map_err(missing)?;
+    let codecs = jstream_platform_windows::MfCodecs::new()
+        .list()
+        .context("could not list the Media Foundation codecs")?;
+    components::aac_encoder(&codecs).map_err(missing)
+}
+
 /// Loads or creates the token, then serves until a signal arrives.
 fn run(options: Options) -> Result<(), Failure> {
     let path = match options.token_file.clone() {
@@ -173,7 +216,16 @@ fn run(options: Options) -> Result<(), Failure> {
         },
     };
     let filter = log_filter(&options)?;
-    init_logging(&log_dir(&options)?, filter)?;
+    let logs = log_dir(&options)?;
+    init_logging(&logs, filter)?;
+    #[cfg(windows)]
+    check_media_foundation()?;
+    #[cfg(windows)]
+    register::log_status();
+    // Next to the log files: every batch, undo, redo and action, without their
+    // arguments (R-SEC-001).
+    let audit = AuditFile::open(&logs)
+        .with_context(|| format!("could not open the audit log in `{}`", logs.display()))?;
     let (token, provenance) = token::load_or_create(&path)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -181,7 +233,7 @@ fn run(options: Options) -> Result<(), Failure> {
         .context("could not start the async runtime")?;
     runtime.block_on(async {
         let stop = serve::shutdown_signal().context("could not install the Ctrl-C handler")?;
-        let engine = serve::engine(&options);
+        let engine = serve::engine(&options, Arc::new(audit))?;
         let server = serve::bind(engine, options.port, token)
             .await
             .map_err(anyhow::Error::from)?;

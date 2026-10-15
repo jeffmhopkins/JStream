@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "rev": 2,
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "scenes": [
+    {
+      "id": "b",
+      "name": "B",
+      "role": "group",
+      "items": [
+        {
+          "id": "i4",
+          "source_id": "cam",
+          "geometry": {
+            "center": {
+              "x": 640.0,
+              "y": 360.0
+            },
+            "size": {
+              "width": 320.0,
+              "height": 180.0
+            },
+            "fit_mode": "fill",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        }
+      ]
+    },
+    {
+      "id": "a",
+      "name": "A",
+      "items": [
+        {
+          "id": "i3",
+          "source_id": "cam",
+          "transform": {
+            "position": {
+              "x": 10.0,
+              "y": 20.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "rotation_deg": 0.0
+          },
+          "crop": {
+            "left": 1,
+            "top": 2,
+            "right": 3,
+            "bottom": 4
+          },
+          "visible": false
+        },
+        {
+          "id": "i1",
+          "source_id": "cam_copy",
+          "transform": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "rotation_deg": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "i2",
+          "source_id": "b_src",
+          "transform": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "rotation_deg": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "a_tint",
+      "name": "a_tint",
+      "kind": {
+        "type": "builtin",
+        "kind": "color"
+      },
+      "kind_version": 2,
+      "settings": {
+        "color": "#000000ff",
+        "follow": {
+          "source_id": "z_base",
+          "type": "source"
+        }
+      }
+    },
+    {
+      "id": "aux",
+      "name": "Aux",
+      "kind": {
+        "type": "builtin",
+        "kind": "webcam"
+      },
+      "kind_version": 1,
+      "duplicated_from": "gone"
+    },
+    {
+      "id": "b_src",
+      "name": "Scene B",
+      "kind": {
+        "type": "scene",
+        "scene_id": "b"
+      }
+    },
+    {
+      "id": "cam",
+      "name": "Camera",
+      "kind": {
+        "type": "builtin",
+        "kind": "webcam"
+      },
+      "kind_version": 1
+    },
+    {
+      "id": "cam_copy",
+      "name": "Camera copy",
+      "kind": {
+        "type": "builtin",
+        "kind": "webcam"
+      },
+      "kind_version": 1,
+      "duplicated_from": "cam"
+    },
+    {
+      "id": "z_base",
+      "name": "z_base",
+      "kind": {
+        "type": "builtin",
+        "kind": "color"
+      },
+      "kind_version": 2,
+      "settings": {
+        "color": "#000000ff",
+        "follow": null
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "id": "rec",
+      "kind": {
+        "type": "record",
+        "path": "/home/me/Videos/show.mp4",
+        "container": "mp4"
+      },
+      "encoder_profile": "hq"
+    },
+    {
+      "id": "tw",
+      "kind": {
+        "type": "rtmp",
+        "target": {
+          "type": "generic",
+          "url": "rtmp://live.twitch.tv/app"
+        }
+      }
+    },
+    {
+      "id": "yt",
+      "kind": {
+        "type": "rtmp",
+        "target": {
+          "type": "generic",
+          "url": "rtmps://a.rtmps.youtube.com:443/live2"
+        }
+      },
+      "encoder_profile": "low"
+    }
+  ],
+  "encoders": [
+    {
+      "id": "hq",
+      "name": "Recording",
+      "profile": {
+        "video": {
+          "codec": "h264",
+          "rate_control": {
+            "type": "vbr",
+            "kbps": 12000,
+            "max_kbps": 20000
+          },
+          "keyframe_interval_s": 4,
+          "hardware": "avoid"
+        },
+        "audio": {
+          "codec": "aac",
+          "kbps": 320
+        }
+      }
+    },
+    {
+      "id": "low",
+      "name": "Stream",
+      "profile": {
+        "video": {
+          "codec": "h264",
+          "rate_control": {
+            "type": "cbr",
+            "kbps": 3000
+          },
+          "keyframe_interval_s": 2,
+          "hardware": "prefer"
+        },
+        "audio": {
+          "codec": "aac",
+          "kbps": 128
+        }
+      }
+    }
+  ]
+}
