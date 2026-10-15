@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:0c5323f5b45d4abd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305: re-read Purpose; contents list still accurate (ws_config.rs holds the pieces both clients share, now incl. end_reason); no API change" }
+verified = { hash = "b3:1300889bfc1760a0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324 N1: Contents' WebSocket client line now says ws_config.rs holds WsConfig and the URL, token and end-reason helpers the browser client uses (cfg test or wasm32), kept there to test natively; rest of the list holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -35,7 +35,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   implementation; its tests hold it to the mock's answers.
 - **WebSocket client** (feature `ws`): `WsControl`, the `Control` trait over the
   engine's WebSocket API, natively (`ws.rs`) and in the browser (`ws_web.rs`, `wasm32`);
-  `WsConfig` and the handshake pieces both share (`ws_config.rs`).
+  `WsConfig`, and the URL, token and end-reason helpers the browser client uses, kept
+  here so they test natively (`ws_config.rs`).
 - **Shared names** (`lib.rs`, no feature): `WS_PATH`, the API's path, and
   `WS_PROTOCOL` and `WS_TOKEN_PROTOCOL_PREFIX`, the subprotocols a browser offers;
   `jstream-server` uses the same constants, so client and server can't drift.

@@ -529,7 +529,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:21624d6201148966", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305 merge of main 92cd698 (#309): re-read Control protocol; only control README and e2e docs changed, no wire, transport or protocol-version change; holds" }
+verified = { hash = "b3:b96c86466d57c8dd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324: re-read Control protocol; only control README's Contents wording changed (covers crates/jstream-control/**); no wire or protocol-version change, holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
