@@ -24,10 +24,9 @@ pub(crate) const MAX_PATH_LEN: usize = 4096;
 
 /// Why `path` is not an acceptable recording path, or `None` when it is.
 ///
-/// The check is the same on every platform, as `check_asset_path` is for an absolute
-/// asset: `/…`, `\…`, `C:/…` or `C:\…`, with `/` or `\` separators, no `..` segment,
-/// and a file name last. The engine checks again, when it opens the file, that the
-/// path is absolute on its own machine.
+/// The check is the same on every platform: `/…`, `\…`, `C:/…` or `C:\…`, with `/` or
+/// `\` separators, no `..` segment, and a file name last. The engine checks again, when
+/// it opens the file, that the path is absolute on its own machine.
 pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
     if path.is_empty() {
         return Some("must not be empty");
