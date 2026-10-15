@@ -221,7 +221,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   a geometry.
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
   scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
-  that would close a cycle (`item.add`, and `item.set_source`).
+  that would close a cycle (`item.add`, and `item.set_source`). The graph accepts any
+  acyclic depth, but the program mix (the live output and `video.snapshot` alike) draws
+  at most **8 levels** of scene sources below the program scene: a scene source deeper
+  than that draws nothing, and the engine logs it at `debug`.
 - **Groups and keyframe scenes** ([ADR-0024](adr/0024-scene-structure.md)):
   - A **group** is a scene with `role = group`. The role changes no engine behaviour: a
     group renders, nests and takes filters like any scene, and clients hide groups from
@@ -374,13 +377,16 @@ every mix runs at the base rate divided by an integer.
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003) |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One per running output, for its render thread. |
 
 **Output pipeline** (`jstream-core` `src/runtime/`), the part that is built.
 `output.start`, once the host has injected platform backends and a publish target,
 starts it and emits `output.state_changed` from the control thread. The render
-thread calls the platform capture mailbox, composites one scene on each 1/30 s
-tick, repeats the last frame when capture is empty, and reads that frame back.
+thread calls the platform capture mailbox and, on each 1/30 s tick, composites the
+program mix from the render snapshot (below) at the encoder size: the program scene
+and the scenes it nests, with every `display` source that has no stored frame showing
+the captured display. With no scene it draws the capture filling the frame. It
+repeats the last capture when the mailbox is empty, and reads the frame back.
 This cut encodes that CPU readback, and the readback is counted. The mixer thread
 polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
 desktop loopback. Encode threads are the
@@ -390,7 +396,8 @@ real-time thread: it emits `stats.tick` about once a second from the stage
 counters, and once more when the pipeline stops. The render loop publishes capture
 mailbox skips, and a tick that falls a whole period behind the clock skips to the
 current tick and counts the skipped ones in `render_ticks`. None of those threads
-lock the collection. `output.stop` during
+lock the collection: the render thread reads the render snapshot, and what it lets
+go of goes to the output's collector thread. `output.stop` during
 `starting` cancels that start and emits `stopped` only after the start has dropped
 its threads. The render and mixer threads catch a panic at their boundary
 ([R-RT-006](RULES.md#R-RT-006)); a capture error or a missing frame repeats the last
@@ -398,8 +405,8 @@ one, and a render panic repeats the last frame until teardown. A fatal error on 
 render, mixer or output thread (a publish failure, an encoder stream that ends
 before stop, a render or mixer panic) is a channel message to a watcher the control
 thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
-encoder session queues. Arc-swap snapshots, the collector thread and a GPU encode
-target are still the rows above, not this cut.
+encoder session queues. The audio and outputs snapshots, the mixer's use of the
+collector, and a GPU encode target are still the rows above, not this cut.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
@@ -452,7 +459,23 @@ lock-free parameter channels. On the wire they are live values, committed by one
 at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
-**Live-value handover** (decided, not built yet): the engine learns that a real-time
+The **render snapshot** is built. After every applied batch and every stored source
+frame, the control side re-plans the program mix under the collection lock: the
+reachable scenes, the frames they show and the passes that draw them. It publishes
+that as the next render generation only when it draws something new, so a batch that
+touches nothing on program publishes nothing. The render thread and `video.snapshot`'s
+thread load it without the lock, and the render thread draws through a `jstream-render`
+resource cache keyed by source and by nested scene and depth. A frame that shows what
+the last one showed allocates no texture: an unchanged frame is not uploaded again and
+each nested scene is redrawn into the layer it had. An image no frame references is
+retired, then freed once the GPU has finished the last frame that used it (a
+`Queue::on_submitted_work_done` fence the cache polls without blocking). The render
+thread hands those images, and each render snapshot it replaces, to the output's
+collector thread ([R-RT-003](RULES.md#R-RT-003)). The audio and outputs snapshots are
+not built.
+
+**Live-value handover** (decided; the render generation and its reader slot are built,
+the parameter channels and the gesture release are not): the engine learns that a real-time
 thread holds a committed snapshot through a **generation counter per subsystem**. Each
 time the control side publishes a subsystem's snapshot it bumps that subsystem's
 generation and stores it in the snapshot. Each real-time thread that reads the snapshot
@@ -666,10 +689,15 @@ src-over. The composite pass writes premultiplied linear light into `Rgba16Float
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a software adapter
-first. A nested scene is composited with `render_image` into an `Rgba16Float` image
-that stays on the GPU and is placed in its parent; the caller walks the nesting,
-bounded in depth. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
-fit modes, 3D, effect packs, and the output path below.
+first. A nested scene is composited into an `Rgba16Float` layer that stays on the GPU
+and is placed in its parent: `render_image` makes a new one, and `render_into` redraws
+a layer the caller keeps, so a frame allocates no texture for it. The caller walks the
+nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads and layers from
+frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
+after the GPU has finished the last frame that used it (see
+[Threads › State to RT threads](#threading)). Still outside this crate: the render
+thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), fit modes, 3D, effect
+packs, and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
 texture blend: during it, the program mix is a synthetic item list whose transforms and

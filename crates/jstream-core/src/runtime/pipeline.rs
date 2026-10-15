@@ -379,10 +379,12 @@ pub(crate) fn gpu_draw() -> OpenDraw {
         let mut cache = ResourceCache::<GpuKey>::new();
         let draw: DrawFn = Box::new(move |shot, size, capture, out| {
             cache.begin_frame();
-            let drawn = snapshot::compose(&mut compositor, &mut cache, shot, capture, size, true)
-                .and_then(|output| copy_pixels(&output, out));
-            let freed = cache.end_frame(&compositor);
-            drawn.map(|()| freed).map_err(|err| err.to_string())
+            snapshot::compose(&mut compositor, &mut cache, shot, capture, size, true)
+                .and_then(|output| copy_pixels(&output, out))
+                .map_err(|err| err.to_string())?;
+            // A failed frame skips this: what it retired waits for the next frame's
+            // fence, which also covers it, so nothing is freed on this thread.
+            Ok(cache.end_frame(&compositor))
         });
         Ok(draw)
     })
@@ -806,8 +808,8 @@ impl Frames {
 /// Each tick first adopts the render snapshot the control side published last, which
 /// costs a pointer compare unless a new one arrived ([`RenderReader::adopt`]); the
 /// thread never takes the collection lock. Its generation is stamped as the thread
-/// starts and whenever it changes, and the stopped marker is published when the loop
-/// ends.
+/// starts and whenever it changes. The stopped marker is published when the loop ends,
+/// and when a fatal error stops the drawing.
 ///
 /// Recoverable: the capture mailbox failing or having no new frame repeats the last
 /// capture, and a composite error repeats the last composited frame, up to
@@ -894,6 +896,8 @@ fn render_loop(job: RenderJob) {
                     }
                     if draw_errors > MAX_DRAW_ERRORS {
                         broken = true;
+                        // No longer adopting snapshots, so it holds no gesture up.
+                        reader.stop();
                         report(
                             &fail,
                             format!("compositing failed {draw_errors} times in a row: {err}"),
@@ -902,6 +906,7 @@ fn render_loop(job: RenderJob) {
                 }
                 Err(panic) => {
                     broken = true;
+                    reader.stop();
                     report(
                         &fail,
                         format!("the render thread panicked: {}", panic_message(&*panic)),
