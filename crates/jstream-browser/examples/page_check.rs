@@ -260,7 +260,7 @@ setInterval(() => {
         let clock = Arc::new(QpcClock::new().map_err(|e| e.to_string())?);
         let gpu = WindowsGpu::new()
             .open_device()
-            .map_err(|e| format!("opening the engine's GPU device: {e}"))?;
+            .map_err(|e| format!("opening the GPU device: {e}"))?;
         line(format_args!(
             "engine device: {} ({:?})",
             gpu.adapter().get_info().name,

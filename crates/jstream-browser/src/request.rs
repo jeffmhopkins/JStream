@@ -10,7 +10,8 @@
 //! - `file:` is allowed only for a page loaded from a local file, and only for files in
 //!   that file's folder or below it. The path is first compared by name, with `..`
 //!   resolved, and only a path inside the folder is ever opened: a URL naming another
-//!   server or a device is refused without touching it. Then both sides are compared
+//!   server, a drive-relative path or a device (a reserved name such as `COM1` included)
+//!   is refused without touching it. Then both sides are compared
 //!   again after resolving symbolic links, so a link inside the folder can't reach out
 //!   of it. A file that doesn't exist is refused.
 //! - Every other scheme (Chromium's internal pages, `filesystem:`, extensions) is
@@ -126,9 +127,13 @@ fn before_query(rest: &str) -> &str {
 /// An absolute path as names to compare, without touching the file system: `.` dropped
 /// and `..` applied by name. On Windows, a drive or server-and-share comes first, in
 /// lower case as is every name (Windows compares names without case), with `\\?\`
-/// forms the same as plain ones. `None` for a relative path, a `..` above the root, a
-/// device path (`\\.\`, `\\?\` without a drive or share) or a name that isn't UTF-8.
+/// forms the same as plain ones. `None` for a relative path (a drive-relative `C:x`
+/// included), a `..` above the root, a device path (`\\.\`, `\\?\` without a drive or
+/// share, or a reserved device name such as `COM1` on Windows) or a name that isn't UTF-8.
 fn lexical(path: &Path) -> Option<Vec<String>> {
+    if !path.has_root() {
+        return None;
+    }
     let mut names: Vec<String> = Vec::new();
     for component in path.components() {
         match component {
@@ -142,7 +147,13 @@ fn lexical(path: &Path) -> Option<Vec<String>> {
                 names.pop();
             }
             Component::Normal(_) if names.is_empty() => return None,
-            Component::Normal(name) => names.push(fold(name.to_str()?)),
+            Component::Normal(name) => {
+                let name = name.to_str()?;
+                if device_name(name) {
+                    return None;
+                }
+                names.push(fold(name));
+            }
         }
     }
     (!names.is_empty()).then_some(names)
@@ -167,6 +178,35 @@ fn prefix_name(prefix: std::path::Prefix<'_>) -> Option<String> {
 #[cfg(not(windows))]
 fn prefix_name(_: std::path::Prefix<'_>) -> Option<String> {
     None
+}
+
+/// Whether Windows may open the name as a device wherever it appears (`CON`, `NUL`,
+/// `COM1`, `LPT1.txt`, ...), whatever follows the first dot.
+#[cfg(windows)]
+fn device_name(name: &str) -> bool {
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    match upper.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" => true,
+        _ => {
+            let port = upper
+                .strip_prefix("COM")
+                .or_else(|| upper.strip_prefix("LPT"));
+            port.is_some_and(|n| {
+                matches!(n, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
+                    || matches!(n, "\u{b9}" | "\u{b2}" | "\u{b3}")
+            })
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn device_name(_: &str) -> bool {
+    false
 }
 
 #[cfg(windows)]
@@ -377,20 +417,36 @@ mod tests {
             assert_eq!(names(r"\\.\pipe\x"), None);
             assert_eq!(names(r"\\?\GLOBALROOT\x"), None);
             assert_eq!(names(r"C:\.."), None);
+            assert_eq!(names(r"C:a\b"), None);
+            assert_eq!(names(r"C:\a\COM1"), None);
+            assert_eq!(names(r"C:\a\nul.txt"), None);
+            assert_eq!(names(r"C:\a\Con .css"), None);
+            assert_eq!(
+                names(r"C:\a\com10"),
+                Some(vec!["c:".into(), "a".into(), "com10".into()])
+            );
+            assert_eq!(
+                names(r"C:\a\console"),
+                Some(vec!["c:".into(), "a".into(), "console".into()])
+            );
         }
     }
 
-    /// A URL naming another server, or a device, is refused by name: the policy never
-    /// opens it, which on Windows would connect to that server.
+    /// A URL naming another server, a device or a drive-relative path is refused by name:
+    /// the policy never opens it, which on Windows would connect to that server or open
+    /// that device.
     #[cfg(windows)]
     #[test]
     fn a_server_or_device_url_is_refused_without_opening_it() {
         let root = tree("unc");
         let policy = RequestPolicy::for_location(&PageLocation::File(root.join("page/index.html")));
+        let device = file_url(&root.join("page/COM1.css"));
         for url in [
             "file://attacker.example/share/x.png",
             "file://./pipe/x",
             "file://localhost/%5C%5Cattacker.example/share/x.png",
+            "file:///C:overlays/page/x.png",
+            device.as_str(),
         ] {
             let verdict = policy.check(url);
             assert!(
@@ -403,7 +459,7 @@ mod tests {
                 "{url}: {verdict:?}"
             );
         }
-        assert_eq!(policy.denied(), 3);
+        assert_eq!(policy.denied(), 5);
         let _ = std::fs::remove_dir_all(root);
     }
 
