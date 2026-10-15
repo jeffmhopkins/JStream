@@ -185,7 +185,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2141744e29b981e6", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
+verified = { hash = "b3:89d941721c210714", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale only through ARCH#threading after merging main (#215) into #143: ARCH changed in wording (render-snapshot lock-free reader, cleared marker value, R-RT links, grammar, rewrap); nothing this section states depends on those sentences" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

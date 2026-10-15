@@ -390,7 +390,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:4fed165b737c2267", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (#231 D7b): kept #231's mixer-collector wording (removed buses' state, filter chains, filters); only diff from main is the render-snapshot paragraph, still matching Engine::video_snapshot and RenderReader::adopt" }
+verified = { hash = "b3:370af77fdc2f0f17", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#215) into #143/#216: #215's render-snapshot wording (only the render thread loads lock-free; video.snapshot reads with rev under the lock) kept; this PR's marker-value wording, R-RT links and grammar fix kept; render-snapshot and handover paragraphs rewrapped at 88 columns (#216 N1), words unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -467,52 +467,53 @@ lock-free parameter channels. On the wire they are live values, committed by one
 at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
-The **render snapshot** is built. After every applied batch, undo and redo, every
-stored source frame and a collection file's load, the control side re-plans the program mix under the collection lock: the
-reachable scenes, the frames they show and the passes that draw them. It publishes
-that as the next render generation only when it draws something new, so a batch that
-touches nothing on program publishes nothing. The render thread loads it without the
-lock. `video.snapshot` reads it together with `rev` under the lock on the control path,
-and its thread only receives the snapshot. The render thread draws through a `jstream-render`
-resource cache keyed by source and by nested scene and depth. A frame that shows what
-the last one showed allocates no texture: an unchanged frame is not uploaded again and
-each nested scene is redrawn into the layer it had. An image no frame references is
-retired, then freed once the GPU has finished the last frame that used it (a
-`Queue::on_submitted_work_done` fence the cache polls without blocking). The render
-thread hands those images, and each render snapshot it replaces, to the program
-stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
-reader slot as the handover below says. When a fatal error stops its drawing it
-publishes the stopped marker too: it adopts nothing more and only repeats the frame it
-last drew until teardown. The audio and outputs snapshots are not built.
+The **render snapshot** is built. After every applied batch, undo and redo, every stored
+source frame and a collection file's load, the control side re-plans the program mix
+under the collection lock: the reachable scenes, the frames they show and the passes
+that draw them. It publishes that as the next render generation only when it draws
+something new, so a batch that touches nothing on program publishes nothing. The render
+thread loads it without the lock. `video.snapshot` reads it together with `rev` under
+the lock on the control path, and its thread only receives the snapshot. The render
+thread draws through a `jstream-render` resource cache keyed by source and by nested
+scene and depth. A frame that shows what the last one showed allocates no texture: an
+unchanged frame is not uploaded again and each nested scene is redrawn into the layer it
+had. An image no frame references is retired, then freed once the GPU has finished the
+last frame that used it (a `Queue::on_submitted_work_done` fence the cache polls without
+blocking). The render thread hands those images, and each render snapshot it replaces,
+to the program stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render
+thread stamps its reader slot as the handover below says. When a fatal error stops its
+drawing it publishes the stopped marker too: it adopts nothing more and only repeats the
+frame it last drew until teardown. The audio and outputs snapshots are not built.
 
 **Live-value handover** (decided; the render generation and its reader slot are built,
-the parameter channels and the gesture release are not): the engine learns that a real-time
-thread holds a committed snapshot through a **generation counter per subsystem**. Each
-time the control side publishes a subsystem's snapshot it bumps that subsystem's
-generation and stores it in the snapshot. Each real-time thread that reads the snapshot
-(the render thread for render, the mixer for audio) publishes the last generation it
-adopted with one atomic store when it picks up a new snapshot, which allocates, locks and
-waits on nothing ([R-RT-001](RULES.md#R-RT-001), [R-RT-002](RULES.md#R-RT-002)). When a
-gesture's committing batch applies, the control side notes the generation of the snapshot
-that carries it, and releases the gesture's live values from the parameter channels once
-every thread that reads them has reported a generation at least that high. Until then the
-parameter channel keeps the live value, so no frame shows the old value in between. The
-control side polls the published generations; the real-time threads never wait for it.
-A thread that isn't adopting snapshots counts as caught up, so a gesture's live values
-aren't held while it is stopped or parked (no output running, nothing to render, no
-device to mix for). Before it stops or parks it publishes a stopped marker in place of
-its generation, and it shows nothing while marked. Each reader's slot starts as
-the stopped marker, so a gesture committed before a thread has ever run waits on
-nothing. On starting or resuming it clears the marker before it loads a snapshot, to a
-value below every generation (so it counts as caught up with nothing until it adopts
-one), and reads the parameter channels only after that load. So if the control side saw the
-marker and released a gesture, the thread's next load comes after the committing
-snapshot was published and already carries the committed value. That needs a store
-then load on each side (the thread clears the marker then loads the snapshot; the
-control side publishes the snapshot then reads the marker), which release and acquire
-alone don't order: the marker and generation stores and reads are `SeqCst`, with a
-`SeqCst` fence between each side's store and its load. A fence doesn't allocate, lock
-or wait, so [R-RT-001](RULES.md#R-RT-001) and [R-RT-002](RULES.md#R-RT-002) still hold.
+the parameter channels and the gesture release are not): the engine learns that a
+real-time thread holds a committed snapshot through a **generation counter per
+subsystem**. Each time the control side publishes a subsystem's snapshot it bumps that
+subsystem's generation and stores it in the snapshot. Each real-time thread that reads
+the snapshot (the render thread for render, the mixer for audio) publishes the last
+generation it adopted with one atomic store when it picks up a new snapshot, which
+allocates, locks and waits on nothing ([R-RT-001](RULES.md#R-RT-001),
+[R-RT-002](RULES.md#R-RT-002)). When a gesture's committing batch applies, the control
+side notes the generation of the snapshot that carries it, and releases the gesture's
+live values from the parameter channels once every thread that reads them has reported a
+generation at least that high. Until then the parameter channel keeps the live value, so
+no frame shows the old value in between. The control side polls the published
+generations; the real-time threads never wait for it. A thread that isn't adopting
+snapshots counts as caught up, so a gesture's live values aren't held while it is
+stopped or parked (no output running, nothing to render, no device to mix for). Before
+it stops or parks it publishes a stopped marker in place of its generation, and it shows
+nothing while marked. Each reader's slot starts as the stopped marker, so a gesture
+committed before a thread has ever run waits on nothing. On starting or resuming it
+clears the marker before it loads a snapshot, to a value below every generation (so it
+counts as caught up with nothing until it adopts one), and reads the parameter channels
+only after that load. So if the control side saw the marker and released a gesture, the
+thread's next load comes after the committing snapshot was published and already carries
+the committed value. That needs a store then load on each side (the thread clears the
+marker then loads the snapshot; the control side publishes the snapshot then reads the
+marker), which release and acquire alone don't order: the marker and generation stores
+and reads are `SeqCst`, with a `SeqCst` fence between each side's store and its load. A
+fence doesn't allocate, lock or wait, so [R-RT-001](RULES.md#R-RT-001) and
+[R-RT-002](RULES.md#R-RT-002) still hold.
 
 The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
 reach the render and mixer threads through a parameter channel, not a snapshot rebuild,

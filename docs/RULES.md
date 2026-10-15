@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:457ecf9221b0a5cb", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (#231 D7b): stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
+verified = { hash = "b3:898b8f0f8230a4c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale only through ARCH#threading after merging main (#215) into #143: ARCH changed in wording (render-snapshot lock-free reader, cleared marker value, R-RT links, grammar, rewrap); nothing this section states depends on those sentences" }
 -->
 
 <a id="R-RT-001"></a>
