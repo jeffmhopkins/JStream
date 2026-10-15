@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:64fad47fe7d85cd5", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (#231 D7b, #210 B6-f) into U2: main changed no server text; re-read the Basic, subprotocol and Web UI parts; hold" }
+verified = { hash = "b3:19d88928ddc8f227", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Round 1 N1/N3/N4/N5: Authorization at most once unless subprotocol carries token (gate.rs credentials/subprotocol_token); extra origins trusted with cached Basic; outside symlink never served (404 or root index for dotless name, ui.rs resolve); MCP preflight comes from post's application/json check (mcp.rs:206)" }
 -->
 
 ### Listening and admission
@@ -76,7 +76,8 @@ served
 | `Origin` | absent, or `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
 | `Authorization` | `Bearer <token>`, or `Basic` credentials whose password is the token (any user name); without `Authorization`, the offered subprotocol `jstream.token.<token>` (below). Matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` (`Basic` on the UI's paths) |
 
-`Host` and `Authorization` must appear exactly once and `Origin` at most once, and
+`Host` must appear exactly once, `Authorization` at most once (exactly once unless the
+subprotocol carries the token) and `Origin` at most once, and
 comparisons ignore ASCII case (except the token). The `Host` check defeats DNS
 rebinding: a page on an attacker's domain that resolves to `127.0.0.1` still sends its
 own name. The `Origin` check stops foreign pages, since browsers always send `Origin` on
@@ -112,7 +113,9 @@ to 65535, and an IPv6 address must be in brackets (`[::1]:4455`), as it is in a
 request's `Host`. Any other entry (no port, two ports as in `name:80:80`, or a bare
 `fe80::1`) could never match, since the gate compares hosts with their port, so
 `Server::bind` refuses it (`ServerError::InvalidHost`) before opening the socket rather
-than ignoring it.
+than ignoring it. A configured extra origin is trusted as the server's own: a page there
+can use whatever credentials the browser holds for the server, a cached `Basic` password
+included.
 
 **Token compare.** `Token` keeps only the BLAKE3 digest of the token. The presented
 value is hashed with BLAKE3 too, and the two 32-byte digests are compared with
@@ -161,7 +164,7 @@ kept-alive connection.
 | A missing path whose last segment has no `.` (the UI's own routes) | the root's `index.html` |
 | Any other missing path, or one under `/api` or `/mcp` | 404 |
 | A path with an empty, `.` or `..` segment, or one that holds `\`, `:` or NUL (percent-escapes decoded first) | 404 |
-| A file that resolves outside the directory (a symbolic link) | 404 |
+| A file that resolves outside the directory (a symbolic link) | never served: 404, or the root's `index.html` for a name without a `.` |
 | Any other method | 405 with `Allow: GET, HEAD` |
 
 **Paths.** The path is percent-decoded segment by segment, and a segment that could step
@@ -253,8 +256,8 @@ it on), `/mcp` (`MCP_PATH`) serves MCP's
 on the control port. Every request, whatever its method, first passes the same `Host`,
 `Origin` and token checks as an upgrade, with the same refusals (403, 401), so a
 request without `Origin` (a native agent) goes on to the token check, as on the
-WebSocket API: browsers send `Origin` on a cross-origin `fetch`, and the bearer token
-forces a preflight. Each body is one JSON-RPC message, answered by a
+WebSocket API: browsers send `Origin` on a cross-origin `fetch`, and a `POST` needs
+`Content-Type: application/json`, which forces a preflight. Each body is one JSON-RPC message, answered by a
 `jstream_mcp::Server` ([jstream-mcp › Design](../jstream-mcp/README.md#design)):
 
 | Request | Answer |

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:3114ad1e18d827f8", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 N2: register.rs log_status doc now says warn for Moved, info for Missing; purpose bullets unchanged and hold" }
+verified = { hash = "b3:a767aeb32840483f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Round 1 B1: 'Not here yet' now says jstream-server serves the UI from ServerConfig::ui_dir and the daemon has no flag yet; rest unchanged" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -57,8 +57,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   headers to check that the backends' Media Foundation DLLs are delay-loaded and none
   is a load-time import).
 
-Not here yet: serving the web UI (it waits on `jstream-server`,
-[jstream-server › Design](../../crates/jstream-server/README.md#design)),
+Not here yet: serving the web UI (`jstream-server` serves one from
+`ServerConfig::ui_dir`, [jstream-server › Design](../../crates/jstream-server/README.md#design),
+but the daemon has no flag for it yet),
 YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
@@ -184,7 +185,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:241ca4d7c49d86cb", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 round 2: stale only through server design; daemon text unchanged on this branch; holds" }
+verified = { hash = "b3:beb7702fe7bf73f9", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through server design; re-read MCP, Listening and logging bullets: unchanged gate, holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

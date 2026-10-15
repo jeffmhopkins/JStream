@@ -519,7 +519,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:b1f6fd8a89b11311", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: main changed no protocol transport text; U2's UI and token sentence kept; holds" }
+verified = { hash = "b3:90a21f5937e05750", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through server design; re-read transport bullet (UI, Basic, subprotocol): unchanged, holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -638,7 +638,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; tool list includes delete and encoder; tools.snap 146 KB, text says about 145 KB" }
+verified = { hash = "b3:843f858c9fefd213", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "MCP Origin reasoning now cites the required Content-Type: application/json (mcp.rs post) as the preflight cause, since Basic is also accepted" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -671,8 +671,8 @@ verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9f
   `Origin`, as the
   [MCP transport spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
   requires. Like the WebSocket API it lets a request without `Origin` through to the
-  token check: browsers send `Origin` on a cross-origin `fetch`, and the bearer token
-  forces a preflight, so only native clients send none
+  token check: browsers send `Origin` on a cross-origin `fetch`, and the required
+  `Content-Type: application/json` forces a preflight, so only native clients send none
   ([jstream-server › Design](../crates/jstream-server/README.md#design)).
 - Every agent action goes to the audit log with the client's name. Undo is per client,
   so an agent can never undo the user's work.
