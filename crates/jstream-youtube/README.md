@@ -100,5 +100,6 @@ anywhere itself.
 
 **Not yet:** chat (reading, sending as the channel, the featured message) and audience
 stats from ADR-0041 (kept by ADR-0051), quota accounting, the protocol commands and MCP tools that expose
-all of this, and the engine wiring (including saving the refresh token in the
-`OAuthTokenStore`).
+all of this, the engine wiring (including saving the refresh token in the
+`OAuthTokenStore`), and the settings where a user enters their own client ID and secret,
+which the host keeps in the OS credential store (ADR-0051 §2).
