@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:e00be6392001ef71", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of #219's branch (main's #295 clock-swap fix and Windows link test, #297, #309, #237, #286): re-read C3's display/window and capture.targets text beside main's; holds" }
+verified = { hash = "b3:99ae2302957e5ff1", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review N1/N3/N4: re-read; capture start now returns the reason and the capture thread logs it (warn once per failing streak); purpose text unchanged, holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -177,7 +177,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a3996cf1d1c151c4", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of #219's branch (main's #295 clock-swap fix and Windows link test, #297, #309, #237, #286): clock-swap sentence matches main's set_clock (kept verbatim); C3's capture and capture.targets text unchanged; holds" }
+verified = { hash = "b3:bd9f293c39da5d06", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review N2/N3: sharing is by target value (empty display target vs the primary's ID captures twice); per-tick allocations list the capture keys' target copies; matches snapshot.rs compose" }
 -->
 
 ### Engine and sessions
@@ -989,7 +989,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:f1928b8ba63bb9e6", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets hw test: runtime/mod.rs only re-exports captures::Backends for the Windows hw test; runtime text holds" }
+verified = { hash = "b3:fb40060978492a40", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review N4: captures.rs start returns Result and capture_thread latches its warning per spec; runtime text (retry 2 s, jstream-capture thread) holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
