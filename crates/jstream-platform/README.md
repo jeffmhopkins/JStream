@@ -143,7 +143,7 @@ is filled, with `MfVideoDevices` on Windows and `MfMjpegDecoder` as its
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:ed925005d2a2cba9", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3 cascade from ARCH#crate-map: only the jstream-ui-e2e test-harness row was added; GPU frame design untouched; holds" }
+verified = { hash = "b3:4802621b70b72250", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 merge of main: text unchanged by the merge (GpuContext::key, Capture::on_context, browser frames on the context); holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

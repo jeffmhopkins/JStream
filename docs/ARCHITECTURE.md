@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:2b244546dfef74f8", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Crate-map daemon row (N3) now says the daemon registers and publishes the virtual camera via a virtual_cam output, matching serve.rs windows_backends" }
+verified = { hash = "b3:b3c9a6bb5eda6c54", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 merge of main: resolved conflict; daemon row is main's (registers and publishes the virtual camera), jstream-browser-helper non-host row from #283 kept; diagram unchanged" }
 -->
 
 ```
@@ -117,7 +117,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:b565e139a0c83a2b", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: re-read; added the jstream-ui-e2e row (layer 6, test-only harness under crates/jstream-ui/tests/e2e/mock-daemon, depends on control+server, no unsafe); lint-deps passes" }
+verified = { hash = "b3:06de2dcb0b88d226", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 merge of main: resolved conflict; main's jstream-ui-e2e row and #283's jstream-browser row both present, apps/* row keeps jstream-browser-helper, platform-windows row without CEF" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
