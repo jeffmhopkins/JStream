@@ -39,6 +39,8 @@ struct Harness {
     /// connections.
     taken: Arc<AtomicUsize>,
     stop: Option<oneshot::Sender<()>>,
+    /// The serving task: done once `serve_with_shutdown` has returned.
+    serving: Option<tokio::task::JoinHandle<Result<(), crate::ServerError>>>,
 }
 
 fn start(engine: &MockEngine) -> Harness {
@@ -86,7 +88,7 @@ fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) ->
     let url = server.ws_url();
     let authority = server.local_addr().to_string();
     let (stop, stopped) = oneshot::channel::<()>();
-    runtime.spawn(server.serve_with_shutdown(async move {
+    let serving = runtime.spawn(server.serve_with_shutdown(async move {
         // A dropped sender also stops the server.
         let _ = stopped.await;
     }));
@@ -98,6 +100,7 @@ fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) ->
         open,
         taken,
         stop: Some(stop),
+        serving: Some(serving),
     }
 }
 
@@ -650,11 +653,13 @@ impl Control for Gated {
 
 /// #294: a request the server reads once it is shutting down is never answered. The
 /// connection closes with 1001 instead, so the client's call fails with `Disconnected`
-/// rather than succeeding after `serve_with_shutdown` has returned.
+/// rather than succeeding after `serve_with_shutdown` has returned. The close frame
+/// arrives, and the connection then ends cleanly: the server reads the client's close
+/// before closing the socket, rather than resetting it with the request unread.
 ///
 /// Each round holds the connection's task inside `hello` while the client queues a
-/// request and the server shuts down, so when the task goes on, the shutdown and the
-/// request are ready together. `tokio::select!` picks among ready branches at random,
+/// request and the server begins shutting down, so when the task goes on, the shutdown
+/// and the request are ready together. `tokio::select!` picks among ready branches at random,
 /// and without the check the task took and answered the request in about one round in
 /// twenty; 200 rounds (well under a second) miss that with a probability near 1e-4.
 #[test]
@@ -702,6 +707,7 @@ fn a_request_read_after_the_shutdown_is_not_answered() {
                     Ok(value) => request.headers_mut().insert(header::AUTHORIZATION, value),
                     Err(error) => panic!("header: {error}"),
                 };
+                let addr = server.local_addr();
                 let (stop, stopped) = oneshot::channel::<()>();
                 let serving = tokio::spawn(server.serve_with_shutdown(async move {
                     let _ = stopped.await;
@@ -720,12 +726,14 @@ fn a_request_read_after_the_shutdown_is_not_answered() {
                     }
                 }
                 let _ = stop.send(());
-                match serving.await {
-                    Ok(Ok(())) => {}
-                    other => panic!("the server did not stop cleanly: {other:?}"),
+                // The server stops listening only after it has told its connections it is
+                // shutting down. (Awaiting `serving` here would wait for this connection,
+                // which `hello` holds.)
+                while tokio::net::TcpStream::connect(addr).await.is_ok() {
+                    tokio::time::sleep(Duration::from_millis(1)).await;
                 }
                 gate.add_permits(1);
-                loop {
+                let code = loop {
                     match socket.next().await {
                         Some(Ok(Message::Text(text))) => {
                             match serde_json::from_str::<ServerMessage>(text.as_str()) {
@@ -735,12 +743,26 @@ fn a_request_read_after_the_shutdown_is_not_answered() {
                             }
                         }
                         Some(Ok(Message::Close(frame))) => {
+                            // The server finishes the closing handshake before it closes
+                            // the socket, so the stream then ends without a reset. Linux
+                            // keeps a frame that arrived before a reset readable, but
+                            // macOS and Windows discard it, so this checks the reset
+                            // itself.
+                            match socket.next().await {
+                                None => {}
+                                other => panic!("round {round}: after the close: {other:?}"),
+                            }
                             break frame.map(|frame| u16::from(frame.code));
                         }
                         Some(Ok(_)) => {}
                         None | Some(Err(_)) => break None,
                     }
+                };
+                match serving.await {
+                    Ok(Ok(())) => {}
+                    other => panic!("the server did not stop cleanly: {other:?}"),
                 }
+                code
             })
             .await
         });
@@ -749,6 +771,35 @@ fn a_request_read_after_the_shutdown_is_not_answered() {
             Err(_) => panic!("round {round} timed out"),
         }
     }
+}
+
+/// #294: `serve_with_shutdown` returns only once every connection has sent its close
+/// and finished the closing handshake. Returning sooner let a host that exits right
+/// after it (the daemon drops its runtime) cut those closes short, so clients lost their
+/// close frame and last replies.
+#[test]
+fn serve_with_shutdown_returns_once_its_connections_have_closed() {
+    let mut harness = start(&MockEngine::new());
+    let (first, _) = harness.session();
+    let (second, _) = harness.session();
+    let mut events = second.events();
+    harness.shut_down();
+    let Some(serving) = harness.serving.take() else {
+        panic!("the harness has no serving task");
+    };
+    match harness.run(serving) {
+        Ok(Ok(())) => {}
+        other => panic!("the server did not stop cleanly: {other:?}"),
+    }
+    assert_eq!(
+        harness.open.load(Ordering::SeqCst),
+        0,
+        "a connection was still open when the server returned"
+    );
+    // Both clients got the close.
+    assert_eq!(next_event(&harness, &mut events), None);
+    let reason = expect_disconnected(harness.run(first.call(create_scene("main"))));
+    assert!(reason.contains("shutting down"), "{reason}");
 }
 
 #[test]

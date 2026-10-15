@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:bd0276aca0894182", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294: stale through server design, where only shutdown-ordering text changed; re-read the steps, none depends on it; holds" }
+verified = { hash = "b3:1946af655b2860bd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294 round 2: re-read step 7 (Ctrl-C prints stopped, exits 0): still true, the daemon may take up to CLOSE_TIMEOUT longer for a client that stopped reading; other steps unaffected; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI

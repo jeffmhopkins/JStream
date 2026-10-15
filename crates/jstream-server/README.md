@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:753f153b59566941", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294: session.rs gained a shutdown check before handling a read message, tests.rs a regression test; contents list and layering unchanged; holds" }
+verified = { hash = "b3:95f30483b18b5d83", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294 round 2: lib.rs serve_with_shutdown now waits for connections, session.rs finishes the closing handshake; contents list and layering unchanged; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4203d80f77203ba7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294: re-read Sessions and the serve_with_shutdown paragraph; edited it to say serve_with_shutdown returns while connections may still be closing and that a connection handles nothing it reads once shutting down (session.rs incoming-branch check); rest holds" }
+verified = { hash = "b3:54f022a686fe359e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294 round 2: rewrote the serve_with_shutdown paragraph: returns once every WebSocket connection has finished closing; each close sends the outbox and close frame, then reads until the client's close or EOF before closing the socket (no RST), bounded by CLOSE_TIMEOUT; re-read Sessions bullets, which hold" }
 -->
 
 ### Listening and admission
@@ -244,13 +244,18 @@ task speaks the envelope
 
 `serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
 open connection (close code 1001), so their clients' pending and later calls fail with
-`Disconnected` and their event streams end. It returns once it stops accepting, while
-connections may still be closing, but a connection handles nothing it reads once the
-server is shutting down: a call sent after the shutdown is never answered. Whenever the
-server closes a connection, it first ends the session's event subscription, then sends
-what the outbox still holds before the close frame. A client that doesn't take them
-within a short timeout (`CLOSE_TIMEOUT`) is dropped without one, so a client that
-stopped reading can't keep its connection or session open.
+`Disconnected` and their event streams end. A connection handles nothing it reads once
+the server is shutting down, so a call sent after the shutdown is never answered. It
+returns once every WebSocket connection has finished closing (as below), so a host that
+exits right after it doesn't cut a close short. Whenever the server closes a
+connection, it first ends the session's event subscription, then sends what the outbox
+still holds before the close frame, then reads and drops what the client still sends
+until the client's own close frame or the end of the stream, and only then closes the
+socket. Closing it with client data unread would make the kernel reset the connection,
+and on macOS and Windows a reset discards what the client hasn't read yet, the close
+frame and last replies included. A client that doesn't finish this within a short
+timeout (`CLOSE_TIMEOUT`) is dropped, so a client that stopped reading can't keep its
+connection or session open, nor hold up the shutdown.
 
 ### MCP over streamable HTTP
 

@@ -528,7 +528,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:d5ea59cb923b5c63", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294: server-internal shutdown ordering only (no request read after shutdown is answered); no wire, version or envelope change; protocol section says nothing about shutdown; holds" }
+verified = { hash = "b3:740095cb0f9cc7a5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294 round 2: server close handshake and shutdown wait only; no wire, version or envelope change; section says nothing about shutdown; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

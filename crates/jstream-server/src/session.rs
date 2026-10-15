@@ -58,7 +58,7 @@ const REMEMBERED_IDS: usize = 1024;
 const MAX_HELD_EVENTS: usize = 1024;
 
 /// How long a closing connection waits for the client to take what is still queued and
-/// the close frame. A client that has stopped reading would otherwise hold the
+/// the close frame, and to answer it with its own. A client that has stopped reading would otherwise hold the
 /// connection, and its `Control` session, open for good (#108 review N1).
 pub(crate) const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -214,10 +214,23 @@ pub(crate) async fn run(
     drop(events);
     if let Ok(frame) = end {
         // What is queued (a refused handshake's error, say) goes before the close frame.
-        // Best effort: the client may already be gone, or have stopped reading.
-        let finish = writer.finish(&mut outbox, frame);
-        if tokio::time::timeout(CLOSE_TIMEOUT, finish).await.is_err() {
-            tracing::info!("connection dropped: the client did not read its last messages");
+        // Then the closing handshake: read, and drop, what the client still sends until
+        // its own close frame or the end of the stream. Closing the socket with client
+        // data unread makes the kernel reset the connection, and a reset can discard
+        // what the client hasn't read yet, the close frame and last replies included
+        // (macOS does, #294). Best effort: the client may already be gone, or have
+        // stopped reading.
+        let close = async {
+            writer.finish(&mut outbox, frame).await?;
+            while let Some(Ok(message)) = incoming.next().await {
+                if matches!(message, Message::Close(_)) {
+                    break;
+                }
+            }
+            Ok::<(), Closed>(())
+        };
+        if tokio::time::timeout(CLOSE_TIMEOUT, close).await.is_err() {
+            tracing::info!("connection dropped: the client did not finish the close");
         }
     }
 }

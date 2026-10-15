@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2de9ec2785e97fac", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294: stale through server design; re-read Signals bullet (serve_with_shutdown closes open connections with 1001) and the rest; daemon code unchanged; holds" }
+verified = { hash = "b3:2c46eaa0f386cd57", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 294 round 2: re-read Signals bullet: serve_with_shutdown closes open connections with 1001, now also before main drops the runtime; daemon code unchanged; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
