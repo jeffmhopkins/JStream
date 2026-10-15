@@ -167,6 +167,8 @@ pub enum EntityKind {
     Encoder,
     /// A transition preset.
     Transition,
+    /// An audio bus.
+    Bus,
 }
 
 impl fmt::Display for EntityKind {
@@ -178,6 +180,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
             EntityKind::Transition => "transition",
+            EntityKind::Bus => "bus",
         })
     }
 }

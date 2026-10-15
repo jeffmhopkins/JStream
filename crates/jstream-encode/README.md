@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:8739827f3e993fbc", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
+verified = { hash = "b3:f5c90aeea81455e7", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (D5 audio #240, #331): re-read main's audio text beside T1's transition/preview text and merged the sentences both sides edited (contents lists, state.get, file, rebuild order, touched sets, tool nouns, version line); T1 now documents protocol 0.20 since D5 took 0.19; CLI usage also notes the transition edits aren't in the CLI; holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

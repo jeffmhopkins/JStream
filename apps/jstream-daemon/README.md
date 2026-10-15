@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1bf85bdda0aa3e41", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
+verified = { hash = "b3:8eca9fb7baba69a1", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (D5 audio #240, #331): re-read main's audio text beside T1's transition/preview text and merged the sentences both sides edited (contents lists, state.get, file, rebuild order, touched sets, tool nouns, version line); T1 now documents protocol 0.20 since D5 took 0.19; CLI usage also notes the transition edits aren't in the CLI; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

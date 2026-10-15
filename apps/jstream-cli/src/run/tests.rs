@@ -241,7 +241,8 @@ fn source_list_golden() {
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"source.list","rev":2,"#,
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}},"#,
-            r#"{"source_id":"nest","name":"Nested BRB","kind":{"type":"scene","scene_id":"brb"}}]}}}"#,
+            r#"{"source_id":"nest","name":"Nested BRB","kind":{"type":"scene","scene_id":"brb"},"#,
+            r#""audio":{"enabled":true,"follow":"when_shown","gain_db":0.0,"muted":false}}]}}}"#,
             "\n"
         ))
     );
@@ -341,7 +342,7 @@ fn state_get_golden() {
             item("cam_2"),
             item("cam_1"),
             r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"#,
-            r#""transitions":{"presets":[{"preset_id":"cut","name":"Cut","kind":"cut","duration_ms":300,"easing":"ease_in_out"}],"default":"cut"}}}}"#,
+            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[],"transitions":{"presets":[{"preset_id":"cut","name":"Cut","kind":"cut","duration_ms":300,"easing":"ease_in_out"}],"default":"cut"}}}}"#,
         ))
     );
     assert_eq!(

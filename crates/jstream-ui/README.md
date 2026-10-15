@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1866196cb1169420", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
+verified = { hash = "b3:96bb3d539336c825", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (D5 audio #240, #331): re-read main's audio text beside T1's transition/preview text and merged the sentences both sides edited (contents lists, state.get, file, rebuild order, touched sets, tool nouns, version line); T1 now documents protocol 0.20 since D5 took 0.19; CLI usage also notes the transition edits aren't in the CLI; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
