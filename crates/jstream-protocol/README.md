@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b0ab2649efe3d49f", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: PROTOCOL_VERSION now 0.17 for scene.create's optional role; version history line names 0.16 for B10's scene.switch/studio" }
+verified = { hash = "b3:b4650be831c06275", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: src change is one envelope test; contents list and layer description unchanged" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -121,7 +121,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:f923ef8b515be15c", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r at 0.17: Groups paragraph marks scene.create's role as protocol 0.17; inverse text holds" }
+verified = { hash = "b3:586452dea5a9e420", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: added the sentence that settings numbers parse to the nearest f64 and round-trip; Finite32 paragraph unchanged" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -312,7 +312,9 @@ then serializes as `null` and no longer parses. So a
 non-finite or out-of-`f32`-range number fails deserialization, and
 `ClientMessage::parse` rejects the whole message as `malformed`. In-process clients
 can't build a non-finite value either: `Finite32::new` and `Vec2::new` return `None`
-for one.
+for one. Settings values keep JSON numbers as `f64`, parsed to the nearest one
+(serde_json's `float_roundtrip`), so a message with a long number still serializes and
+parses back to itself.
 
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next

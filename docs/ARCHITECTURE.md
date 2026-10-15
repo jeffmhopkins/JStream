@@ -524,7 +524,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e3759c009695f67a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through server design; transport bullet (UI, Basic, subprotocol) unchanged; holds" }
+verified = { hash = "b3:d0c300fd256e6d8a", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: section describes the envelope and calls; nothing on number parsing changes" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

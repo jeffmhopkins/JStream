@@ -156,7 +156,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bc013b6f6916b7d1", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (B10, B6, U-series, D8): locking paragraph still says only the render thread loads the render snapshot lock-free; Snapshots and lock-order text agree with Engine::video_snapshot (rev and snapshot read under the collection lock)" }
+verified = { hash = "b3:ca76390be6576f3a", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: only the protocol design gained a sentence on f64 settings numbers; engine, sessions and snapshot text unaffected" }
 -->
 
 ### Engine and sessions

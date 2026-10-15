@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:2627015178af28cd", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: scene.create role and delete inverse text hold beside B9 blockers / B2-f2 touched sets" }
+verified = { hash = "b3:d33eaca6ffe735d1", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: protocol design dependency gained a number-parsing sentence; graph model, edits and tests text unaffected" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
