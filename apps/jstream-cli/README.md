@@ -232,7 +232,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f5101ac13a2b736b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: re-read; holds" }
+verified = { hash = "b3:c5138e865623869c", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B6-f #210 mock groups and CLI placement, D7b #231) into U0: took main's text and stamp, re-read; main's mock/CLI changes and U0's browser client and token subprotocol text both hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

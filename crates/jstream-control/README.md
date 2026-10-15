@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:b24d855a6714afcc", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: re-read; contents list holds" }
+verified = { hash = "b3:3f5592fcc6b24d0e", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B6-f #210 mock groups and CLI placement, D7b #231) into U0: took main's text and stamp, re-read; main's mock/CLI changes and U0's browser client and token subprotocol text both hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:b10544e7956fd894", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: kept main's B9 line (delete.plan internal, no blockers on refused deletes) beside this branch's set_role/item.move bullets; matches mock.rs" }
+verified = { hash = "b3:bf201fa390b1c0dd", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B6-f #210 mock groups and CLI placement, D7b #231) into U0: took main's text and stamp, re-read; main's mock/CLI changes and U0's browser client and token subprotocol text both hold" }
 -->
 
 ### The trait

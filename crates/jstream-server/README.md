@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:42323e3c06de0f79", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: cascade; unaffected" }
+verified = { hash = "b3:e7b7ebef15e3424e", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B6-f #210 mock groups and CLI placement, D7b #231) into U0: took main's text and stamp, re-read; main's mock/CLI changes and U0's browser client and token subprotocol text both hold" }
 -->
 
 ### Listening and admission

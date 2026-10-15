@@ -151,7 +151,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:24ce24aaf3375494", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: cascade; main's text kept, mock text unaffected by this branch" }
+verified = { hash = "b3:9e06ef8bdedaab30", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B6-f #210 mock groups and CLI placement, D7b #231) into U0: took main's text and stamp, re-read; main's mock/CLI changes and U0's browser client and token subprotocol text both hold" }
 -->
 
 ### Engine and sessions
