@@ -8,6 +8,7 @@
 //! after the lock is released.
 
 use crate::audit::{self, Audit, AuditSink};
+use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::history::{History, Touched};
@@ -15,7 +16,7 @@ use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
     Destination, Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent,
-    Running, launch, parts_from,
+    RenderHub, Running, launch, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
@@ -61,9 +62,11 @@ pub struct Engine {
     drops: Arc<Mutex<DropLedger>>,
 }
 
-/// The collection lock, and the snapshot thread that owns the snapshot compositor. A
-/// snapshot copies its shot under the lock, drops it, then queues the shot for that
-/// thread. The pipeline threads never take the lock.
+/// The collection lock, the render snapshot, and the snapshot thread that owns the
+/// snapshot compositor. Every change to what the program mix draws publishes a new render
+/// snapshot under the lock. A `video.snapshot` reads `rev` and the published snapshot
+/// under the lock, drops it, then queues the snapshot for that thread. The pipeline
+/// threads never take the lock.
 struct Shared {
     state: Mutex<State>,
     snapshots: SnapshotWorker,
@@ -72,6 +75,9 @@ struct Shared {
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
     /// Where each executed batch, undo, redo and action is recorded, if the host gave a sink.
     audit: Audit,
+    /// Where the collection is saved, if the host named a file. Taken before the
+    /// collection lock, never while holding it, so the disk write happens outside it.
+    collection_file: Mutex<Option<CollectionFile>>,
 }
 
 impl Default for Engine {
@@ -86,6 +92,7 @@ impl Default for Engine {
                 snapshots: SnapshotWorker::default(),
                 keys: Mutex::new(None),
                 audit: Audit::default(),
+                collection_file: Mutex::new(None),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -117,10 +124,13 @@ impl Engine {
         height: u32,
         rgba: &[u8],
     ) -> Result<(), SourceFrameError> {
-        let frame = Frame::new(width, height, rgba)?;
-        lock(&self.shared.state)
-            .frames
-            .insert(source_id.clone(), frame);
+        // Copied before the lock is taken; only the version is assigned under it.
+        let frame = Frame::new(width, height, rgba, 0)?;
+        let mut state = lock(&self.shared.state);
+        state.frame_versions = state.frame_versions.saturating_add(1);
+        let frame = frame.with_version(state.frame_versions);
+        state.frames.insert(source_id.clone(), frame);
+        state.publish_render();
         Ok(())
     }
 
@@ -154,6 +164,72 @@ impl Engine {
     pub fn with_audit(self, sink: Arc<dyn AuditSink>) -> Self {
         self.shared.audit.set(sink);
         self
+    }
+
+    /// Loads the collection from the file at `path` and saves it there after every
+    /// change. Configure this before [`connect`](Self::connect): it replaces the
+    /// collection and its `rev` with the file's.
+    ///
+    /// The file is a versioned JSON collection (`jstream-graph`), upgraded on load if it
+    /// is older, and checked as edits are, against this engine's kinds. When there is
+    /// no file at `path`, it is created with the current, empty, collection, so a path
+    /// that can't be written fails here rather than at the first change.
+    ///
+    /// Every applied batch, undo and redo then replaces the file atomically before its
+    /// call returns, so a client that has its `rev` knows the file holds it. A failed
+    /// save is logged at `error` and leaves the call's result as it is: the change is
+    /// applied, and the next change saves again. The `rev` is saved too, so revisions
+    /// keep increasing across restarts and an `expected_rev` from before one can't
+    /// match a different state. Undo history and idempotency keys are not saved.
+    ///
+    /// # Errors
+    /// [`CollectionFileError`] when the file can't be read, holds no loadable
+    /// collection (it is then left as it is), or can't be created.
+    pub fn with_collection_file(
+        self,
+        path: impl Into<PathBuf>,
+    ) -> Result<Self, CollectionFileError> {
+        {
+            let mut file = lock(&self.shared.collection_file);
+            // The file is read (or created) with only the file's lock held, from a copy
+            // of the graph taken under the collection lock.
+            let current = lock(&self.shared.state).graph.clone();
+            let (opened, graph) = CollectionFile::open(path.into(), &current)?;
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state.graph = graph;
+            state.outputs.sync(state.graph.state());
+            // The loaded collection is what the program mix draws now.
+            state.publish_render();
+            *file = Some(opened);
+        }
+        Ok(self)
+    }
+
+    /// Saves the collection to its file, if the host named one and the file doesn't
+    /// already hold this `rev` or a later one. Takes the file's lock, then the
+    /// collection lock only to serialize, and writes with only the file's lock held, so
+    /// saves happen one at a time and a late one never overwrites a newer collection.
+    fn save_collection(&self) {
+        let mut file = lock(&self.shared.collection_file);
+        let Some(file) = file.as_mut() else {
+            return;
+        };
+        let (rev, json) = {
+            let state = lock(&self.shared.state);
+            if state.graph.rev() <= file.saved() {
+                return;
+            }
+            (state.graph.rev(), state.graph.to_collection_json())
+        };
+        if let Err(err) = file.save(rev, &json) {
+            tracing::error!(
+                path = %file.path().display(),
+                rev = %rev,
+                error = %err,
+                "collection not saved"
+            );
+        }
     }
 
     /// What an output in the collection is and where it sends, or `None` if the
@@ -453,6 +529,12 @@ impl Engine {
             }
             self.with_key_set(result)
         };
+        if matches!(
+            result,
+            Ok(CallResult::Batch { .. } | CallResult::History { .. })
+        ) {
+            self.save_collection();
+        }
         match (&result, output) {
             (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
             (Ok(CallResult::History { rev, step_rev, .. }), _) => {
@@ -636,6 +718,7 @@ impl Engine {
                     backends,
                     Arc::clone(&lock(&host.draw)),
                     *lock(&host.open_timeout),
+                    Arc::clone(&state.render),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -891,14 +974,21 @@ impl Engine {
         wake_all(wake);
     }
 
-    /// `video.snapshot`. The shot is copied under the collection lock; the snapshot
-    /// thread renders it after that lock is released.
+    /// `video.snapshot`. The `rev` and the render snapshot published for it are read
+    /// together under the collection lock; the snapshot thread renders it after that
+    /// lock is released.
     fn video_snapshot(&self) -> SnapshotReply {
-        let shot = {
+        let (snapshot, rev) = {
             let state = lock(&self.shared.state);
-            snapshot::plan(&state.graph, &state.frames)
+            (state.render.load(), state.graph.rev())
         };
-        self.shared.snapshots.request(shot)
+        self.shared.snapshots.request(snapshot, rev)
+    }
+
+    /// The render hub the pipeline's render thread reads, for tests.
+    #[cfg(test)]
+    pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
+        Arc::clone(&lock(&self.shared.state).render)
     }
 }
 
@@ -1236,6 +1326,12 @@ struct State {
     /// `rev`. A snapshot draws an item from this when the source is not itself a scene.
     /// An applied `source.delete` removes the deleted source's entry.
     frames: BTreeMap<SourceId, Frame>,
+    /// How many frames `set_source_frame` has stored: the next one's version.
+    frame_versions: u64,
+    /// The program mix the render thread and `video.snapshot` draw, republished after
+    /// every change to the graph or a stored frame (it only becomes a new generation when
+    /// what it draws changed).
+    render: Arc<RenderHub>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
 }
@@ -1424,6 +1520,7 @@ impl State {
                 self.frames.remove(source_id);
             }
         }
+        self.publish_render();
         self.subscribers.emit(
             &Event::StateChanged {
                 rev,
@@ -1472,6 +1569,12 @@ impl State {
             },
         };
         Ok(CallResult::Query { result })
+    }
+
+    /// Re-plans the program mix and publishes it if it draws something new.
+    fn publish_render(&self) {
+        self.render
+            .publish(snapshot::plan(&self.graph, &self.frames));
     }
 
     fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {

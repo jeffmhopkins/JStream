@@ -1,0 +1,25 @@
+{
+  "kind": "youtube#liveStream",
+  "etag": "fixture-etag-stream2",
+  "id": "UCfixturechannel000000000fixturestream2",
+  "snippet": {
+    "publishedAt": "2026-10-15T01:21:00Z",
+    "channelId": "UCfixturechannel000000000",
+    "title": "JStream",
+    "description": ""
+  },
+  "cdn": {
+    "ingestionType": "rtmp",
+    "ingestionInfo": {
+      "streamName": "wxyz-1234-5678-9abc-defg",
+      "ingestionAddress": "rtmp://a.rtmp.youtube.com/live2",
+      "backupIngestionAddress": "rtmp://b.rtmp.youtube.com/live2?backup=1",
+      "rtmpsIngestionAddress": "rtmps://a.rtmps.youtube.com/live2",
+      "rtmpsBackupIngestionAddress": "rtmps://b.rtmps.youtube.com/live2?backup=1"
+    },
+    "resolution": "variable",
+    "frameRate": "variable"
+  },
+  "status": { "streamStatus": "ready", "healthStatus": { "status": "noData" } },
+  "contentDetails": { "closedCaptionsIngestionUrl": "http://upload.youtube.com/closedcaption?cid=fixture", "isReusable": true }
+}

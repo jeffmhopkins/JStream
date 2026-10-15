@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e580608f903a3224", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Cascade from control#design (B6-f mock edits): re-read; server text unaffected" }
+verified = { hash = "b3:f064af34aba317c3", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#protocol, whose only change is the YouTube bullet's ADR link (0034 -> 0041, same design restated); the server's transport and auth text doesn't rely on it" }
 -->
 
 ### Listening and admission

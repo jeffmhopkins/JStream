@@ -1,0 +1,12 @@
+{
+  "kind": "youtube#liveBroadcast",
+  "etag": "fixture-etag-live",
+  "id": "jNQXAC9IVRw",
+  "snippet": {
+    "title": "JStream go-live test",
+    "scheduledStartTime": "2026-10-15T02:00:00Z",
+    "actualStartTime": "2026-10-15T02:00:31Z"
+  },
+  "status": { "lifeCycleStatus": "liveStarting", "privacyStatus": "private", "recordingStatus": "recording" },
+  "contentDetails": { "boundStreamId": "UCfixturechannel000000000fixturestream2" }
+}

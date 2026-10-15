@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:7a3802940a84d900", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B6-f: mock bullet now says every protocol edit; item.move index and cycle checks listed; reads keep scene roles and moved items' scenes" }
+verified = { hash = "b3:fb675d8fbcc38ecf", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#protocol, whose only change is the YouTube bullet's ADR link (0034 -> 0041, same design restated); nothing here relies on it" }
 -->
 
 ### The trait

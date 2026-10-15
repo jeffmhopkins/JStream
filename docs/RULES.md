@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:080fea9002e1d852", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: rule text unchanged; ARCH#threading only combines main's collector text and F2b's recording write path, both within R-RT-003/R-RT-004" }
+verified = { hash = "b3:892f22ab2f9a07aa", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: R-RT rules unchanged; render and mixer collectors still satisfy R-RT-003" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:ee1670969f47fe74", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: rule text unchanged; re-read, holds for B6 as its own additive minor 0.12" }
+verified = { hash = "b3:0b37bf85a0c9c88d", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#protocol, whose only change is the YouTube bullet's ADR link (0034 -> 0041); R-API-001..004 text unchanged and holds" }
 -->
 
 <a id="R-API-001"></a>

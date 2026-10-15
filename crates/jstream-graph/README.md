@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:69708ec0315d4fe2", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Round 6 B5 follow-up: Groups and moves bullet's placement-edit list now names item.set_geometry, which takes scene_id after the B3 merge (apply.rs placement_mut)" }
+verified = { hash = "b3:9077e3c3a2817ff4", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the YouTube ADR link in protocol README#design (0034 -> 0041); main's text kept; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -125,6 +125,36 @@ protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads 
 stored transform and no geometry. `Source::to_info`,
 `Scene::to_info`, `Item::to_info` and `Output::to_info` convert single objects. Reads change nothing.
 
+**The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
+`Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
+(`SCHEMA_VERSION`, now 1), `rev`, the `canvas`, scenes in display order (a group with
+`role: "group"`, ADR-0024) with their items bottom first (each with its placement in
+its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
+and `visible`), sources ordered by ID (with `kind_version`, the descriptor version a
+`builtin` source's settings follow, ADR-0025), and outputs ordered by ID. Kinds, undo history and runtime state are not in it, and
+neither is any secret: stream keys are in the OS credential store and output URLs can't
+carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
+the engine's; this crate does no I/O.
+- **Loading** (`Graph::with_collection_json`) parses the JSON, refuses a
+  `schema_version` it has no path from (missing, 0, or newer), runs the forward
+  migrations from the file's version (`MIGRATIONS[n]` upgrades `n + 1` to `n + 2`;
+  there are none while the schema is at 1), and refuses unknown fields in the file's
+  own objects, so a newer field is never silently dropped by the next save.
+- **A loaded collection passes every edit check.** Rather than trust the file, loading
+  rebuilds the state by applying the edits that create it, one at a time, to an empty
+  graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
+  sources its settings refer to), then items in their placement form with their crop
+  and visibility, then outputs. A
+  dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
+  URL with a credential fails as `LoadError::Invalid`, naming the object
+  (`` item `i1` ``) and the protocol error; nothing is partly loaded. Then `rev` is set
+  to the file's, so revisions keep increasing across restarts. A source whose
+  `kind_version` differs from its kind's descriptor is refused
+  (`LoadError::KindVersion`) until kinds ship settings migrations.
+- **Errors** never quote a value beyond IDs, so they are safe to log. `serde_json`'s
+  own messages quote the offending value, so a parse error keeps only a missing field's
+  name, a fixed reason, and the line and column of a syntax error.
+
 **Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
 edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds, and through
 settings references, one case per edge-adding edit), settings checks and defaults,
@@ -139,6 +169,16 @@ property test: a seeded generator applies 6000 random
 batches of every edit, including moves, role changes and addressed placement edits. After each successful one, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged.
+The collection file's tests (`persist/tests.rs`): saving the parity collection (a
+1280×720 canvas, legacy and geometry items, scene `b` made a group) plus a source whose
+settings refer to a later one must produce exactly the checked-in
+`persist/fixtures/v1.json`, and that fixture must load back to the same state and
+`rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
+moves on, and a migration has to load it); the migration runner over stand-in
+migrations; and refused files (versions, malformed JSON, unknown fields, dangling
+references, cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
+item with both or neither placement form, an invalid geometry or canvas), and that
+no error quotes a credential-like value placed where a number, key or tag belongs.
 
 <a id="follow-ups"></a>
 ## Not yet
@@ -147,15 +187,11 @@ restore the batch's result. After each failed one, the graph must be unchanged.
 
 Planned, and kept possible by the private fields of the model types:
 
-- **Persistence and migrations.** A versioned JSON collection file with
-  `schema_version` and forward migrations ([R-API-003](../../docs/RULES.md#R-API-003),
-  [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)) belongs here, in
-  `src/persist/`. Deferred to keep this first cut reviewable; nothing is saved yet.
 - **Filters and effects:** `filters[]` on sources (applied wherever the source is
   placed) and `effects[]` on items (per placement), with their edits.
-- **Kinds from `jstream-sources`.** The engine's kinds are stubs until that crate
-  supplies the real ones. Kind versions on stored settings, migrations, and keeping
-  data for a missing kind come with persistence.
+- **Kind versions.** The engine's kinds come from `jstream-sources`. The collection file
+  records each source's kind version but refuses a mismatch: settings migrations per
+  kind, and keeping the data of a source whose kind is missing, come later.
 - Blend modes and opacity on placements (B7). Legacy placements go in 1.0, whose
   collection migration converts them
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) decision 5).
