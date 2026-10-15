@@ -1629,7 +1629,7 @@ fn deleting_a_source_drops_its_frame() {
 
 mod cpu_pipeline {
     use super::{block_on, code, connected, drain, output_call, output_state, output_steps};
-    use crate::runtime::{DrawFn, OpenDraw};
+    use crate::runtime::{DrawFn, OpenDraw, cpu_draw};
     use crate::{Engine, LinkState, LivePublish, PublishError, RecordingPublish};
     use jstream_control::{Control, EventStream};
     use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, Timebase};
@@ -1651,22 +1651,6 @@ mod cpu_pipeline {
 
     /// One base-rate period of the pipeline on a microsecond clock (1/30 s).
     const PERIOD_US: u64 = 33_333;
-
-    /// Composites by copying: the capture as it is, or black.
-    fn cpu_draw() -> OpenDraw {
-        Arc::new(|| {
-            let draw: DrawFn =
-                Box::new(|size: FrameSize, rgba: Option<&[u8]>, out: &mut Vec<u8>| {
-                    out.clear();
-                    match rgba {
-                        Some(rgba) => out.extend_from_slice(rgba),
-                        None => out.resize(size.width() as usize * size.height() as usize * 4, 0),
-                    }
-                    Ok(())
-                });
-            Ok(draw)
-        })
-    }
 
     struct Fakes {
         clock: FakeClock,
@@ -1780,6 +1764,139 @@ mod cpu_pipeline {
             while !*open {
                 open = self.cv.wait(open).expect("hold");
             }
+        }
+    }
+
+    // --- Item: a publish opener connects on every start, as a live host needs.
+
+    /// The engine as a live host wires it: no one-shot target, an opener that
+    /// connects RTMP to a fake server on loopback. Each `output.start` opens a new
+    /// session and publishes media into it, and `output.stop` ends it, so the output
+    /// can start again after a stop.
+    #[test]
+    fn a_publish_opener_connects_rtmp_on_every_start() {
+        use crate::runtime::serve_rtmp;
+        use crate::{OpenPublish, connect_rtmp};
+        use std::net::TcpListener;
+
+        const STARTS: usize = 2;
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let url = format!(
+            "rtmp://127.0.0.1:{}/live",
+            listener.local_addr().expect("addr").port()
+        );
+        // A baseline session that publishes no media, then one session per start, in
+        // turn; each drains until the client hangs up.
+        let server = thread::spawn(move || {
+            (0..=STARTS)
+                .map(|_| {
+                    let (io, _) = listener.accept().expect("accept");
+                    serve_rtmp(io, Duration::ZERO).join().expect("drain")
+                })
+                .collect::<Vec<u64>>()
+        });
+        let opens = Arc::new(AtomicU64::new(0));
+        let open: OpenPublish = {
+            let opens = Arc::clone(&opens);
+            let url = url.clone();
+            Arc::new(move |output_id: &OutputId| {
+                assert_eq!(output_id, &OutputId::new("yt"));
+                opens.fetch_add(1, Ordering::SeqCst);
+                let publish: Box<dyn LivePublish> = Box::new(connect_rtmp(&url, "test-key")?);
+                Ok(publish)
+            })
+        };
+
+        let mut baseline = connect_rtmp(&url, "test-key").expect("baseline session");
+        baseline.finish().expect("finish");
+        drop(baseline);
+
+        let fakes = fakes();
+        let engine = Engine::new()
+            .with_output(OutputId::new("yt"))
+            .with_backends(share(&fakes.backends))
+            .with_draw(cpu_draw())
+            .with_publish_opener(open);
+        let control = connected(&engine);
+        let mut events = control.events();
+        for run in 1..=STARTS {
+            start(&control, &mut events);
+            assert_eq!(
+                opens.load(Ordering::SeqCst),
+                run as u64,
+                "one open per start"
+            );
+            assert!(
+                pump_until(&fakes.clock, &fakes.audio, || {
+                    engine.output_stats().is_some_and(|stats| {
+                        stats.video_subscriber.delivered >= 3
+                            && stats.audio_subscriber.delivered >= 3
+                    })
+                }),
+                "start {run}: media never reached the publish target"
+            );
+            block_on(control.call(output_call("yt", false))).expect("output.stop");
+            assert_eq!(
+                output_steps(&mut events),
+                vec![OutputState::Stopping, OutputState::Stopped]
+            );
+        }
+        let drained = server.join().expect("server");
+        let (baseline, runs) = drained.split_first().expect("sessions");
+        assert_eq!(runs.len(), STARTS, "one session per start");
+        for (run, bytes) in runs.iter().enumerate() {
+            assert!(
+                bytes > baseline,
+                "session {} carried {bytes} bytes, no more than the {baseline} without media",
+                run + 1
+            );
+        }
+    }
+
+    /// An opener that cannot connect fails the start with `action_failed` and settles
+    /// `failed`; the reason says what failed without the stream key (R-SEC-001), and
+    /// the opener is kept for the next start.
+    #[test]
+    fn a_failed_publish_opener_fails_the_start() {
+        use crate::{OpenPublish, connect_rtmp};
+        use std::net::TcpListener;
+
+        // A port nothing listens on: bound, then released.
+        let port = TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        let url = format!("rtmp://127.0.0.1:{port}/live");
+        let opens = Arc::new(AtomicU64::new(0));
+        let open: OpenPublish = {
+            let opens = Arc::clone(&opens);
+            Arc::new(move |_: &OutputId| {
+                opens.fetch_add(1, Ordering::SeqCst);
+                let publish: Box<dyn LivePublish> =
+                    Box::new(connect_rtmp(&url, "secret-stream-key")?);
+                Ok(publish)
+            })
+        };
+        let fakes = fakes();
+        let engine = Engine::new()
+            .with_output(OutputId::new("yt"))
+            .with_backends(share(&fakes.backends))
+            .with_draw(cpu_draw())
+            .with_publish_opener(open);
+        let control = connected(&engine);
+        let mut events = control.events();
+        for run in 1..=2 {
+            let err = block_on(control.call(output_call("yt", true))).expect_err("refused");
+            assert_eq!(code(&err), Some("action_failed"));
+            let reason = err.to_string();
+            assert!(reason.contains("opening the publish target"), "{reason}");
+            assert!(!reason.contains("secret-stream-key"), "{reason}");
+            assert_eq!(
+                output_steps(&mut events),
+                vec![OutputState::Starting, OutputState::Failed]
+            );
+            assert_eq!(opens.load(Ordering::SeqCst), run, "the opener is kept");
+            assert!(engine.output_stats().is_none());
         }
     }
 
@@ -2615,5 +2732,99 @@ mod cpu_pipeline {
             last_tick.output_packets >= dropped,
             "{dropped} tags dropped while reconnecting, but the last tick says {last_tick:?}"
         );
+    }
+
+    // --- Item: a stalled publish target cannot hold `output.stop` past the drain bound.
+
+    /// A publish target whose peer has stopped reading: once `stalled`, every send
+    /// blocks for 200 ms, and it ignores [`LivePublish::stop_by`] as a destination that
+    /// cannot cut a write short would. Records the deadline it was given.
+    struct StalledPeer {
+        stalled: Arc<AtomicBool>,
+        sent: Arc<AtomicU64>,
+        deadline: Arc<Mutex<Option<Instant>>>,
+    }
+
+    impl LivePublish for StalledPeer {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.stalled.load(Ordering::Acquire) {
+                thread::sleep(Duration::from_millis(200));
+            }
+            self.sent.fetch_add(1, Ordering::AcqRel);
+            Ok(())
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn stop_by(&mut self, deadline: Instant) {
+            *self.deadline.lock().expect("deadline") = Some(deadline);
+        }
+    }
+
+    /// The peer stalls while well over a hundred packets queue up behind it. Draining
+    /// them all at 200 ms a tag would hold `output.stop` for half a minute; the stop
+    /// gives up after `STOP_DRAIN`, drops the rest, counts it in the final
+    /// `stats.tick`'s `output_packets`, and passes its deadline to the target.
+    #[test]
+    fn a_stalled_peer_cannot_hold_output_stop() {
+        use crate::runtime::STOP_DRAIN;
+
+        let fakes = fakes();
+        let stalled = Arc::new(AtomicBool::new(false));
+        let sent = Arc::new(AtomicU64::new(0));
+        let deadline = Arc::new(Mutex::new(None));
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(StalledPeer {
+                stalled: Arc::clone(&stalled),
+                sent: Arc::clone(&sent),
+                deadline: Arc::clone(&deadline),
+            }),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || sent.load(Ordering::Acquire)
+                >= 5),
+            "nothing was published"
+        );
+
+        stalled.store(true, Ordering::Release);
+        // Two simulated seconds of media: about 60 video and 90 audio packets.
+        for _ in 0..40 {
+            pump(&fakes.clock, &fakes.audio);
+        }
+        drain(&mut events);
+
+        let started = Instant::now();
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        let took = started.elapsed();
+        assert!(
+            took < STOP_DRAIN + Duration::from_secs(2),
+            "output.stop took {took:?} behind a stalled peer"
+        );
+        let given = deadline.lock().expect("deadline").take();
+        assert!(given.is_some(), "the target was not told the stop deadline");
+        let last_tick = drain(&mut events)
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::StatsTick { drops, .. } => Some(drops),
+                _ => None,
+            })
+            .next_back()
+            .expect("no stats.tick");
+        assert!(
+            last_tick.output_packets > 0,
+            "the abandoned packets were not counted: {last_tick:?}"
+        );
+        assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
     }
 }

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:96d3d789bd0aefe7", by = "agent:grok@stats-tick", note = "Re-read the contents list against args.rs and run.rs. The parser still maps commands onto protocol calls, and the binary still does not link the engine. stats.tick is printed from the existing event stream." }
+verified = { hash = "b3:54ff54944ec657f3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via mcp.rs doc comment (hello at initialize): the contents list (mcp.rs is jstream-mcp's server over the same session) still holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:c7b258fd09e04188", by = "agent:grok@stats-tick", note = "Re-read the events bullet against run.rs. A stats.tick prints seq and the six drop totals. version and hello print PROTOCOL_VERSION, now 0.6. --json still prints the protocol event. video snapshot still omits the payload." }
+verified = { hash = "b3:cd944448eb8fbc79", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the One session bullet: hello is now sent at initialize because the server closes a connection without hello in time; re-read the rest of the MCP paragraph against mcp.rs and run.rs, unchanged" }
 -->
 
 ```sh
@@ -140,8 +140,9 @@ for example:
   or token file, 3 when the engine can't be reached or refuses the token. Nothing is
   written to stdout then, so the MCP client sees the process exit.
 - **One session for the whole run.** Every tool call acts as one client of the engine,
-  with one undo history; `hello` is sent before the first call that needs the engine,
-  with the MCP client's name (`clientInfo.name`) instead of `jstream-cli`.
+  with one undo history; `hello` is sent at `initialize` (the proxy has already
+  connected, and the server closes a connection that hasn't said `hello` in time), with
+  the MCP client's name (`clientInfo.name`) instead of `jstream-cli`.
 - **A lost engine doesn't stop the proxy.** Each tool call that needs the engine is then
   answered with the `disconnected` tool error, and `describe_api` still works, as does
   `events`, which returns what was buffered and says the feed ended. The proxy doesn't
@@ -176,7 +177,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:49f50f57490e9f45", by = "agent:grok@stats-tick", note = "Re-read against the control design. The mock still answers video.snapshot with internal, and MockEngine::emit can inject a stats.tick. The CLI still sends queries through the same connector. Parsing, block_on and exit code 3 are unchanged." }
+verified = { hash = "b3:17517c2da2fc2d41", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: the MCP proxy bullet says the server sends hello at initialize, and the Tests bullet names the new idle-past-handshake-timeout test in tests/mcp.rs; parsing, block_on and connector bullets unchanged" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -218,8 +219,8 @@ verified = { hash = "b3:49f50f57490e9f45", by = "agent:grok@stats-tick", note = 
   CLI adds no MCP code of its own (`jstream-mcp` is layer 3, below this app, and needs
   no runtime). Like `ws`, it is always built, with no feature: `mcp` is part of what the
   CLI is for (ARCH), and it adds no third-party crate. It doesn't send `hello` first,
-  unlike the other commands: the server does, with the MCP client's name, so the audit
-  log names the agent rather than the CLI. A lost connection follows `jstream-mcp`'s
+  unlike the other commands: the server does, at `initialize`, with the MCP client's
+  name, so the audit log names the agent rather than the CLI. A lost connection follows `jstream-mcp`'s
   design: a `disconnected` tool error per call that the model can read and act on,
   while the transport keeps going until the MCP client closes stdin. Exiting instead
   would surface to the agent only as a crashed server. The proxy doesn't reconnect by
@@ -234,7 +235,8 @@ verified = { hash = "b3:49f50f57490e9f45", by = "agent:grok@stats-tick", note = 
   (`initialize`, `tools/list`, `tools/call`, a refused connection, a lost one and a
   failing input), and
   `tests/mcp.rs` runs the binary's `mcp` against a real `jstream-server` on a loopback
-  port, through a server shutdown. `jstream-server` and tokio (for the runtime the test
+  port, through a server shutdown, and with an agent that idles past a short handshake
+  timeout after `initialize` and still has its session. `jstream-server` and tokio (for the runtime the test
   serves on) are dev-dependencies only; the binary itself gains only `jstream-mcp`.
 
 ### Open questions
