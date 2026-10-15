@@ -2,6 +2,7 @@
 //! creating sources.
 
 use crate::audio;
+use crate::capture::CaptureKind;
 use crate::color::ColorKind;
 use crate::describe::described;
 use crate::image::ImageKind;
@@ -17,17 +18,20 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0031, docs/adr/0031-source-types-and-decoding-scope.md).
-    /// `color`, `image` and `text` produce frames. `audio_input`, `desktop_audio` and
+    /// `color`, `image` and `text` produce frames. `display` and `window` say what the
+    /// platform captures ([`Source::capture`]). `audio_input`, `desktop_audio` and
     /// `app_audio` are audio-only: the engine records them, and `create` fails with
-    /// [`SourceError::AudioOnly`]. `display`, `media`, `webcam` and `window` are
-    /// described only, so their sources can be created and configured but fail to start
-    /// with [`SourceError::NotBuilt`].
+    /// [`SourceError::AudioOnly`]. `media` and `webcam` are described only, so their
+    /// sources can be created and configured but fail to start with
+    /// [`SourceError::NotBuilt`].
     pub fn builtin() -> Self {
         let mut kinds: BTreeMap<String, Box<dyn SourceKind>> = BTreeMap::new();
         let mut add = |kind: Box<dyn SourceKind>| {
             kinds.insert(kind.descriptor().kind_id.clone(), kind);
         };
         add(Box::new(ColorKind::new()));
+        add(Box::new(CaptureKind::display()));
+        add(Box::new(CaptureKind::window()));
         add(Box::new(ImageKind::new()));
         add(Box::new(TextKind::new()));
         for kind in audio::kinds() {

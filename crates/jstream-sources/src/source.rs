@@ -1,6 +1,6 @@
 //! The `Source` and `SourceKind` seams, and what a source is created with.
 
-use crate::SourceError;
+use crate::{CaptureSpec, SourceError};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
 use std::fs::File;
@@ -38,6 +38,14 @@ pub trait Source: Send {
     /// [`SourceError::NotLive`] when a non-live parameter changed, and
     /// [`SourceError::Setting`] when a value doesn't have its descriptor's type.
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError>;
+
+    /// What the platform captures for this source, for a `display` or `window` source;
+    /// `None`, the default, for a source that makes its own frames. A capture source's
+    /// frames come from the platform's capture backend on the engine's render thread,
+    /// so its [`frame`](Self::frame) is [`SourceError::Captured`].
+    fn capture(&self) -> Option<&CaptureSpec> {
+        None
+    }
 }
 
 /// A source kind: its descriptor (`kind.describe`) and how to create its sources.
