@@ -1027,6 +1027,49 @@ fn mcp_serves_initialize_list_and_call_over_one_session() {
     assert_eq!(engine.rev(), Rev(1));
 }
 
+/// The proxy is one client for the whole run, so an agent can undo and redo its own
+/// edits through the `history` tool. A one-shot command can't: each run is a new
+/// client with an empty history.
+#[test]
+fn mcp_undoes_and_redoes_within_its_session() {
+    let engine = MockEngine::new();
+    let connector =
+        |_: &Connection| -> Result<Box<dyn Control>, CliError> { Ok(Box::new(engine.connect())) };
+    let input = mcp_input(&[
+        mcp_initialize(1),
+        mcp_call(
+            2,
+            "scene",
+            json!({"op": {"type": "scene.create", "scene_id": "main", "name": "Main"}}),
+        ),
+        mcp_call(3, "history", json!({"op": {"type": "history.undo"}})),
+        mcp_call(4, "scene", json!({"op": {"type": "scene.list"}})),
+        mcp_call(
+            5,
+            "history",
+            json!({"op": {"type": "history.redo"}, "expected_rev": 2}),
+        ),
+        mcp_call(6, "history", json!({"op": {"type": "history.redo"}})),
+    ]);
+    let outcome = run_with_input(&connector, &["mcp"], &input);
+    assert_eq!((outcome.code, outcome.err.as_str()), (exit::OK, ""));
+    let replies = mcp_replies(&outcome.out);
+    let result = |n: usize| &replies[n]["result"]["structuredContent"]["result"];
+    assert_eq!(
+        result(2),
+        &json!({"kind": "history", "rev": 2, "step_rev": 1, "undo_depth": 0, "redo_depth": 1})
+    );
+    assert_eq!(result(3)["result"]["scenes"], json!([]));
+    assert_eq!(
+        result(4),
+        &json!({"kind": "history", "rev": 3, "step_rev": 1, "undo_depth": 1, "redo_depth": 0})
+    );
+    let empty = &replies[5]["result"];
+    assert_eq!(empty["isError"], true, "{empty}");
+    assert!(empty.to_string().contains("history_empty"), "{empty}");
+    assert_eq!(engine.rev(), Rev(3));
+}
+
 #[test]
 fn mcp_connection_failures_exit_before_serving() {
     let input = mcp_input(&[mcp_initialize(1)]);

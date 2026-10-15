@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:bd9768d2ab90a22e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; apps changes from main (MCP on, CLI outputs) and B2's CLI cause print fit the diagram" }
+verified = { hash = "b3:d704931bfd5210e7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3 (control mock and CLI tests only): re-read; diagram and clients list unchanged" }
 -->
 
 ```
@@ -503,7 +503,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:acec851b35f8fa00", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1 (protocol README only changed): re-read; History bullet (undo_conflict, protocol 0.10) still holds" }
+verified = { hash = "b3:1f4e6cdbe67513af", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3 on main with #198 (control mock only changed): re-read; History bullet holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

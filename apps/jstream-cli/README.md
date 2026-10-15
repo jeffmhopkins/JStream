@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:981187ded0c79d9b", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; contents list (output set-key reads stdin) holds; run.rs still prints a state.changed cause" }
+verified = { hash = "b3:d09c916d343dec0e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3: re-read; contents list holds: commands map to the handshake, queries, batches, actions and events (no history command, see Usage); MCP proxy carries the history tool" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:ca23828e30a23c33", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): output commands and exit table from #166 hold; the event line's undo/redo suffix and exit code 20 for undo_conflict/history_empty still match run.rs/exit.rs" }
+verified = { hash = "b3:534c5096e879e726", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3: re-read; new 'No undo or redo command' bullet (each run is a new client, ADR-0032; mcp's history tool undoes within its run) matches run/tests.rs mcp_undoes_and_redoes_within_its_session; commands table and exit codes unchanged" }
 -->
 
 ```sh
@@ -112,6 +112,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
   the URL.
+- **No undo or redo command.** Undo history belongs to a client and ends with its
+  session ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), and each run of a
+  command is a new client, so a one-shot `undo` would always find nothing to undo.
+  `mcp` is one client for its whole run: its `history` tool undoes and redoes the
+  agent's own edits.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
@@ -207,7 +212,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a7797f30fdad8605", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; #166's BufRead note holds, history adds nothing CLI-side beyond the event cause" }
+verified = { hash = "b3:9e9cef557edaf3d6", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3 (mock gains undo, CLI tests only): re-read; connector seam, --mock fresh per run and block_on notes hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
