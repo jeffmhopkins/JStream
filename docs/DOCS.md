@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:b098625e37cae5f4", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (docs merge-main bullet) into ADR-0042: the hash bullet adds the #jstream-meta covers view, implemented in hash.rs with tests; merge-main and other bullets are main's and unchanged" }
+verified = { hash = "b3:ae9d0ff1e09e16b4", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "Generated content bullet now names the README progress block and docs progress, both implemented in xtask/src/docs/progress.rs with unit tests and wired into check/generate in mod.rs; other bullets untouched" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -49,7 +49,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **`cargo xtask docs for <path>`** ([Code back-references](#back-references)): prints
   what governs a file.
 - **Generated content** ([Generated content](#generated)): `cargo xtask docs generate`
-  writes the ADR status banners and the ADR index, and `docs check` fails on their drift.
+  writes the ADR status banners, the ADR index and the README's progress block, and
+  `docs check` fails on their drift. `cargo xtask docs progress` lists progress entries
+  the merged history contradicts.
   The crate map and the other generated references are not generated yet.
 - **Reports (warnings):** crates no section covers, and `applies_to` globs naming an
   unknown crate ([PR gate](#gate)).
@@ -387,7 +389,7 @@ holds**. The note says what was checked and why it still holds, e.g.:
 ## Time-based review
 <!-- @section
 covers = [".github/workflows/sweep.yml"]
-verified = { hash = "b3:c3082e7e20a1bae2", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against sweep.yml now that ttl covers it: deny (fetch, version line, tool-failure exit), docs due via docs log, cargo update --dry-run, 8-day override audit, one Weekly sweep issue, and the not-built list all match the workflow" }
+verified = { hash = "b3:5c33e486425c55a6", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "Re-read against sweep.yml: new Roadmap progress step runs xtask docs progress (full history from fetch-depth 0) into the issue; added its bullet; deny, docs-due, update dry-run, override audit, one pinned issue and not-built list unchanged" }
 -->
 
 Docs also go stale when nothing in the repo changes. **Time-based checks never fail a PR.**
@@ -416,6 +418,8 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
     `review_every` has passed), and any `cargo xtask docs check` failure on `main`;
   - reports `cargo update --dry-run`: compatible updates, and dependencies held back by a
     version requirement or the toolchain;
+  - lists the entries of `docs/progress.toml` that the merged history contradicts
+    (`cargo xtask docs progress`, [Generated content](#generated));
   - lists every PR merged with `governance-approved` or `review-override` in the past
     eight days (the override audit, [R-GOV-002](RULES.md#R-GOV-002));
   - **rewrites one pinned issue, "Weekly sweep"**, instead of opening new ones, and
@@ -490,9 +494,9 @@ covered by the TTLs of their external resources.
 
 Anything derivable is generated, never hand-written: the crate map (from
 `[package.metadata.jstream]`), the protocol reference, the MCP tool list, the index, and
-the ADR status banners and ADR index. Generated blocks in committed docs are fenced as
-`<!-- @generated begin <name> -->` … `<!-- @generated end <name> -->` and are
-drift-checked.
+the ADR status banners and ADR index, and the README's progress table. Generated blocks
+in committed docs are fenced as `<!-- @generated begin <name> -->` …
+`<!-- @generated end <name> -->` and are drift-checked.
 
 `cargo xtask docs generate` writes them; running it again changes nothing. `docs check`
 regenerates them in memory and fails, naming that command, when the committed text
@@ -509,6 +513,20 @@ differs. Today it generates two things, both from ADR `@doc` metadata
 - **The ADR index** `docs/adr/README.md`: a tracked doc with `kind = "generated"`, written
   whole, whose `adr-index` block is a table of every ADR under `docs/adr/` in number
   order: number, title, status, tier, and the successor of a superseded one.
+
+It also generates one block from data rather than from docs:
+
+- **The `progress` block** in `README.md`: a table of the milestones with how many of
+  their items are merged, in review or planned, then each milestone's items, all from
+  `docs/progress.toml`. That file lists the milestones and each roadmap item's
+  milestone, title, `status` (`done`, `hardware` for merged work still waiting on a run
+  on Windows hardware, named by a `note`, `review`, or `planned`) and the PRs that
+  deliver it, and `docs check` fails when it doesn't parse or breaks those rules. A PR
+  that delivers or advances an item updates its entry, so the README changes with the
+  work. `cargo xtask docs progress` compares the file with the merged history (the
+  `(#N)` of each squash commit, and item IDs that PR titles name in parentheses) and
+  prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
+  never fails a PR, because a PR's own merge commit doesn't exist yet.
 
 <a id="governance"></a>
 ## Governance: protecting the checks themselves
