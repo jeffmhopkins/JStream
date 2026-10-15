@@ -26,7 +26,9 @@ use std::time::Duration;
 use ::cef::{BrowserSettings, CefString, ImplBrowser, ImplBrowserHost, ImplFrame, LogSeverity};
 use jstream_platform::{GpuContext, GpuFrame, MediaClock};
 
-use crate::{BrowserBackend, BrowserError, BrowserPage, PageAudio, PageSpec, css_script};
+use crate::{
+    BrowserBackend, BrowserError, BrowserPage, PageAudio, PageSpec, RequestPolicy, css_script,
+};
 use gpu::{DeviceSlot, PageFrames};
 
 /// How long shutting down waits for open pages to close before CEF's loop is quit
@@ -247,6 +249,8 @@ impl BrowserBackend for CefBackend {
             channels: AtomicUsize::new(0),
             clock: Arc::clone(&self.clock),
             backend: Arc::clone(&self.shared),
+            policy: RequestPolicy::for_location(&spec.location),
+            denial_logged: AtomicBool::new(false),
         });
         let window_info = ::cef::WindowInfo {
             windowless_rendering_enabled: 1,
@@ -324,6 +328,10 @@ pub(crate) struct PageShared {
     pub(crate) channels: AtomicUsize,
     pub(crate) clock: Arc<dyn MediaClock>,
     pub(crate) backend: Arc<Shared>,
+    /// What the page may request; the request handler cancels the rest.
+    pub(crate) policy: RequestPolicy,
+    /// Whether a refused request was logged yet: the first is a warning, the rest debug.
+    pub(crate) denial_logged: AtomicBool,
 }
 
 /// A browser, held across threads.
@@ -412,6 +420,10 @@ impl BrowserPage for CefPage {
 
     fn audio(&self) -> &Arc<PageAudio> {
         &self.0.audio
+    }
+
+    fn denied_requests(&self) -> u64 {
+        self.0.policy.denied()
     }
 }
 

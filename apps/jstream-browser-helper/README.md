@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-browser-helper/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*", "crates/jstream-browser/README.md#purpose"]
-verified = { hash = "b3:546101968069dc11", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: new README re-read against main.rs, build.rs and the manifest (Windows 10/11 compatibility entry only, exit 1 without cef)" }
+verified = { hash = "b3:c887d499492666c7", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2: stale via the browser README only; the helper is unchanged" }
 -->
 
 CEF's subprocess exe for browser sources
