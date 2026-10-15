@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d46a278a46d73d8a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; crate shape unchanged" }
+verified = { hash = "b3:72c31c21149a1e25", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#183) into B2-f3: re-read; diagram and client list unchanged" }
 -->
 
 ```
@@ -504,7 +504,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:415e020d4c5b0d5c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; Edits bullet (canvas.set_size/item.set_geometry at 0.11) and History bullet hold" }
+verified = { hash = "b3:80631e0fc1d0cbb5", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#183) into B2-f3 (control mock only): re-read; History bullet and B3 canvas/geometry bullets hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

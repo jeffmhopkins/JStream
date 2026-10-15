@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:be2adbe6c71bbb82", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3 at 0.11: re-read; server text names no protocol minor or placement" }
+verified = { hash = "b3:2aa15aea050daeca", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#183) into B2-f3 (control mock changed): re-read; mock-backed tests and per-session undo note hold" }
 -->
 
 ### Listening and admission
