@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:98b39de2bc84f4de", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (CL1 part 1 #272, #266) into C9: main only restamped these via ARCH crate-map's jstream-plugin-proto row; encode text untouched, holds" }
+verified = { hash = "b3:88b330a90a5c90f5", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Stale only through ARCH#data-model (C9's media kind in the built-kinds sentence); section text and code identical to main; re-read, holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
