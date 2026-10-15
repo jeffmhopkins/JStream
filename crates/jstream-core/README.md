@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:bc64addc2e2f5bc5", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1 + merge of main (B4 kinds): Snapshot and Runtime bullets describe plan/compose and the render snapshot (runtime/render.rs); Kinds bullet says a display source with no stored frame shows the pipeline capture; Tests bullet lists the new render-snapshot, compose and adoption tests; Not-here list drops arc-swap snapshots for render; main's B4 text kept" }
+verified = { hash = "b3:fd6742576b4ce54e", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: the render snapshot, reader slot, compose and collector text re-read after RenderHub::caught_up became test-only (only tests poll it until live edits exist, as Design says); nothing else changed" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -108,7 +108,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fbcf2e0d0f194e83", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1 + merge of main (B4): Calls and Locking say video.snapshot reads rev and the published render snapshot under the lock and the render/snapshot threads load it lock-free; Snapshots adds the one MAX_NESTING limit, per (scene, depth) layers kept across frames, the render snapshot (plan, publish only on change, frame versions) and compose (GpuKey cache, canvas vs encoder size, display -> capture); Outputs describes adopt/generation stamp/stopped marker/collector and per-tick allocations; Not yet updated; checked against engine.rs, snapshot.rs, runtime/render.rs, pipeline.rs" }
+verified = { hash = "b3:4a1887fadfe65760", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: the render snapshot, reader slot, compose and collector text re-read after RenderHub::caught_up became test-only (only tests poll it until live edits exist, as Design says); nothing else changed" }
 -->
 
 ### Engine and sessions

@@ -365,7 +365,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:8eb5b85202bf7762", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: Output pipeline paragraph now has the render thread drawing the program mix from the render snapshot at the encoder size (display sources show the capture; no scene = capture fills); Collector row is per output for the render thread; new render-snapshot paragraph (plan under the lock, publish only on change, cache keyed by source and scene+depth, fence-based freeing, collector hand-off, stopped marker on a fatal error); handover heading says generation and reader slot are built; checked against runtime/render.rs, pipeline.rs, snapshot.rs and render cache.rs" }
+verified = { hash = "b3:a1839893a0131123", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: the render snapshot, reader slot, compose and collector text re-read after RenderHub::caught_up became test-only (only tests poll it until live edits exist, as Design says); nothing else changed" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
