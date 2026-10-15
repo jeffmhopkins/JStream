@@ -1375,7 +1375,20 @@ mod tests {
         assert_eq!(format_lufs(loudness.momentary), "-23.0");
         assert_eq!(format_lufs(loudness.integrated), "–");
 
-        // The next tick keeps the hold and drops a source the mixer no longer has.
+        // A quieter tick keeps a source's hold.
+        let quieter = vec![SourceMeter {
+            source_id: mic.clone(),
+            peak: levels(0.25, 0.25),
+            rms: levels(0.1, 0.1),
+        }];
+        bank.observe(&quieter, &tick_buses);
+        let reading = bank.sources.get(&mic).copied().expect("mic reading");
+        assert_eq!(reading.peak, [0.25, 0.25]);
+        assert_eq!(reading.hold[0].level, 1.0);
+        assert_eq!(reading.hold[0].ticks, HOLD_TICKS - 1);
+
+        // A tick without the source drops its reading; when it comes back, it starts
+        // afresh.
         bank.observe(&[], &tick_buses);
         assert!(bank.sources.is_empty());
         bank.observe(&tick_sources, &tick_buses[1..]);

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:9a542442725677b7", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line gained the e2e README sections; contents list holds" }
+verified = { hash = "b3:3e40520eee315222", by = "agent:claude@session_014tD7qzFcSezrCaUXKkGDhv", note = "#308 merge of #240's branch (Q3 from main): contents list names mixer.rs beside outputs.rs; main's lib.rs Docs line change adds no contents; holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -53,7 +53,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5147b8af968798bb", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at Q3 (#309): the design text is main's (Playwright against a mock daemon); D5's mock additions (buses, sends, audio) are additive to the state the mock daemon serves; holds" }
+verified = { hash = "b3:d6697b592f74fd6f", by = "agent:claude@session_014tD7qzFcSezrCaUXKkGDhv", note = "#308 merge of #240's branch and review N2 (test only): Mixer bullet still matches mixer.rs; the rest is the base's text; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
