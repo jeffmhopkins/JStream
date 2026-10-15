@@ -6,12 +6,13 @@
 //! This is the skeleton: connecting, the session, and the shell's regions. The panels
 //! (`panels`) and the preview canvas (`canvas`) fill them in.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#build, docs/adr/0045-leptos-web-ui.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#canvas, crates/jstream-ui/README.md#build, docs/adr/0045-leptos-web-ui.md
 
 #![forbid(unsafe_code)]
 
 pub mod app;
 pub mod canvas;
+pub mod host;
 pub mod panels;
 pub mod session;
 
