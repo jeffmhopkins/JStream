@@ -223,14 +223,24 @@ fn check_opened(file: &File, base: &Path, joined: &Path) -> Result<(), Opened> {
 /// inside `base` however the path's folders change meanwhile.
 ///
 /// Stable Rust has no file IDs on Windows, so the path is held still instead: its
-/// resolved form is walked from `base` one component at a time, each opened as itself
-/// (not followed if it is a reparse point) and without `FILE_SHARE_DELETE`, so it can't
-/// be renamed, deleted or replaced while the walk holds it. A component that is a link by
-/// then (a name-surrogate reparse point: symlink, junction, WSL link) was swapped after
+/// resolved form is walked from `base` one component at a time (see [`walk_below`]).
+/// A path that resolves outside `base` is refused before the walk.
+#[cfg(windows)]
+fn open_inside(base: &Path, rel: &str) -> Result<File, Opened> {
+    let canonical = base.join(rel).canonicalize()?;
+    let below = canonical.strip_prefix(base).map_err(|_| Opened::Escapes)?;
+    walk_below(base, below)
+}
+
+/// Opens `below`, a path relative to the canonical folder `base` that was resolved
+/// already, one component at a time, each opened as itself (not followed if it is a
+/// reparse point) and without `FILE_SHARE_DELETE`, so it can't be renamed, deleted or
+/// replaced while the walk holds it. A component that is a link by then (a
+/// name-surrogate reparse point: symlink, junction, WSL link) was swapped after
 /// resolving, and is refused. Other reparse points, such as OneDrive placeholders and
 /// dedup files, are files `canonicalize` left in place, and are read.
 #[cfg(windows)]
-fn open_inside(base: &Path, rel: &str) -> Result<File, Opened> {
+fn walk_below(base: &Path, below: &Path) -> Result<File, Opened> {
     use std::fs::OpenOptions;
     use std::os::windows::fs::OpenOptionsExt;
     // Win32 values (winnt.h, winbase.h).
@@ -239,8 +249,6 @@ fn open_inside(base: &Path, rel: &str) -> Result<File, Opened> {
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 
-    let canonical = base.join(rel).canonicalize()?;
-    let below = canonical.strip_prefix(base).map_err(|_| Opened::Escapes)?;
     let parts: Vec<_> = below.components().collect();
     let mut at = base.to_path_buf();
     // Handles on the folders walked so far, held until the file is open.
@@ -398,7 +406,7 @@ mod tests {
 
 #[cfg(all(test, windows))]
 mod windows_tests {
-    use super::{AssetRoots, Opened, open_inside};
+    use super::{AssetRoots, Opened, open_inside, walk_below};
     use crate::SourceError;
     use jstream_protocol::AssetRoot;
     use std::fs;
@@ -415,8 +423,9 @@ mod windows_tests {
     }
 
     /// Checks that `rel`, which goes through a link inside `root` to `outside.png`
-    /// outside it, is refused by `resolve`, `read` and the walk itself, while the
-    /// target is reachable through the link.
+    /// outside it, is refused by `resolve`, `read` and `open_inside` (at the resolve
+    /// step), and by the walk on its own, as if the link had been swapped in after the
+    /// path resolved, while the target is reachable through the link.
     fn refused(roots: &AssetRoots, base: &Path, rel: &str) {
         assert_eq!(
             fs::read(base.join(rel)).expect("the link leads to the file outside"),
@@ -431,6 +440,12 @@ mod windows_tests {
             Err(SourceError::AssetEscapesRoot { .. })
         ));
         assert!(matches!(open_inside(base, rel), Err(Opened::Escapes)));
+        // The walk's own link check, which `open_inside` reaches only when a link
+        // appears between resolving and walking.
+        assert!(matches!(
+            walk_below(base, Path::new(rel)),
+            Err(Opened::Escapes)
+        ));
     }
 
     #[test]
@@ -459,6 +474,8 @@ mod windows_tests {
                 .expect("inside"),
             b"inside"
         );
+        // The walk opens a plain file inside the root.
+        assert!(walk_below(&base, Path::new("a.png")).is_ok());
 
         // A junction needs no privilege, so it is always tested.
         let made = Command::new("cmd")
