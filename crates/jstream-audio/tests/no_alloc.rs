@@ -7,28 +7,29 @@
 //! The simulation sets everything up, then runs warm-up seconds with no checks (the
 //! drift fit fills, the controller settles). After that, each simulated 10 ms tick does
 //! what the real-time threads do inside a checked scope: every input's audio callback
-//! (`AudioInputHandler::on_packet`), then `Mixer::poll` until no block is due, then the
-//! filter kernels and meters on each mixed block, as the mixer thread will run them
-//! (ADR-0028). Control-plane work (adding and removing inputs, gain and mute changes)
-//! runs between ticks, outside the scope, as it does on the control thread.
+//! (`AudioInputHandler::on_packet`), then `Mixer::poll` until no block is due (which runs
+//! the input and bus filter chains), then a keyed compressor and the meters on each
+//! mixed block, as the mixer thread will run them (ADR-0028; sidechain keys and meters
+//! aren't in the mixer yet). Control-plane work (adding and removing inputs, buses,
+//! sends and filters, filter edits, gain and mute changes) runs between ticks, outside
+//! the scope, as it does on the control thread.
 //!
 //! The checked phase walks through the paths a session hits besides plain steady state:
 //! drift, jitter, timestamp outliers and missing stamps, lost packets, a discontinuity,
 //! a stalled audio thread that catches up, a device gap long enough to reset the
 //! mapping, silent and non-finite packets, a stalled mixer (overrun and skipped
-//! frames), and an input added and another removed while the mixer runs. The test
-//! asserts afterwards that each path actually ran.
+//! frames), an input added and another removed while the mixer runs, a bus added, sent
+//! to, filtered and removed, filters added, edited and removed (changing the chains'
+//! latency, so the compensation delays move). The test asserts afterwards that each
+//! path actually ran.
 //!
 //! Dropping an input's producer frees its resampler state, so a producer is dropped
 //! outside the checked scope: that is stream teardown, not steady state.
 
 use assert_no_alloc::{AllocDisabler, assert_no_alloc, reset_violation_count, violation_count};
-use jstream_audio::filter::{
-    AudioFilter, Compressor, CompressorParams, Delay, Gain, GateParams, Limiter, LimiterParams,
-    NoiseGate,
-};
+use jstream_audio::filter::{AudioFilter, Compressor, CompressorParams, GateParams, LimiterParams};
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
-use jstream_audio::{InputControl, InputProducer, Mixer, MixerConfig};
+use jstream_audio::{FilterParams, FilterSpec, InputControl, InputProducer, Mixer, MixerConfig};
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, SampleFormat, Timebase};
 use jstream_platform::{AudioInputHandler, AudioPacket, AudioPacketFlags};
 
@@ -213,9 +214,10 @@ impl Device {
     }
 }
 
-/// The filter chain and meters the mixer thread will run on the bus.
+/// What the mixer thread will also run on the bus once sidechain keys and meters are in
+/// the mixer: a keyed compressor and the meters.
 struct BusChain {
-    filters: [Box<dyn AudioFilter>; 5],
+    keyed: Compressor,
     key: Vec<f32>,
     true_peak: TruePeakMeter,
     loudness: LoudnessMeter,
@@ -224,20 +226,10 @@ struct BusChain {
 impl BusChain {
     fn new() -> Self {
         let rate = ENGINE;
-        let mut delay = Delay::new(rate, 100.0).expect("valid delay");
-        delay.set_delay_ms(20.0).expect("in range");
         Self {
-            filters: [
-                Box::new(Gain::new(rate, -3.0).expect("valid gain")),
-                Box::new(NoiseGate::new(rate, GateParams::default()).expect("valid gate")),
-                Box::new(
-                    Compressor::new(rate, CompressorParams::default())
-                        .expect("valid compressor")
-                        .with_key(true),
-                ),
-                Box::new(delay),
-                Box::new(Limiter::new(rate, 5.0, LimiterParams::default()).expect("valid limiter")),
-            ],
+            keyed: Compressor::new(rate, CompressorParams::default())
+                .expect("valid compressor")
+                .with_key(true),
             key: vec![0.0; 2 * MixerConfig::default().block_frames],
             true_peak: TruePeakMeter::new(),
             loudness: LoudnessMeter::new(rate).expect("valid rate"),
@@ -247,13 +239,7 @@ impl BusChain {
     /// The mixer thread's work on one block. Real-time code only.
     fn process(&mut self, block: &mut [f32]) {
         self.key.copy_from_slice(block);
-        for f in &mut self.filters {
-            if f.wants_key() {
-                f.process_keyed(block, &self.key);
-            } else {
-                f.process(block);
-            }
-        }
+        self.keyed.process_keyed(block, &self.key);
         self.true_peak.process(block);
         self.loudness.process(block);
         let _ = (
@@ -352,6 +338,33 @@ mod rt {
         };
         let control = sim.mixer.control();
         let bus = sim.mixer.bus();
+        let limiter = |lookahead_ms| FilterSpec::Limiter {
+            lookahead_ms,
+            params: LimiterParams::default(),
+        };
+        // Filter chains on an input and on the master, built on the control thread.
+        let mic_gate = sim.devices[0]
+            .control
+            .add_filter(FilterSpec::NoiseGate(GateParams::default()))
+            .expect("valid gate");
+        sim.devices[0]
+            .control
+            .add_filter(FilterSpec::Compressor(CompressorParams::default()))
+            .expect("valid compressor");
+        let master_gain = bus
+            .add_filter(FilterSpec::Gain { gain_db: -3.0 })
+            .expect("valid gain");
+        let master_delay = bus
+            .add_filter(FilterSpec::Delay {
+                max_ms: 100.0,
+                delay_ms: 20.0,
+            })
+            .expect("valid delay");
+        bus.add_filter(limiter(5.0)).expect("valid limiter");
+        let mut aux = None;
+        let mut aux_limiter = None;
+        let mut extra = None;
+        let mut latencies = std::collections::BTreeSet::new();
 
         reset_violation_count();
         let mut violations = Vec::new();
@@ -380,8 +393,53 @@ mod rt {
                     assert!(gone.control.remove(), "removal queued");
                     sim.removed.push(gone);
                 }
+                // A bus, sent to and filtered while the mixer runs: the bus chains'
+                // latency changes, so every bus's compensation delay moves.
+                1_550 => {
+                    let added = control.add_bus().expect("room for a bus");
+                    sim.devices[1].control.set_send(added.id(), 0.5);
+                    sim.devices[0].control.set_send_db(added.id(), -6.0);
+                    aux_limiter = Some(added.add_filter(limiter(2.0)).expect("valid limiter"));
+                    aux = Some(added);
+                }
+                // A filter with latency on an input: every other input is delayed to it.
+                2_300 => {
+                    extra = Some(
+                        sim.devices[1]
+                            .control
+                            .insert_filter(0, limiter(10.0))
+                            .expect("valid limiter"),
+                    );
+                }
+                2_500 => assert!(extra.take().expect("added").remove(), "removal queued"),
+                2_600 => assert!(
+                    aux_limiter.take().expect("added").remove(),
+                    "removal queued"
+                ),
+                2_700 => assert!(aux.as_ref().expect("added").remove(), "removal queued"),
                 _ => {}
             }
+            if tick % 50 == 0 {
+                let open = if tick % 100 == 0 { -30.0 } else { -40.0 };
+                mic_gate
+                    .set(FilterParams::NoiseGate(GateParams {
+                        open_threshold_db: open,
+                        close_threshold_db: open - 6.0,
+                        ..GateParams::default()
+                    }))
+                    .expect("valid gate");
+                master_gain
+                    .set(FilterParams::Gain {
+                        gain_db: -3.0 - (tick % 200) as f32 / 100.0,
+                    })
+                    .expect("valid gain");
+                master_delay
+                    .set(FilterParams::Delay {
+                        delay_ms: if tick % 100 == 0 { 20.0 } else { 0.0 },
+                    })
+                    .expect("valid delay");
+            }
+            latencies.insert(sim.mixer.latency_frames());
             if tick % 100 == 0 {
                 let db = if tick % 200 == 0 { -6.0 } else { 0.0 };
                 sim.devices[0].control.set_gain_db(db);
@@ -431,6 +489,11 @@ mod rt {
         );
         assert!(removed.packets > 0, "{removed:?}");
         assert!(bus.skipped_frames > 0, "{bus:?}");
+        let aux = aux.expect("added").stats();
+        // 11.5 s of blocks, minus the stall's.
+        assert!(aux.blocks > 400, "{aux:?}");
+        // No latency, the master limiter's, plus the aux limiter's, plus the input one's.
+        assert!(latencies.len() >= 3, "{latencies:?}");
         // 45 s of 1024-frame blocks at 48 kHz, minus the stall's.
         assert!(bus.blocks > 2_000, "{bus:?}");
     }

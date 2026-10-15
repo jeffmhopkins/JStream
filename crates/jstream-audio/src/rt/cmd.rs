@@ -1,11 +1,12 @@
-//! Lock-free commands that add and remove mixer inputs and buses while the mixer runs.
+//! Lock-free commands that add and remove mixer inputs, buses and filters, and edit
+//! filters, while the mixer runs.
 //!
 //! The control thread allocates the ring and the producer (or a bus's shared state),
 //! then `try_send`s it to the mixer. The mixer applies the command at the start of the next block and does
 //! not allocate to do it (R-RT-001). The queue is bounded and lock-free
 //! ([`crossbeam_channel`]).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -13,6 +14,9 @@ use crossbeam_channel::Sender;
 use jstream_media::{AudioFormat, SampleFormat};
 
 use super::bus::{BusShared, MASTER_ID, MAX_BUSES};
+use super::chain::{
+    Chain, FilterBook, FilterParams, FilterSpec, Kernel, MAX_CHAIN_LATENCY_MS, MAX_FILTERS,
+};
 use super::input::{InputProducer, InputShared};
 use super::retire::Retirer;
 use super::ring::FrameRing;
@@ -26,21 +30,45 @@ pub(crate) const MAX_INPUTS: usize = 64;
 /// before the mixer has applied the removals.
 pub(crate) const COMMAND_CAP: usize = 128;
 
+/// The input or bus whose filter chain a command changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum ChainTarget {
+    Input(u64),
+    Bus { slot: usize, id: u64 },
+}
+
 pub(crate) enum Command {
     Add {
         id: u64,
         ring: Arc<FrameRing>,
         shared: Arc<InputShared>,
+        chain: Box<Chain>,
     },
     Remove(u64),
     AddBus {
         slot: usize,
         id: u64,
         shared: Arc<BusShared>,
+        chain: Box<Chain>,
     },
     RemoveBus {
         slot: usize,
         id: u64,
+    },
+    AddFilter {
+        target: ChainTarget,
+        index: usize,
+        id: u64,
+        kernel: Box<Kernel>,
+    },
+    RemoveFilter {
+        target: ChainTarget,
+        id: u64,
+    },
+    EditFilter {
+        target: ChainTarget,
+        id: u64,
+        params: FilterParams,
     },
 }
 
@@ -55,6 +83,10 @@ pub(crate) struct ControlPlane {
     /// the master. Touched only from the control plane.
     buses: Mutex<[Option<u64>; MAX_BUSES]>,
     next_bus_id: AtomicU64,
+    /// Each live input's and bus's filters, as the control plane has queued them.
+    /// Touched only from the control plane.
+    books: Mutex<BTreeMap<ChainTarget, Vec<FilterBook>>>,
+    next_filter_id: AtomicU64,
     retirer: Retirer,
     sample_rate: u32,
     ring_frames: usize,
@@ -84,6 +116,14 @@ impl ControlPlane {
             admitted: Mutex::new(BTreeSet::new()),
             buses: Mutex::new(std::array::from_fn(|slot| (slot == 0).then_some(MASTER_ID))),
             next_bus_id: AtomicU64::new(MASTER_ID + 1),
+            books: Mutex::new(BTreeMap::from([(
+                ChainTarget::Bus {
+                    slot: 0,
+                    id: MASTER_ID,
+                },
+                Vec::new(),
+            )])),
+            next_filter_id: AtomicU64::new(1),
             retirer,
             sample_rate,
             ring_frames,
@@ -123,11 +163,13 @@ impl ControlPlane {
             id,
             ring: Arc::clone(&ring),
             shared: Arc::clone(&shared),
+            chain: Box::new(Chain::new(engine)?),
         };
         if self.tx.try_send(queued).is_err() {
             return Err(AudioError::CommandQueueFull);
         }
         admitted.insert(id);
+        lock(&self.books).insert(ChainTarget::Input(id), Vec::new());
         drop(admitted);
         let producer = InputProducer::new(
             format,
@@ -155,6 +197,7 @@ impl ControlPlane {
             admitted.insert(id);
             return false;
         }
+        lock(&self.books).remove(&ChainTarget::Input(id));
         true
     }
 
@@ -171,11 +214,13 @@ impl ControlPlane {
             slot,
             id,
             shared: Arc::clone(&shared),
+            chain: Box::new(Chain::new(self.sample_rate)?),
         };
         if self.tx.try_send(queued).is_err() {
             return Err(AudioError::CommandQueueFull);
         }
         buses[slot] = Some(id);
+        lock(&self.books).insert(ChainTarget::Bus { slot, id }, Vec::new());
         Ok((slot, id, shared))
     }
 
@@ -193,6 +238,84 @@ impl ControlPlane {
             return false;
         }
         buses[slot] = None;
+        lock(&self.books).remove(&ChainTarget::Bus { slot, id });
         true
+    }
+
+    /// Builds the filter `spec` describes and queues it for `target`'s chain at `index`
+    /// (clamped to the end). Returns its id and latency.
+    pub(crate) fn add_filter(
+        &self,
+        target: ChainTarget,
+        index: usize,
+        spec: FilterSpec,
+    ) -> Result<(u64, usize), AudioError> {
+        let mut books = lock(&self.books);
+        let book = books.get_mut(&target).ok_or(AudioError::Removed)?;
+        if book.len() >= MAX_FILTERS {
+            return Err(AudioError::TooManyFilters);
+        }
+        let kernel = Kernel::build(self.sample_rate, spec)?;
+        let latency = kernel.latency_frames();
+        let total: usize = book.iter().map(|f| f.latency).sum::<usize>() + latency;
+        let cap = (f64::from(MAX_CHAIN_LATENCY_MS) * f64::from(self.sample_rate) / 1000.0).round()
+            as usize;
+        if total > cap {
+            return Err(AudioError::InvalidConfig {
+                what: "a filter chain's latency must be at most 100 ms",
+            });
+        }
+        let id = self.next_filter_id.fetch_add(1, Ordering::Relaxed);
+        let filter = FilterBook::new(id, &kernel);
+        let queued = Command::AddFilter {
+            target,
+            index,
+            id,
+            kernel: Box::new(kernel),
+        };
+        if self.tx.try_send(queued).is_err() {
+            return Err(AudioError::CommandQueueFull);
+        }
+        book.insert(index.min(book.len()), filter);
+        Ok((id, latency))
+    }
+
+    /// Queues removal of filter `id` from `target`'s chain. False when it is not there
+    /// (removed already, or its input or bus was), or the queue cannot take it.
+    pub(crate) fn remove_filter(&self, target: ChainTarget, id: u64) -> bool {
+        let mut books = lock(&self.books);
+        let Some(book) = books.get_mut(&target) else {
+            return false;
+        };
+        let Some(index) = book.iter().position(|f| f.id == id) else {
+            return false;
+        };
+        if self
+            .tx
+            .try_send(Command::RemoveFilter { target, id })
+            .is_err()
+        {
+            return false;
+        }
+        book.remove(index);
+        true
+    }
+
+    /// Checks `params` and queues them for filter `id` in `target`'s chain.
+    pub(crate) fn edit_filter(
+        &self,
+        target: ChainTarget,
+        id: u64,
+        params: FilterParams,
+    ) -> Result<(), AudioError> {
+        let books = lock(&self.books);
+        let filter = books
+            .get(&target)
+            .and_then(|book| book.iter().find(|f| f.id == id))
+            .ok_or(AudioError::Removed)?;
+        filter.check(self.sample_rate, &params)?;
+        self.tx
+            .try_send(Command::EditFilter { target, id, params })
+            .map_err(|_| AudioError::CommandQueueFull)
     }
 }
