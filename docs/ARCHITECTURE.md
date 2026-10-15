@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:02586af269c6ad78", by = "agent:claude@session_01G2n9TnrH9za1trRoJWCsmB", note = "main.rs gained the docs review and docs log usage entries only; the xtask/ line (docs, lint-deps, governance, ...) and the rest of the tree still hold" }
+verified = { hash = "b3:f93d77c61243e82a", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against H3: .github line now lists the new sweep workflow alongside ci, governance and review-gate; xtask main.rs entries and the rest of the tree unchanged" }
 -->
 
 ```
@@ -107,7 +107,7 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md, generated README.md index)
 │   └── guides/
-└── .github/                # workflows (CI, governance, review-gate), Dependabot config, PR template
+└── .github/                # workflows (CI, governance, review-gate, sweep), Dependabot config, PR template
 ```
 
 <a id="crate-map"></a>
@@ -356,7 +356,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:c155fb3f4532ab9e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#135) into #136: prose is main's; re-read the section: the output-pipeline paragraph's 'publish target' covers #135's opener, it claims nothing about stop duration so #136's 2 s drain bound fits, the panic-boundary and watcher text matches rt_panic_is_reported, and the SeqCst handover paragraph is untouched" }
+verified = { hash = "b3:ba6900fcfb9b0d02", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#136, #146) into #133: prose is main's; re-read the section: the Collector row and 'collector thread ... not this cut' hold with #133's InputControl keep-alive (rings freed on the control plane); #136's bounded drain and #146's keyframe requests don't touch audio teardown" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:3cae6179cf6ddd09", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (#142 StreamKeyStore) into H1: re-read both; main's WindowsCredentials/StreamKeyStore and Secret text kept as is; check_media_foundation bullet unchanged; the Tests paragraph merges #142's credential tests (non-UTF-8 read, StreamKeyStore) with the MF decision, probe and edition-read tests" }
+verified = { hash = "b3:aa7b0451b3d1bfb3", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (#158 C4a) into H1: stale through jstream-platform#purpose's new VideoDevices trait; this section claims no VideoDevices backend (C4b adds it), and the check_media_foundation bullet is unchanged, so it holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
