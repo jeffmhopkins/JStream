@@ -48,8 +48,9 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-// The test below sits at the crate root because RULES.md names it by path (R-API-004):
-// `jstream_core::stale_expected_rev_is_rejected`.
+// The tests below sit at the crate root because RULES.md names them by path:
+// `jstream_core::stale_expected_rev_is_rejected` (R-API-004) and
+// `jstream_core::secrets_are_redacted` (R-SEC-001).
 
 /// R-API-004: a batch whose `expected_rev` is stale fails with `rev_conflict`, carrying
 /// both revisions, and applies nothing; the same batch at the current `rev` applies.
@@ -57,4 +58,12 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[test]
 fn stale_expected_rev_is_rejected() {
     tests::check_stale_expected_rev_is_rejected();
+}
+
+/// R-SEC-001: a stream key set through the protocol reaches the credential store and
+/// nothing else the engine sends or logs.
+#[cfg(test)]
+#[test]
+fn secrets_are_redacted() {
+    tests::check_secrets_are_redacted();
 }

@@ -1,0 +1,209 @@
+# sweep: the weekly scheduled sweep (docs/DOCS.md#ttl, check `sweep` in docs/RULES.md#R-GIT-003).
+# It never fails on what it finds: findings go into one issue, "Weekly sweep", which each run
+# rewrites (or reopens) instead of opening a new one. The job fails only when a tool can't run.
+# Time-based findings never block a PR (R-DOC-011).
+# Editing this file is a governance change (R-GOV-001).
+
+# Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
+# Dependabot proposes updates (ADR-0018). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
+
+name: sweep
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sweep
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: never
+  # The cargo-deny release the sweep installs; bump it by hand.
+  CARGO_DENY_VERSION: 0.20.2
+  ISSUE_TITLE: Weekly sweep
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write          # create, edit, reopen and pin the sweep issue
+      pull-requests: read    # the override audit list
+    steps:
+      # Full history: a doc's TTL clock restarts at the last commit that changed it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Install cargo-deny
+        run: cargo install --locked "cargo-deny@$CARGO_DENY_VERSION"
+      - name: Build xtask
+        run: cargo build --locked --package xtask
+
+      # Each finding step writes a Markdown fragment to $RUNNER_TEMP/sweep/.
+
+      # A fetch failure fails the job; advisories, bans and licences are findings.
+      - name: Fetch the latest RustSec advisory DB
+        run: cargo deny --color never fetch db
+      - name: cargo deny check
+        run: |
+          mkdir -p "$RUNNER_TEMP/sweep"
+          status=0
+          cargo deny --color never --all-features --locked check > "$RUNNER_TEMP/deny.txt" 2>&1 || status=$?
+          {
+            if [ "$status" -eq 0 ]; then
+              echo "Passed."
+            else
+              echo "**Failed** (exit $status): $(tail -n 1 "$RUNNER_TEMP/deny.txt")."
+              echo "Each finding needs a fix, or a justified exception in \`deny.toml\` (a governance change)."
+              echo
+              echo '```text'
+              grep -E '^error' -A12 "$RUNNER_TEMP/deny.txt" | head -c 20000
+              echo '```'
+            fi
+          } > "$RUNNER_TEMP/sweep/deny.md"
+
+      # `docs check` should pass on main; TTL expiry comes from `docs log`, which prints
+      # (to stderr) "(due now)" once a doc's `review_every` has passed since its clock last restarted.
+      - name: Docs due for review
+        run: |
+          xtask=target/debug/xtask
+          status=0
+          "$xtask" docs check > "$RUNNER_TEMP/docs-check.txt" 2>&1 || status=$?
+          due=""
+          # Tracked docs, as in docs/DOCS.md#identity.
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              .github/*|LICENSE*|docs/adr/TEMPLATE.md) continue ;;
+            esac
+            log=$("$xtask" docs log "$path" 2>&1)
+            line=$(printf '%s\n' "$log" | grep -E '^review every .*\(due now\)$' || true)
+            if [ -n "$line" ]; then
+              due="$due- [\`$path\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/$path): ${line}"$'\n'
+            fi
+          done < <(git ls-files -z -- '*.md')
+          {
+            if [ -n "$due" ]; then
+              echo "Re-read each one, then \`cargo xtask docs review <DOC> --by … --note \"…\"\` in a PR (docs/DOCS.md#ttl)."
+              echo
+              printf '%s' "$due"
+            else
+              echo "None."
+            fi
+            if [ "$status" -ne 0 ]; then
+              echo
+              echo "**\`cargo xtask docs check\` fails on main** (exit $status):"
+              echo
+              echo '```text'
+              head -c 10000 "$RUNNER_TEMP/docs-check.txt"
+              echo '```'
+            fi
+          } > "$RUNNER_TEMP/sweep/docs.md"
+
+      # `--verbose` also lists the dependencies held back by a version requirement or the
+      # toolchain ("Unchanged … (available: …)").
+      - name: cargo update --dry-run
+        run: |
+          cargo update --dry-run --verbose > "$RUNNER_TEMP/update.txt" 2>&1
+          changes=$(grep -E '^ +(Updating|Adding|Removing|Downgrading) [A-Za-z0-9_-]+ v' "$RUNNER_TEMP/update.txt" | sed 's/^ *//' || true)
+          held=$(grep -E '^ +Unchanged [A-Za-z0-9_-]+ v.*\(available: ' "$RUNNER_TEMP/update.txt" | sed 's/^ *Unchanged //' || true)
+          {
+            if [ -n "$changes" ]; then
+              echo "Compatible updates the lockfile would take. Dependabot's weekly \`build(deps)\` PR proposes them (ADR-0018)."
+              echo
+              echo '```text'
+              printf '%s\n' "$changes" | head -c 15000
+              echo '```'
+            else
+              echo "The lockfile takes every compatible update already."
+            fi
+            if [ -n "$held" ]; then
+              echo
+              echo "Held back by a version requirement or the toolchain:"
+              echo
+              echo '```text'
+              printf '%s\n' "$held" | head -c 15000
+              echo '```'
+            fi
+          } > "$RUNNER_TEMP/sweep/update.md"
+
+      # R-GOV-002: every PR merged with an override label, for the maintainer's audit.
+      # Eight days so a late scheduled run leaves no gap; the issue's edit history keeps
+      # earlier weeks.
+      - name: Override audit list
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          since=$(date -u -d '8 days ago' +%Y-%m-%d)
+          {
+            for label in governance-approved review-override; do
+              echo "**\`$label\`**, merged since $since:"
+              echo
+              gh pr list --repo "$GITHUB_REPOSITORY" --state merged --label "$label" \
+                --search "merged:>=$since" --limit 100 \
+                --json number,title,mergedAt \
+                --jq 'sort_by(.mergedAt) | .[] | "- #\(.number) \(.title)"' > "$RUNNER_TEMP/prs.txt"
+              if [ -s "$RUNNER_TEMP/prs.txt" ]; then cat "$RUNNER_TEMP/prs.txt"; else echo "None."; fi
+              echo
+            done
+          } > "$RUNNER_TEMP/sweep/audit.md"
+
+      - name: Update the sweep issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          s="$RUNNER_TEMP/sweep"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "Rewritten by the weekly [\`sweep\`]($run_url) workflow on \`$(git rev-parse --short HEAD)\` (docs/DOCS.md#ttl)."
+            echo "Each item is fixed in a normal PR. This issue never blocks one (R-DOC-011)."
+            echo
+            echo "## cargo deny"
+            echo
+            cat "$s/deny.md"
+            echo
+            echo "## Docs due for review"
+            echo
+            cat "$s/docs.md"
+            echo
+            echo "## Dependency updates"
+            echo
+            cat "$s/update.md"
+            echo
+            echo "## Override audit (R-GOV-002)"
+            echo
+            cat "$s/audit.md"
+            echo "## Not swept yet"
+            echo
+            echo "Link checks of \`docs/external.toml\`, externals and \`ext\` facts that are due, fact drift,"
+            echo "verify-to-edit ratios, pending enforcement past its milestone, and the Tier-1 ADR decision audit."
+          } > "$RUNNER_TEMP/body.md"
+          # GitHub caps an issue body at 65536 characters.
+          if [ "$(wc -c < "$RUNNER_TEMP/body.md")" -gt 65000 ]; then
+            head -c 64000 "$RUNNER_TEMP/body.md" > "$RUNNER_TEMP/cut.md"
+            printf '\n\n…cut; the full output is in the [run log](%s).\n' "$run_url" >> "$RUNNER_TEMP/cut.md"
+            mv "$RUNNER_TEMP/cut.md" "$RUNNER_TEMP/body.md"
+          fi
+          cat "$RUNNER_TEMP/body.md" >> "$GITHUB_STEP_SUMMARY"
+
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --author 'app/github-actions' \
+            --search "in:title \"$ISSUE_TITLE\"" --limit 20 --json number,title \
+            --jq "map(select(.title == \"$ISSUE_TITLE\")) | sort_by(.number) | first | .number // empty")
+          if [ -z "$number" ]; then
+            url=$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --body-file "$RUNNER_TEMP/body.md")
+            number=${url##*/}
+            gh issue pin "$number" --repo "$GITHUB_REPOSITORY" || echo "::warning::could not pin issue #$number"
+          else
+            gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
+            if [ "$(gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json state --jq .state)" = CLOSED ]; then
+              gh issue reopen "$number" --repo "$GITHUB_REPOSITORY"
+            fi
+          fi
+          echo "Sweep issue: #$number"
