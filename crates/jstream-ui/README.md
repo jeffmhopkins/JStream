@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:17d870f02e6c5a94", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: Connecting bullet no longer says the desktop connect fails until #246; it links server Design, which accepts the subprotocol; holds" }
+verified = { hash = "b3:37514afcfa6ed27f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: 'pairing is not decided yet' now says a remote browser will pair with a one-time code per ADR-0044, not built yet; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -61,8 +61,8 @@ verified = { hash = "b3:17d870f02e6c5a94", by = "agent:claude@session_01WbL3WRbc
   console, and the field is a password field. It may be left empty when the daemon
   served the page behind HTTP Basic with the token as the password: the browser's
   cached Basic credentials then carry the token on the upgrade, and no token
-  subprotocol is sent. How the daemon hands the token to a
-  browser (pairing) is not decided yet. In the desktop app the form is skipped: the
+  subprotocol is sent. A remote browser will pair with a one-time code instead
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)); that isn't built yet. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). That connection carries the
   token in the subprotocol, which `jstream-server` accepts

@@ -185,7 +185,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:3a96a34d64883427", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server design; MCP, Listening and token bullets unchanged; holds" }
+verified = { hash = "b3:1642d2deda2f92bd", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through server design; Listening bullet (loopback only until TLS and pairing) still holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

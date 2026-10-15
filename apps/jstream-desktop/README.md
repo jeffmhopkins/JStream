@@ -92,7 +92,7 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:8f9d5cf1567e1fcb", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "R-SEC-002 amended by ADR-0044 (device tokens, pair endpoint): desktop still serves loopback behind its in-memory control token; section holds" }
+verified = { hash = "b3:8f9d5cf1567e1fcb", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through amended R-SEC-002; desktop serves loopback with an in-memory token and pairs nothing, so the amendment changes nothing here; holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
