@@ -25,12 +25,13 @@
 //! # Ok::<(), jstream_audio::AudioError>(())
 //! ```
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-audio/README.md#purpose, crates/jstream-audio/README.md#realtime, docs/adr/0028-audio-model-v2.md, docs/adr/0014-media-clock.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-audio/README.md#purpose, crates/jstream-audio/README.md#realtime, crates/jstream-audio/README.md#meters, docs/adr/0028-audio-model-v2.md, docs/adr/0014-media-clock.md
 
 #![forbid(unsafe_code)]
 
 mod error;
 mod handle;
+pub mod meter;
 mod rt;
 
 pub use error::AudioError;

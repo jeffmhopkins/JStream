@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:0e48ba2d422db8da", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs gained the 'docs generate' usage entry (xtask/ line still lists docs); the docs/adr/ line now mentions the generated README.md index next to TEMPLATE.md; rest of the tree unchanged" }
+verified = { hash = "b3:02586af269c6ad78", by = "agent:claude@session_01G2n9TnrH9za1trRoJWCsmB", note = "main.rs gained the docs review and docs log usage entries only; the xtask/ line (docs, lint-deps, governance, ...) and the rest of the tree still hold" }
 -->
 
 ```
@@ -490,7 +490,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:d7a978d7c1760f76", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Edits bullet names the output edits; new Stream keys bullet (set_key/clear_key, write-only, key_set); Queries list output.list" }
+verified = { hash = "b3:1297cb1237ce04ea", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#150, #151, #152) into #142: only verified lines conflicted; re-read the section: the 0.7 output edits, Stream keys and output.list bullets are #142's, Transport and Slow clients unaffected by #150's test-only change" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

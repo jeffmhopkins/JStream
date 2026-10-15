@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:3630422825c76331", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the limits change: the contents list now names listener.rs and the connection limits on ServerConfig; layer, connector and not-yet items unchanged" }
+verified = { hash = "b3:c890b3b9db54eb66", by = "agent:claude@session_01Gkayyrtq9Ahc5U37dAfdoB", note = "Re-read for #137: test-only change (shutdown tests wait on counted conditions instead of fixed sleeps; CLOSE_TIMEOUT made pub(crate) for the test). No behaviour change; the section still matches" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -51,7 +51,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ea7bc5a525af227f", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Stale via ARCH#protocol and control Design (#142): the server forwards calls unchanged and never logs message contents, so a stream key in output.set_key is not logged; limits, sessions and logging hold" }
+verified = { hash = "b3:5b907571e1a851aa", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#150 shutdown tests) into #142: only verified lines conflicted, prose is unchanged on both sides; re-read: serve_with_shutdown and CLOSE_TIMEOUT behaviour unchanged by #150's test-only waits; message contents never logged, so set_key's key is not logged" }
 -->
 
 ### Listening and admission
