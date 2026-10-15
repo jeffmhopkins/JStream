@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:e3539a9229f4e9be", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: Mock section merged: edit checks list keeps B4's settings-reference delete rule and A5's RTMP URL and running-delete rules; the kinds/settings paragraph is B4's; queries now list output.list and settings; A5's outputs and stream-key bullets match mock.rs (apply has both settings handling and running)" }
+verified = { hash = "b3:ecf7953de5ff37ad", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (I1 #153 /mcp) into A5: only the verified line conflicted; prose is A5's merged Mock section (outputs, stream keys, B4 settings) and I1 changed none of it; re-read the WebSocket client part: /mcp makes no claim on WsControl" }
 -->
 
 ### The trait

@@ -97,7 +97,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:daa4624da93f3c55", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: prose is main's; the differential-script paragraph holds (the script's parity collection now has outputs and the kinds, and the test passes against the merged mock)" }
+verified = { hash = "b3:7180c1c7b826cd03", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (I1 #153 /mcp) into A5: only the verified line conflicted; re-read the connector/MCP-session sentence (each /mcp session calls Engine::connect) and the differential-script paragraph (parity collection with outputs, passes against the merged mock); both hold" }
 -->
 
 ### Engine and sessions

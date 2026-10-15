@@ -128,7 +128,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:6d45418b89299049", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Stale through ARCH#crate-map only (main's #141 platform-windows row plus G1's vcam-proto row); the jstream-platform row it relies on (GpuInterop with wgpu types) is unchanged, so the section holds" }
+verified = { hash = "b3:40dc2bf9ee897a2a", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#141/G1 crate-map rows) into I1 #153: stale via ARCH#crate-map only; I1 just dropped (not built) from the mcp and server rows; nothing here relies on them" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
