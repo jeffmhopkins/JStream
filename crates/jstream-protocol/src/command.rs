@@ -65,8 +65,9 @@ pub enum Edit {
     /// `invalid_argument` while a `scene` source shows it or any source's settings refer
     /// to it: delete those sources, or clear those references, first (in the same batch
     /// if needed). Inverse: `scene.create`, then `scene.reorder` to its old
-    /// display position (unless it was last), `scene.set_role` if it was a group, then
-    /// each deleted item's `item.remove` inverse, from bottom to top.
+    /// display position (unless it was last), `scene.set_role` if it was a group,
+    /// `scene.set_transitions` if it had an override, then each deleted item's
+    /// `item.remove` inverse, from bottom to top.
     #[serde(rename = "scene.delete")]
     SceneDelete {
         /// The scene to delete.
@@ -100,8 +101,9 @@ pub enum Edit {
     /// Removes an item from its scene. The source itself stays. Inverse: `item.add` with
     /// the removed item's scene, ID and source, and its placement in the field matching
     /// its form (`transform` or `geometry`), then `item.reorder` to its old stacking
-    /// position (unless it was on top), `item.set_crop` if it was cropped, and
-    /// `item.set_visible` if it was hidden.
+    /// position (unless it was on top), `item.set_crop` if it was cropped,
+    /// `item.set_visible` if it was hidden, and `item.set_transition` if its transition
+    /// settings were not the default.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.

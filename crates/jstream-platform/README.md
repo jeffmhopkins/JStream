@@ -137,7 +137,7 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:c6e56f3ac4e834a3", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: stale only via ARCH crate-map (jstream-ui row now layer 3); GPU frame design untouched" }
+verified = { hash = "b3:91958314428c4b07", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: stale via ARCH gpu-pipeline; platform frame lifetime text unaffected; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

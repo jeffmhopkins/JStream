@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:b2650ff35c006fc4", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read against D7b's ARCH threading Collector row and B10; encode text unaffected by program; holds" }
+verified = { hash = "b3:3dcf843ea02cb506", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: stale via ARCH data-model; encode text unaffected by transitions; holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

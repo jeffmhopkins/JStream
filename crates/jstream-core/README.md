@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:d351cde9bb26d196", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; Studio bullet sits after main's Snapshot bullet; main's Runtime bullet (render thread composites the program mix) is now true of program, so B10's old capture-alone wording is dropped" }
+verified = { hash = "b3:7dad70749f260cc2", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: Studio bullet adds preview and the running transition; new Transitions bullet (resolve, plan); tests paragraph lists src/tests/transitions.rs" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -68,9 +68,13 @@ state machine. Contents:
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
   compositor.
-- **Studio** (`studio.rs`): which scene is on program, runtime state under the
-  collection lock that `scene.switch` sets and `studio.get` reads
+- **Studio** (`studio.rs`): which scene is on program and which on preview, and the
+  transition running onto program, runtime state under the collection lock that
+  `scene.switch` and `studio.set_preview` set and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
+- **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md)):
+  which preset a switch runs (`resolve`), and the plan that pairs what is on screen
+  with the new scene's items, one `jstream-render` `Track` per item (`plan`).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox, composites
   the program mix from the render snapshot the control side publishes
@@ -140,7 +144,9 @@ state machine. Contents:
   as they were, a failed save that the next change recovers, and concurrent sessions
   leaving the latest collection and no temporary file), `scene.switch` and the program
   scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
-  that follows program, and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
+  that follows program, transitions and preview (`src/tests/transitions.rs`: preset
+  resolution, a fade that ends on the clock, a switch mid-transition, and a GPU
+  snapshot mid-fade), pairing (`transition.rs`), and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
   engine in-process.
 
 Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
@@ -156,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5f91820569c3c7a7", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:2628870907434d00", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: Actions add studio.set_preview; Program scene adds Preview and Transitions paragraphs (resolution, Running, plan_with, on_screen retarget, flattening rule, legacy conversion, no audio follow); render snapshot and compose paragraphs updated; checked against engine.rs, studio.rs, transition.rs, snapshot.rs" }
 -->
 
 ### Engine and sessions
@@ -252,8 +258,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), and
-  `scene.switch` (see *Program scene* below).
-- **`studio.get`** reads the program scene under the collection lock.
+  `scene.switch` and `studio.set_preview` (see *Program scene* below).
+- **`studio.get`** reads the program and preview scenes under the collection lock.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -326,9 +332,38 @@ program emits `studio.changed` right after its `state.changed`, naming the same 
 mock applies the same rules, and the differential script holds the two to each other.
 Program is not saved in the collection file, so an engine that loads one (a restart) starts
 with its first scene on program. The program mix, on the render thread and in
-`video.snapshot`, draws the program scene, and a switch re-plans it, so the next frame
-shows the new scene: a cut. Only a cut exists; transitions and the preview scene come
-later.
+`video.snapshot`, draws the program scene, and a switch re-plans it.
+
+**Preview** follows the same rules: `studio.set_preview` sets it (`not_found` for a
+missing scene; setting the scene already there emits nothing), the first scene goes on
+preview when it is created, and a deleted preview scene gives way to the first scene
+left. A switch never moves it, and nothing draws it until E2's preview mix does.
+
+**Transitions** ([ADR-0029](../../docs/adr/0029-transitions.md)). A switch resolves its
+preset (`transition::resolve`: the preset it names, else the new scene's
+`transition_in`, else the old scene's `transition_out`, else the default). A `cut`, a
+zero duration, or a kind this engine can't run puts the scene on program for the next
+frame. A `fade` or `move` puts it on program at once too, and keeps a `Running`
+transition beside it in the studio: where it starts from, the scene it goes to, its
+start on the media clock, and the resolved preset. `studio.changed` names the preset and
+the transition's length. While it runs, `snapshot::plan_with` plans the transition
+instead of the program scene: `transition::plan` pairs the starting items with the
+program scene's (as the collection holds them now, so an edit mid-transition shows),
+and the shot carries one `Track` per item, which the render thread samples at each
+frame's time. The plan's wake time includes the end, so the engine re-plans then, sees
+the transition has ended and lets it go; from that frame the program scene is drawn
+alone. A switch while a transition runs samples it at the switch time
+(`snapshot::on_screen`, the function the render thread draws with) and starts the new
+one from those items, so nothing jumps. A switch to the scene already on program, even
+mid-transition, does nothing. An edit that moves program drops the transition.
+
+Pairing and its inputs: each visible item that has a frame becomes a `Visual`, its
+placement converted to a geometry (a legacy placement through `ItemGeometry::from_legacy`
+at its frame size; a reflection is not kept mid-transition). `move` pairs by source as
+the protocol says; a nested scene's items are flattened into its parent only when its
+item covers the canvas exactly (an identity placement, no crop, not rotated), so a
+scene shown at another size moves as one image. Audio does not follow a transition
+yet (D29).
 
 ### Snapshots
 
@@ -366,16 +401,18 @@ draws nothing.
 **The render snapshot.** `snapshot::plan` copies the program scene, the scenes it
 reaches, the frames they place and the passes that draw them (`schedule`, made once
 here) into an immutable `Shot`. The program scene is the one `scene.switch` put on
-program (*Program scene*). The engine re-plans after every applied batch, undo
-and redo, a `scene.switch` that moves program, every `set_source_frame`, a collection file's load, a live source's build
+program (*Program scene*), or the transition running onto it. The engine re-plans
+after every applied batch, undo and redo, a `scene.switch` that moves program, a
+transition's end, every `set_source_frame`, a collection file's load, a live source's build
 and a live source's next frame (see *Live sources*), under the collection lock, and
 `RenderHub::publish` stores
 it through `arc-swap` as the next render generation only when it draws something new
 (the canvas, the scenes, their placements or the frames' versions differ). So a batch
 that changes nothing on program, or a frame for a source no program scene shows,
 publishes nothing. Each stored frame carries a version, so a cache re-uploads it only when it
-changed. `video.snapshot` reads `rev` and the published snapshot together under the
-lock and hands both to the snapshot thread.
+changed. `video.snapshot` reads `rev`, the published snapshot and the media clock's
+time together under the lock and hands them to the snapshot thread, which draws a
+running transition at that time.
 
 `snapshot::compose` draws a `Shot` for both threads through a `jstream-render`
 `ResourceCache` keyed by `GpuKey`: a source's upload, the capture's, a nested scene's
@@ -385,7 +422,9 @@ uploaded again, and each nested scene is redrawn into the layer it had
 are retired and freed after the GPU has finished with them. The program scene is drawn
 at the canvas: straight to the output when that is the canvas size (`video.snapshot`),
 else into a layer that a last pass scales to the output (the render thread draws at the
-encoder size). Without a program scene the output is the capture filling it, or black.
+encoder size). A transition replaces the program scene's pass: `compose` samples each
+track at the frame's time and draws the sampled items over opaque black, bottom first,
+the nested scenes they show composited first. Without a program scene the output is the capture filling it, or black.
 A `display` source with no stored frame shows the pipeline's capture on the render
 thread and nothing in `video.snapshot`, which has no capture; a stored frame wins.
 That mapping holds until per-source capture exists.
@@ -908,7 +947,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:9cb93b65cd929904", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (C5 audio sources, B9) into D7b: kept C5's audio-sources sentences and D7b's mixer-collector sentence (rings, removed buses' state, filter chains and filters, per retire.rs); re-read; holds" }
+verified = { hash = "b3:d320c0a443c44520", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: render thread composites a running transition sampled at the tick's media time (DrawFn takes the time); rest holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -917,8 +956,9 @@ The output pipeline (`src/runtime/`) is the part of
 (a recording output needs none), starts it and emits `output.state_changed` from the
 control thread. The render thread calls the platform capture mailbox and, on each
 1/30 s tick, composites the program mix from the render snapshot (see *Snapshots* in
-Design) at the encoder size: the program scene and the scenes it nests, with every
-`display` source that has no stored frame showing the captured display. With no scene
+Design) at the encoder size: the program scene and the scenes it nests, or a running
+transition sampled at the tick's media time, with every `display` source that has no
+stored frame showing the captured display. With no scene
 it draws the capture filling the frame. It repeats the last capture when the mailbox
 is empty, and reads the frame back. This cut encodes that CPU readback, and the
 readback is counted. The mixer thread polls the media clock and pushes 48 kHz stereo

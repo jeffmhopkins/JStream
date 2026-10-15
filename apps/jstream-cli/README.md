@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:889d8fc912b3ef44", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; contents hold with B6-f's commands and scene switch/studio get" }
+verified = { hash = "b3:4177f480eae5a086", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: re-read; contents hold (args/run gained scene switch --preset and studio set-preview, no new module)" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:a5ec524c34e496eb", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; scene switch and studio get rows hold beside B6-f's set_role/item.move/set_geometry rows" }
+verified = { hash = "b3:0c72b39983a0d05f", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: scene switch row now takes --preset, studio get reports program and preview, new studio set-preview row; checked against args.rs and run.rs goldens" }
 -->
 
 ```sh
@@ -83,8 +83,9 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `hello` | the `hello`/`welcome` handshake |
 | `state get` | query `state.get` |
 | `scene list` | query `scene.list` |
-| `scene switch <scene-id>` | action `scene.switch` (a cut to that scene) |
-| `studio get` | query `studio.get` (the scene on program) |
+| `scene switch <scene-id> [--preset <preset-id>]` | action `scene.switch` (to that scene, with the preset's transition, else the one the engine resolves) |
+| `studio get` | query `studio.get` (the scenes on program and preview) |
+| `studio set-preview <scene-id>` | action `studio.set_preview` |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |
@@ -234,7 +235,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4f5fca2208c71215", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:a2268dfb2ab7ae1b", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: re-read; design unchanged by the new switch/preview commands and studio.changed line format" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

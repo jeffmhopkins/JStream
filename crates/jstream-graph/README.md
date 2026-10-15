@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a883234871ab7b25", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; program not in the graph; holds" }
+verified = { hash = "b3:0c9bf093c3fa6310", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: Model adds transitions/Preset/scene overrides/item transition and Graph::new's transition kinds; Transitions edit bullet; touched sets, reads and the collection file updated; checked against model, apply.rs, transition.rs, touched.rs, read.rs, persist" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -25,10 +25,12 @@ codes, so the engine passes them to clients unchanged.
 **Model** (`model/`, [ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)):
 - `Graph`: the `State` plus its `rev`, and the kind descriptors it validates `builtin`
   sources against. The engine supplies them (`Graph::with_kinds`); they are not
-  collection state, and `Graph::new()` describes none.
+  collection state, and `Graph::new()` describes only the built-in transition kinds
+  (`cut`, `fade`, `move`), which every graph has.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
-  in display order, the `outputs`, keyed by ID, and the `encoders` (encoder profiles),
-  keyed by ID.
+  in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
+  keyed by ID, and the `transitions`: the presets, keyed by ID, and the default. A new
+  state holds one preset, `cut`, as its default.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -38,14 +40,19 @@ codes, so the engine passes them to clients unchanged.
   the original may be deleted, and reads then omit the link. Removing an item never
   deletes its source.
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
-  here) and its items in stacking order, bottom first.
-- `Item`: the source it places, a `Placement`, a `crop` and `visible`. `Placement` is
+  here), its `transition_in` and `transition_out` overrides, and its items in stacking
+  order, bottom first.
+- `Item`: the source it places, a `Placement`, a `crop`, `visible` and its
+  `ItemTransition` ([ADR-0029](../../docs/adr/0029-transitions.md)). `Placement` is
   one of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two forms: a
   `Geometry` (a box on the canvas) or a `Legacy` 0.3 `ItemTransform`, kept exactly as
   written. Only an edit changes the form.
   `item.set_source` changes the source and keeps the rest, the item's ID and its
   stacking position, so it converts the item between a reference and a clone
   ([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)).
+- `Preset`: a transition preset ([ADR-0029](../../docs/adr/0029-transitions.md),
+  [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): an
+  ID, a name, a transition kind, `duration_ms`, `easing` and its complete settings.
 - `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
   `State::encoding_of` gives the encoding an output starts with.
 - `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, or a recording
@@ -75,11 +82,13 @@ the batch **touched**.
   source's scene, a duplicate's original, the scene an `item.move` names, the profile
   an `output.set_encoder` names), the properties set (names, a scene's role, an item's
   placement, crop, visibility, index and source, each settings parameter, an output's
-  target and encoder choice, a profile's encoding), and whether the scenes' order or
-  the canvas size was set. An edit it doesn't know marks the set as conflicting with
+  target and encoder choice, a profile's encoding, a preset's fields, a scene's
+  transition overrides, an item's transition settings), and whether the scenes' order,
+  the canvas size or the default preset was set. An edit it doesn't know marks the set as conflicting with
   everything. `conflicts_with` is the undo rule the engine's history applies to other
   clients' later batches: one set creates or deletes an object the other touches, both
-  set the same property, both set the scenes' order, or both set the canvas size.
+  set the same property, both set the scenes' order, both set the canvas size, or both
+  set the default preset.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   `source.create` of a `builtin` source needs a kind the graph describes, checks each
   given value with the protocol's `ParamDescriptor::check`, and stores the complete map
@@ -127,6 +136,17 @@ the batch **touched**.
   then the profile (`not_found`), and needs no running check: it applies from the
   output's next start. Each is undone by its opposite (`encoder.delete` by
   `encoder.create`, `encoder.update` and `output.set_encoder` by the previous value).
+- **Transitions** (`transition.rs`): `transition.create` needs a kind of category
+  `transition` (else `invalid_argument` on `kind`) and checks its settings as
+  `source.create` does; `transition.update` patches the fields it names, and a new
+  kind resets the settings to that kind's defaults before the patch, its inverse
+  carrying the old kind and the whole old map. `transition.delete` refuses the default
+  (`invalid_argument` on `preset_id`) and clears every scene override naming the
+  preset; its inverse re-creates the preset, then restores those overrides.
+  `transition.set_default`, `scene.set_transitions` (a missing preset is `not_found`)
+  and `item.set_transition` (its delay checked by `ItemTransition::problem`) are undone
+  by the previous value. `scene.delete`'s and `item.remove`'s inverses restore the
+  overrides and settings they dropped.
 - **Groups and moves** ([ADR-0024](../../docs/adr/0024-scene-structure.md) §1):
   `scene.set_role` changes a scene's role and is undone by the previous role.
   `item.move` moves an item to an index in another scene (up to one past its top) or
@@ -162,7 +182,8 @@ to `null` (one `source.set_settings` per source), and the target's own delete co
 last. Sources come ordered by ID, scenes in
 display order, items bottom first, outputs and encoder profiles ordered by ID.
 `state.get` carries the
-canvas. A geometry item reads its `geometry`, and the deprecated `transform` view the
+canvas and the transition presets (ordered by ID) with the default; `kind.list` lists
+the transition kinds beside the source kinds. A geometry item reads its `geometry`, and the deprecated `transform` view the
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
 stored transform and no geometry. `Source::to_info` (given the `State`, to omit a
 `duplicated_from` whose source is gone),
@@ -177,7 +198,10 @@ and `visible`), sources ordered by ID (with `kind_version`, the descriptor versi
 `builtin` source's settings follow, ADR-0025, and `duplicated_from` as stored, even
 when it names a deleted source), outputs ordered by ID (each with its
 `encoder_profile`, omitted for the default), and encoder profiles (`encoders`) ordered by
-ID, omitted when there are none. Kinds, undo history and runtime state are not in it, and
+ID, omitted when there are none, and `transitions` (each preset with its
+`kind_version`, and the default), omitted while it is the initial `cut` alone. A scene
+writes `transition_in` and `transition_out` when set, and an item its `transition`
+when not the default. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -189,13 +213,15 @@ the engine's; this crate does no I/O.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
   graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
-  sources its settings refer to), then items in their placement form with their crop
-  and visibility, then encoder profiles, then outputs with their profiles. A
+  sources its settings refer to), then items in their placement form with their crop,
+  visibility and transition settings, then encoder profiles, then the presets and the
+  default (the initial `cut` is updated in place when the file has it, and deleted when
+  it doesn't), then each scene's overrides, then outputs with their profiles. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
   `LoadError` stay small); nothing is partly loaded. Then `rev` is set
-  to the file's, so revisions keep increasing across restarts. A source whose
+  to the file's, so revisions keep increasing across restarts. A source or preset whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
 - **Errors** never quote a value beyond IDs, so they are safe to log. `serde_json`'s

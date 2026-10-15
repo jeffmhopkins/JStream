@@ -171,7 +171,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group,\n`scene.set_transitions` if it had an override, then each deleted item's\n`item.remove` inverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -239,7 +239,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, and its placement in the field matching\nits form (`transform` or `geometry`), then `item.reorder` to its old stacking\nposition (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
+                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, and its placement in the field matching\nits form (`transform` or `geometry`), then `item.reorder` to its old stacking\nposition (unless it was on top), `item.set_crop` if it was cropped,\n`item.set_visible` if it was hidden, and `item.set_transition` if its transition\nsettings were not the default.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -2574,7 +2574,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, and its placement in the field matching\nits form (`transform` or `geometry`), then `item.reorder` to its old stacking\nposition (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
+                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, and its placement in the field matching\nits form (`transform` or `geometry`), then `item.reorder` to its old stacking\nposition (unless it was on top), `item.set_crop` if it was cropped,\n`item.set_visible` if it was hidden, and `item.set_transition` if its transition\nsettings were not the default.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -3385,7 +3385,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group,\n`scene.set_transitions` if it had an override, then each deleted item's\n`item.remove` inverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",

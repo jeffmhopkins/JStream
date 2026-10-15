@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:573804037ce32dde", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; Commands keeps main's set_source/encoder edits plus scene.switch; Queries add studio.get beside delete.plan; version line 0.16 then main's 0.15 to 0.5" }
+verified = { hash = "b3:a666c3114a15586e", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: command.rs docs only (scene.delete and item.remove inverses now name scene.set_transitions and item.set_transition), snapshots regenerated; re-read, section holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -38,10 +38,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `item.set_visible`, `item.set_source`, `canvas.set_size`, `source.create`,
   `source.rename`, `source.set_settings`, `source.duplicate`, `source.delete`,
   `output.create`, `output.set_target`, `output.set_encoder`, `output.delete`,
-  `encoder.create`, `encoder.update`, `encoder.delete`), with `ItemTransform`
+  `encoder.create`, `encoder.update`, `encoder.delete`, `transition.create`,
+  `transition.update`, `transition.delete`, `transition.set_default`,
+  `scene.set_transitions`, `item.set_transition`), with `ItemTransform`
   (deprecated), `Crop`, `SourceKind` and `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch`);
+  `scene.switch` with its optional `preset_id`, `studio.set_preview`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
@@ -58,8 +60,16 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `delete.plan` (with its `DeleteTarget`) and `studio.get`, with `QueryResult` and the `SceneSummary`,
   `SceneInfo`, `SourceInfo` and `ItemInfo`
   shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
-  the item's `placement` form and its `geometry`. `video.snapshot` returns the program
-  mix as a PNG.
+  the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
+  overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  returns the program mix as a PNG.
+- **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md),
+  [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): the
+  built-in transition kinds (`cut`, `fade`, `move`) and their descriptors, `Easing` with
+  `Easing::apply`, the one easing function every implementation shares (golden-tested),
+  `ItemTransition` (an item's delay, easing, glide and appear and disappear effects) with
+  its range check, `TransitionPresetInfo` and `TransitionsInfo` as `state.get` reports
+  them, and `TransitionStarted`, what a `studio.changed` says a switch ran.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
   [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)): `KindDescriptor`,
   `ParamDescriptor` and `ParamType`, the shapes that describe a source or filter kind's
@@ -68,7 +78,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No kind is defined here.
-- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
+- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
+  (program, preview and the transition a switch started),
   `events.dropped` and `stats.tick`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
@@ -86,8 +97,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.16 because of
-  `scene.switch`, `studio.get` and `studio.changed`; 0.15 added `delete.plan` and the
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.17 because of
+  transition presets and studio mode's preview; 0.16 added `scene.switch`, `studio.get`
+  and `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
@@ -120,7 +132,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:3adf477bdf0f66e2", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; studio.get beside delete.plan in Queries, both Added in 0.16 for studio.get/studio.changed; OQ5 settled" }
+verified = { hash = "b3:30a71edceec94550", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: command.rs docs only (scene.delete and item.remove inverses now name scene.set_transitions and item.set_transition), snapshots regenerated; re-read, section holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -349,6 +361,38 @@ no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe 
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
 
+### Transitions and studio mode
+
+[ADR-0029](../../docs/adr/0029-transitions.md) and
+[ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
+the model (0.17). A transition preset is collection state:
+`{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
+kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
+`settings` are checked against its descriptor as a source's are (`unmatched`, the
+effect for items nothing pairs, and `stagger_ms` for `fade` and `move`).
+
+- `transition.create` adds a preset, `transition.update` changes its fields or patches
+  its settings (a new `kind` resets the settings to that kind's defaults, overlaid by
+  the patch), and `transition.delete` removes one, clearing the scene overrides that
+  name it in the same edit; its inverse re-creates the preset and restores them. The
+  default preset can't be deleted (`invalid_argument` on `preset_id`);
+  `transition.set_default` moves it. A new collection holds one preset, `cut`, as its
+  default.
+- `scene.set_transitions {scene_id, transition_in?, transition_out?}` sets both of a
+  scene's overrides (absent clears one), and `item.set_transition {item_id,
+  transition}` an item's `ItemTransition {delay_ms, easing, glide, appear,
+  disappear}`, omitted from `ItemInfo` while it is the default.
+- `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
+  (`not_found` when there is no such preset), else the new scene's `transition_in`,
+  else the current scene's `transition_out`, else the default. A switch while a
+  transition runs starts the new one from what is on screen.
+- `studio.set_preview {scene_id}` puts a scene on preview, studio mode's next scene.
+  Like a switch it changes no `rev` and is never undone; a switch leaves preview where
+  it is.
+
+`Easing::apply` is the one easing function every implementation evaluates, so the UI's
+preview of a transition and the engine's render agree.
+
 ### Batches, revisions and `expected_rev`
 
 Edits are only sent inside a `Batch`; a single edit is a batch of one.
@@ -378,7 +422,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
-  missing from a pre-0.13 server, it parses as empty). A client reads it on connecting, and again after a
+  missing from a pre-0.13 server, it parses as empty) and the transition presets with
+  the default (`transitions`; missing from a pre-0.17 server, it parses as the one
+  initial `cut`). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
@@ -400,8 +446,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
-- `studio.get`: the scene on program (`program_scene`, omitted only while the collection
-  has no scene). Runtime state, not collection state
+- `studio.get`: the scene on program (`program_scene`) and on preview
+  (`preview_scene`, 0.17), each omitted only while the collection has no scene. Runtime
+  state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
 - `delete.plan {target}`: the batch that deletes a scene or source (`target` is
@@ -521,14 +568,17 @@ After `welcome`, the server pushes every event to every client.
   to `rev`, a gap shows that an event was missed.
 - `output.state_changed {output_id, state}` reports runtime state, which is not part of
   the collection, so it carries no `rev`.
-- `studio.changed {program_scene?, client_id, request_id?}` reports a new scene on
-  program, with the request that caused it: a `scene.switch`, or a batch, undo or redo
-  that created
-  the collection's first scene (it goes on program) or deleted the program scene
-  (program moves to the first scene left, or to none). For edits it follows their
-  `state.changed`. A switch to the scene already on program emits nothing.
-  Program is runtime state, so it carries no `rev`
-  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). Added in 0.16.
+- `studio.changed {program_scene?, preview_scene?, transition?, client_id, request_id?}`
+  reports a new scene on program or preview, with the request that caused it: a
+  `scene.switch`, a `studio.set_preview`, or a batch, undo or redo that created the
+  collection's first scene (it goes on program and preview) or deleted the program or
+  preview scene (it moves to the first scene left, or to none). For edits it follows
+  their `state.changed`. A switch, or setting preview, to the scene already there emits
+  nothing. After a switch, `transition` names the preset it ran and how long the
+  transition lasts in milliseconds (`duration_ms`, 0 for a cut), so a client can show
+  progress; no event marks the end. Program and preview are runtime state, so it
+  carries no `rev` ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
+  Added in 0.16; `preview_scene` and `transition` in 0.17.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

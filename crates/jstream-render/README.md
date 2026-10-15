@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:d35d5306bc8ac01f", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: render's link to ARCH Threads for the cache hand-off still points at the model's State-to-RT-threads text; holds" }
+verified = { hash = "b3:b96b570ff36476fb", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: new Transitions bullet (Track, Endpoint, Timing, effects, clamping); dropped transitions from Not in this cut" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -65,6 +65,19 @@ and calls this crate.
   picks the thread that drops it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
 
+- **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md)):
+  a `Track` is one item's part in a transition: a `Pair` that interpolates between two
+  `Endpoint`s (a geometry, a crop and an opacity), an `Appear` or a `Disappear` with
+  its effect (`Fade`, `Scale` to 65 %, `Slide` to the nearest canvas edge, or `None`),
+  each with its `Timing` (delay, duration and easing). `Track::sample` gives the
+  endpoint at a time since the start, or nothing once the item is invisible; it is a
+  pure function, so the render thread and the control thread that retargets a running
+  transition get the same answer. Angles take the shortest way round, discrete fields
+  (fit mode, a perspective present at one end) switch halfway, and after easing the
+  opacity is clamped to `[0, 1]`, the crop to the source, the size to `≥ 0` and the
+  perspective to `≥ 1`. Pairing items and drawing the sampled endpoints are
+  `jstream-core`'s.
+
 **Where it sits on the existing APIs.**
 
 - It does **not** open the media adapter. When platform interop works, the engine
@@ -101,8 +114,7 @@ and calls this crate.
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's. Also not here: NV12 or
 P010 conversion, encode-target export and the D3D12 `PRESENT` transition, WGSL effect
-packs, 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
-stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
+packs, 3D tilt/turn/depth/perspective, the master chain and the privacy stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
 fields stay neutral until M3. The GPU pipeline's encode
 steps stay in
 [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline).
@@ -112,7 +124,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c91d3972472d19b9", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
+verified = { hash = "b3:14ba5bd7dcb55d25", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: re-read; transition.rs adds pure sampling, no passes change and no per-item allocation; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O

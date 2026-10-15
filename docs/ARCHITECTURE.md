@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:ceeba392ba295c97", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "ADR-0030 dependency changed (What follows program now says the render thread follows it): re-read; Program bullet and Built so far hold" }
+verified = { hash = "b3:b24a3b13b41f3e99", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: Program bullet adds Preview and studio.set_preview; Transitions bullet says the running transition is runtime state (behaviour built); Built so far adds presets, overrides, item transitions and the initial cut, drops the transition fields from Not yet; runtime state line names preview and the running transition" }
 -->
 
 ```
@@ -200,8 +200,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `preview_scene`, which are runtime state beside the outputs' state, not part of the
   collection or its `rev` ([ADR-0030](adr/0030-studio-state-and-scene-switching.md)).
   `Program` shows `program_scene`, including any transition in progress. A `VideoMix`
-  with input `Program` follows it. The collection's first scene goes on program when it
-  is created, and a deleted program scene gives way to the first scene left.
+  with input `Program` follows it. `Preview` shows `preview_scene`, studio mode's next
+  scene, set by `studio.set_preview`; a switch doesn't move it. The collection's first
+  scene goes on program and on preview when it is created, and a deleted program or
+  preview scene gives way to the first scene left.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
   Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
   shares everything with the other placements of that source except its own placement,
@@ -296,8 +298,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   belongs to the placement, keyed by item ID. **Move** pairs outgoing and incoming items
   that place the same source (the k-th placement with the k-th, in stacking order) and
   interpolates each pair; **Fade** pairs nothing; **Cut** switches on the next tick.
-  Unpaired items appear or disappear with their effect. The fields are reserved with
-  neutral defaults while M1b builds the model; the behaviour comes before or during M2.
+  Unpaired items appear or disappear with their effect. The running transition is
+  runtime state beside `program_scene`, never collection state.
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Master and output chains**
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)): the `master` stage applies
@@ -373,18 +375,22 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. The mix is always
   `Program` until video mixes exist, so outputs share a session by profile alone.
+  Transition presets (`cut`, `fade` and `move`, built-in kinds with descriptors), the
+  default preset, each scene's `transition_in` and `transition_out` and each item's
+  `transition`: a new collection holds one preset, `cut`, as its default, so a switch
+  cuts until a client adds another.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), filters, source audio settings, `opacity`, `blend`, the reserved
-  `effects[]`, the transition fields, 3D
+  `effects[]`, 3D
   geometry, `scene.create`'s optional `role`, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
-  `outputs` and `encoders`. The collection file saves everything built so
+  `transitions`, `outputs` and `encoders`. The collection file saves everything built so
   far, encoder profiles, each output's profile and `duplicated_from` included
   ([Persistence](#persistence)).
-  The program scene is built in `jstream-core` as runtime state, so the file doesn't
-  hold it (no preview scene yet).
+  The program and preview scenes and the running transition are built in `jstream-core`
+  as runtime state, so the file doesn't hold them.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -523,7 +529,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:d5e25ccd1e21a596", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:7a2416a0743de352", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: command.rs docs only (scene.delete and item.remove inverses now name scene.set_transitions and item.set_transition), snapshots regenerated; re-read, section holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -559,11 +565,19 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
-- **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
-  delete presets (each with a kind and a settings map or patch,
-  [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
-  and set a scene's `transition_in` and `transition_out` and an item's transition
-  settings. The scene-switch action takes an optional preset.
+- **Studio mode** (protocol 0.17): the action `studio.set_preview { scene_id }` puts a
+  scene on preview, also with no `rev` change; `studio.get` and `studio.changed` carry
+  `preview_scene` beside `program_scene`.
+- **Transitions** (protocol 0.17, [ADR-0029](adr/0029-transitions.md)): the edits
+  `transition.create`, `transition.update` and `transition.delete` manage presets (each
+  with a kind and a settings map or patch,
+  [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)),
+  `transition.set_default` sets the default, `scene.set_transitions` sets a scene's
+  `transition_in` and `transition_out`, and `item.set_transition` an item's transition
+  settings. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
+  causes names the preset it ran and how long the transition lasts (0 for a cut).
+  `state.get` reports the presets and the default under `transitions`, and `kind.list`
+  the transition kinds.
 - **Live values** (`live.set`, `live.cancel`; events `live.changed`, `live.ended`):
   actions that override live-adjustable parameters during a drag or a live dialog, with
   no `rev` bump or undo step; one batch commits the gesture
@@ -646,11 +660,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:89b4f7228ad5ed37", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; studio moved into the built tool list beside delete and encoder" }
+verified = { hash = "b3:71687d1217f13f0a", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: command.rs docs only (scene.delete and item.remove inverses now name scene.set_transitions and item.set_transition), snapshots regenerated; re-read, section holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio` and `video` so far; `audio`, `youtube`
+  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio`, `transition` and `video` so far; `audio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -690,7 +704,7 @@ verified = { hash = "b3:89b4f7228ad5ed37", by = "agent:claude@session_01TkdJbk8g
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:dc199b6560c865f5", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
+verified = { hash = "b3:17d14d8dfb453a64", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: Transitions paragraph as built: plan of Tracks in the shot, render thread samples at the frame time, retarget samples the running plan on the control thread with the same function (deviation from ADR-0029 7 wording noted in PR); perspective clamp >= 1" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -737,16 +751,19 @@ after the GPU has finished the last frame that used it (see
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
 the output path below.
 
-**Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
-texture blend: during it, the program mix is a synthetic item list whose transforms and
-opacity come from the transition state, drawn by a transition node that reads both
-scenes' source textures. The control thread pairs the items when the switch starts and
-sends the render thread a plan; the render thread only interpolates, and owns the live
-interpolated state, so a switch mid-transition starts from what is on screen. Rotation,
-tilt and turn take the shortest way round. The easing curves are one shared function
-with golden tests. After easing, the compositor clamps values with a hard range: opacity
-to `[0, 1]`, crop to `[0, source size]`, size to `≥ 0` and perspective to `> 0`; the
-spring may overshoot everything else.
+**Transitions** ([ADR-0029](adr/0029-transitions.md)). A Move is not a texture blend:
+during it, the program mix is a synthetic item list whose transforms and opacity come
+from the transition state, drawn over both scenes' source images. The control thread
+pairs the items when the switch starts and publishes the plan in the shot, one
+`jstream_render::transition::Track` per item (a pair, an appearance or a
+disappearance, each with its delay, duration and easing); the render thread only
+samples each track at the frame's media time. A switch mid-transition starts from what
+is on screen: the control thread samples the running plan at the switch time with the
+same function, so both threads agree on it without the render thread keeping any
+state. Rotation, tilt and turn take the shortest way round. The easing curves are one
+shared function (`jstream_protocol::Easing`) with golden tests. After easing, values
+are clamped to a hard range: opacity to `[0, 1]`, crop to `[0, source size]`, size to
+`≥ 0` and perspective to `≥ 1`; the spring may overshoot everything else.
 
 **S1 result**, on a Ryzen 9 8945HS with Radeon 780M (driver 32.0.22029.9039), a
 3840x2160 display at 29 Hz and the async `AMDh264Encoder` MFT. The pipeline holds 60
@@ -847,7 +864,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:e8da9a7e3807bb8c", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9 CI fix: LoadError::Invalid now boxes its ProtocolError, a type-size change only; re-read, the Collections bullet (checks a loaded collection as it checks edits) holds" }
+verified = { hash = "b3:40ab2688ff321dbf", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: presets record kind_version and are refused at another version, as sources" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
@@ -855,9 +872,10 @@ verified = { hash = "b3:e8da9a7e3807bb8c", by = "agent:claude@session_011UxatT9f
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
-  Each stored source and filter records its kind's descriptor version, migrated on load
-  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until
-  kinds ship settings migrations, a source saved at another version is refused on load.
+  Each stored source, filter and transition preset records its kind's descriptor
+  version, migrated on load like the collection
+  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
+  migrations, a source or preset saved at another version is refused on load.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
 - **Control token:** a random token in a user-only file in the config directory

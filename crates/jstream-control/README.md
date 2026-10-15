@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:c7ee3fb4d79fb3e4", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:cca57f0d72225ec1", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: re-read; Mock bullet unchanged in shape, holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:fe4924343077e36e", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:9820fe409b271a88", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: mock bullet now covers preview, studio.set_preview, and the initial cut preset only (transition edits answer internal); checked against mock.rs" }
 -->
 
 ### The trait
@@ -184,11 +184,15 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - `state.changed` events carrying the request ID (and `cause` for an undo or redo), and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
-- the program scene with the engine's rules
+- the program and preview scenes with the engine's rules
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)): `scene.switch`
-  (`not_found` for a missing scene, no `rev`), `studio.get`, and `studio.changed` for a
-  switch and after a batch, undo or redo that creates the first scene or deletes the
-  program scene;
+  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `studio.get`,
+  and `studio.changed` for each and after a batch, undo or redo that creates the first
+  scene or deletes the program or preview scene. The mock knows only the initial `cut`
+  preset ([ADR-0029](../../docs/adr/0029-transitions.md)): `state.get` reports it, every
+  switch cuts and reports it, a switch naming another preset is `not_found`, and the
+  `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
+  `internal`;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.
