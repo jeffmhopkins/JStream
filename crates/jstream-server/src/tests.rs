@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::runtime::Runtime;
-use tokio::sync::oneshot;
+use tokio::sync::{Notify, Semaphore, oneshot};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode, header};
 use tokio_tungstenite::tungstenite::{self, Message};
@@ -616,6 +616,139 @@ fn a_server_shutdown_disconnects_calls_and_ends_events() {
     // A subscription opened after the close ends at once.
     let mut late = control.events();
     assert_eq!(next_event(&harness, &mut late), None);
+}
+
+/// A session whose `hello` signals `entered`, then waits for a permit from `gate`, so a
+/// test can hold a connection's task inside the handshake while the client queues more
+/// messages behind it.
+struct Gated {
+    inner: jstream_control::MockControl,
+    entered: Arc<Notify>,
+    gate: Arc<Semaphore>,
+}
+
+impl Control for Gated {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        Box::pin(async move {
+            self.entered.notify_one();
+            match self.gate.acquire().await {
+                Ok(permit) => permit.forget(),
+                Err(error) => panic!("gate: {error}"),
+            }
+            self.inner.hello(hello).await
+        })
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        self.inner.call(call)
+    }
+
+    fn events(&self) -> EventStream {
+        self.inner.events()
+    }
+}
+
+/// #294: a request the server reads once it is shutting down is never answered. The
+/// connection closes with 1001 instead, so the client's call fails with `Disconnected`
+/// rather than succeeding after `serve_with_shutdown` has returned.
+///
+/// Each round holds the connection's task inside `hello` while the client queues a
+/// request and the server shuts down, so when the task goes on, the shutdown and the
+/// request are ready together. `tokio::select!` picks among ready branches at random,
+/// and without the check the task took and answered the request in about one round in
+/// twenty; 200 rounds (well under a second) miss that with a probability near 1e-4.
+#[test]
+fn a_request_read_after_the_shutdown_is_not_answered() {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => panic!("runtime: {error}"),
+    };
+    let query =
+        r#"{"type":"request","id":"q1","call":{"kind":"query","query":{"type":"scene.list"}}}"#;
+    let hello = r#"{"type":"hello","protocol":{"major":0,"minor":5},"client_name":"raw"}"#;
+    for round in 0..200 {
+        let entered = Arc::new(Notify::new());
+        let gate = Arc::new(Semaphore::new(0));
+        let engine = MockEngine::new();
+        let connector: Connector = {
+            let (entered, gate) = (Arc::clone(&entered), Arc::clone(&gate));
+            Arc::new(move || {
+                Box::new(Gated {
+                    inner: engine.connect(),
+                    entered: Arc::clone(&entered),
+                    gate: Arc::clone(&gate),
+                })
+            })
+        };
+        let config = match Token::new(TOKEN) {
+            Ok(token) => ServerConfig::new(token),
+            Err(error) => panic!("token: {error}"),
+        };
+        let closed = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(10), async {
+                let server = match Server::bind(config, connector).await {
+                    Ok(server) => server,
+                    Err(error) => panic!("bind: {error}"),
+                };
+                let mut request = match server.ws_url().into_client_request() {
+                    Ok(request) => request,
+                    Err(error) => panic!("request: {error}"),
+                };
+                match HeaderValue::from_str(&format!("Bearer {TOKEN}")) {
+                    Ok(value) => request.headers_mut().insert(header::AUTHORIZATION, value),
+                    Err(error) => panic!("header: {error}"),
+                };
+                let (stop, stopped) = oneshot::channel::<()>();
+                let serving = tokio::spawn(server.serve_with_shutdown(async move {
+                    let _ = stopped.await;
+                }));
+                let mut socket = match tokio_tungstenite::connect_async(request).await {
+                    Ok((socket, _)) => socket,
+                    Err(error) => panic!("connect: {error}"),
+                };
+                for text in [hello, query] {
+                    if let Err(error) = socket.send(Message::Text(text.into())).await {
+                        panic!("send: {error}");
+                    }
+                    if text == hello {
+                        // The connection's task is now held inside `hello`.
+                        entered.notified().await;
+                    }
+                }
+                let _ = stop.send(());
+                match serving.await {
+                    Ok(Ok(())) => {}
+                    other => panic!("the server did not stop cleanly: {other:?}"),
+                }
+                gate.add_permits(1);
+                loop {
+                    match socket.next().await {
+                        Some(Ok(Message::Text(text))) => {
+                            match serde_json::from_str::<ServerMessage>(text.as_str()) {
+                                // The `hello` was read before the shutdown.
+                                Ok(ServerMessage::Welcome(_)) => {}
+                                other => panic!("round {round}: answered {other:?}"),
+                            }
+                        }
+                        Some(Ok(Message::Close(frame))) => {
+                            break frame.map(|frame| u16::from(frame.code));
+                        }
+                        Some(Ok(_)) => {}
+                        None | Some(Err(_)) => break None,
+                    }
+                }
+            })
+            .await
+        });
+        match closed {
+            Ok(code) => assert_eq!(code, Some(1001), "round {round}"),
+            Err(_) => panic!("round {round} timed out"),
+        }
+    }
 }
 
 #[test]
