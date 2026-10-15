@@ -17,7 +17,7 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
+verified = { hash = "b3:a22174667355c2b7", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: stale via daemon Usage; prerequisites unchanged by --youtube-client (YouTube section stays A4's); holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:a0fb4e1c97dc660d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:d8ead57483365a7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: stale via daemon Usage; generic RTMP steps unchanged; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:8d5b0cd16377274b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: stale through cli#usage; smoke script's commands unchanged by Y3" }
+verified = { hash = "b3:9dba22fff3d8ca09", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: stale via daemon Usage; the smoke script passes no YouTube client, so the daemon logs YouTube unavailable; steps hold" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

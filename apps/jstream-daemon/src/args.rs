@@ -26,6 +26,12 @@ Options:
                        directory); created if missing
   --log-level <spec>   the log filter, as `target=level` directives and an
                        optional default level (default: RUST_LOG, else info)
+  --youtube-client <path>
+                       Windows: the Google OAuth client for YouTube sign-in,
+                       the JSON Google Cloud gives for a Desktop app client
+                       (default: JSTREAM_YOUTUBE_CLIENT_ID and
+                       JSTREAM_YOUTUBE_CLIENT_SECRET; without them YouTube is
+                       unavailable)
   --register-vcam      Windows: register the virtual camera (the DLL beside the
                        daemon) for this machine, then exit. Asks for
                        administrator rights once; takes no other options
@@ -56,6 +62,9 @@ pub struct Options {
     pub log_dir: Option<String>,
     /// `--log-level`, unparsed: `main` parses it, and reads `RUST_LOG` without it.
     pub log_level: Option<String>,
+    /// `--youtube-client`: the OAuth client file. Without it `main` reads
+    /// `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET`.
+    pub youtube_client: Option<String>,
 }
 
 /// A parsed command line.
@@ -108,6 +117,12 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             "--log-level" => {
                 let spec = value()?;
                 if options.log_level.replace(spec.clone()).is_some() {
+                    return Err(format!("`{arg}` given twice"));
+                }
+            }
+            "--youtube-client" => {
+                let path = value()?;
+                if options.youtube_client.replace(path.clone()).is_some() {
                     return Err(format!("`{arg}` given twice"));
                 }
             }
@@ -164,7 +179,8 @@ mod tests {
     fn options_are_read_in_any_order() {
         let options = serve(
             "--output out_1 --log-level debug --port 4455 --token-file /tmp/t \
-             --collection /tmp/c.json --log-dir /tmp/logs --output out_2",
+             --collection /tmp/c.json --log-dir /tmp/logs --output out_2 \
+             --youtube-client /tmp/yt.json",
         );
         assert_eq!(
             options,
@@ -175,6 +191,7 @@ mod tests {
                 outputs: vec![OutputId::new("out_1"), OutputId::new("out_2")],
                 log_dir: Some("/tmp/logs".to_owned()),
                 log_level: Some("debug".to_owned()),
+                youtube_client: Some("/tmp/yt.json".to_owned()),
             }
         );
     }
@@ -195,6 +212,14 @@ mod tests {
         assert_eq!(error("--log-dir"), "`--log-dir` needs a value");
         assert_eq!(error("--log-level"), "`--log-level` needs a value");
         assert_eq!(error("--collection"), "`--collection` needs a value");
+        assert_eq!(
+            error("--youtube-client"),
+            "`--youtube-client` needs a value"
+        );
+        assert_eq!(
+            error("--youtube-client a --youtube-client b"),
+            "`--youtube-client` given twice"
+        );
         assert_eq!(
             error("--collection a.json --collection b.json"),
             "`--collection` given twice"

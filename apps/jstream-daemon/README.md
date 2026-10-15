@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:ba52f5f3dcaeb8c8", by = "agent:claude@session_01PZRAdnkMzURQaUtof2W6W2", note = "Round 1 B1: Tests bullet now says WS sets the key and starts the stream, MCP starts the recording (matches e2e.rs); rest of Purpose re-read, holds" }
+verified = { hash = "b3:32865baf89974a4a", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: new youtube.rs contents bullet; Not here yet now lists YouTube outside Windows (no OS credential store) instead of waiting on with_youtube; rest holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -32,6 +32,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   the tokio runtime,
   prints where it listens, and maps failures to exit codes.
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
+- **YouTube** (`youtube.rs`): reads the app's Google OAuth client from
+  `--youtube-client` or the environment, and gives the engine YouTube with it
+  ([Design](#design)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
@@ -65,8 +68,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 
 Not here yet: serving the web UI (`jstream-server` serves one from
 `ServerConfig::ui_dir`, [jstream-server › Design](../../crates/jstream-server/README.md#design),
-but the daemon has no flag for it yet),
-YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
+but the daemon has no flag for it yet), YouTube outside Windows (it needs an OS
+credential store the daemon has only there), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
@@ -78,7 +81,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:71f39c73730f3eae", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 B2: exit-code 0 row now includes a successful --register-vcam; N1: Virtual camera bullet says an already-current registration keeps the file's ACL as it is" }
+verified = { hash = "b3:500fa09c986a5eb0", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: --youtube-client row and YouTube (Windows) bullet match args.rs, main.rs and youtube.rs (Google's Desktop app JSON or JSTREAM_YOUTUBE_CLIENT_ID/_SECRET, unavailable without a client or off Windows, bad file or lone secret exit 1 without quoting values); exit 1 row adds the client file" }
 -->
 
 ```sh
@@ -97,6 +100,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
+| `--youtube-client <path>` | Windows: the Google OAuth client for YouTube sign-in, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables. |
 | `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
 | `-V`, `--version` | Prints the daemon and protocol versions. |
 | `-h`, `--help` | Prints the help. |
@@ -138,6 +142,17 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   it stops accepting connections, closes the open ones (their clients see
   `Disconnected`, and event streams end) and exits 0. Without `--collection` the
   engine's state is lost.
+- **YouTube (Windows).** With the app's OAuth client, the `youtube.*` calls work
+  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)): `youtube.sign_in`
+  returns Google's consent URL, and the account's refresh token is kept in Credential
+  Manager, so a restart stays signed in. The client is a Google Cloud OAuth client of
+  type "Desktop app" with the YouTube Data API v3 enabled. Pass its downloaded JSON
+  with `--youtube-client`, or set `JSTREAM_YOUTUBE_CLIENT_ID` (and
+  `JSTREAM_YOUTUBE_CLIENT_SECRET`, if it has one). Never commit it. Without a client,
+  or off Windows, `youtube.status` answers `unavailable` and the startup log says why.
+  A client file that can't be read or holds no `client_id`, or a secret set without an
+  ID, is a startup failure (exit 1); the message names the file but never its contents
+  or the secret ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Going live (Windows).** `output.create` with an RTMP(S) server URL, then
   `output.set_key` (stored in Windows Credential Manager), then `output.start`
   connects and streams. A start fails with `action_failed` and a reason that says what
@@ -182,7 +197,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -191,7 +206,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:0a8bf51209359351", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:5484d2ddd924ea82", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: new YouTube bullet matches youtube::client/set_up and serve::with_youtube (HttpsTransport, WindowsCredentials, before live; dropped with a warning off Windows; never fails the start); Dependencies add jstream-youtube and serde_json, dev-dep jstream-youtube fake" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -244,6 +259,18 @@ verified = { hash = "b3:0a8bf51209359351", by = "agent:claude@session_016BkTSqJ3
   already names this DLL is left alone, so repeating the command never prompts. The
   startup check (`log_status`) only logs: the daemon serves without the camera, and
   `WindowsVcam::start` refuses to start an unregistered camera on its own.
+- **YouTube** (`youtube.rs`, `serve.rs`). `youtube::client` reads the OAuth client
+  from `--youtube-client`'s file (Google's `{"installed": {…}}` download, or the two
+  fields at the top level), else from the environment, holding the secret as a
+  `Secret` so it never prints. A JSON error reports only its line and column, because
+  serde_json's messages can quote a value. `main` reads it after the audit log opens
+  and before the token is touched. `serve.rs` then calls `Engine::with_youtube` with
+  `jstream_youtube::HttpsTransport` (the OS's root store) and `WindowsCredentials` as
+  the token store, before the engine goes live; core keeps the token under its fixed
+  account ID. Off Windows there is no OAuth token store, so the client is dropped with
+  a warning. Neither a missing client nor a transport that can't be built stops the
+  daemon: YouTube is optional (ADR-0041). `youtube::set_up` is that call over any
+  transport and store, which is how the test runs it on `jstream-youtube`'s fake.
 - **Collection file and audit log** (`serve.rs`, `main.rs`). The daemon only passes
   them to the engine: `Engine::with_collection_file` loads and saves the collection,
   and `with_audit` takes a `jstream_core::AuditFile`, whose writer thread appends
@@ -335,7 +362,8 @@ verified = { hash = "b3:0a8bf51209359351", by = "agent:claude@session_016BkTSqJ3
   `jstream-platform` (`Backends`, the key store trait), `jstream-platform-windows` on
   Windows only (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
-  check), `anyhow`, `tracing` (the startup line) and `blake3`
+  check), `jstream-youtube` (the HTTPS transport) and `serde_json` (the OAuth client
+  file), both already in the tree through core and the server, `anyhow`, `tracing` (the startup line) and `blake3`
   (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,
   `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), `tracing-subscriber`
   (features `fmt` and `std` only: no `ansi`, `env-filter` or `tracing-log`, so it adds
@@ -345,7 +373,8 @@ verified = { hash = "b3:0a8bf51209359351", by = "agent:claude@session_016BkTSqJ3
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
-  `jstream-platform` (feature `fake`), for the live engine and opener tests.
+  `jstream-platform` (feature `fake`), for the live engine and opener tests;
+  `jstream-youtube` (feature `fake`), for the YouTube setup's test.
 
 <a id="open-questions"></a>
 ### Open questions

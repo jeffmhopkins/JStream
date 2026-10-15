@@ -29,6 +29,11 @@ jstream-platform.workspace = true
 # `OutputId`, for `--output`; `OutputKind`, for the publish opener.
 jstream-protocol.workspace = true
 jstream-server.workspace = true
+# `HttpTransport`, and on Windows `HttpsTransport`, the transport YouTube's calls go
+# through (`Engine::with_youtube`).
+jstream-youtube.workspace = true
+# Reading the YouTube OAuth client file Google Cloud gives (`--youtube-client`).
+serde_json.workspace = true
 # The runtime the server runs on; `signal` for Ctrl-C (and SIGTERM on Unix).
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
 # The startup log line, with the log file's path.
@@ -46,6 +51,8 @@ jstream-platform-windows.workspace = true
 # The tests drive the daemon through the WebSocket client, as the CLI does.
 futures-util.workspace = true
 jstream-control = { workspace = true, features = ["ws"] }
+# The YouTube setup's test: a transport that replays canned responses.
+jstream-youtube = { workspace = true, features = ["fake"] }
 # The publish opener's tests: an in-memory key store, and the fake backends.
 jstream-platform = { workspace = true, features = ["fake"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "time"] }

@@ -25,6 +25,7 @@ mod logs;
 mod register;
 mod serve;
 mod token;
+mod youtube;
 
 use anyhow::Context;
 use args::{Invocation, Options};
@@ -226,6 +227,11 @@ fn run(options: Options) -> Result<(), Failure> {
     // arguments (R-SEC-001).
     let audit = AuditFile::open(&logs)
         .with_context(|| format!("could not open the audit log in `{}`", logs.display()))?;
+    // Before the token: a client file that can't be used stops the start here.
+    let youtube = youtube::client(options.youtube_client.as_deref().map(Path::new), |name| {
+        std::env::var(name).ok()
+    })
+    .map_err(|message| Failure::Failed(anyhow::anyhow!(message)))?;
     let (token, provenance) = token::load_or_create(&path)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -233,7 +239,7 @@ fn run(options: Options) -> Result<(), Failure> {
         .context("could not start the async runtime")?;
     runtime.block_on(async {
         let stop = serve::shutdown_signal().context("could not install the Ctrl-C handler")?;
-        let engine = serve::engine(&options, Arc::new(audit))?;
+        let engine = serve::engine(&options, Arc::new(audit), youtube)?;
         let server = serve::bind(engine, options.port, token)
             .await
             .map_err(anyhow::Error::from)?;
