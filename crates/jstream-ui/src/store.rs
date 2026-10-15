@@ -263,14 +263,19 @@ impl Studio {
         });
         let kinds = session.clone();
         spawn_local(async move {
-            // An engine that lists no kinds (a test double) leaves "New source" empty;
-            // existing sources and scenes can still be placed.
-            let listed = match query(&kinds, Query::KindList).await {
-                Ok(QueryResult::KindList { kinds }) => kinds,
-                _ => Vec::new(),
-            };
-            studio.kinds.set(Some(listed));
+            studio.take_kinds(list_kinds(&kinds).await);
         });
+    }
+
+    /// Keeps the kinds `kind.list` answered. A failed `kind.list` shows its error in the
+    /// status bar and leaves "New source" empty, as an engine that lists no kinds does;
+    /// existing sources and scenes can still be placed.
+    fn take_kinds(&self, listed: Result<Vec<KindSummary>, ControlError>) {
+        let kinds = listed.unwrap_or_else(|error| {
+            self.report(&error);
+            Vec::new()
+        });
+        self.kinds.set(Some(kinds));
     }
 
     /// Follows one engine event.
@@ -452,6 +457,14 @@ pub async fn apply(
     }
 }
 
+/// Reads the source kinds the engine offers, with `kind.list`.
+pub async fn list_kinds(session: &Session) -> Result<Vec<KindSummary>, ControlError> {
+    match query(session, Query::KindList).await? {
+        QueryResult::KindList { kinds } => Ok(kinds),
+        other => Err(unexpected(other.name())),
+    }
+}
+
 /// Reads the `delete.plan` for `target`: the revision it was made at and its edits.
 pub async fn plan_delete(
     session: &Session,
@@ -472,13 +485,14 @@ fn unexpected(what: &str) -> ControlError {
 
 #[cfg(test)]
 mod tests {
-    use super::{Collection, Selection, fresh_id, plan_summary};
+    use super::{Collection, Selection, Studio, fresh_id, list_kinds, plan_summary};
     use crate::session::Session;
-    use jstream_control::MockEngine;
     use jstream_control::protocol::{
-        Batch, Call, CallResult, Edit, ItemId, Query, QueryResult, SceneId, SceneRole, Settings,
-        SourceId, SourceKind,
+        Batch, Call, CallResult, Edit, Hello, ItemId, Query, QueryResult, Response, SceneId,
+        SceneRole, Settings, SourceId, SourceKind, Welcome,
     };
+    use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
+    use leptos::prelude::*;
     use serde_json::json;
     use std::pin::pin;
     use std::rc::Rc;
@@ -657,6 +671,55 @@ mod tests {
         assert_eq!(
             plan_summary(&edits).as_deref(),
             Some("This also removes 2 items, clears 1 setting that refers to it.")
+        );
+    }
+
+    /// An engine whose connection closed: every call fails.
+    struct Closed;
+
+    impl Control for Closed {
+        fn hello(&self, _: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+            panic!("the session is already open")
+        }
+
+        fn call(&self, _: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+            Box::pin(std::future::ready(Err(ControlError::Disconnected {
+                reason: "the engine closed the connection".into(),
+            })))
+        }
+
+        fn events(&self) -> EventStream {
+            Box::pin(futures_util::stream::empty())
+        }
+    }
+
+    /// An engine that lists no kinds offers none, quietly; a failed `kind.list` offers
+    /// none either, but says why in the status bar (#401).
+    #[test]
+    fn a_failed_kind_list_is_reported() {
+        let engine = MockEngine::new();
+        let session = now(Session::open(Rc::new(engine.connect())))
+            .unwrap_or_else(|e| panic!("hello failed: {e}"));
+        let studio = Studio::new();
+        studio.take_kinds(now(list_kinds(&session)));
+        assert_eq!(studio.kinds.get_untracked(), Some(Vec::new()));
+        assert_eq!(
+            studio.problem.get_untracked(),
+            None,
+            "no kinds is no problem"
+        );
+
+        let studio = Studio::new();
+        let closed = Session {
+            control: Rc::new(Closed),
+            welcome: session.welcome,
+        };
+        studio.take_kinds(now(list_kinds(&closed)));
+        assert_eq!(studio.kinds.get_untracked(), Some(Vec::new()));
+        let problem = studio.problem.get_untracked().unwrap_or_default();
+        assert!(
+            problem.contains("the engine closed the connection"),
+            "{problem:?}"
         );
     }
 

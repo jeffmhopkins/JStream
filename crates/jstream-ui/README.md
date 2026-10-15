@@ -36,7 +36,7 @@ Contents ([Design](#design) explains the choices):
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`), the program
   scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
-  last failed call. Also the call helpers (`query`, `apply`, `plan_delete`),
+  last failed call. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
   (`sources.rs`), the properties form (`properties.rs`) and the delete confirmation
@@ -105,8 +105,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the session's client ID so two UIs on one engine don't pick the same one. "Add"
   creates a source of a kind `kind.list` reports, or places an existing source or
   another scene (a `scene` source), as one batch, with a geometry covering the canvas
-  (ADR-0022). An engine whose `kind.list` fails (a test double) offers no new kinds,
-  only existing sources and scenes. Deleting a scene, or a source everywhere, reads `delete.plan` first,
+  (ADR-0022). An engine that lists no kinds (the mock) offers no new kinds, only
+  existing sources and scenes. A `kind.list` that fails does the same, and its
+  error shows as any failed call's does. Deleting a scene, or a source everywhere, reads `delete.plan` first,
   shows what else it takes, and sends the plan's edits expecting the plan's revision,
   so a change in between makes the engine refuse it rather than delete more than the
   user saw. Removing an item from its scene is a plain `item.remove`.

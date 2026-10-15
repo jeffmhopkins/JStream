@@ -143,8 +143,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   wasn't told about has no audio). It stores settings as sent without
   checking them or filling in defaults (a `null` in a `source.set_settings` patch
   removes the entry), and doesn't follow settings references when it looks for cycles.
-  `kind.list`, `kind.describe` and `delete.plan` answer `internal`, and its refused
-  deletes carry no `blockers`;
+  `kind.list` answers with no kinds, `kind.describe` and `delete.plan` answer
+  `internal`, and its refused deletes carry no `blockers`;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
