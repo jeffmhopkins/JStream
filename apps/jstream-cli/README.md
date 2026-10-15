@@ -241,7 +241,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:773b64392ca9934d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 cascade from control#design; mock bullets concern the --mock feature, not batch check order; holds" }
+verified = { hash = "b3:cb4222ea1038f082", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at e1e2a94: cascade only; main changed no text here since the last merge; this PR's text unchanged; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

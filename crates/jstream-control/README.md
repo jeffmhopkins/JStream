@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:a3db87fd74092474", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 N4: only the mock's batch check order changed; purpose and contents hold" }
+verified = { hash = "b3:6816ecda4cee7253", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at e1e2a94 (G3b virtual camera, Q3 e2e harness, #286, #295, #237): cascade; mock contents unaffected by main's changes; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:1fca380161cfcf33", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 N4: live-values bullet now says ends_gesture is checked after the idempotency key and before expected_rev, as in MockControl::batch and Engine; differential script row added" }
+verified = { hash = "b3:461cbca50df3b342", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at e1e2a94 (G3b virtual camera, Q3 e2e harness, #286, #295, #237): re-read main's mock text (virtual_cam outputs, group moves) beside the live-values bullet; holds" }
 -->
 
 ### The trait
@@ -124,7 +124,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
-    reasons), `output.set_target` on a recording output, and an `unknown` output kind,
+    reasons), `output.set_target` on a recording or virtual-camera output (the mock
+    accepts a `virtual_cam` output, as the engine does), and an `unknown` output kind,
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`

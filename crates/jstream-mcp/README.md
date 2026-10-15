@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:6d77c5dc6166d4ab", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "round 2 B3: events paragraph rewritten; live.changed now merges in place into the newest unread event of its gesture, only across live.changed for other parameters, keeping its seq, so seq is contiguous and dropped exact; matches Buffer::supersede/read and the new eviction test" }
+verified = { hash = "b3:76f17d7d78c30aa3", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at e1e2a94: cascade from ARCH#mcp (size line now 213 KB); this section names no size; its live.changed merge-in-place paragraph matches events.rs; holds" }
 -->
 
 ### Tools

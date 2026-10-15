@@ -42,6 +42,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
 /// `a` (the second placement moved, cropped, hidden and reordered to the bottom) and once
 /// in `b` with a geometry, scene `b` nested in `a` through the scene source `b_src`, the
 /// RTMP outputs `yt` and `tw` (`tw`'s target changed after it was created), the
+/// virtual camera `vcam`, the
 /// recording output `rec`, and the encoder profiles `hq` (updated after it was created,
 /// used by `rec`) and `low` (used by `yt`, `tw` keeping the engine's default). Then the
 /// references and clones of ADR-0023: `cam` is duplicated as `cam_copy` and `i1` is
@@ -120,6 +121,10 @@ pub fn collection() -> Batch {
             Edit::OutputCreate {
                 output_id: OutputId::new("yt"),
                 kind: youtube().kind,
+            },
+            Edit::OutputCreate {
+                output_id: OutputId::new("vcam"),
+                kind: OutputKind::VirtualCam,
             },
             Edit::OutputCreate {
                 output_id: OutputId::new("tw"),
@@ -586,6 +591,15 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             }),
             invalid("edits.0.output_id", "the output is not an RTMP output"),
         ),
+        (
+            Batch::single(Edit::OutputSetTarget {
+                output_id: OutputId::new("vcam"),
+                target: RtmpTarget::Generic {
+                    url: "rtmp://host/app".into(),
+                },
+            }),
+            invalid("edits.0.output_id", "the output is not an RTMP output"),
+        ),
         // A delete inside the batch applies, the second fails, and the output is back.
         (
             Batch {
@@ -857,6 +871,11 @@ fn outputs() -> Vec<OutputInfo> {
         OutputInfo {
             output_id: OutputId::new("tw"),
             kind: rtmp(TWITCH_URL),
+            encoder_profile: None,
+        },
+        OutputInfo {
+            output_id: OutputId::new("vcam"),
+            kind: OutputKind::VirtualCam,
             encoder_profile: None,
         },
         youtube(),
