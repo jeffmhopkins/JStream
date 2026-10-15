@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:a19ccef4a41905d4", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; D5 note now says protocol 0.19 audio is not in the CLI; holds" }
+verified = { hash = "b3:e6f2937ad2fb1a08", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: edited: says the folder, label and metadata edits are not in the CLI, like the audio ones; checked args.rs has none" }
 -->
 
 ```sh
@@ -122,7 +122,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
   the item's own scene, which omitting it already means. Protocol 0.19's audio edits
   (`source.set_audio`, `bus.*`, `send.*`), `bus.list` and `audio.reset_loudness` are not
-  in the CLI either.
+  in the CLI either, nor are the folder, label and metadata edits (`folder.*`,
+  `label.*`, `scene.set_folder`, `scene.set_meta`, `source.set_meta`).
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
@@ -239,7 +240,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6dbfcb9a75652418", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
+verified = { hash = "b3:00233ba9b48aae19", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main: re-read; stale via control#design only, CLI code identical to main; parser and connector text holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

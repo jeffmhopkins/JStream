@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:38433d0bcbf22574", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B6, sends is written whenever a channel source or send exists and a file without it keeps default master sends; the file format, loading and tests paragraphs now say so; holds" }
+verified = { hash = "b3:6c0e44b5423c5e0f", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main (D5 audio): edited: model list gains folders, labels, a source's labels and favourite, a scene's folder and SceneMeta; reads, file and load-order text combine audio and organisation; icon length-only (B1)" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -28,8 +28,8 @@ codes, so the engine passes them to clients unchanged.
   collection state, and `Graph::new()` describes none.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
-  keyed by ID, the `buses`, keyed by ID and always holding the master, and the `sends`,
-  keyed by bus and source.
+  keyed by ID, the `buses`, keyed by ID and always holding the master, the `sends`,
+  keyed by bus and source, and the `folders` and `labels`, each in its own order.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -38,9 +38,14 @@ codes, so the engine passes them to clients unchanged.
   original in the copy's `duplicated_from`, a plain link that is no dependency edge:
   the original may be deleted, and reads then omit the link. Removing an item never
   deletes its source. An audio source (its kind has audio, or a `scene` source) also
-  has its `SourceAudio` ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)).
+  has its `SourceAudio` ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)). Every
+  source carries a set of labels and a favourite flag (ADR-0024 §4).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
-  here) and its items in stacking order, bottom first.
+  here), the folder it is filed in, if any, its `SceneMeta` and its items in stacking
+  order, bottom first.
+- `Folder` and `Label`: a folder has an ID, a name and an optional parent folder, and a
+  label an ID, a name, a colour and an optional icon (ADR-0024 §3 and §4). They organise
+  only.
 - `Item`: the source it places, a `Placement`, a `crop` and `visible`. `Placement` is
   one of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two forms: a
   `Geometry` (a box on the canvas) or a `Legacy` 0.3 `ItemTransform`, kept exactly as

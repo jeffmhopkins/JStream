@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:68e32a9d77022b3e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; version line 0.19 audio, 0.18 virtual_cam, 0.17 role; holds" }
+verified = { hash = "b3:2d611ecc5e0b264b", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main (D5 audio): edited: Edit list has the audio then the organisation edits; Audio and Organisation bullets both kept" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -141,7 +141,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:f61c4f32f259b1d6", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio, bus.list, meters.tick and the envelope example say 0.19; virtual_cam stays 0.18; holds" }
+verified = { hash = "b3:d9770fa516f834d8", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11: edited: icon is checked only for its length (B1, ADR-0024 §4); merged with main's 0.19 audio text; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -423,8 +423,8 @@ the source, so every item placing it shares them, and `source.duplicate` copies 
 A scene's `SceneMeta` (`scene.set_meta`) is its `icon`, `color`, `favourite` and
 `show_in_multiview` (default `true`). `scene.set_meta` and `source.set_meta` replace
 the whole metadata, so a field left out takes its default. Colours are sRGB `#rrggbb`;
-an icon is an opaque name from the UI's icon set, 1 to 64 bytes, checked only for its length. A
-folder that holds a scene or folder, and a label a source carries, can't be deleted:
+an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
+bytes). A folder that holds a scene or folder, and a label a source carries, can't be deleted:
 the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`), and
 `delete.plan` with a `folder` or `label` target returns the batch that moves what the
 folder holds up to its parent, or takes the label off its sources, then deletes it.

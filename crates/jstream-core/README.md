@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:0b14bb91f4448a5e", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
+verified = { hash = "b3:b61f5473da5396c8", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main (D5 audio): re-read; tests list has main's audio tests and history.rs folders and labels; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -182,7 +182,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9b817c7bfb94016b", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
+verified = { hash = "b3:815ae92ddb65ba53", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main (D5 audio): re-read; differential script still skips organisation edits; audio routing text is main's; holds" }
 -->
 
 ### Engine and sessions

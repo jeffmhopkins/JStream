@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:81c8c6dbf76dc975", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; meters kept beside stats.tick; holds" }
+verified = { hash = "b3:99054af5e424f652", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main (D5 audio): re-read; contents list holds" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:5da485d496642047", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tool list unchanged (18 tools); tools.snap regenerated for 0.19; holds" }
+verified = { hash = "b3:0d6c1830af6780ef", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main (D5 audio): re-read; noun list now audio, bus, folder, label, send among them; tests expect 20 tools; tools.snap regenerated" }
 -->
 
 ### Tools

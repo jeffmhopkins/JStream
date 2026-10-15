@@ -167,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:cafb607d97bfd5ec", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio paragraph says protocol 0.19; not-yet list drops VirtualCam as main did; holds" }
+verified = { hash = "b3:80d6e9b414678649", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main (D5 audio): re-read; Source keeps labels, favourite and audio?; folders/labels lines beside audio; Label icon? (N3); holds" }
 -->
 
 ```
@@ -541,7 +541,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:84f1c8ab5494756e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B5, filters join the audio edits once they are in the protocol, the mixer has chains since D7b; rest holds at 0.19" }
+verified = { hash = "b3:40ee767b8dff418a", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main (D5 audio): re-read; edit bullet lists the audio edits (0.19) then the organisation edits (version added at the queue bump); holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -680,7 +680,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:6ae5b6bb90cc519e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
+verified = { hash = "b3:7d010aabe7bb5718", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main (D5 audio): tools.snap is 213,491 bytes, edited to about 213 KB; 20 tools incl. audio, bus, send, folder, label; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -695,7 +695,7 @@ verified = { hash = "b3:6ae5b6bb90cc519e", by = "agent:claude@session_01D4rY84zM
   about ten a second while the mixer runs, is kept the same way, as `meters`.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 185 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 213 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -882,7 +882,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:e9fce11408a54542", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): collections bullet (schema_version, forward migrations, checks as edits) holds; the sends fix needs no migration since schema 1 files load as before" }
+verified = { hash = "b3:10d8f62d93f2971e", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main (D5 audio): re-read; buses/sends and folders/labels/metadata are both additive optional file fields, no schema_version bump; holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

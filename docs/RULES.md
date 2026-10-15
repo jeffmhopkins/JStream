@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2348bc7076ff2d66", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): R-API-003 holds: schema stays 1 and a pre-D5 v1 file now loads with its audio sources' master sends, as it did on main" }
+verified = { hash = "b3:d2b91f0ac50271bf", by = "agent:claude@session_011UbbWjsiKSNVSndeqLPkzY", note = "B11 merge of main: re-read; organisation fields are additive (minor), as audio's were; holds" }
 -->
 
 <a id="R-API-001"></a>
