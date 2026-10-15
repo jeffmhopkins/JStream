@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:bd5137389f3420a8", by = "agent:claude@session_01Ut2Cuz7uioyngsXQuKGFMP", note = "#156 review N1/N2: re-read Purpose against the manifest description change and the ends_recording doc (create-time errors count as never started); the record paragraph's error bullet still matches error.rs, crate-map row unchanged" }
+verified = { hash = "b3:0a6d6275bc3b9c45", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042 edit of ARCH#threading: only the output-pipeline paragraph moved to core README#runtime and the audio 'In the engine' paragraph became a link; the thread roster, clock, snapshot and parameter-channel text this section relies on is unchanged, so it holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

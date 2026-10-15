@@ -26,7 +26,7 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "b3:d5323183193d9c30", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against DOCS#notes, whose verify-to-edit sentence now says the sweep doesn't report it yet: the check/verify workflow, no-dates rule and hash bullets here don't rely on it and still hold" }
+verified = { hash = "b3:8b74f4c5ee9faa13", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "DOCS#verification gained the #jstream-meta file-hash rule (ADR-0042); the check/verify workflow, no-dates and hash bullets here don't depend on it and still hold" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one

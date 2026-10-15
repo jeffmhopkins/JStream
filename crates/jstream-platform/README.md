@@ -11,9 +11,9 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-platform/src/**"]
+covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:c7a07f7e27ddc59c", by = "agent:claude@session_01M7dd6pdhEEieUbct9m5TkJ", note = "Merge of main (Y2 OAuth tokens bullet and MemoryTokenStore, on top of C4a and #142) with F5 (jstream-media's Codec gains Hevc and Av1): re-read Codecs, Video capture devices, Stream keys, OAuth tokens, Fakes and Not yet; platform encoders still emit only H.264 Annex B and raw AAC, nothing here produces HEVC/AV1, the MJPEG Codec variant is still not added, so the section holds" }
+verified = { hash = "b3:42d96fbee0fbc91c", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042: covers gains Cargo.toml for the third-party claim; 'depends only on jstream-media, thiserror and wgpu' matches the manifest; ARCH#threading edit (pipeline paragraph moved) doesn't touch the capture mailbox / render-thread wording here" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

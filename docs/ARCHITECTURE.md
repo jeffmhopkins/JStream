@@ -18,9 +18,9 @@ provisional, and globs that match nothing are only warnings.
 <a id="shape"></a>
 ## Shape of the system
 <!-- @section
-covers = ["apps/**"]
+covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:348e93b0bafdf766", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; main's repo-tree comment change and I1's daemon row both hold" }
+verified = { hash = "b3:12acea01746e7b87", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042: covers narrowed to apps' manifest view and main.rs; re-read the host table against both main.rs crate docs: cli (remote client, mcp stdio proxy, no engine) holds; daemon row now says --collection is not built yet, matching daemon main.rs 'Not yet: the web UI and --collection'" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:348e93b0bafdf766", by = "agent:claude@session_017CbEsAJT
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI yet ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI or `--collection` yet ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -114,9 +114,9 @@ JStream/
 <a id="crate-map"></a>
 ## Crate map
 <!-- @section
-covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
+covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:59fc1ace1041b20d", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read the whole map; main's rows and I1's mcp/server rows without (not built) hold" }
+verified = { hash = "b3:07f207d11eb46564", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042: covers now the #jstream-meta view; text unchanged. Rows' third-party claims checked by README sections covering whole manifests: platform (wgpu), render (wgpu), mux (pure Rust, media+thiserror), control (no tokio on wasm32), server (axum) all match their Cargo.toml" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -361,9 +361,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <a id="threading"></a>
 ## Threads, clock and sync
 <!-- @section
-covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
-depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:ba6900fcfb9b0d02", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#136, #146) into #133: prose is main's; re-read the section: the Collector row and 'collector thread ... not this cut' hold with #133's InputControl keep-alive (rings freed on the control plane); #136's bounded drain and #146's keyframe requests don't touch audio teardown" }
+depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
+verified = { hash = "b3:b6be37ffb315d64a", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042: covers dropped, depends_on gains ADR-0027/0032/0035; output-pipeline paragraph moved to core README#runtime and 'In the engine' trimmed to a link to audio #realtime (which states the sinc/absolute-error detail); clock, roster, timestamps, snapshots, handover, privacy, CLAP, S3 kept unchanged and still match their ADRs" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -383,30 +382,12 @@ every mix runs at the base rate divided by an integer.
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003) |
 
-**Output pipeline** (`jstream-core` `src/runtime/`), the part that is built.
-`output.start`, once the host has injected platform backends and a publish target,
-starts it and emits `output.state_changed` from the control thread. The render
-thread calls the platform capture mailbox, composites one scene on each 1/30 s
-tick, repeats the last frame when capture is empty, and reads that frame back.
-This cut encodes that CPU readback, and the readback is counted. The mixer thread
-polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
-desktop loopback. Encode threads are the
-ones inside the encoder sessions. The output thread muxes FLV and sends tags to the
-publish target. `output.start` also starts `jstream-stats`, which is not a
-real-time thread: it emits `stats.tick` about once a second from the stage
-counters, and once more when the pipeline stops. The render loop publishes capture
-mailbox skips, and a tick that falls a whole period behind the clock skips to the
-current tick and counts the skipped ones in `render_ticks`. None of those threads
-lock the collection. `output.stop` during
-`starting` cancels that start and emits `stopped` only after the start has dropped
-its threads. The render and mixer threads catch a panic at their boundary
-([R-RT-006](RULES.md#R-RT-006)); a capture error or a missing frame repeats the last
-one, and a render panic repeats the last frame until teardown. A fatal error on the
-render, mixer or output thread (a publish failure, an encoder stream that ends
-before stop, a render or mixer panic) is a channel message to a watcher the control
-thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
-encoder session queues. Arc-swap snapshots, the collector thread and a GPU encode
-target are still the rows above, not this cut.
+This section is the engine-wide model. Each subsystem's runtime, as built, is described
+next to its code, which that section covers: the output pipeline in
+[`jstream-core`'s runtime](../crates/jstream-core/README.md#runtime) and the audio and
+mixer threads in [`jstream-audio`'s real-time design](../crates/jstream-audio/README.md#realtime)
+([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)). Neither may contradict this
+model; a change that would edits it in the same PR.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
@@ -436,13 +417,10 @@ Still open: the mic and the output share the ES-9's crystal, so the relative dri
 only −0.12 ppm. Drift between two independent devices, and events rarer than about once
 in 20 minutes, haven't been measured.
 
-**In the engine:** `jstream-audio` runs S3's drift fit and PI loop with S3's tuning on
-each input's audio thread, resampling into a per-input ring indexed by engine frame
-that the mixer reads on the engine clock
-([its real-time design](../crates/jstream-audio/README.md#realtime)). It differs from
-what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, and the
-timing error is absolute, so inputs line up with each other. That combination has been
-simulated (within 0.05 ms after settling), not yet measured on hardware.
+**In the engine:** `jstream-audio` runs S3's drift fit and PI loop on each input's audio
+thread, resampling into a per-input ring that the mixer reads on the engine clock. How it
+differs from what S3 measured is in
+[its real-time design](../crates/jstream-audio/README.md#realtime).
 
 **Audio timestamps** ([ADR-0028](adr/0028-audio-model-v2.md)): every audio filter reports
 its latency in frames, and the mixer delays the shorter paths before each sum so all inputs

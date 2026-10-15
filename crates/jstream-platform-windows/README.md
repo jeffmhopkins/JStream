@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:f0118c326fd773b1", by = "agent:claude@session_01CinhSCRTBiaJNaiD4w6CUq", note = "Y2: re-read the purpose section; WindowsCredentials now also implements OAuthTokenStore via CredentialTarget::oauth_token (JStream/oauth-token/<account>), same ID checks, storage and blob limits; Tests paragraph lists the new target and Windows round-trip tests, matching credential.rs" }
+verified = { hash = "b3:3f826a4ea7db4db6", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042 edit of ARCH#threading: only the output-pipeline paragraph moved to core README#runtime and the audio 'In the engine' paragraph became a link; the thread roster, clock, snapshot and parameter-channel text this section relies on is unchanged, so it holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

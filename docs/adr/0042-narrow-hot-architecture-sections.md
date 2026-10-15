@@ -2,14 +2,14 @@
 id = "ADR-0042"
 title = "Narrow the hot architecture sections: manifest views, app entry points, threading model"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0042: Narrow the hot architecture sections: manifest views, app entry points, threading model
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 Refines [ADR-0016](0016-docs-as-checked-graph-v2.md)'s point 2 (what a section's hash is

@@ -14,9 +14,9 @@ a single canvas.
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-render/src/**"]
+covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:10fb68e90ec3ddda", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rewrote the source-image bullet: uploads are premultiplied in linear light into Rgba16Float (image.rs premultiply_to_f16), imports stay Rgba8/Bgra8UnormSrgb read as straight alpha (Alpha::Straight). Added the bullet that render refuses another compositor's Image with Invalid (Owner check in prepare). Placement via legacy_quad, readback and not-in-this-cut list unchanged." }
+verified = { hash = "b3:11361ff6cccd4c13", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042: covers gains Cargo.toml; 'composited on the GPU with wgpu' matches the wgpu dependency in the manifest; rest unchanged" }
 -->
 
 One scene, composited on the GPU with wgpu
