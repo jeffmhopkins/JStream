@@ -577,6 +577,10 @@ mod rt {
                 let db = if tick % 200 == 0 { -6.0 } else { 0.0 };
                 sim.devices[0].control.set_gain_db(db);
                 sim.devices[1].control.set_muted(tick % 300 == 0);
+                // A scene switch moves activity gains (ADR-0028's `when_shown`).
+                sim.devices[0]
+                    .control
+                    .set_activity_gain(if tick % 400 == 0 { 0.0 } else { 1.0 });
                 bus.set_gain_db(db / 2.0);
                 for d in &sim.devices {
                     let _ = (d.control.take_meter(), d.control.stats());
