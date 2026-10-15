@@ -9,13 +9,15 @@
 //! [`Engine::with_publish`](engine::Engine::with_publish) (or
 //! [`Engine::with_publish_opener`](engine::Engine::with_publish_opener)) run the media pipeline on
 //! `output.start` instead. That pipeline registers the drop sources a `stats.tick`
-//! sums and emits one about once a second while it runs. There is no undo, audit log
-//! or persistence yet.
+//! sums and emits one about once a second while it runs. With
+//! [`Engine::with_audit`](engine::Engine::with_audit), every batch and action is recorded
+//! in an [`AuditSink`]. There is no undo or persistence yet.
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md
 
 #![forbid(unsafe_code)]
 
+mod audit;
 mod drops;
 mod engine;
 mod events;
@@ -27,6 +29,10 @@ mod snapshot;
 #[cfg(test)]
 mod tests;
 
+pub use audit::{
+    AUDIT_FILE, AUDIT_FILE_OLD, AuditEntry, AuditFile, AuditMemory, AuditSink,
+    DEFAULT_MAX_FILE_BYTES, QUEUE_ENTRIES,
+};
 pub use drops::{
     AudioBusDrops, AudioEncodeDrops, AudioInputDrops, DropSnapshot, DropSource, DropSourceId,
     FnDropSource, VideoEncodeDrops, audio_bus_drops, audio_encode_drops, audio_input_drops,

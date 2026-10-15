@@ -7,6 +7,7 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::audit::{self, Audit, AuditSink};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
@@ -67,6 +68,8 @@ struct Shared {
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
     /// only to clone the handle: the store is never called under the collection lock.
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
+    /// Where each executed batch and action is recorded, if the host gave a sink.
+    audit: Audit,
 }
 
 impl Default for Engine {
@@ -80,6 +83,7 @@ impl Default for Engine {
                 }),
                 snapshots: SnapshotWorker::default(),
                 keys: Mutex::new(None),
+                audit: Audit::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -138,6 +142,15 @@ impl Engine {
     #[must_use]
     pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
         *lock(&self.shared.keys) = Some(store);
+        self
+    }
+
+    /// Records every batch and action this engine executes in `sink`, after the call
+    /// and with no engine lock held (see [`AuditSink`]). Without a sink nothing is
+    /// recorded. Every clone of the engine shares it.
+    #[must_use]
+    pub fn with_audit(self, sink: Arc<dyn AuditSink>) -> Self {
+        self.shared.audit.set(sink);
         self
     }
 
@@ -353,6 +366,11 @@ impl Engine {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
         }
+        let audit = self
+            .shared
+            .audit
+            .sink_for(&call)
+            .map(|sink| (sink, audit::Pending::new(&call, self.rev())));
         let output = match &call {
             Call::Action {
                 action:
@@ -395,6 +413,9 @@ impl Engine {
                 tracing::info!(output_id = %output_id, code = error.code(), "output action failed");
             }
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
+        }
+        if let Some((sink, pending)) = audit {
+            sink.record(pending.finish(client_id, request_id, &result));
         }
         Executed::Ready(result)
     }
