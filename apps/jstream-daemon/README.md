@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:81c7c458ffb1da30", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via the crate-map apps row (helper now a DLL); the daemon creates no browser backend on this branch, text holds" }
+verified = { hash = "b3:2032674a6ca2f1c5", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 merge-only round (C8b2, with main, merged in): re-read the hosts table and crate map with main's daemon virtual-camera and ui-e2e rows next to this PR's sandboxed helper rows; both hold together" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -53,9 +53,15 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   crash hook in a child process; the publish opener and the live engine on the
   platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
-  SIGINT; `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE
-  headers to check that the backends' Media Foundation DLLs are delay-loaded and none
-  is a load-time import).
+  SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
+  daemon makes it live, on the platform fakes with the CPU compositor, behind the
+  server with MCP on, where MCP builds a scene and creates an RTMP output to a local
+  loopback sink and a recording, the WebSocket client sets the key and starts the
+  stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
+  received and the recorded MP4. The binary has no backends off Windows, so it runs
+  in process; `tests/delay_load.rs`,
+  Windows MSVC only, which reads the built binary's PE headers to check that the
+  backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
 Not here yet: serving the web UI (`jstream-server` serves one from
 `ServerConfig::ui_dir`, [jstream-server › Design](../../crates/jstream-server/README.md#design),
@@ -185,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1c353819440fc545", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via core design (with_browser, page audio inputs); the daemon calls neither and its design text names neither, holds" }
+verified = { hash = "b3:2682d068031adcc2", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge-only round (main merged in): re-read against main's changes and this PR's browser additions; both hold together" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -196,7 +202,10 @@ verified = { hash = "b3:1c353819440fc545", by = "agent:claude@session_01E4Mb9bbG
   `Arc`; the server, and through it every session, keep it alive.
 - **Live on Windows** (`serve.rs`). Under `cfg(windows)` the engine gets the
   `jstream-platform-windows` backends (`QpcClock`, `WgcCapture`, `MfVideoDevices`,
-  `WasapiAudio`, `MfCodecs`, `WindowsGpu`; no virtual camera sink yet), `WindowsCredentials` as its
+  `WasapiAudio`, `MfCodecs`, `WindowsGpu`, and `WindowsVcam` as the virtual camera, so
+  a `virtual_cam` output's `output.start` publishes the program as a webcam; that start
+  fails with the sink's reason on a Windows without `MFCreateVirtualCamera` (before
+  Windows 11) or before `--register-vcam`), `WindowsCredentials` as its
   stream key store (`with_key_store`), and a publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
   starts. Elsewhere there are no backends yet, so outputs stay the placeholder state
@@ -217,16 +226,20 @@ verified = { hash = "b3:1c353819440fc545", by = "agent:claude@session_01E4Mb9bbG
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
   `build.rs` links the binary (not its test binaries) with `/DELAYLOAD` for each DLL
   the daemon's backends import from (`mfplat.dll` for `MfCodecs` and
-  `MfVideoDevices`, `mf.dll` and `mfreadwrite.dll` for `MfVideoDevices`) and
+  `MfVideoDevices`, `mf.dll` and `mfreadwrite.dll` for `MfVideoDevices`,
+  `mfsensorgroup.dll` for `WindowsVcam`) and
   `delayimp.lib` when the target is MSVC, so each loads on the first call into it.
   `main.rs` runs `jstream_platform_windows::check_media_foundation` right after
   logging starts, before the engine is built or anything else calls Media Foundation,
   then lists `MfCodecs`' codecs and requires an AAC encoder (`components.rs`, plain
   data in and out, tested everywhere), since every stream's audio needs one. Either
   failure is a `MissingComponent`, mapped to exit code 3 with its advice.
-  `mfsensorgroup.dll` (`WindowsVcam`) joins the list when the daemon links the
-  virtual camera, not before: delay-loading a DLL the binary doesn't import from is
-  linker warning LNK4199, which CI's `-D warnings` turns into an error.
+  Only DLLs the binary imports from are listed: delay-loading one it doesn't is linker
+  warning LNK4199, which CI's `-D warnings` turns into an error. The startup check
+  doesn't cover `mfsensorgroup.dll`, since the daemon serves without a camera:
+  `WindowsVcam::start` checks that it exports `MFCreateVirtualCamera` before calling
+  it, so a Windows 10 gets an `output.start` error, not a delay-load
+  exception.
   `tests/delay_load.rs` checks the built binary's import tables, so CI's Windows job
   proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib imports.
 - **Virtual camera registration** (`register.rs`). `--register-vcam` is a separate mode

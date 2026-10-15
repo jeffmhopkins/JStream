@@ -1,0 +1,109 @@
+# Fuzz targets for cargo-fuzz (libFuzzer). Not a member of the root workspace: the targets
+# build only with `cargo +nightly fuzz`, so `cargo test --workspace` and CI never see them.
+# See README.md for how to run them.
+[package]
+name = "jstream-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Its own workspace, so the root workspace (crates/*, xtask) never builds or lints it.
+[workspace]
+
+[dependencies]
+# The fuzzing entry point and libFuzzer itself (C++, compiled by its build script). A
+# test tool, never linked into JStream.
+libfuzzer-sys = "0.4"
+jstream-graph = { path = "../crates/jstream-graph" }
+jstream-media = { path = "../crates/jstream-media" }
+jstream-mux = { path = "../crates/jstream-mux" }
+jstream-protocol = { path = "../crates/jstream-protocol" }
+jstream-sources = { path = "../crates/jstream-sources" }
+serde_json = "1"
+
+# A standalone workspace can't inherit the root `[workspace.lints]`, so the lints that
+# apply to test harness code are restated here (R-UNSAFE-001, R-UNSAFE-002, R-RS-004,
+# R-RS-005, R-RS-009). Targets panic on purpose (`expect`, `assert!`): a panic is how
+# libFuzzer reports a finding.
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+allow_attributes_without_reason = "deny"
+undocumented_unsafe_blocks = "deny"
+
+# Debug assertions on, so overflow checks run while fuzzing.
+[profile.release]
+debug = 1
+debug-assertions = true
+overflow-checks = true
+
+[[bin]]
+name = "protocol_decode"
+path = "fuzz_targets/protocol_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "kind_settings"
+path = "fuzz_targets/kind_settings.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "collection_load"
+path = "fuzz_targets/collection_load.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "amf0"
+path = "fuzz_targets/amf0.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "h264"
+path = "fuzz_targets/h264.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hevc"
+path = "fuzz_targets/hevc.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "av1"
+path = "fuzz_targets/av1.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "aac"
+path = "fuzz_targets/aac.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mux"
+path = "fuzz_targets/mux.rs"
+test = false
+doc = false
+bench = false

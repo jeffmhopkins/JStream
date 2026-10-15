@@ -102,22 +102,31 @@ impl Transport {
     /// `close_notify` (and whatever TLS data is still queued ahead of it) is bounded
     /// by it like any other write (#209).
     ///
+    /// The socket is shut down even when sending `close_notify` fails, so the peer
+    /// sees the connection end without waiting for the transport to be dropped (#236).
+    ///
     /// # Errors
     /// Transport errors while sending `close_notify` or shutting the socket down;
-    /// [`TimedOut`](io::ErrorKind::TimedOut) when the write deadline passes first.
+    /// [`TimedOut`](io::ErrorKind::TimedOut) when the write deadline passes first. A
+    /// failed `close_notify` is the error returned when both steps fail.
     pub fn shutdown(&mut self) -> io::Result<()> {
-        if let Link::Tls(s) = &mut self.link {
+        let notified = if let Link::Tls(s) = &mut self.link {
             s.conn.send_close_notify();
             // Through `Write::flush`, which honours the write deadline.
-            match Write::flush(self) {
-                Err(e) if peer_gone(&e) => return Ok(()),
-                result => result?,
-            }
-        }
-        match self.tcp().shutdown(Shutdown::Both) {
-            Err(e) if peer_gone(&e) => Ok(()),
-            result => result,
-        }
+            Write::flush(self)
+        } else {
+            Ok(())
+        };
+        let closed = self.tcp().shutdown(Shutdown::Both);
+        unless_peer_gone(notified).and(unless_peer_gone(closed))
+    }
+}
+
+/// `result`, with an error that says the peer is already gone counted as success.
+fn unless_peer_gone(result: io::Result<()>) -> io::Result<()> {
+    match result {
+        Err(e) if peer_gone(&e) => Ok(()),
+        result => result,
     }
 }
 
