@@ -835,7 +835,9 @@ fn output_start_publishes_fake_audio_and_video() {
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_mux::flv::TagType;
     use jstream_platform::Backends;
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
     use std::sync::Arc;
 
     use crate::RecordingPublish;
@@ -845,6 +847,7 @@ fn output_start_publishes_fake_audio_and_video() {
     let size = FrameSize::new(320, 180).expect("size");
     let backends = Backends {
         clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(FakeCapture::new(clock.clone(), size)),
         audio: Arc::new(audio.clone()),
         codecs: Arc::new(FakeCodecs),
@@ -919,7 +922,9 @@ fn output_stop_during_start_cancels_the_pipeline() {
     use std::time::Duration;
 
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
     use jstream_platform::{Backends, Capture, CaptureTarget, PlatformError};
 
     struct Hold {
@@ -976,6 +981,7 @@ fn output_stop_during_start_cancels_the_pipeline() {
     let release = Hold::new();
     let backends = Backends {
         clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(HoldCapture {
             inner: FakeCapture::new(clock, size),
             entered: Arc::clone(&entered),
@@ -1040,7 +1046,9 @@ fn output_publish_failure_settles_failed() {
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_mux::flv::FlvTag;
     use jstream_platform::Backends;
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
 
     use crate::{LivePublish, PublishError};
 
@@ -1076,6 +1084,7 @@ fn output_publish_failure_settles_failed() {
     let fail = Arc::new(AtomicBool::new(false));
     let backends = Backends {
         clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(FakeCapture::new(clock, size)),
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
@@ -1142,7 +1151,9 @@ fn output_start_returns_after_a_panicking_teardown() {
 
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_mux::flv::FlvTag;
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
     use jstream_platform::{
         AudioInputHandler, AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget,
         AudioStream, Backends, PlatformError,
@@ -1239,6 +1250,7 @@ fn output_start_returns_after_a_panicking_teardown() {
     let fail = Arc::new(AtomicBool::new(false));
     let backends = Backends {
         clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(FakeCapture::new(clock, size)),
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
@@ -1312,7 +1324,9 @@ fn dropping_the_engine_stops_the_pipeline() {
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_mux::flv::FlvTag;
     use jstream_platform::Backends;
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
 
     use crate::{LivePublish, PublishError};
 
@@ -1341,6 +1355,7 @@ fn dropping_the_engine_stops_the_pipeline() {
     let finished = Arc::new(AtomicBool::new(false));
     let backends = Backends {
         clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(FakeCapture::new(clock, size)),
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
@@ -1831,7 +1846,9 @@ mod cpu_pipeline {
     use jstream_control::{Control, EventStream};
     use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, Timebase};
     use jstream_mux::flv::{FlvTag, TagType};
-    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    };
     use jstream_platform::{
         AudioDeviceInfo, AudioEncoder, AudioEncoderConfig, AudioInputHandler, AudioInputTarget,
         AudioIo, AudioOutputHandler, AudioOutputTarget, AudioStream, Backends, Capture,
@@ -1864,6 +1881,7 @@ mod cpu_pipeline {
         let size = FrameSize::new(64, 36).expect("size");
         let backends = Backends {
             clock: Arc::new(clock.clone()),
+            video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
             capture: Arc::new(FakeCapture::new(clock.clone(), size)),
             audio: Arc::new(audio.clone()),
             codecs: Arc::new(FakeCodecs),
@@ -1881,6 +1899,7 @@ mod cpu_pipeline {
     fn share(backends: &Backends) -> Backends {
         Backends {
             clock: Arc::clone(&backends.clock),
+            video_devices: Arc::clone(&backends.video_devices),
             capture: Arc::clone(&backends.capture),
             audio: Arc::clone(&backends.audio),
             codecs: Arc::clone(&backends.codecs),

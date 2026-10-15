@@ -1,10 +1,11 @@
 //! Windows platform backends: the implementations of the `jstream-platform` traits on
 //! Windows. It has the QPC media clock (`QpcClock`), WASAPI audio I/O (`WasapiAudio`),
 //! Windows.Graphics.Capture display and window capture (`WgcCapture`), Media Foundation
-//! codecs (`MfCodecs`), GPU interop (`WindowsGpu`), the Credential Manager store for
-//! stream keys (`WindowsCredentials`), the virtual camera's engine side (`WindowsVcam`),
-//! and `check_media_foundation`, which reports a Windows N edition without Media
-//! Foundation; video decoders follow. Layer 2, and one of the few crates allowed
+//! codecs (`MfCodecs`), webcams and capture cards (`MfVideoDevices`, with the MJPEG
+//! decode hook `MfMjpegDecoder`), GPU interop (`WindowsGpu`), the Credential Manager
+//! store for stream keys (`WindowsCredentials`), the virtual camera's engine side
+//! (`WindowsVcam`), and `check_media_foundation`, which reports a Windows N edition
+//! without Media Foundation; video decoders follow. Layer 2, and one of the few crates allowed
 //! `unsafe` (R-UNSAFE-001): every OS call is wrapped here behind safe APIs.
 //!
 //! The backends exist only on Windows. On other platforms the crate builds empty except
@@ -25,6 +26,7 @@ mod gpu;
 #[cfg(any(windows, test))]
 mod n_edition;
 mod vcam;
+mod video_device;
 
 #[cfg(windows)]
 pub use audio::WasapiAudio;
@@ -44,3 +46,5 @@ pub use gpu::WindowsGpu;
 pub use n_edition::check_media_foundation;
 #[cfg(windows)]
 pub use vcam::WindowsVcam;
+#[cfg(windows)]
+pub use video_device::{MfMjpegDecoder, MfVideoDevices};

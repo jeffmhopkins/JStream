@@ -80,4 +80,8 @@ pub struct CaptureStats {
     /// Frames replaced in the mailbox by a newer one before
     /// [`latest`](CaptureStream::latest) took them.
     pub frames_skipped: u64,
+    /// Compressed frames the stream's [`CaptureDecoder`](crate::CaptureDecoder) rejected,
+    /// which are dropped. Only a video capture device in a compressed format has a
+    /// decoder; every other stream reports 0.
+    pub frames_undecodable: u64,
 }

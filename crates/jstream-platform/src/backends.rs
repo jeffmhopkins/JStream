@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::{AudioIo, Capture, Codecs, GpuInterop, MediaClock, VcamSink};
+use crate::{AudioIo, Capture, Codecs, GpuInterop, MediaClock, VcamSink, VideoDevices};
 
 /// Everything one platform provides, as the engine receives it: plain data holding the
 /// injected trait objects, so the engine never names a platform crate.
@@ -13,8 +13,10 @@ use crate::{AudioIo, Capture, Codecs, GpuInterop, MediaClock, VcamSink};
 pub struct Backends {
     /// The media clock every timestamp is on.
     pub clock: Arc<dyn MediaClock>,
-    /// Video capture.
+    /// Video capture: displays and windows.
     pub capture: Arc<dyn Capture>,
+    /// Video capture devices: webcams and capture cards.
+    pub video_devices: Arc<dyn VideoDevices>,
     /// Audio devices.
     pub audio: Arc<dyn AudioIo>,
     /// Encoders and decoders.
