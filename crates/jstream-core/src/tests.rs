@@ -1628,7 +1628,7 @@ fn deleting_a_source_drops_its_frame() {
 
 mod cpu_pipeline {
     use super::{block_on, code, connected, drain, output_call, output_state, output_steps};
-    use crate::runtime::{DrawFn, OpenDraw};
+    use crate::runtime::{DrawFn, OpenDraw, cpu_draw};
     use crate::{Engine, LinkState, LivePublish, PublishError, RecordingPublish};
     use jstream_control::{Control, EventStream};
     use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, Timebase};
@@ -1650,22 +1650,6 @@ mod cpu_pipeline {
 
     /// One base-rate period of the pipeline on a microsecond clock (1/30 s).
     const PERIOD_US: u64 = 33_333;
-
-    /// Composites by copying: the capture as it is, or black.
-    fn cpu_draw() -> OpenDraw {
-        Arc::new(|| {
-            let draw: DrawFn =
-                Box::new(|size: FrameSize, rgba: Option<&[u8]>, out: &mut Vec<u8>| {
-                    out.clear();
-                    match rgba {
-                        Some(rgba) => out.extend_from_slice(rgba),
-                        None => out.resize(size.width() as usize * size.height() as usize * 4, 0),
-                    }
-                    Ok(())
-                });
-            Ok(draw)
-        })
-    }
 
     struct Fakes {
         clock: FakeClock,
@@ -2614,5 +2598,99 @@ mod cpu_pipeline {
             last_tick.output_packets >= dropped,
             "{dropped} tags dropped while reconnecting, but the last tick says {last_tick:?}"
         );
+    }
+
+    // --- Item: a stalled publish target cannot hold `output.stop` past the drain bound.
+
+    /// A publish target whose peer has stopped reading: once `stalled`, every send
+    /// blocks for 200 ms, and it ignores [`LivePublish::stop_by`] as a destination that
+    /// cannot cut a write short would. Records the deadline it was given.
+    struct StalledPeer {
+        stalled: Arc<AtomicBool>,
+        sent: Arc<AtomicU64>,
+        deadline: Arc<Mutex<Option<Instant>>>,
+    }
+
+    impl LivePublish for StalledPeer {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.stalled.load(Ordering::Acquire) {
+                thread::sleep(Duration::from_millis(200));
+            }
+            self.sent.fetch_add(1, Ordering::AcqRel);
+            Ok(())
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn stop_by(&mut self, deadline: Instant) {
+            *self.deadline.lock().expect("deadline") = Some(deadline);
+        }
+    }
+
+    /// The peer stalls while well over a hundred packets queue up behind it. Draining
+    /// them all at 200 ms a tag would hold `output.stop` for half a minute; the stop
+    /// gives up after `STOP_DRAIN`, drops the rest, counts it in the final
+    /// `stats.tick`'s `output_packets`, and passes its deadline to the target.
+    #[test]
+    fn a_stalled_peer_cannot_hold_output_stop() {
+        use crate::runtime::STOP_DRAIN;
+
+        let fakes = fakes();
+        let stalled = Arc::new(AtomicBool::new(false));
+        let sent = Arc::new(AtomicU64::new(0));
+        let deadline = Arc::new(Mutex::new(None));
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(StalledPeer {
+                stalled: Arc::clone(&stalled),
+                sent: Arc::clone(&sent),
+                deadline: Arc::clone(&deadline),
+            }),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || sent.load(Ordering::Acquire)
+                >= 5),
+            "nothing was published"
+        );
+
+        stalled.store(true, Ordering::Release);
+        // Two simulated seconds of media: about 60 video and 90 audio packets.
+        for _ in 0..40 {
+            pump(&fakes.clock, &fakes.audio);
+        }
+        drain(&mut events);
+
+        let started = Instant::now();
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        let took = started.elapsed();
+        assert!(
+            took < STOP_DRAIN + Duration::from_secs(2),
+            "output.stop took {took:?} behind a stalled peer"
+        );
+        let given = deadline.lock().expect("deadline").take();
+        assert!(given.is_some(), "the target was not told the stop deadline");
+        let last_tick = drain(&mut events)
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::StatsTick { drops, .. } => Some(drops),
+                _ => None,
+            })
+            .next_back()
+            .expect("no stats.tick");
+        assert!(
+            last_tick.output_packets > 0,
+            "the abandoned packets were not counted: {last_tick:?}"
+        );
+        assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
     }
 }
