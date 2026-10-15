@@ -226,6 +226,13 @@ fn run(options: Options) -> Result<(), Failure> {
     // arguments (R-SEC-001).
     let audit = AuditFile::open(&logs)
         .with_context(|| format!("could not open the audit log in `{}`", logs.display()))?;
+    // Checked before the token or collection file is written, so a mistyped
+    // `--ui-dir` leaves nothing behind. `Server::bind` checks it again.
+    if let Some(dir) = options.ui_dir.as_deref()
+        && !Path::new(dir).is_dir()
+    {
+        return Err(anyhow::anyhow!("unusable UI directory `{dir}`: not a directory").into());
+    }
     let (token, provenance) = token::load_or_create(&path)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

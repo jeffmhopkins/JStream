@@ -721,5 +721,7 @@ fn a_missing_ui_directory_exits_1() {
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("unusable UI directory"), "{stderr}");
+    // Refused before anything is written.
+    assert!(!dir.join("token").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }

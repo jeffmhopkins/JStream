@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:8042ae2c04dc88ec", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into --ui-dir PR: main's text kept; this PR's --ui-dir flag, ui: line and Web UI bullet still match args.rs and main.rs" }
+verified = { hash = "b3:98f3f588de4538f4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Re-read Purpose itself: Not-here-yet drops serving the web UI, which --ui-dir now does; Serving bullet adds the web UI's files with --ui-dir (serve.rs bind); Tests bullet adds raw HTTP UI requests (serves_the_ui_directory_to_the_token_holder); main.rs's early --ui-dir check is within 'maps failures to exit codes'" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -36,7 +36,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   creates the file with a new random token ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
   file and the placeholder outputs; on Windows a live one, [Design](#design)), installs
-  the signal handlers that stop it, then binds the server with MCP on.
+  the signal handlers that stop it, then binds the server with MCP on and, with
+  `--ui-dir`, the web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
@@ -52,7 +53,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Tests** (`serve.rs`, `token.rs`, `args.rs`, `logs.rs`, `crash.rs` unit tests, the
   crash hook in a child process; the publish opener and the live engine on the
   platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
-  `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
+  `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI
+  requests, and stopped with
   SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
   daemon makes it live, on the platform fakes with the CPU compositor, behind the
   server with MCP on, where MCP builds a scene and creates an RTMP output to a local
@@ -75,7 +77,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:08383bca8d7cfb6c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 --ui-dir: re-read against args.rs and main.rs: new option row, ui: banner line before listening on, Web UI bullet, exit 1 for a non-directory" }
+verified = { hash = "b3:8e03f312da88c790", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Round 1 N2: --ui-dir row now says a non-directory fails with exit 1 before the token or collection file is written, matching main.rs's early is_dir check and the daemon test asserting no token file; option row, ui: line, Web UI bullet and exit-1 row otherwise unchanged" }
 -->
 
 ```sh
@@ -91,7 +93,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--token-file <path>` | The control token file. Default: the `JSTREAM_TOKEN_FILE` environment variable, which `jstream-cli` reads too. One of them is required. |
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
 | `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding the empty collection, if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
-| `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1. Default: no UI. |
+| `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
@@ -195,7 +197,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:6bc8626009d87cff", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into --ui-dir PR: main's text kept; Listening says port, MCP and the UI directory change, matching serve.rs:177-179; Not-here-yet drops serving the web UI, which --ui-dir now does" }
+verified = { hash = "b3:608ac8c86e0f88b6", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Re-read Design: Listening names the port, MCP and UI directory, matching serve.rs's config assignments; the early --ui-dir check in main.rs runs before the token load and doesn't change the token-file or signal ordering described here; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

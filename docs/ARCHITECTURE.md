@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:81335b22324c5a40", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into --ui-dir PR: main's desktop row kept; daemon row's first cut now serves the UI's built files (--ui-dir), matching serve.rs" }
+verified = { hash = "b3:bc63cf8d8ff21398", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through daemon Purpose's Serving and Tests bullets; daemon row's first cut (WebSocket API, MCP, UI files with --ui-dir) still matches; holds" }
 -->
 
 ```
