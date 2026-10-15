@@ -148,7 +148,7 @@ verified = { hash = "b3:b0200407002e63d1", by = "agent:claude@session_01QBbMRwRu
   parameters and opaque saved state are the filter's settings
   ([ADR-0037](docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)). A
   `state` may be 2 MiB, so a batch carrying two can pass the server's 4 MiB message
-  limit, which closes the connection. The maintainer chose to settle this here (issue
+  limit, which closes the connection. The maintainer deferred this to M3 (issue
   #102): a maintainer-tier ADR superseding ADR-0037's `state` clause adds a stable
   `too_large` error for requests over a soft limit, read below a higher hard frame
   limit, so an oversized batch fails cleanly.
