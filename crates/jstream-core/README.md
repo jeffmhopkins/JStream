@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:9f9bd74ed157256e", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (#182 H7b): re-read; Tests bullet (src/tests/collection.rs, batches/undo/redo saved, reload) and Collection file bullet hold; main changed no core prose" }
+verified = { hash = "b3:ac782753f15cda61", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#205 collection file) into C1a: re-read; resolved Not here yet as #205's list (persistence now built) with C1a's rendering from the source registry in place of real source kinds; Kinds bullet still matches kinds.rs; #205's Collection file and Tests text taken as is" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -121,7 +121,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3ca7612494ac158c", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (#182): re-read Collection file subsection against engine.rs and collection.rs; unchanged" }
+verified = { hash = "b3:922123d45ba09349", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#205 collection file) into C1a: re-read; resolved Not yet as #205's daemon --collection/audit file plus C1a's rendering from the registry; serde_json dev-only now also names src/tests/ (collection.rs reads saved files), matching Cargo.toml; jstream-sources dependency holds" }
 -->
 
 ### Engine and sessions
@@ -171,7 +171,7 @@ the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. D
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
-values in `src/tests.rs` and `tests/mcp.rs`). All of them
+values and saved collection files in `src/tests.rs`, `src/tests/` and `tests/mcp.rs`). All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
