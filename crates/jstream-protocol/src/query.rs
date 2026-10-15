@@ -68,6 +68,10 @@ pub enum Query {
     /// sends. Outputs have no display order of their own.
     #[serde(rename = "output.list")]
     OutputList,
+    /// Reads the studio state: which scene is on program. It is runtime state, not
+    /// collection state (ADR-0030), so the result carries no `rev`.
+    #[serde(rename = "studio.get")]
+    StudioGet,
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
@@ -116,6 +120,7 @@ impl Query {
             Query::KindList => "kind.list",
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
+            Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
             Query::DeletePlan { .. } => "delete.plan",
         }
@@ -237,6 +242,13 @@ pub enum QueryResult {
         /// The outputs, ordered by ID.
         outputs: Vec<OutputInfo>,
     },
+    /// The result of `studio.get`. Studio state is runtime state, so it carries no `rev`.
+    #[serde(rename = "studio.get")]
+    StudioGet {
+        /// The scene on program. Omitted only while the collection has no scene.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        program_scene: Option<SceneId>,
+    },
     /// The result of `encoder.list`.
     #[serde(rename = "encoder.list")]
     EncoderList {
@@ -272,6 +284,7 @@ impl QueryResult {
             QueryResult::KindList { .. } => "kind.list",
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
+            QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
         }

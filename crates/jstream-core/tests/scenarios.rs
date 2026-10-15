@@ -225,7 +225,10 @@ fn overload_drops_and_counts() {
     assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
     assert!(matches!(
         drain(&mut user_events).as_slice(),
-        [Event::StateChanged { rev: Rev(1), .. }]
+        [
+            Event::StateChanged { rev: Rev(1), .. },
+            Event::StudioChanged { .. }
+        ]
     ));
 
     drop(slow);

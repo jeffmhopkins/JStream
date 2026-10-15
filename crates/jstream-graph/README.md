@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:20eae20874afc10a", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (C5 #238 audio sources) into C9: stale only via ARCH data-model; graph text untouched, holds" }
+verified = { hash = "b3:5ae07811c1009683", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Round 3 of #245 with main (B6-f #210, B10 #201) merged: stale only via ARCH data-model; graph text untouched, holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

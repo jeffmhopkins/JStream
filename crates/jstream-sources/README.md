@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:311e9ab81983e918", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (C5 #238 audio sources) into C9: C5's audio-only kinds bullet and Tests audio-target line kept with C9's media bullet, show seam, Context media and tests/media.rs; review N1 (frame docs) and N3 (package description) fixed; re-read" }
+verified = { hash = "b3:ade4044298b098a5", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Round 3 of #245: media bullet now says every frame must have the first's size (N5), restart on first show (B2), the unknown-length loop seek (N7) and seeks without the lock (B3); re-read against media/player.rs and mod.rs" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every

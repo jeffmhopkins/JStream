@@ -82,6 +82,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             "output_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every\noutput that shows program) shows it from the next frame. The program scene is\nruntime state, not collection state (ADR-0030): the switch changes no `rev`, is\nnever undone, and emits `studio.changed`, which `studio.get` reads back. Switching\nto the scene already on program succeeds and emits nothing. Fails with\n`not_found` for a scene not in the collection.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to put on program."
+            },
+            "type": {
+              "const": "scene.switch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1471,6 +1489,46 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The scene on program changed: after a `scene.switch`, or after a batch, undo or\nredo deleted the program scene (program moves to the first remaining scene) or\ncreated the collection's first scene (it goes on program). Studio state is runtime state\n(ADR-0030), so the event carries no `rev`; a `state.changed` for the same edits\ncomes first.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose request caused it."
+            },
+            "program_scene": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene now on program. Omitted when the collection has no scene left."
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RequestId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "That client's request ID, so it can match the event to its own response."
+            },
+            "type": {
+              "const": "studio.changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "client_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "This connection's queued events were dropped because the client read them too\nslowly: the server keeps a bounded buffer per connection and empties it when it\noverflows. `state.changed` events may be among those lost, so the client re-reads\nthe state with `state.get`, which carries `rev`. Drops that happen before the\nnotice is sent add up in that one notice. Only events are dropped: every request\nstill gets its answer. Sent by the WebSocket server, never by an in-process engine.",
           "properties": {
             "count": {
@@ -2489,6 +2547,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Reads the studio state: which scene is on program. It is runtime state, not\ncollection state (ADR-0030), so the result carries no `rev`.",
+          "properties": {
+            "type": {
+              "const": "studio.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the collection's encoder profiles, ordered by ID.",
           "properties": {
             "type": {
@@ -2821,6 +2892,30 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "rev",
             "outputs"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `studio.get`. Studio state is runtime state, so it carries no `rev`.",
+          "properties": {
+            "program_scene": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene on program. Omitted only while the collection has no scene."
+            },
+            "type": {
+              "const": "studio.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         },
@@ -3630,5 +3725,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.15"
+  "title": "JStream protocol 0.16"
 }
