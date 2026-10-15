@@ -7,7 +7,8 @@
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
 //! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
 //! pipeline on the Windows backends and publishes over RTMP(S), after checking that
-//! Media Foundation is installed. Not yet: the web UI and `--collection`.
+//! Media Foundation is installed, and `--register-vcam` registers the virtual
+//! camera's media source (`register`). Not yet: the web UI and `--collection`.
 //!
 //! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-daemon/README.md#purpose, apps/jstream-daemon/README.md#usage, apps/jstream-daemon/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0006-mcp-full-access.md
 
@@ -19,6 +20,7 @@ mod args;
 mod components;
 mod crash;
 mod logs;
+mod register;
 mod serve;
 mod token;
 
@@ -88,6 +90,9 @@ fn main() -> ExitCode {
             "jstream-daemon {}, protocol {PROTOCOL_VERSION}\n",
             env!("CARGO_PKG_VERSION")
         )),
+        Ok(Invocation::RegisterVcam) => register::register()
+            .map_err(Failure::Failed)
+            .and_then(|message| print(&message)),
         Ok(Invocation::Serve(options)) => run(options),
         Err(message) => Err(Failure::Usage(format!(
             "{message}\n(run `jstream-daemon --help` for usage)"
@@ -211,6 +216,8 @@ fn run(options: Options) -> Result<(), Failure> {
     init_logging(&log_dir(&options)?, filter)?;
     #[cfg(windows)]
     check_media_foundation()?;
+    #[cfg(windows)]
+    register::log_status();
     let (token, provenance) = token::load_or_create(&path)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

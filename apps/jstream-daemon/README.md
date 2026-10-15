@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:9c3cf659bf5fda8a", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#225 Backends.video_devices) into A3: build.rs bullet now says it delay-loads the Media Foundation DLLs; delay_load.rs test bullet checks the backends' DLLs are delayed and none is a load-time import; other contents hold" }
+verified = { hash = "b3:bf7ae7c2c891e69b", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c: new Virtual camera registration bullet (register.rs, --register-vcam, startup moved-folder warning); rest unchanged" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -39,6 +39,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
+- **Virtual camera registration** (`register.rs`, Windows only): `--register-vcam`
+  registers the media source DLL shipped beside the daemon, and startup logs a warning
+  when the registration names another folder ([Design](#design)).
 - **Build script** (`build.rs`): delay-loads the Media Foundation DLLs on Windows
   (MSVC), so that check can run at all.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
@@ -67,7 +70,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:548561c153a39b06", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#225) into A3 plus review N2: --help exit 3 now names the AAC encoder too, matching the exit-code table and the Media Foundation bullet; options and Going live bullets unchanged and hold" }
+verified = { hash = "b3:a19fcd589a232236", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c: --register-vcam option row, Virtual camera bullet (one UAC prompt, printed lines, exit 1 cases, startup warning) and exit-code 1 row match register.rs, args.rs and main.rs" }
 -->
 
 ```sh
@@ -85,6 +88,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files and crash reports go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
+| `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
 | `-V`, `--version` | Prints the daemon and protocol versions. |
 | `-h`, `--help` | Prints the help. |
 
@@ -137,12 +141,22 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   and before touching the token file. If Media Foundation is there but has no AAC
   encoder, it does the same with `error: Media Foundation's AAC encoder is not
   installed: …`. Listing the codecs fails with exit 1.
+- **Virtual camera (Windows).** `jstream-daemon --register-vcam` registers
+  `jstream_vcam_windows.dll` from the daemon's own folder machine-wide, as the Windows
+  camera Frame Server requires. From a normal prompt it shows one UAC prompt and runs
+  itself elevated, without a window. It prints `virtual camera: registered <dll>`, adding
+  the old path when the registration named another folder, or `virtual camera: already
+  registered (<dll>)` without asking for elevation. A missing DLL, a declined prompt or a
+  failed registration exits 1; from an administrator prompt the error says what failed.
+  At startup the daemon logs a warning when the registration names another folder (a
+  moved install), and an `info` line when there is none. Elsewhere `--register-vcam`
+  fails with exit 1.
 - `--collection` is refused with a usage error that says it is not supported yet.
 
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, or printed the help or version |
-| 1 | Failed: the log directory or a log file can't be created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory or a log file can't be created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -151,7 +165,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:db823ec3144334a1", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14, #185) into A3: design text is A3's (live engine, opener, MF+AAC check, mfplat/mf/mfreadwrite delay-load); main changed no daemon code; daemon tests pass on the merge" }
+verified = { hash = "b3:2d3d76d514f2b3ad", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c: Virtual camera registration bullet matches register.rs (no unsafe, relaunch elevated then read back, already-current skips the prompt, startup check only logs)" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -195,6 +209,15 @@ verified = { hash = "b3:db823ec3144334a1", by = "agent:claude@session_01YKRrREb5
   linker warning LNK4199, which CI's `-D warnings` turns into an error.
   `tests/delay_load.rs` checks the built binary's import tables, so CI's Windows job
   proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib imports.
+- **Virtual camera registration** (`register.rs`). `--register-vcam` is a separate mode
+  that exits without serving, so it creates no logs or token. The registry and ACL work
+  is `jstream-platform-windows`'s (`register_vcam`), because the daemon has no `unsafe`.
+  A non-elevated daemon doesn't write: it relaunches itself elevated with the same fixed
+  argument (`run_elevated`), then reads the registration back, so success is judged by
+  what the registry holds rather than by the hidden child's output. A registration that
+  already names this DLL is left alone, so repeating the command never prompts. The
+  startup check (`log_status`) only logs: the daemon serves without the camera, and
+  `WindowsVcam::start` refuses to start an unregistered camera on its own.
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server
   answers MCP at `/mcp` on the same port, with its default MCP session cap and idle
   timeout. Each MCP session is one more engine client through the same `Connector`, so

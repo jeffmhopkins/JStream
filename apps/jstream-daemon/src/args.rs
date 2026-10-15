@@ -22,6 +22,9 @@ Options:
                        in the platform data directory); created if missing
   --log-level <spec>   the log filter, as `target=level` directives and an
                        optional default level (default: RUST_LOG, else info)
+  --register-vcam      Windows: register the virtual camera (the DLL beside the
+                       daemon) for this machine, then exit. Asks for
+                       administrator rights once; takes no other options
   -V, --version        print the daemon and protocol versions
   -h, --help           print this help
 
@@ -56,6 +59,8 @@ pub enum Invocation {
     Help,
     /// Print the versions.
     Version,
+    /// Register the virtual camera, then exit.
+    RegisterVcam,
     /// Run the engine and serve it.
     Serve(Options),
 }
@@ -64,12 +69,14 @@ pub enum Invocation {
 pub fn parse(args: &[String]) -> Result<Invocation, String> {
     let mut options = Options::default();
     let mut port = None;
+    let mut register_vcam = false;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || rest.next().ok_or_else(|| format!("`{arg}` needs a value"));
         match arg.as_str() {
             "-h" | "--help" => return Ok(Invocation::Help),
             "-V" | "--version" => return Ok(Invocation::Version),
+            "--register-vcam" => register_vcam = true,
             "--token-file" => {
                 let path = value()?;
                 if options.token_file.replace(path.clone()).is_some() {
@@ -108,6 +115,12 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             other if other.starts_with('-') => return Err(format!("unknown option `{other}`")),
             other => return Err(format!("unexpected argument `{other}`")),
         }
+    }
+    if register_vcam {
+        if args.len() > 1 {
+            return Err("`--register-vcam` takes no other options".to_owned());
+        }
+        return Ok(Invocation::RegisterVcam);
     }
     options.port = port.unwrap_or(0);
     Ok(Invocation::Serve(options))
@@ -199,6 +212,23 @@ mod tests {
     fn unknown_arguments_are_usage_errors() {
         assert_eq!(error("--bogus"), "unknown option `--bogus`");
         assert_eq!(error("serve"), "unexpected argument `serve`");
+    }
+
+    #[test]
+    fn register_vcam_stands_alone() {
+        assert_eq!(
+            parse(&args("--register-vcam")),
+            Ok(Invocation::RegisterVcam)
+        );
+        assert_eq!(
+            error("--register-vcam --port 1"),
+            "`--register-vcam` takes no other options"
+        );
+        assert_eq!(
+            error("--register-vcam --register-vcam"),
+            "`--register-vcam` takes no other options"
+        );
+        assert_eq!(parse(&args("--register-vcam --help")), Ok(Invocation::Help));
     }
 
     /// ARCH plans `--collection`; until the daemon wires the engine's collection file it
