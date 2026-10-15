@@ -89,6 +89,7 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
         item_id: ItemId::new(item),
         source_id: SourceId::new(source),
         transform: None,
+        geometry: None,
     }
 }
 
@@ -1572,6 +1573,86 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
     let (_, width, rgba) = image(&shot);
     assert_eq!(at(&rgba, width, 100, 100), [0, 255, 0, 255]);
     assert_eq!(at(&rgba, width, 1100, 600), [0, 255, 0, 255]);
+}
+
+/// `video.snapshot` draws at the collection's canvas size and places a geometry item by
+/// the shared formula: a 16:9 red frame fitted into a 320×360 box on a 640×360 canvas is
+/// letterboxed, and nothing is drawn outside the box.
+#[test]
+fn video_snapshot_draws_a_geometry_on_the_collection_canvas() {
+    let _gpu = one_gpu_test_at_a_time();
+    use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
+    use jstream_protocol::{FitMode, ItemGeometry, Size, Vec2};
+
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let geometry = ItemGeometry {
+        fit_mode: FitMode::Fit,
+        ..ItemGeometry::try_new(
+            Vec2::new(160.0, 180.0).expect("finite"),
+            Size::try_new(320.0, 360.0).expect("positive"),
+        )
+        .expect("positive")
+    };
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                Edit::CanvasSetSize {
+                    width: 640,
+                    height: 360,
+                },
+                create("main"),
+                webcam(),
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("boxed"),
+                    source_id: SourceId::new("webcam"),
+                    transform: None,
+                    geometry: Some(geometry),
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        },
+    )
+    .expect("scene");
+    let red: Vec<u8> = std::iter::repeat_n([255, 0, 0, 255], 1920 * 1080)
+        .flatten()
+        .collect();
+    engine
+        .set_source_frame(&SourceId::new("webcam"), 1920, 1080, &red)
+        .expect("frame");
+    let shot = match query(&control, Query::VideoSnapshot) {
+        Ok(shot) => shot,
+        Err(error) if error.protocol().is_some_and(is_no_adapter) => {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "CI has no wgpu adapter: {error}"
+            );
+            return;
+        }
+        Err(error) => panic!("video.snapshot failed: {error}"),
+    };
+    let QueryResult::VideoSnapshot {
+        width, height, png, ..
+    } = shot
+    else {
+        panic!("not a snapshot: {shot:?}");
+    };
+    assert_eq!((width, height), (640, 360), "the canvas, not 1920×1080");
+    let (_, _, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+    let at = |x: usize, y: usize| {
+        let i = (y * 640 + x) * 4;
+        [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+    };
+    // The fitted frame is 320×180, centred in the box: rows 90 to 270.
+    assert_eq!(at(160, 180), [255, 0, 0, 255]);
+    assert_eq!(at(10, 100), [255, 0, 0, 255]);
+    // Letterbox above and below it, and the rest of the canvas, stay clear.
+    assert_eq!(at(160, 40), [0, 0, 0, 255]);
+    assert_eq!(at(160, 320), [0, 0, 0, 255]);
+    assert_eq!(at(480, 180), [0, 0, 0, 255]);
 }
 
 #[test]

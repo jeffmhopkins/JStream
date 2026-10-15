@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d704931bfd5210e7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3 (control mock and CLI tests only): re-read; diagram and clients list unchanged" }
+verified = { hash = "b3:d46a278a46d73d8a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; crate shape unchanged" }
 -->
 
 ```
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:39a005ebabd81f23", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; ADR-0040 hotkey sentence and depends_on are main's; Built so far still lists Record { path, container: mp4 } with its path checks" }
+verified = { hash = "b3:dfe3957b0f391551", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Built so far says canvas at protocol 0.11; rest holds" }
 -->
 
 ```
@@ -341,8 +341,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 - **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind ID or a nested
   scene, with `settings` checked against the kind's descriptor and stored complete; no
   filters yet), scenes in display order, and items in stacking order with `source_id`,
-  protocol 0.3's 2D transform (top-left corner and scale, which ADR-0022 replaces),
-  `crop` and `visible`. Items refer to sources; they never copy them. Scene and source
+  a placement, `crop` and `visible`. The placement is a `geometry` or, until 1.0, a
+  legacy placement (protocol 0.3's 2D transform as written), and the collection has
+  its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Items refer to sources; they never copy them. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
@@ -352,8 +353,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   checked to be absolute and to end in a file name. A stream key is never collection state: it
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
-  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
-  `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
+  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, 3D
+  geometry, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
   variants and overrides, folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
@@ -503,7 +504,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1f4e6cdbe67513af", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3 on main with #198 (control mock only changed): re-read; History bullet holds" }
+verified = { hash = "b3:415e020d4c5b0d5c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; Edits bullet (canvas.set_size/item.set_geometry at 0.11) and History bullet hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -520,7 +521,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9.
+  0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
+  `item.set_transform`.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -556,7 +559,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   encoder refuses a session, `output.start` fails with a stable session-limit error code
   naming the outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
-- **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
+- **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
@@ -605,11 +608,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:93f000624e12ab05", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): grouped tools list includes history; tools.snap about 83 KB, so about 80 KB holds" }
+verified = { hash = "b3:f87823856265c90a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: grouped tools list includes canvas and history; tools.snap now about 102 KB, so the text says about 100 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -619,7 +622,7 @@ verified = { hash = "b3:93f000624e12ab05", by = "agent:claude@session_01WG1uLVaz
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 80 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 100 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -649,7 +652,7 @@ verified = { hash = "b3:93f000624e12ab05", by = "agent:claude@session_01WG1uLVaz
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:d4c7ac3c7850d9fe", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into E3a: body is main's (C6's nested-scene render_image sentence kept); re-read steps 1-2 against gpu/capture.rs (one GPU copy into JStream-allocated shared NT-handle textures, opened in D3D12 via wgpu-hal; D3D11 signals a per-stream fence the wgpu queue waits on, the queue signals the release) and the one-scene paragraph against C6" }
+verified = { hash = "b3:c39815529eedb369", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: E3a's capture steps (shared NT-handle textures, fence) from main and B3's one-scene compositor placement forms both present and accurate" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -676,10 +679,12 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
    back and reports it.
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
-one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement is
-that 0.3 evaluation from `jstream-protocol`'s `legacy_quad` (crop in source pixels, scale
-against the current source size, top-left at `position`, clockwise rotation about that
-corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
+is evaluated with `jstream-protocol`'s shared formula in either of ADR-0022's forms: a
+geometry (crop in source pixels, fitted into the box by `stretch`, `fit` or `fill`,
+which is clipped to the box, then rotated about the box centre), or a legacy 0.3
+transform through `legacy_quad` (crop, scale against the current source size,
+top-left at `position`, clockwise rotation about that corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
@@ -687,7 +692,7 @@ when interop is present, and otherwise a device the crate opens with a software 
 first. A nested scene is composited with `render_image` into an `Rgba16Float` image
 that stays on the GPU and is placed in its parent; the caller walks the nesting,
 bounded in depth. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
-fit modes, 3D, effect packs, and the output path below.
+3D, effect packs, and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
 texture blend: during it, the program mix is a synthetic item list whose transforms and

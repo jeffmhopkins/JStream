@@ -2,13 +2,17 @@
 //! time. The producer (the engine) creates them, with the contract's DACL; the DLL only
 //! opens them by name.
 
-use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, LocalFree};
+use windows::Win32::Security::Authorization::{
+    ConvertSidToStringSidW, GetSecurityInfo, SE_KERNEL_OBJECT,
+};
+use windows::Win32::Security::{OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID};
 use windows::Win32::System::Memory::{
     FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
     UnmapViewOfFile,
 };
 use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
-use windows_core::{HSTRING, Result};
+use windows_core::{HSTRING, PWSTR, Result};
 
 use jstream_vcam_proto::{Control, MAPPING_SIZE};
 
@@ -29,9 +33,38 @@ impl Drop for OwnedHandle {
 // SAFETY: a kernel handle is a process-wide value usable from any thread.
 unsafe impl Send for OwnedHandle {}
 
+/// Frees memory the system allocated with `LocalAlloc` on drop.
+struct LocalMem(*mut core::ffi::c_void);
+
+impl Drop for LocalMem {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            // SAFETY: the system allocated the block with LocalAlloc for us, and it is
+            // freed exactly once, after every pointer into it is last used.
+            unsafe {
+                let _ = LocalFree(Some(HLOCAL(self.0)));
+            }
+        }
+    }
+}
+
+/// `sid` as a string (`S-1-5-…`).
+///
+/// # Safety
+/// `sid` must point to a valid SID for the duration of the call.
+pub(crate) unsafe fn sid_string(sid: PSID) -> Result<String> {
+    let mut text = PWSTR::null();
+    // SAFETY: the caller guarantees `sid`; `text` is a valid out-pointer.
+    unsafe { ConvertSidToStringSidW(sid, &mut text) }?;
+    let _free = LocalMem(text.0.cast());
+    // SAFETY: on success `text` is a NUL-terminated wide string, freed only by `_free`
+    // after this read.
+    Ok(unsafe { text.to_string() }?)
+}
+
 /// The control block's file mapping, mapped read-write into this process.
 pub(crate) struct Mapping {
-    _handle: OwnedHandle,
+    handle: OwnedHandle,
     view: MEMORY_MAPPED_VIEW_ADDRESS,
 }
 
@@ -52,10 +85,38 @@ impl Mapping {
         if view.Value.is_null() {
             return Err(windows_core::Error::from_thread());
         }
-        Ok(Self {
-            _handle: handle,
-            view,
-        })
+        Ok(Self { handle, view })
+    }
+
+    /// The mapping's owner SID, as a string. The contract's DACL grants LOCAL SERVICE
+    /// `GA`, so the handle opened with `FILE_MAP_ALL_ACCESS` carries `READ_CONTROL`.
+    pub(crate) fn owner_sid(&self) -> Result<String> {
+        let mut owner = PSID::default();
+        let mut sd = PSECURITY_DESCRIPTOR::default();
+        // SAFETY: `handle` is a live section handle; the out-pointers are valid. On
+        // success `owner` points into `sd`, which `_free` releases after the last use.
+        let err = unsafe {
+            GetSecurityInfo(
+                self.handle.0,
+                SE_KERNEL_OBJECT,
+                OWNER_SECURITY_INFORMATION,
+                Some(&mut owner),
+                None,
+                None,
+                None,
+                Some(&mut sd),
+            )
+        };
+        let _free = LocalMem(sd.0);
+        err.to_hresult().ok()?;
+        if owner.0.is_null() {
+            return Err(windows_core::Error::new(
+                windows::Win32::Foundation::E_FAIL,
+                "the control block has no owner",
+            ));
+        }
+        // SAFETY: `owner` points into `sd`, which is still allocated.
+        unsafe { sid_string(owner) }
     }
 
     pub(crate) fn control(&self) -> &Control {

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:d09c916d343dec0e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3: re-read; contents list holds: commands map to the handshake, queries, batches, actions and events (no history command, see Usage); MCP proxy carries the history tool" }
+verified = { hash = "b3:75e80f9d5bfc8517", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2 history 0.10) into B3 at 0.11: re-read; contents list holds for args.rs/run.rs with B2's history cause and B3's geometry: None" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:534c5096e879e726", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3: re-read; new 'No undo or redo command' bullet (each run is a new client, ADR-0032; mcp's history tool undoes within its run) matches run/tests.rs mcp_undoes_and_redoes_within_its_session; commands table and exit codes unchanged" }
+verified = { hash = "b3:bfbfdab2c4076796", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Edits bullet now says protocol 0.11's canvas.set_size/item.set_geometry are not in the CLI; B2's undo/redo cause suffix and exit-code row hold" }
 -->
 
 ```sh
@@ -103,7 +103,10 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
   protocol is supported except settings. `source.set_settings`, and `source.create`
   with settings, need a JSON argument form the CLI doesn't have yet, so a source it
-  creates gets its kind's defaults. Several edits on one line go as **one atomic batch**: one new
+  creates gets its kind's defaults. Protocol 0.11's `canvas.set_size`,
+  `item.set_geometry` and `item.add`'s `geometry`
+  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
+  yet; `item.add` sends neither placement, so its item is a legacy one. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -138,9 +141,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   sources with their kind in the `source.create` spelling (`builtin:webcam`,
   `scene:main`); items bottom first, with `VISIBLE`, `POSITION` (`x,y`), `SCALE`,
   `ROTATION` and `CROP` (`left,top,right,bottom`) in the argument order of the edits
-  that set them; outputs with their `KIND` (`rtmp`) and `TARGET` (the server URL, as
-  `output.create` takes it). `state get` prints the sources, then each scene in display
-  order with its items, then the outputs. `output status` prints
+  that set them; for an item placed with a geometry, those columns show the
+  protocol's deprecated transform view of it, and only `--json` shows its `geometry`
+  and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
+  server URL, as `output.create` takes it). `state get` prints the sources, then each
+  scene in display order with its items, then the outputs. `output status` prints
   `<id>: <state>, stream key set` (or `not set`). An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
@@ -212,7 +217,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9e9cef557edaf3d6", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3 (mock gains undo, CLI tests only): re-read; connector seam, --mock fresh per run and block_on notes hold" }
+verified = { hash = "b3:e8613ebfa1f33687", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; parsing, connector, mock and MCP proxy bullets hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

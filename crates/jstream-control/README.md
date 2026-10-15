@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:16eebb538dfed030", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3: re-read; Mock bullet and contents hold with the mock now doing undo and redo" }
+verified = { hash = "b3:03b5a5e95e7b2c05", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; call() now covers history calls (B2) and the mock keeps canvas/geometry (B3); holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:04479b2466d40356", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f3: re-read Mock; new undo/redo bullet (graph's inverses, engine's check order, running output keeps step, with_history_limit, session drop, stricter conflicts) matches mock.rs History and its tests; 'no undo' removed; parity paragraph names the undo test" }
+verified = { hash = "b3:21a987fc74e7a497", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; mock reads bullet (canvas, placement forms, outputs) and B2's history text hold against mock.rs" }
 -->
 
 ### The trait
@@ -108,6 +108,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
   - reorder indices out of range;
+  - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
+    not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or
     either while a source's settings refer to it;
   - nesting cycles;
@@ -127,10 +129,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
   scene) and `output.list` (ordered by ID), each at the current `rev`. So it keeps
-  everything an edit sets: source names, kinds and settings, each item's transform,
-  crop and visibility, and each output's kind and target. `video.snapshot` is not one
-  of those reads: the mock has no compositor and answers it with `internal`, as it
-  does for any protocol variant it does not implement;
+  everything an edit sets: the canvas, source names, kinds and settings, each item's
+  placement (its transform, or its geometry and the transform view of it), crop and
+  visibility, and each output's kind and target. `video.snapshot` is not one of those
+  reads: the mock has no compositor and answers it with `internal`, as it does for any
+  protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
@@ -147,8 +150,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - per-client undo and redo (`history.undo`, `history.redo`,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Each batch is a step built
   from the same inverse edits `jstream-graph` returns: a removed item comes back at its
-  index with its transform, crop and visibility, a deleted scene at its position with
-  its items. The checks run in the engine's order (the key, then `expected_rev`, then
+  index with its placement in its own form (transform or geometry), crop and
+  visibility, a deleted scene at its position with its items, and `canvas.set_size`
+  undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with
   the graph's `invalid_argument` and keeps the step, the history is bounded
