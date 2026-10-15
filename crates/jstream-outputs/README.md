@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:1851d03558773cf6", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (#213, #292 and others) into #237: took main's stamp; stale only via ARCH#threading, whose CLAP-host paragraph now says the shared block and mixer side are built; this section names no CLAP hosts; re-read; Transport shutdown text (#209, #236) and main's text hold" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -81,12 +80,17 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   (#138). Each socket write then sends at most 16 KiB, because on macOS and the BSDs a
   write's timeout restarts whenever the peer frees buffer space. `Transport::shutdown` sends TLS `close_notify` before closing the socket, bounded
   by the write deadline like any other write (#209), and shuts the socket down even
-  when that fails (#236).
+  when that fails (#236). It shuts down only the sending side, so the server sees a FIN
+  and its reply stays readable; the drop closes the rest. Shut down both ways, Windows
+  aborts the connection when the server's data (TLS 1.3 session tickets, say) sits
+  unread (#243).
 - **URLs and keys** (`url`): `rtmp(s)://host[:port]/app[/...]`, with the whole path as the
   application name and the stream key separate. `StreamKey` prints as `***`, and no error
   carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The server's
   status code and description are untrusted text, so `RtmpError::Rejected` replaces any
-  echo of the key in them with `***`.
+  echo of the key in them with `***`, then cuts each to 512 characters and replaces
+  control characters with spaces, so a server can't forge log lines or flood the
+  errors an agent reads.
 - **Reconnect** (`reconnect`): `ReconnectingPublisher` wraps a published session and a
   `Connector`, the function that opens and publishes a replacement (`rtmp_connector`
   for TCP and TLS, built on `connect_publisher`). A send or `poll` that fails because
@@ -132,14 +136,19 @@ path builds its FLV tags from) and writes fragmented MP4 with `jstream-mux`'s
 `Fmp4Muxer`, which starts a fragment at every video keyframe (every second for
 audio-only).
 
-- **Temporary name, renamed on finish:** a recording to `show.mp4` is written to
-  `show.mp4.part` in the same directory (so the rename stays on one file system), and
-  `finish` writes the last fragment, syncs, closes the file and renames it. A file at
-  the destination is therefore always a finished recording. Nothing is overwritten: an
+- **Temporary name, moved on finish:** a recording to `show.mp4` is written to
+  `show.mp4.part` in the same directory (so the move stays on one file system), and
+  `finish` writes the last fragment, syncs, closes the file and moves it there. A file at
+  the destination is therefore a finished recording (or, after a crash during the
+  fallback below, an empty placeholder). Nothing is overwritten: an
   existing destination or `.part` file (a recording a crash left behind) is
-  `RecordError::Exists`, checked on create and again just before the rename. That
-  second check can still race a file created in between, since `std` has no
-  rename-without-replace.
+  `RecordError::Exists`, checked on create and enforced atomically on finish. `std`
+  has no rename-without-replace, so `finish` hard links the `.part` file to the
+  destination (which fails if anything is there, however late it appeared) and then
+  removes the `.part` name. On a file system without hard links (FAT, exFAT) it
+  instead creates the destination exclusively as an empty placeholder and renames over
+  that; a crash between the two steps leaves an empty destination beside the complete
+  `.part` file.
 - **Crash safety:** each fragment is written as one buffer and then synced
   (`sync_data`), so a crash or power loss loses at most the fragment being built, and
   the `.part` file is readable up to its last complete fragment. Dropping a recorder
@@ -193,7 +202,7 @@ rustls server on loopback TCP with a CA and server certificate that `rcgen` gene
 for the test, and a client that trusts only that CA: a round trip over TLS 1.3 and 1.2,
 a full publish session, a read timeout that splits a TLS record during `poll_incoming`,
 a handshake timeout, a write deadline bounding a large write and a shutdown's
-`close_notify`, and refusal of a certificate for another host or from an untrusted
+`close_notify`, the server's reply staying readable after a shutdown, and refusal of a certificate for another host or from an untrusted
 CA. Reconnect tests drive a clock the test advances by hand: a fake server on loopback
 TCP that hangs up mid-stream, after which the test checks the wait before the first
 attempt, the drop counts, the re-sent headers and the resume at the keyframe on the
@@ -206,9 +215,12 @@ in `jstream-mux`. Recorder tests write to a directory under the system temp dir:
 the finished file matches `Fmp4Writer`'s output byte for byte, with the AVC
 configuration given or taken from the stream; after every packet the `.part` file is
 exactly the segments completed so far, and stays so when the recorder is dropped; an
-existing destination or `.part` file is refused, also at finish; a rejected packet
-leaves the recording going. A writer that fails on demand checks that a full disk is
-`DiskFull` and other write or sync failures `Write`, that each ends the recording, and
+existing destination or `.part` file is refused, also at finish, where both the
+hard-link move and its placeholder fallback leave a destination created just before
+them untouched (on Unix, a dangling symlink at the destination, which an existence
+check misses, stands in for a file that appears after the check, so the race is
+tested deterministically); a rejected packet leaves the recording going. A writer
+that fails on demand checks that a full disk is `DiskFull` and other write or sync failures `Write`, that each ends the recording, and
 that every fragment is synced.
 
 <a id="open-questions"></a>

@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:06a431ab39e6dbc8", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: stale via ARCH browser-source and crate-map edits only; the seam text (with_browser, use_device) holds" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
@@ -26,8 +25,9 @@ download and build it ([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.m
 into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageSpec` (a
 location, a size, a frame-rate cap and the custom CSS) and returns a `BrowserPage`:
 its latest frame as a `GpuFrame`, its audio, and a way to replace its custom CSS while it
-runs. `use_device` gives the backend the engine's GPU device, which pages copy their
-paints onto; without one a page renders and plays but delivers no frames. Dropping the
+runs. `use_device` gives the backend a GPU device to copy the pages' paints onto. Today
+that is one the host opens on the media adapter, since the engine doesn't hand out its
+own device yet; without one a page renders and plays but delivers no frames. Dropping the
 page closes it.
 
 **Built everywhere:**
@@ -88,7 +88,6 @@ to, and the shutdown time. It runs on Windows with the `cef` feature only.
 ## Open items
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md"]
-verified = { hash = "b3:425ea3d66bd09b80", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: Hosts bullet now says the desktop app creates a backend with its cef feature on a device it opens; daemon still doesn't; other items unchanged" }
 -->
 
 What ADR-0021 asks for that this crate doesn't do yet. The first three block any host

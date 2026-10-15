@@ -20,6 +20,8 @@
 
 #![forbid(unsafe_code)]
 
+mod activity;
+mod audio;
 mod audio_sources;
 mod audit;
 mod collection;

@@ -42,14 +42,15 @@ test('a failed connect says why and stays on the form', async ({ page, daemon, c
   await expect(page.getByRole('button', { name: 'Connect' })).toBeEnabled();
 });
 
-// Known bug, #305: a socket the page's Content-Security-Policy refuses gets an `error`
-// event and no `close` in Chromium, and the browser client only listens for `close`, so
-// the form stays on "Connecting…". `test.fail` flips to a failure once that is fixed:
-// then drop the marker.
+// #305: a socket the page's Content-Security-Policy refuses gets an `error` event and no
+// `close` in Chromium, so the browser client must fail the connect on `error` too.
 test('a connect the page policy refuses says why', async ({ page, daemon, consoleErrors }) => {
-  test.fail(true, '#305: the browser client waits for a close event Chromium never sends');
   // Another port is another origin: the policy refuses it, and the browser logs that.
-  consoleErrors.allow(/^Refused to connect to 'ws:\/\/127\.0\.0\.1:9\/api\/v1\/ws'/);
+  // Chromium's wording changed: older builds (Playwright's) say "Refused to connect to
+  // '…' because it violates …", newer ones (CI's Chrome) "Connecting to '…' violates …".
+  consoleErrors.allow(
+    /^(Refused to connect to|Connecting to) 'ws:\/\/127\.0\.0\.1:9\/api\/v1\/ws'.* violates the following Content Security Policy directive/,
+  );
   await page.goto(daemon.url);
   await page.getByLabel('Engine URL').fill('ws://127.0.0.1:9/api/v1/ws');
   await page.getByRole('button', { name: 'Connect' }).click();

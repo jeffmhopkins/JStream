@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-browser-helper/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*", "crates/jstream-browser/README.md#purpose"]
-verified = { hash = "b3:8f67270c1e2f017c", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: stale via crate-map apps row only; helper text holds" }
 -->
 
 CEF's subprocess exe for browser sources

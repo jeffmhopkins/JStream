@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:a1f50d3313163f2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +56,6 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a0912e1d9a6dd09d", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; server passes output kinds through untouched" }
 -->
 
 ### Listening and admission
@@ -244,11 +242,18 @@ task speaks the envelope
 
 `serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
 open connection (close code 1001), so their clients' pending and later calls fail with
-`Disconnected` and their event streams end. Whenever the server closes a connection,
-it first ends the session's event subscription, then sends what the outbox still holds
-before the close frame. A client that doesn't take them within a short timeout
-(`CLOSE_TIMEOUT`) is dropped without one, so a client that stopped reading can't keep
-its connection or session open.
+`Disconnected` and their event streams end. A connection handles nothing it reads once
+the server is shutting down, so a call sent after the shutdown is never answered. It
+returns once every WebSocket connection has finished closing (as below), so a host that
+exits right after it doesn't cut a close short. Whenever the server closes a
+connection, it first ends the session's event subscription, then sends what the outbox
+still holds before the close frame, then reads and drops what the client still sends
+until the client's own close frame or the end of the stream, and only then closes the
+socket. Closing it with client data unread would make the kernel reset the connection,
+and on macOS and Windows a reset discards what the client hasn't read yet, the close
+frame and last replies included. A client that doesn't finish this within a short
+timeout (`CLOSE_TIMEOUT`) is dropped, so a client that stopped reading can't keep its
+connection or session open, nor hold up the shutdown.
 
 ### MCP over streamable HTTP
 
@@ -374,8 +379,10 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    event buffer, and on overflow the server drops the queued events and sends one
    `events.dropped` notice, so the engine is never slowed down by one client. What is
    left open is tuning: whether 1024 events suits `stats.tick` (about once a second
-   while a pipeline runs) and the high-rate meters still to come, or wants a byte
-   limit or per-event-kind limits once they exist.
+   while a pipeline runs) and `meters.tick` (about ten a second while the mixer runs,
+   so 1024 events are under two minutes of them), or wants a byte limit or
+   per-event-kind limits, such as keeping only the newest meter reading as
+   `jstream-mcp` does.
 8. **Limit tuning.** The connection limits (see *Listening and admission*) are a
    conservative first cut. Whether a remote bind wants a per-peer cap as well, or the
    host app should expose the limits, is open. Settled: the handshake timeout counts
