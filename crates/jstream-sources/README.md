@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:018baf5cda58feac", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "#217 N1: only the unit test's temp-folder cleanup changed (drop guard); the Assets paragraph on open_inside/check_opened still holds" }
+verified = { hash = "b3:b3f8a6d8afa85737", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#217) into png 0.18: kept #217's AssetRoots::read paragraph as is; png 0.18 maps a usize-overflowing frame size to a decode error, which the section does not describe; seams and kind text hold" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
