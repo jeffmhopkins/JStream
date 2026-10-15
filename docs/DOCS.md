@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:159065a894722bd5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #100's xtask change (parse.rs gives rules a body range; hash.rs resolves rule anchors to it): the hash-bound bullet still holds, and Hash-bound verification now names rule-anchor targets" }
+verified = { hash = "b3:3ddfa20219b42b37", by = "agent:claude@session_01G2n9TnrH9za1trRoJWCsmB", note = "Re-read against I3's xtask change (history.rs adds docs log; mod.rs adds docs review and a shared stamp check): new History and TTL review bullet matches both commands; Not yet now names only docs index and the sweep; other bullets unchanged" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -51,8 +51,10 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   The crate map and the other generated references are not generated yet.
 - **Reports (warnings):** crates no section covers, and `applies_to` globs naming an
   unknown crate ([PR gate](#gate)).
-- **Not yet:** the `review` and `log` commands.
-  Until they land, those rules are enforced by review.
+- **History and TTL review** ([History](#history), [Time-based review](#ttl)):
+  `cargo xtask docs log` derives a doc's or section's history from git, and
+  `cargo xtask docs review` writes a doc's `reviewed` stamp.
+- **Not yet:** `docs index` and the weekly sweep.
 - IDs, anchors and rule numbers became permanent at the first merge to `main` (#1).
 
 <a id="identity"></a>
@@ -259,8 +261,9 @@ Commands:
 cargo xtask docs check                         # what is stale, and why
 cargo xtask docs verify ARCH#gpu-pipeline \
     --by agent:claude --note "…"                # re-read (or edited) and it holds: write new hash
-cargo xtask docs review ARCH --note "…"        # doc-level TTL review          (planned)
-cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git     (planned)
+cargo xtask docs review ARCH \
+    --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
+cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
 cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
 cargo xtask docs rehash                        # one-time ADR-0039 migration (below)
 ```
@@ -282,7 +285,15 @@ Nothing about history is stored in the files. `xtask docs log` derives it from g
 - **Revision n** of a section is the n-th commit on `main` that changed its normalized
   body.
 - **Date, author and PR** come from that squash-merge commit.
-- **Verifications** are the commits that changed its `verified` line, with the note.
+- **Verifications** are the commits that changed its `verified` line, with the note. A
+  commit that changed only the stored hash (`docs rehash`) is shown as a restamp.
+- **Reviews** of a whole doc are the commits that changed its `reviewed` line. The log of
+  a doc also shows its TTL: when the clock last restarted and when the doc is due.
+
+`docs log` takes a doc (`ARCH`), a section or a rule (`ARCH#gpu-pipeline`,
+`RULES#R-DOC-011`), and `--rev <rev>` for another branch than `HEAD`. It follows the
+first-parent line, so on `main` each entry is one squash-merged PR. A doc is followed by
+its current path only, and a shallow clone shows only the history it has.
 
 `xtask docs index` renders an index (every ID, link, revision count, last change, last
 verification, TTL status). It is published as a CI artifact and is **not committed**,
@@ -348,6 +359,10 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
 
 - **Docs:** a doc's TTL clock restarts at the last git commit that changed its content
   or its `reviewed` line. Once `review_every` has passed, it is due.
+  `cargo xtask docs review <DOC> --by <who> --note "…"` writes the `reviewed` line after a
+  re-read. The note follows [Verification notes](#notes), and it must differ from the
+  last one, since an unchanged line restarts nothing. ADRs and docs without
+  `review_every` are refused.
 - **ADRs** have no TTL, because they are immutable. The external resources they cite do
   have TTLs. A decision that no longer holds gets a new superseding ADR.
 - **External resources** ([`external.toml`](external.toml)): each entry records its URL,

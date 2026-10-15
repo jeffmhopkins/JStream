@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:0e48ba2d422db8da", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs gained the 'docs generate' usage entry (xtask/ line still lists docs); the docs/adr/ line now mentions the generated README.md index next to TEMPLATE.md; rest of the tree unchanged" }
+verified = { hash = "b3:02586af269c6ad78", by = "agent:claude@session_01G2n9TnrH9za1trRoJWCsmB", note = "main.rs gained the docs review and docs log usage entries only; the xtask/ line (docs, lint-deps, governance, ...) and the rest of the tree still hold" }
 -->
 
 ```
@@ -491,7 +491,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:778769be0c9db82d", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: re-stale only from a clippy fix in kind.rs (accept.contains instead of iter().any); behaviour and the text re-read earlier in this PR are unchanged" }
+verified = { hash = "b3:5386153a7678a890", by = "agent:claude@session_01Gkayyrtq9Ahc5U37dAfdoB", note = "Re-read for #137: test-only change (shutdown tests wait on counted conditions instead of fixed sleeps; CLOSE_TIMEOUT made pub(crate) for the test). No behaviour change; the section still matches; envelope and transport bullets unaffected" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
