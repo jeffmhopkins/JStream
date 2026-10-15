@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:548e864cb0868064", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: B1's Tests and Collection file bullets are main's beside E1's bullets; the Not-yet line drops persistence and keeps the audio/outputs snapshots" }
+verified = { hash = "b3:280a330c50e3e9fe", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: re-read; resolved Kinds bullet: descriptors taken from jstream-sources' registry (kinds.rs) plus E1's display-capture exception; E1's Snapshot bullet kept; Not here yet keeps E1's audio/outputs snapshots with C1a's rendering from the source registry in place of real source kinds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -48,12 +48,11 @@ state machine. Contents:
   names with `with_collection_file` (or creates it), and saves it atomically after every
   change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
-  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
-  They are stubs: `color`, `image`, `media` and `text` take a first set of parameters,
-  and `display`, `webcam` and `window` none. Nothing renders from their settings yet;
-  frames still come from `set_source_frame`, except that a `display` source with no
-  stored frame shows the output pipeline's capture on the render thread (see
-  *Snapshots*). `jstream-sources` replaces them.
+  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)),
+  taken from `jstream-sources`' built-in registry. Nothing renders from their settings
+  yet; frames still come from `set_source_frame`, except that a `display` source with
+  no stored frame shows the output pipeline's capture on the render thread (see
+  *Snapshots*).
 - **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -119,7 +118,7 @@ state machine. Contents:
   leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
-Not here yet: live values, real source kinds, the audio and outputs
+Not here yet: live values, rendering from the source registry, the audio and outputs
 snapshots, a GPU encode target, and the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -132,7 +131,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bf611e7fa88cc5aa", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: the render-snapshot paragraph now names undo/redo and a collection file's load among the re-plans (with_collection_file publishes after replacing the graph; tests/collection.rs checks the loaded program scene); B1's Collection file subsection is main's; Not-yet line keeps both sides (persistence built, audio/outputs snapshots not)" }
+verified = { hash = "b3:8530f5004443e479", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: re-read; resolved Not yet: daemon --collection/audit file with rendering sources from jstream-sources' registry, plus E1's audio/outputs snapshots bullet as is; Dependencies list jstream-sources and serde_json dev-only, matching Cargo.toml after E1's arc-swap" }
 -->
 
 ### Engine and sessions
@@ -172,16 +171,17 @@ and the pipeline compositor), `jstream-platform` (backend traits the host inject
 the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its drop
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
-publisher and the recording file sink), `png`
+publisher and the recording file sink), `jstream-sources` (the built-in kind
+descriptors), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
-[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `serde_json`
-(settings values in the built-in kind descriptors), `thiserror`
+[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
 `tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
-`tests/scenarios.rs`) and `jstream-mcp` (`tests/mcp.rs`). All of them
+`tests/scenarios.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
+values and saved collection files in `src/tests.rs`, `src/tests/` and `tests/mcp.rs`). All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
@@ -721,8 +721,8 @@ The daemon's `--collection` option, which turns this on, is a later item.
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- The daemon's `--collection` option and audit file, and real source kinds with
-  settings that change what renders (`jstream-sources`).
+- The daemon's `--collection` option and audit file, and rendering sources from
+  `jstream-sources`' registry, so settings change what renders.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one
