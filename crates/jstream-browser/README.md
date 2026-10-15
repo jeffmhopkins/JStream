@@ -54,10 +54,11 @@ page closes it.
   `wss`), `data:`, `blob:`, `about:blank` and `about:srcdoc` are allowed for every
   page. `file:` URLs are allowed only for a page loaded from a local file, and only for
   files in its folder or below. The path is compared by name first, with `..` applied,
-  and only a path inside the folder is ever opened, so a URL naming another server (an
-  SMB connection on Windows) or a device is refused untouched. It is compared again
-  after resolving links on both sides, so a link inside the folder can't reach out; a
-  missing file is refused. Every other scheme is refused. Each refusal is counted. The
+  and only a path inside the folder is ever opened. So a URL naming another server (an
+  SMB connection on Windows), a drive-relative path or a device (a `\\.\` path, or on
+  Windows a reserved name such as `COM1` or `nul.txt`) is refused untouched. It is
+  compared again after resolving links on both sides, so a link inside the folder can't
+  reach out; a missing file is refused. Every other scheme is refused. Each refusal is counted. The
   folder is trusted as an asset root is: something that can write in it could swap a
   file for a link between the check and the load.
 - `fake` (feature `fake`, and in tests): `FakeBrowser`, a backend that records the
