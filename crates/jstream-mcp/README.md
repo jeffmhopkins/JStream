@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:e4af564483fe4c4b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of #143 (with main at 94fb25d, #240 D5 audio) into #273: re-read; contents list and 'needs no async runtime' hold with #273's retry hello bounded by with_timeout's std timer and #240's meters.tick sentence; holds" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +44,6 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:b25054c3cf70425c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of #143 (with main at 94fb25d, #240 D5 audio) into #273: re-read; #273's 3 s bound on a tool call's own hello and its error-table row kept beside #143's initialize bound and #240's audio/bus/send/studio tools and meters; match server.rs; holds" }
 -->
 
 ### Tools

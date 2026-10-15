@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:4776d9543f9d94a7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of #143 into #273: re-read contents list; Session bullet covers session.rs's handshake race (#273), config/error bullets cover #143's check_limits and InvalidLimit; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +56,6 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:da4a77cf4d210f14", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of #143 (with main at 94fb25d, #240 D5 audio) into #273: re-read; #273's Sessions text (engine's hello answer races the handshake deadline) matches session.rs handshake(); #143's zero-limit paragraph and #240's meters.tick open-question text kept; holds" }
 -->
 
 ### Listening and admission
