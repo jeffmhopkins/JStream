@@ -529,7 +529,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:ac5d28b9b674d023", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272, #263) into #143: covered changes are this PR's ServerConfig limits/hello-timeout checks and #263's mock cycle-reason text; section describes neither; holds" }
+verified = { hash = "b3:cdf8c876b12bee53", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#273: envelope summary doesn't describe handshake timing; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -655,7 +655,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:b50f143018e8efbe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "B2/N9 in #143: Server rustdoc now says handle awaits the Control futures and the hello wait's timer; ARCH MCP covers tools, events and access, not executors; holds" }
+verified = { hash = "b3:a59f0617172fca53", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#273: ARCH MCP covers tools, events and access, not hello timing; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

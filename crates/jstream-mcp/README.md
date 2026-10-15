@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:44c12e4c16f2776e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "B2 in #143: server.rs rustdoc fix only; contents list and 'needs no async runtime' hold (the hello wait's timer is a std thread)" }
+verified = { hash = "b3:bd03bf345c455a10", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#273: server.rs bounds the retry hello with the existing with_timeout; contents list and 'needs no async runtime' hold" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:3346f4d0a7f9114b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "B2 in #143: Server rustdoc now mirrors Async and transports (awaits the Control futures and the hello wait's timer, which its own thread wakes); section re-read; holds" }
+verified = { hash = "b3:c9fd7136e682f5d0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#273: Session and identity and the error table now say a tool call's own hello has the same 3 s bound and fails unsent with disconnected, next call retries; Async and transports still holds (with_timeout's std timer thread, no runtime); re-read" }
 -->
 
 ### Tools
@@ -116,6 +116,7 @@ batches (MCP removed them in 2025-06-18).
 | The arguments don't fit the tool, or an `events` cursor is past the newest event | the same, with the protocol's `malformed` code and the reason |
 | The connection to the engine was lost during the call | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again ([Session and identity](#design)). |
 | `hello` failed with a lost connection | the same `disconnected` code, saying the call was not sent and that the MCP server must be restarted for a new session, with its own undo history |
+| `hello` wasn't answered within 3 s | the same `disconnected` code, saying the call was not sent and that the next call sends `hello` again ([Session and identity](#design)) |
 | Unknown tool, or a `tools/call` without `name` or with non-object `arguments` | JSON-RPC `-32602` |
 | Unparseable JSON / not a valid request / unknown method | `-32700` / `-32600` / `-32601` |
 
@@ -149,7 +150,10 @@ session must open before the agent goes idle, not at its first tool call. If tha
 engine that accepted the connection and then hangs doesn't hold `initialize` until it
 closes), the request still succeeds, and a client that skips both (a stateless
 client going straight to `tools/call`) gets its `hello` before the next tool call that
-needs the engine, which reports a failure. Later names don't change the session.
+needs the engine, which reports a failure. That `hello` has the same 3 s bound: if it
+runs out, the call isn't sent and fails with `disconnected`, and the call after it sends
+`hello` again (if the engine closed the connection meanwhile, that call reports a lost
+connection, as below). Later names don't change the session.
 `describe_api`, argument errors and `events` reads never call the engine
 ([Events](#design)).
 

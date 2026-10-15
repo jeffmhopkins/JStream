@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:90a6615e74f01227", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N3): re-read; config.rs/error.rs contents bullets still accurate with check_limits and InvalidLimit; holds" }
+verified = { hash = "b3:13886136176f60da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#273: session.rs change only; contents list holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0dd84c65dc8c5366", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N3): Connection limits now says Server::bind refuses a zero limit or timeout (incl. max_mcp_sessions, mcp_idle_timeout) with ServerError::InvalidLimit before opening the socket, matching lib.rs/config.rs; rest unchanged" }
+verified = { hash = "b3:da2688af6d5bd0c1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#273: Sessions bullet now says a hello the engine hasn't answered by handshake_timeout is closed 1008 too (the answer races the deadline); limits table unchanged; re-read" }
 -->
 
 ### Listening and admission
@@ -210,7 +210,8 @@ task speaks the envelope
   first handshake (`unsupported_version`) is answered and the connection closed (close
   code 1008), as the envelope says. A connection whose handshake hasn't succeeded within
   `handshake_timeout` of being accepted is closed with code 1008 too (`no handshake in
-  time`).
+  time`), including one whose `hello` arrived in time but that the engine hasn't
+  answered by then: the wait for the engine's answer races the same deadline.
 - Each `request` is forwarded to `Control::call` and may stay in flight while others
   run; answers go back as they complete, carrying the client's request ID. A request
   before `hello` is answered by the session itself (`handshake_required`).
