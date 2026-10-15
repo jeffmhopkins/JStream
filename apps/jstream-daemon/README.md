@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:8c58a5105c467013", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at #295 (clock swap re-plan): re-read against both sides: daemon text is main's; names no audio routing; holds" }
+verified = { hash = "b3:9fb169bbfbfadef8", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at D5: re-read; one engine per daemon, Windows backends, publish opener and MF delay-load unchanged; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

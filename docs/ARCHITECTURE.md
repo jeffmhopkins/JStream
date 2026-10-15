@@ -167,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:cafb607d97bfd5ec", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio paragraph says protocol 0.19; not-yet list drops VirtualCam as main did; holds" }
+verified = { hash = "b3:1e6d23d4efccddb3", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at D5 (#240): data model lists waveform and spectrum among built kinds; D5's buses, sends and audio-only routing text is main's and does not conflict; holds" }
 -->
 
 ```

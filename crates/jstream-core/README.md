@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:119e8ff233eb074f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at #295 (clock swap re-plan): re-read against both sides: main's clock-swap text is about live sources' timing, not audio routing; D5's audio bullets hold" }
+verified = { hash = "b3:dd7d3226779b0aa3", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at D5 (#240): Live sources says waveform/spectrum draw the engine's AudioScope; Tests list has both the scope test and D5's routed-and-metered test; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -182,7 +182,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0e47b24b75116936", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at #295 (clock swap re-plan): re-read against both sides: clock swap re-plans live sources; audio sources and routing text unchanged and still hold" }
+verified = { hash = "b3:7d2ce6387fff0069", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at D5 (#240): Live sources (painters painted off-lock before re-plan) and Locking now combine D5's mixer-detach and meter-atomics text with the sources-thread painting text; Audio sources scope paragraph holds alongside routing" }
 -->
 
 ### Engine and sessions
@@ -1032,7 +1032,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:ee964bed8bad32e1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
+verified = { hash = "b3:451ebf1322acd85d", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at D5 (#240): mixer thread paragraph now says it meters each master block and pushes it into the audio scope; mixer_loop takes Mixing (mixer, metering) and MixOut (inputs, format, scope); holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
