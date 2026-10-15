@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:b4174eb4c30a7d4f", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Stale via ARCH#data-model (ADR-0040 hotkey sentence): encode reads no hotkeys or collection state; API and tests unchanged" }
+verified = { hash = "b3:bd03a01d37302311", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: cascade from ARCH#data-model only (scene role/item.move text); encode doesn't touch scenes, purpose holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

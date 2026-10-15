@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d1aae25b710240dd", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read R-API-001..004 against 0.8 (main, additive) and I1 (transport only, no protocol change)" }
+verified = { hash = "b3:1a80b2d57a6b5de2", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: cascade from ARCH#protocol; 0.9 is additive (new edits, optional scene_id, role omitted for scene) under R-API-001; rules text holds" }
 -->
 
 <a id="R-API-001"></a>

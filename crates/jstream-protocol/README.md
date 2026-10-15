@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b5cf903a5f2b3dcd", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Commands list both source.rename/set_settings and output edits/key actions; Queries list output.list and kind.list/describe; Outputs and Kinds-and-settings bullets; PROTOCOL_VERSION 0.8 for kinds, 0.7 outputs (version.rs)" }
+verified = { hash = "b3:c19da4f693f9f99b", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: Commands list gains scene.set_role, item.move and SceneRole; PROTOCOL_VERSION 0.9 for groups, earlier minors kept (version.rs)" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -94,7 +94,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:4e06cd0fe67b2407", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): handshake example updated to 0.8; SourceInfo settings note says 0.7 readers; Queries list has output.list, key_set and the kind queries; outputs and settings paragraphs both hold; geometry paragraph names 0.8/0.7/0.6/0.5" }
+verified = { hash = "b3:5aded4b4439a77ca", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: new Groups and placement addressing subsection matches command.rs/query.rs (role omitted for scene, item.move index rules, scene_id own-scene only); cycle-edit list, scene.list bullet and Undo paragraph updated; geometry paragraph says 0.9" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

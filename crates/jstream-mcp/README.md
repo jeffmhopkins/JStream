@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:04cf05697ae74a56", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; Tools table gains kind (main), I1's Session/Async paragraphs on /mcp sessions hold" }
+verified = { hash = "b3:0b7eb5e014a50078", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: tools table unchanged; new ops land in the existing scene and item tools from the generated schema (tools.snap regenerated)" }
 -->
 
 ### Tools

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:348e93b0bafdf766", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; main's repo-tree comment change and I1's daemon row both hold" }
+verified = { hash = "b3:be1fc5775163c351", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: only apps/jstream-cli/src/args.rs changed (scene_id: None on placement edits); shape diagram and host table unaffected" }
 -->
 
 ```
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:81cb37560b19b12c", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "ADR-0040 accepted: hotkey sentence now says deleting a binding's target removes the binding in the same undoable edit, delete.plan lists them, never a blocker (ADR-0040 §3); depends_on gains ADR-0040; the orphaned-override and shared-group bullets already match its §1-2; Built so far still lists hotkeys as not built" }
+verified = { hash = "b3:c4f1be129797162f", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6 (protocol 0.9): Built so far now lists scene role/scene.set_role, item.move with the cycle check, and scene_id addressing limited to the item's own scene; Not yet keeps scene.create's role and variants/overrides; ADR-0040 hotkey text from #134 unchanged; checked against graph model/mod.rs and apply.rs" }
 -->
 
 ```
@@ -501,7 +501,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1dbe914dd531c477", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Stale via jstream-server src (I1 413 from Content-Length): transport bullet's /mcp sentence still holds" }
+verified = { hash = "b3:d8c89b53d60996e6", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: Edits bullet names item.move, scene.set_role and the optional scene_id (0.9), own-scene-only until keyframes; checked against protocol command.rs" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -603,7 +603,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:90489d48b902b02d", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; tool groups gain kind and about 80 KB (main), Access bullet settles no-Origin at /mcp (I1)" }
+verified = { hash = "b3:b66df5fafe3cb359", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: tools.snap grows to ~88 KB with scene.set_role/item.move ops in the existing scene and item tools (no new noun); 'about 90 KB' updated" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

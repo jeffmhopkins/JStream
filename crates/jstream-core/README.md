@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:5ca589e8ea016a80", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#155 B4 kinds, #133, #153, #156-#160) into C6 #147: main's Kinds bullet and Engine/Outputs text kept; C6's nested-scene tests in the Tests bullet; Snapshot bullet still matches snapshot.rs, which main did not touch" }
+verified = { hash = "b3:72be689cc61ce166", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: core only gets scene_id: None in a test (tests.rs); engine passes graph edits through unchanged, purpose holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -98,7 +98,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:691a514cddc6ee9b", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#155 kinds/protocol 0.8, #153 MCP over HTTP) into C6 #147: main's Queries/kinds text and C6's Snapshots nested-scene paragraph coexist; a scene source is still SourceKind::Scene, which snapshot.rs walks; the depth bound, transparency and cycle text still hold" }
+verified = { hash = "b3:19497c642ff3bf93", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: cascade from ARCH#protocol and protocol/control design; core undo and batch handling are edit-agnostic, so set_role/item.move/scene_id need no core text" }
 -->
 
 ### Engine and sessions

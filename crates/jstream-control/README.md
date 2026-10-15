@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:7ef650d094893271", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; trait, errors, mock and ws bullets hold for mock.rs with both settings and key_set changes" }
+verified = { hash = "b3:08b352c3d5919354", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: mock.rs gains placement() for scene_id and role on SceneSummary/SceneInfo; trait/error/mock/ws contents bullets still hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:2b9df30ab1c1fee4", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read main's kind/0.8 mock text; I1's /mcp wording in ARCH#protocol makes no claim on WsControl" }
+verified = { hash = "b3:81f0469ed60cb128", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: mock bullet now excludes scene.set_role/item.move (internal) and lists the scene_id own-scene check, matching mock.rs placement()" }
 -->
 
 ### The trait

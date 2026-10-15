@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:15e8ec2e9262bce9", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; contents list holds for both (run.rs ignores key_set/outputs and settings alike)" }
+verified = { hash = "b3:fef000506531245e", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: args.rs only adds scene_id: None to placement edits; contents list holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:46f8a234ede5d0ab", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Edits bullet merged to say settings and outputs are both unsupported (args.rs has source.rename, no settings or output edits); Reads bullet keeps #142's outputs/key_set note; version line reads PROTOCOL_VERSION" }
+verified = { hash = "b3:d0f273aba6a276ea", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: Edits bullet says 0.9's scene.set_role, item.move and placement scene_id are not in the CLI yet (args.rs parses none of them)" }
 -->
 
 ```sh
@@ -184,7 +184,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1c04bb14bd2bf578", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; parsing, block_on, connector, mock, writers and MCP proxy bullets unaffected by either change" }
+verified = { hash = "b3:6bbb0fe6865bd2c6", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: parsing/writers unchanged apart from scene_id: None; scene list output ignores the omitted role" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
