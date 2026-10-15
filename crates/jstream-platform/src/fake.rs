@@ -38,6 +38,7 @@ pub fn backends(clock: &FakeClock) -> Result<Backends, PlatformError> {
     Ok(Backends {
         clock: Arc::new(clock.clone()),
         capture: Arc::new(FakeCapture::new(clock.clone(), size)),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         audio: Arc::new(FakeAudioIo::new(
             clock.clone(),
             48_000,
@@ -397,7 +398,11 @@ impl CaptureStream for FakeVideoDeviceStream {
             pts: now,
         };
         // As the trait says, a frame the decoder rejects is dropped and the stream goes on.
-        Ok(decoder.decode(&frame).ok())
+        let decoded = decoder.decode(&frame).ok();
+        if decoded.is_none() {
+            self.stats.frames_undecodable += 1;
+        }
+        Ok(decoded)
     }
 
     fn stats(&self) -> CaptureStats {
