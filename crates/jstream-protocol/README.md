@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b0710d441de11f89", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9: re-read; Queries bullet gains delete.plan/DeleteTarget, Errors bullet gains Blocker; version line left at 0.9 until the queue bump" }
+verified = { hash = "b3:4e2f3cc5820c9b88", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Geometry bullet says 0.11 is canvas+geometry, 0.10 history, 0.9 record; matches version.rs and regenerated snaps" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -28,11 +28,16 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Envelope** (`envelope.rs`): `ClientMessage` (`hello`, `request`) and `ServerMessage`
   (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`.
   `ClientMessage::parse` maps every parse failure to `malformed`.
+- **History** (`history.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
+  `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
+  kind, and `HistoryDirection` (`undo`, `redo`), the `cause` of a `state.changed` and
+  the `direction` of a `history_empty` error.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
-  `scene.reorder`, `item.add`, `item.remove`, `item.reorder`, `item.set_transform`,
-  `item.set_crop`, `item.set_visible`, `source.create`, `source.rename`,
-  `source.set_settings`, `source.duplicate`, `source.delete`, `output.create`,
-  `output.set_target`, `output.delete`), with `ItemTransform`, `Crop` and `SourceKind`;
+  `scene.reorder`, `item.add`, `item.remove`, `item.reorder`, `item.set_geometry`,
+  `item.set_transform` (deprecated), `item.set_crop`, `item.set_visible`,
+  `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
+  `source.duplicate`, `source.delete`, `output.create`, `output.set_target`,
+  `output.delete`), with `ItemTransform` (deprecated), `Crop` and `SourceKind`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
@@ -43,7 +48,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `video.snapshot`, `kind.list`, `kind.describe` and
   `delete.plan` (with its `DeleteTarget`), with `QueryResult` and the `SceneSummary`,
-  `SceneInfo`, `SourceInfo` and `ItemInfo` shapes the collection reads report. `video.snapshot` returns the program mix as a PNG.
+  `SceneInfo`, `SourceInfo` and `ItemInfo` shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
+  the item's `placement` form and its `geometry`. `video.snapshot` returns the program
+  mix as a PNG.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
   [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)): `KindDescriptor`,
   `ParamDescriptor` and `ParamType`, the shapes that describe a source or filter kind's
@@ -62,26 +69,28 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
   NaN, infinity and out-of-range numbers at construction and deserialization. Computed
   results (`CanvasPoint`, `ContentRect`, `LegacyQuad`) use plain `f32`.
-- **Geometry** (`geometry.rs`): [`ItemGeometry`](src/geometry.rs) and the shared
-  placement formula ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)).
-  `project` places the box, rotation about its centre, with the 3D fields in the
-  formula and defaulting to neutral. `content` maps a cropped source with `stretch`,
-  `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
-  transform. A negative scale is not refused: `from_legacy` returns the drawn outline
-  and flags the reflection, which geometry cannot store. These types are not
-  messages. `PROTOCOL_VERSION` is 0.9 because of the `record` output kind; 0.8 added
-  the kind queries and settings, 0.7 the output edits, `output.list`, the key actions
-  and `key_set`, `stats.tick` is the 0.6 addition and `video.snapshot` the 0.5 one, and
-  the geometry wire surface ships as a later minor. `ItemTransform`'s schema description names
-  `ItemGeometry` as the replacement (`protocol.snap` and the MCP `tools.snap`).
+- **Geometry** (`geometry.rs`): [`ItemGeometry`](src/geometry.rs), `Canvas`,
+  `PlacementForm` and the shared placement formula
+  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). `project` places the
+  box, rotation about its centre, with the 3D fields in the formula and defaulting to
+  neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`.
+  `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
+  reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
+  negative scale is not refused: `from_legacy` returns the drawn outline and flags the
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.11 because of the
+  canvas and the geometry wire surface ([Item geometry](#design)); 0.10 added the
+  `history` calls, 0.9 the `record` output kind, 0.8 the kind queries and settings,
+  0.7 the output edits, `output.list`, the key actions and `key_set`, 0.6 `stats.tick`
+  and 0.5 `video.snapshot`.
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
-  support, not wire types. One batch that builds a small collection with two RTMP
-  outputs and a recording output, the exact answer to every collection read of it
-  (`output.list` included), and the exact error for batches rejected against it (RTMP
-  URL and recording path checks included).
+  support, not wire types. One batch that builds a small collection (a non-default
+  canvas, legacy items, one geometry item, two RTMP outputs and a recording output),
+  the exact answer to every collection read of it (`output.list` included), and the
+  exact error for batches rejected against it (geometry, canvas, RTMP URL and
+  recording path checks included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -94,7 +103,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:330e5172dd48fd58", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9: re-read; new Deletes bullet (blockers list per ADR-0025), delete.plan in Queries, blockers in the Errors table, OQ12 marked built; compatibility: blockers is optional and defaults when missing" }
+verified = { hash = "b3:e37fd17b91df6495", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: main's history order list kept; undo_conflict paragraph now also names setting the canvas size and says an item's transform and geometry are one property, matching history.rs Prop::Placement and Touched.canvas" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -114,8 +123,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":9},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":9},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":11},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":11},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -134,11 +143,13 @@ no handshake; it is compiled against the same crate.
 Every enum uses serde's internally tagged form, so a message is one flat JSON object
 whose tag says what it is:
 
-- `type` names the message (`request`), the command, query or result (`scene.create`), or
-  the event (`state.changed`). Command, query and event names are `noun.verb` in
+- `type` names the message (`request`), the command, query, history op or result
+  (`scene.create`, `history.undo`), or the event (`state.changed`). Command, query,
+  history and event names are `noun.verb` in
   snake_case ([R-API-002](../../docs/RULES.md#R-API-002)), so the tag *is* the name that
   MCP tools, the CLI and logs use.
-- `kind` names the class of a call and its result: `batch`, `action` or `query`. It is a
+- `kind` names the class of a call and its result: `batch`, `action`, `query` or
+  `history`. It is a
   different key from `type`, so a call can nest its command without the two tags
   colliding, and the class of every request is explicit on the wire.
 - `code` names an error.
@@ -168,7 +179,10 @@ Otherwise it is an action.** A command that does both is split into an edit and 
 action. A **query** (`Query`) changes nothing and is neither.
 
 The types enforce the split: a `Batch` holds only `Edit`s, an action travels alone, and
-`Call` (tagged by `kind`) has exactly three forms: `batch`, `action` and `query`.
+`Call` (tagged by `kind`) has exactly four forms: `batch`, `action`, `query` and
+`history`. A `history` call carries no command: it names a direction and applies edits
+the engine already holds (see *Undo* below), so it is neither class and R-ARCH-006
+still covers every command.
 `Command` is a classification view over both enums, with `class()`, `is_undoable()` and
 `is_batchable()`. The tests `names_are_valid` and `every_command_is_classified` check
 every name in the generated schema.
@@ -295,9 +309,10 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
 Queries read and never change `rev`. Those that read the collection state carry the
 `rev` they read, so a client can send its next batch with that `expected_rev`:
 
-- `state.get`: the whole collection at one revision: every source, every scene in
-  display order with its items, and every output (`outputs`, ordered by ID; missing
-  from a pre-0.7 server, it parses as empty). A client reads it on connecting, and again after a
+- `state.get`: the whole collection at one revision: the `canvas` (missing from a
+  pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
+  with its items, and every output (`outputs`, ordered by ID; missing from a pre-0.7
+  server, it parses as empty). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
@@ -328,18 +343,19 @@ Queries read and never change `rev`. Those that read the collection state carry 
   Source pixels are runtime state and can change without a new `rev`. The query takes
   no arguments and changes nothing.
   **Size.** The PNG is RGBA8 and nothing caps its byte size, so a noise-like frame,
-  which PNG can't compress, can be as large as its raw pixels: today's canvas is
-  always 1920×1080, so the image is 1280×720, 3.7 MB raw, and `png` can reach about
-  4.9 MB of base64 (a square canvas, once its size can be set, about 8.7 MB). A typical
-  frame is far smaller. The 4 MiB limit `jstream-server` sets applies only to messages
+  which PNG can't compress, can be as large as its raw pixels: the image is the
+  canvas, scaled down so its longest side is at most 1280. The default 1920×1080
+  canvas gives 1280×720, 3.7 MB raw, and `png` can reach about 4.9 MB of base64; a
+  square canvas about 8.7 MB. A typical frame is far smaller. The 4 MiB limit `jstream-server` sets applies only to messages
   it receives, not to its answers
   ([jstream-server › Design](../jstream-server/README.md#design)), so a client must
   accept an answer of that size: `jstream-control`'s WebSocket client keeps
   tungstenite's default limits, which are well above it.
 
-An item is reported with its `source_id`, `transform`, `crop` and `visible`, and a
-source with its name, kind and settings: every property an edit sets, so a client can
-compute any edit, or its inverse, from what it read. The shapes (`SourceInfo`, `SceneInfo`, `ItemInfo`) mirror `jstream-graph`'s model,
+An item is reported with its `source_id`, `placement` form, `transform`, `geometry`,
+`crop` and `visible`, and a source with its name, kind and settings: every property an
+edit sets, so a client can compute any edit, or its inverse, from what it read
+([Item geometry](#design) says what `transform` and `geometry` hold for each form). The shapes (`SourceInfo`, `SceneInfo`, `ItemInfo`) mirror `jstream-graph`'s model,
 which produces them (`Graph::query`). As the model grows (settings, filters, effects)
 they gain fields, which older clients ignore.
 
@@ -354,9 +370,12 @@ guarantee is that the edit set is **closed under inversion**: every edit's inver
 itself a sequence of edits. Each `Edit` variant documents its inverse.
 
 **The edit set is closed under inversion.** Every property of the state has an edit
-that sets it: `scene.reorder` and `item.reorder` restore positions, and
-`item.set_visible` and `item.set_crop` restore what `item.add` doesn't take. So undoing
-`item.remove` is `item.add` plus whichever of `item.reorder`, `item.set_crop` and
+that sets it: `scene.reorder` and `item.reorder` restore positions,
+`item.set_visible` and `item.set_crop` restore what `item.add` doesn't take,
+`canvas.set_size` restores the canvas, and `item.set_geometry` and
+`item.set_transform` each restore the previous placement in its own form. So undoing
+`item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
+item's form) plus whichever of `item.reorder`, `item.set_crop` and
 `item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
 `scene.reorder` unless it was last, and each item's restore, bottom to top. Undoing
 `source.delete` is `source.create` with the complete stored settings, and undoing
@@ -364,17 +383,58 @@ that sets it: `scene.reorder` and `item.reorder` restore positions, and
 place or a setting refers to, or a scene that a `scene` source shows or a setting refers
 to, is rejected, so no edit removes more than the object it names. `jstream-graph`'s property
 test checks that applying a random batch and then its inverse restores the state
-exactly. A new edit that can't state its inverse in edits needs new edits first. Undo
-and redo requests (`history.undo`, `history.redo`), and the `undo_conflict` error for an
-undo whose inverse conflicts with later edits by another client, are decided in
-[ADR-0032](../../docs/adr/0032-live-edits-and-undo.md), together with the live values
-that keep a drag to one batch and one undo step. They come with the engine's history.
+exactly. A new edit that can't state its inverse in edits needs new edits first.
+
+**Undo and redo requests** follow [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md):
+
+```json
+{"type":"request","id":"r4","call":{"kind":"history","op":{"type":"history.undo"},"expected_rev":15}}
+{"type":"response","id":"r4","result":{"kind":"history","rev":16,"step_rev":13,"undo_depth":4,"redo_depth":1}}
+```
+
+- `history.undo` applies the inverse of the client's most recent step that isn't
+  undone, and `history.redo` applies its most recently undone step again. Each is one
+  `rev` bump and emits `state.changed` with `cause` `undo` or `redo`, but makes no new
+  step: the step moves between the client's undo and redo stacks. The client's next
+  batch clears its redo stack. Another client's batches never touch either stack.
+- `expected_rev` and `idempotency_key` work as for a batch, and keys are shared with
+  the client's batches. The engine checks in this order:
+  1. **The key.** A key the client already used gets that call's stored result, whatever
+     `expected_rev` says now, so a retried undo whose response was lost never undoes a
+     second step. A batch's retry works the same way.
+  2. **`expected_rev`.** A stale one fails with `rev_conflict` and leaves both stacks
+     as they were. This is what ADR-0032 means by "checked first": no part of the
+     history is read or changed before it passes.
+  3. **The stack.** An empty one fails with `history_empty`.
+- `rev` is the revision produced, `step_rev` the revision the step's batch originally
+  produced (it names the step), and the depths say what can be undone and redone next.
+- `undo_conflict` (`step_rev`, and the `client_id` and `rev` of the conflicting batch)
+  refuses an undo or redo when another client's batch after it changed a property the
+  step sets, created or deleted an object the step touches, touched an object the step
+  creates or deletes, also reordered the scenes or also set the canvas size, or made its edits
+  no longer apply. An item's transform and its geometry are one property, its
+  placement. An
+  edit touches the objects it creates, deletes or edits and the ones it places or
+  names, such as an item's source. What the step touches is taken both from when it was recorded and from
+  the edits it would apply now. Nothing is applied and the step is dropped, so the next
+  undo reaches the step before it.
+- A step whose edits fail for a reason no other client caused keeps its place and the
+  call fails with the graph's own error. The usual case is a running output that blocks
+  undoing its `output.create`, which fails with `invalid_argument` until the output
+  stops.
+- `history_empty` (`direction`) means there is nothing to undo or redo.
+- Actions (outputs, stream keys), queries and history calls are never steps. The engine
+  keeps 100 steps per client by default, in memory, for the session's lifetime.
+
+Live values, which keep a drag to one batch and one undo step, are the other half of
+ADR-0032 and are not built yet.
 
 ### Events
 
 After `welcome`, the server pushes every event to every client.
 
-- `state.changed {rev, client_id, request_id?}` follows every applied batch. A client
+- `state.changed {rev, client_id, request_id?, cause?}` follows every applied batch,
+  undo and redo; `cause` is `undo` or `redo` for a history call (0.10). A client
   matches it to its own response by `request_id`; there is no ordering promise between
   the two. Every other client re-reads what it shows. Since each batch adds exactly one
   to `rev`, a gap shows that an event was missed.
@@ -426,6 +486,8 @@ people and agents. Clients match on `code`, never on `message`.
 | `not_found` | A command named a missing object | `entity`, `id` |
 | `already_exists` | A creating edit reused an ID | `entity`, `id` |
 | `invalid_argument` | A field's value was rejected | `field`, `reason`, and `blockers` for a refused delete |
+| `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
+| `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
@@ -495,22 +557,42 @@ function in this crate so the compositor and the UI share one implementation.
   matches the outline and not the reflected corner order. `legacy_quad` is the
   reflected quad.
 
-These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.9 because of the
-`record` output kind; 0.8 added the kind queries and settings, the outputs are 0.7,
-`stats.tick` the 0.6 addition and `video.snapshot` the 0.5 one. ADR-0022
-names the geometry additions as 0.4, which already shipped with `events.dropped`;
-the geometry wire surface ships as a later minor, under
+**On the wire (0.11).** ADR-0022 names these additions as 0.4, which had already
+shipped with `events.dropped`, so they ship as 0.11, an additive minor under
 [R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited
-([R-DOC-009](../../docs/RULES.md#R-DOC-009)). The geometry change in the schema
-snapshots ([R-TEST-002](../../docs/RULES.md#R-TEST-002)) is `ItemTransform`'s
-description, in `protocol.snap` and in the MCP tool list (`tools.snap`): it no longer
-says that 3D fields will be added to that struct with defaults. `video.snapshot` is
-the additive 0.5 definition beside that. No geometry definition was added or removed.
-`is_neutral_3d` is the predicate a stored geometry uses to reject a non-neutral 3D
-field with `invalid_argument` until the compositor draws it. That rejection belongs
-on the edit that stores the geometry, which is not on the wire yet. This crate still
-evaluates the formula, so the definition is locked by unit tests; it does not draw.
+([R-DOC-009](../../docs/RULES.md#R-DOC-009)).
+
+- **Canvas.** `state.get` reports `canvas { width, height }` in whole pixels, default
+  1920×1080, and `canvas.set_size` changes it. Zero, or a side over the engine's
+  maximum (`jstream-graph` accepts up to 8192 each way, so 7680×4320 and its portrait
+  form fit), is `invalid_argument` on `edits.N.width` or `edits.N.height`. Items keep
+  their canvas-pixel placements. Inverse: `canvas.set_size` with the previous size.
+- **Two placement forms.** An item stores either a geometry or a legacy 0.3 transform,
+  and only an edit changes which. `item.add` takes an optional `geometry` beside the
+  deprecated `transform`; sending both is `invalid_argument` on `edits.N.geometry`, and
+  sending neither stores the identity transform, its 0.3 meaning, until 1.0.
+  `item.set_geometry` stores a geometry and the deprecated `item.set_transform` a
+  transform. Each one's inverse restores the previous placement in its own form.
+- **Validation.** A stored geometry has a size greater than zero
+  (`edits.N.geometry.size`), a `perspective_px` greater than zero if present
+  (`edits.N.geometry.perspective_px`), and finite corners (`edits.N.geometry`). Until
+  the compositor draws 3D, a non-neutral `tilt_deg`, `turn_deg`, `depth_px` or any
+  `perspective_px` is `invalid_argument` naming that field; `is_neutral_3d` is that
+  predicate. Accepting them later is not a breaking change.
+- **Reads.** `ItemInfo.placement` is `legacy` or `geometry` (missing from a pre-0.11
+  server, it parses as `legacy`). A legacy item reports its transform exactly as
+  written and no `geometry`, because its box depends on the source's runtime size. A
+  geometry item reports its `geometry`, and a deprecated `transform` computed from it
+  alone (`transform_view`): the box's top-left corner after rotation about the centre,
+  its rotation, and scale (1, 1). Every read is a function of stored state, so it
+  changes only with `rev`.
+- **Deprecated** since 0.11, removed in 1.0: `ItemTransform`, `item.set_transform`,
+  `item.add`'s `transform` and `ItemInfo.transform`. Their doc comments, and so the
+  schema descriptions in `protocol.snap` and the MCP `tools.snap`, say so
+  ([R-TEST-002](../../docs/RULES.md#R-TEST-002)).
+- **Not in 0.11 yet:** `source.sizes` and `source.size_changed` (decision 4), which need
+  the engine's runtime source sizes, and live geometry values (ADR-0032's `live.set`),
+  which need the live-value channel. Both are later minors.
 
 ### Binary streams (deferred)
 
@@ -544,11 +626,12 @@ described above.
    should the ID types move to `jstream-types`, once it has IDs and an optional serde
    feature?
 4. **Undo and redo on the wire.** Settled by
-   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md), not built yet:
+   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md) and built in 0.10:
    `history.undo` and `history.redo` are a fourth kind of call, `history`, which
    carries no command (it applies a batch of edits the engine already holds), so
    R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
-   (`live.set`, `live.cancel`, `live.changed`), committed by one batch.
+   (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are not
+   built yet.
 5. **Actions that change collection state.** `studio.transition` changes the program
    scene, which is saved in the collection. Is it an action that also bumps `rev`, or an
    edit plus a separate "run transition" action?

@@ -13,6 +13,7 @@ mod error;
 mod event;
 mod finite;
 mod geometry;
+mod history;
 mod id;
 mod kind;
 mod output;
@@ -34,9 +35,10 @@ pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{DropCounts, Event, OutputState};
 pub use finite::Finite32;
 pub use geometry::{
-    CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, Placed,
-    ProjectedQuad, Size, legacy_quad,
+    Canvas, CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad,
+    Placed, PlacementForm, ProjectedQuad, Size, legacy_quad,
 };
+pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,

@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:34234031dba3d482", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9: re-read; R-API-001 unchanged; delete.plan and the optional blockers field are additions (minor), and an older client ignores blockers" }
+verified = { hash = "b3:d4fb911b13c3542a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3 at 0.11: rule text unchanged; re-read, holds for an additive minor" }
 -->
 
 <a id="R-API-001"></a>
