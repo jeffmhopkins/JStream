@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:6ea773551a6ee472", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Cascade from jstream-server#design (#273): steps don't depend on handshake timing; holds" }
+verified = { hash = "b3:4106933cae31cf3d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of #143 into #273: re-read steps; they set no limits and don't depend on handshake timing; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
