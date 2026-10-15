@@ -7,6 +7,7 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::audio_sources::AudioSources;
 use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
@@ -22,6 +23,7 @@ use crate::runtime::{
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::studio::Studio;
 use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
@@ -186,7 +188,8 @@ impl Engine {
     /// failed save is logged at `error` and leaves the call's result as it is: the change
     /// is applied, and the next change saves again. The `rev` is saved too, so revisions
     /// keep increasing across restarts and an `expected_rev` from before one can't
-    /// match a different state. Undo history and idempotency keys are not saved.
+    /// match a different state. Undo history, idempotency keys and the program scene are
+    /// not saved: the loaded collection's first scene goes on program.
     ///
     /// # Errors
     /// [`CollectionFileError`] when the file can't be read, holds no loadable
@@ -205,11 +208,16 @@ impl Engine {
             let state = &mut *state;
             state.graph = graph;
             state.outputs.sync(state.graph.state());
+            // Program is not saved: the loaded collection's first scene goes on it, with
+            // no event, as no client is connected yet (ADR-0030).
+            state.studio = Studio::default();
+            state.studio.reconcile(state.graph.state());
             // `collection` asset references are relative to the file's folder.
             state
                 .live
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
+            state.audio.sync(state.graph.state());
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             *file = Some(opened);
@@ -847,6 +855,7 @@ impl Engine {
                     Arc::clone(&lock(&host.draw)),
                     *lock(&host.open_timeout),
                     Arc::clone(&state.render),
+                    state.audio.wanted(),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1130,6 +1139,15 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
         Arc::clone(&lock(&self.shared.state).render)
+    }
+
+    /// How the program stage fares with audio source `source_id`, for tests.
+    #[cfg(test)]
+    pub(crate) fn audio_status(
+        &self,
+        source_id: &SourceId,
+    ) -> Option<crate::audio_sources::AudioStatus> {
+        lock(&self.shared.state).audio.status(source_id)
     }
 
     /// Waits until the live sources have built everything asked of them, for tests.
@@ -1508,6 +1526,8 @@ struct State {
     /// A running `jstream-sources` source for each source whose kind produces frames
     /// (C1b). An item shows its source's stored frame if it has one, else this.
     live: LiveSources,
+    /// The audio-only sources the program stage records, one mixer input each (C5).
+    audio: AudioSources,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -1525,6 +1545,8 @@ struct State {
     ticking: bool,
     /// The engine this state belongs to, for the live ticker.
     shared: Weak<Shared>,
+    /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
+    studio: Studio,
 }
 
 impl State {
@@ -1569,10 +1591,10 @@ impl State {
         if let Some(gesture_id) = &batch.ends_gesture
             && !self.gestures.is_open(client_id, gesture_id)
         {
-            return Err(ProtocolError::InvalidArgument {
-                field: "ends_gesture".into(),
-                reason: format!("the client has no open gesture `{gesture_id}`"),
-            });
+            return Err(ProtocolError::invalid_argument(
+                "ends_gesture",
+                format!("the client has no open gesture `{gesture_id}`"),
+            ));
         }
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
@@ -1716,8 +1738,8 @@ impl State {
 
     /// What follows every applied batch, undo and redo: the outputs follow the
     /// collection, a deleted source's stored frame goes (unless the same edits made a
-    /// new source under its id), live values on a deleted item go, and `state.changed`
-    /// is emitted.
+    /// new source under its id), live values on a deleted item go, `state.changed` is
+    /// emitted, and the program scene is reconciled (ADR-0030).
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -1729,6 +1751,7 @@ impl State {
     ) {
         self.outputs.sync(self.graph.state());
         self.live.sync(self.graph.state());
+        self.audio.sync(self.graph.state());
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -1736,6 +1759,9 @@ impl State {
                 self.frames.remove(source_id);
             }
         }
+        // Edits that deleted the program scene, or created the first scene, move
+        // program before the mix is planned; that event follows their `state.changed`.
+        let moved = self.studio.reconcile(self.graph.state());
         self.publish_render();
         let state = self.graph.state();
         if self
@@ -1753,6 +1779,9 @@ impl State {
             },
             wake,
         );
+        if moved {
+            self.emit_studio(client_id, request_id, wake);
+        }
     }
 
     fn action(
@@ -1778,6 +1807,14 @@ impl State {
                 );
                 return Ok(CallResult::Action {});
             }
+            Action::SceneSwitch { scene_id } => {
+                if self.studio.switch(self.graph.state(), &scene_id)? {
+                    // The program mix shows the new scene from the next frame: a cut.
+                    self.publish_render();
+                    self.emit_studio(client_id, request_id, wake);
+                }
+                return Ok(CallResult::Action {});
+            }
             other => return Err(not_implemented(other.name())),
         };
         for state in self.outputs.transition(&output_id, start)? {
@@ -1793,7 +1830,7 @@ impl State {
     }
 
     /// Collection reads go to `Graph::query`; `output.status` reads the outputs and
-    /// `live.list` the open gestures.
+    /// `live.list` the open gestures, and `studio.get` the studio state.
     fn query(&self, query: &Query) -> Result<CallResult, ProtocolError> {
         let result = match self.graph.query(query) {
             Some(result) => result?,
@@ -1811,16 +1848,31 @@ impl State {
                 Query::LiveList => QueryResult::LiveList {
                     gestures: self.gestures.list(),
                 },
+                Query::StudioGet => QueryResult::StudioGet {
+                    program_scene: self.studio.program().cloned(),
+                },
                 other => return Err(not_implemented(other.name())),
             },
         };
         Ok(CallResult::Query { result })
     }
 
+    /// `studio.changed` with the scene now on program, caused by `request_id`.
+    fn emit_studio(&mut self, client_id: &ClientId, request_id: &RequestId, wake: &mut Vec<Waker>) {
+        self.subscribers.emit(
+            &Event::StudioChanged {
+                program_scene: self.studio.program().cloned(),
+                client_id: client_id.clone(),
+                request_id: Some(request_id.clone()),
+            },
+            wake,
+        );
+    }
+
     /// Re-plans the program mix at the current time and publishes it if it draws
     /// something new. A source's stored frame wins over its live one. The live sources
-    /// are told when the plan's next frame change is due, to re-plan then. Returns the
-    /// render generation current afterwards.
+    /// are told when the plan's next frame change is due, to re-plan then. The mix shows
+    /// the program scene (ADR-0030). Returns the render generation current afterwards.
     fn publish_render(&mut self) -> u64 {
         let Self {
             graph,
@@ -1828,13 +1880,15 @@ impl State {
             frame_versions,
             live,
             render,
+            studio,
             ..
         } = self;
         let now = live.now();
-        let (shot, wake) = snapshot::plan_with(graph, &mut |id| match frames.get(id) {
-            Some(frame) => Some((frame.clone(), None)),
-            None => live.frame(id, now, frame_versions),
-        });
+        let (shot, wake) =
+            snapshot::plan_with(graph, studio.program(), &mut |id| match frames.get(id) {
+                Some(frame) => Some((frame.clone(), None)),
+                None => live.frame(id, now, frame_versions),
+            });
         let generation = render.publish(shot);
         live.wake_at(wake);
         generation
@@ -2025,12 +2079,17 @@ fn live_ticker(shared: &Weak<Shared>) {
 /// `edits.<n>`, and `live.set` carries them as `values.<n>`.
 fn values_error(error: ProtocolError) -> ProtocolError {
     match error {
-        ProtocolError::InvalidArgument { field, reason } => ProtocolError::InvalidArgument {
+        ProtocolError::InvalidArgument {
+            field,
+            reason,
+            blockers,
+        } => ProtocolError::InvalidArgument {
             field: match field.strip_prefix("edits.") {
                 Some(rest) => format!("values.{rest}"),
                 None => field,
             },
             reason,
+            blockers,
         },
         other => other,
     }
@@ -2051,10 +2110,7 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
     } else {
         return Ok(());
     };
-    Err(ProtocolError::InvalidArgument {
-        field: "key".into(),
-        reason: reason.into(),
-    })
+    Err(ProtocolError::invalid_argument("key", reason))
 }
 
 fn no_key_store() -> ProtocolError {

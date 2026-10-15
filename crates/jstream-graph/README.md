@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:d331a96d3dc605e8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values, second pass: cascade from my later edits to ARCH#threading (collector frees replaced live values), protocol design (never-steps line, 0.11 note) and server design (EVENT_BUFFER sizing); re-read earlier this session, holds" }
+verified = { hash = "b3:411c4a9c6032e30f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: cascade only (this PR doesn't edit the section); re-read earlier this session, and main's changes here are main's verified text; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -65,8 +65,8 @@ the batch **touched**.
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
   Undo design requires: removing an item is undone by `item.add`, then `item.reorder`,
   `item.set_crop` and `item.set_visible` only where the item differed from what
-  `item.add` produces, and deleting a scene by `scene.create`, `scene.reorder` and each
-  item's restore (with `scene.set_role` for a group). The inverse carries no `expected_rev`: the engine's per-client undo
+  `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
+  group), `scene.reorder` and each item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
   history (in `jstream-core`) chooses it.
 - **Touched sets** (`touched.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
   `Touched::of(edits, inverse)` names, from a batch's edits and its inverse's (so a
@@ -91,10 +91,12 @@ the batch **touched**.
   a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
   places the source or a setting refers to it, and `scene.delete` while a `scene`
-  source shows the scene or a setting refers to it. The error names the blockers (a
-  setting as `<source>.settings.<param>`), and the client removes them first, in the
-  same batch if it likes. Rejecting rather than cascading keeps each edit's effect, and
-  its inverse, limited to the object it names.
+  source shows the scene or a setting refers to it. The `invalid_argument` lists every
+  blocker in `blockers` (`deps::blockers`, the reverse of the cycle check's edges): the
+  item (`source_id`), the `scene` source (`kind.scene_id`) or the setting
+  (`settings.<param>`). The client removes them first, in the same batch if it likes,
+  or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
+  edit's effect, and its inverse, limited to the object it names.
 - **Canvas and geometry** ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)):
   `canvas.set_size` accepts each side from 1 to `MAX_CANVAS_EDGE` (8192) and moves no
   item. `item.add` stores its `geometry`, or else its `transform` (the identity when
@@ -127,6 +129,7 @@ the batch **touched**.
   `encoder.create`, `encoder.update` and `output.set_encoder` by the previous value).
 - **Groups and moves** ([ADR-0024](../../docs/adr/0024-scene-structure.md) §1):
   `scene.set_role` changes a scene's role and is undone by the previous role.
+  `scene.create` sets the `role` it names, or `scene` when it names none.
   `item.move` moves an item to an index in another scene (up to one past its top) or
   within its own (a reorder), keeping the whole item, and is undone by `item.move`
   back. The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
@@ -150,8 +153,14 @@ collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list`
 `encoder.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
-unknown kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
-`not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
+unknown kind), and `delete.plan` (`plan.rs`,
+[ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
+`not_found` for an `item.list` of a missing scene or a `delete.plan` of a missing
+target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
+check uses: a scene's plan also deletes the `scene` sources that show it, the items
+placing any deleted source are removed, settings references to anything deleted are set
+to `null` (one `source.set_settings` per source), and the target's own delete comes
+last. Sources come ordered by ID, scenes in
 display order, items bottom first, outputs and encoder profiles ordered by ID.
 `state.get` carries the
 canvas. A geometry item reads its `geometry`, and the deprecated `transform` view the
@@ -185,7 +194,8 @@ the engine's; this crate does no I/O.
   and visibility, then encoder profiles, then outputs with their profiles. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
-  (`` item `i1` ``) and the protocol error; nothing is partly loaded. Then `rev` is set
+  (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
+  `LoadError` stay small); nothing is partly loaded. Then `rev` is set
   to the file's, so revisions keep increasing across restarts. A source whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
@@ -210,7 +220,18 @@ feature) must get exactly the fixture's answers, the same ones the mock is held 
 property test: a seeded generator applies 6000 random
 batches of every edit, including moves, role changes, source switches and addressed placement edits. After each successful one, the state must hold no cycle, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
-restore the batch's result. After each failed one, the graph must be unchanged.
+restore the batch's result. After each failed one, the graph must be unchanged. And
+after every batch, for each scene and source: a plain delete is refused exactly when
+it has blockers, the error lists them, and the `delete.plan` batch applies at the
+planned `rev`, removes the target, and undoes exactly.
+The proptest suites (`tests/properties.rs`, public API only, shrinking failures to a
+minimal batch sequence) start from a graph holding every sort of reference and apply
+random batches with free-form names, numbers and settings values: a batch that applies
+must undo and redo exactly and a failed one change nothing; and after every batch no
+reference may dangle, and each scene, source and encoder profile delete must be refused
+exactly when something refers to it, a scene's or source's with the blockers the test
+works out itself. The
+seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
 scene `b` made a group, a clone and a `duplicated_from` naming a missing source) plus a source whose
@@ -243,7 +264,5 @@ Planned, and kept possible by the private fields of the model types:
 - Keyframe scenes (`variant_of`, per-item `overrides`, `item.clear_override`) and the
   rest of ADR-0024: placement edits addressed to a variant will write its override, and
   the edits ADR-0040 lists will drop orphaned overrides and restore them in their
-  inverses. `scene.create`'s optional `role` comes with a change to the daemon, which
-  builds that edit; until then a batch of `scene.create` and `scene.set_role` makes a
-  group.
+  inverses.
 - Item lookup is a linear scan over scenes. An ID index can come once collections grow.

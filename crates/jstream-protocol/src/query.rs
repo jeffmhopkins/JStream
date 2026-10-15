@@ -1,6 +1,6 @@
 //! Queries: reads with no effect on state, and their results.
 
-use crate::command::{Crop, ItemTransform, SceneRole, SourceKind};
+use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
@@ -69,6 +69,10 @@ pub enum Query {
     /// sends. Outputs have no display order of their own.
     #[serde(rename = "output.list")]
     OutputList,
+    /// Reads the studio state: which scene is on program. It is runtime state, not
+    /// collection state (ADR-0030), so the result carries no `rev`.
+    #[serde(rename = "studio.get")]
+    StudioGet,
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
@@ -78,6 +82,36 @@ pub enum Query {
     /// state, so the result carries no `rev`.
     #[serde(rename = "live.list")]
     LiveList,
+    /// The batch that deletes a scene or source together with everything that refers to
+    /// it, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`
+    /// lists those `blockers`). The plan removes the items that place a deleted source,
+    /// deletes the `scene` sources that show a deleted scene (and their items), and sets
+    /// settings references to the target to `null`, keeping the sources that hold them.
+    /// The client shows it, then sends its `edits` as an ordinary batch with
+    /// `expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with
+    /// `not_found` if the target doesn't exist.
+    #[serde(rename = "delete.plan")]
+    DeletePlan {
+        /// What to delete.
+        target: DeleteTarget,
+    },
+}
+
+/// What a `delete.plan` deletes: a scene or a source.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum DeleteTarget {
+    /// A scene.
+    Scene {
+        /// The scene to delete.
+        scene_id: SceneId,
+    },
+    /// A source.
+    Source {
+        /// The source to delete.
+        source_id: SourceId,
+    },
 }
 
 impl Query {
@@ -93,8 +127,10 @@ impl Query {
             Query::KindList => "kind.list",
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
+            Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
             Query::LiveList => "live.list",
+            Query::DeletePlan { .. } => "delete.plan",
         }
     }
 }
@@ -214,6 +250,13 @@ pub enum QueryResult {
         /// The outputs, ordered by ID.
         outputs: Vec<OutputInfo>,
     },
+    /// The result of `studio.get`. Studio state is runtime state, so it carries no `rev`.
+    #[serde(rename = "studio.get")]
+    StudioGet {
+        /// The scene on program. Omitted only while the collection has no scene.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        program_scene: Option<SceneId>,
+    },
     /// The result of `encoder.list`.
     #[serde(rename = "encoder.list")]
     EncoderList {
@@ -227,6 +270,18 @@ pub enum QueryResult {
     LiveList {
         /// The open gestures, ordered by client ID, then gesture ID.
         gestures: Vec<GestureInfo>,
+    },
+    /// The result of `delete.plan`.
+    #[serde(rename = "delete.plan")]
+    DeletePlan {
+        /// The revision the plan was made at. Send `edits` with this `expected_rev`, so
+        /// the batch is refused if the state changed since.
+        rev: Rev,
+        /// The edits, in order: `item.remove` for the items that place a deleted source,
+        /// `source.set_settings` setting each reference to a deleted object to `null`,
+        /// `source.delete` for the `scene` sources that show a deleted scene, and last the
+        /// delete of the target itself.
+        edits: Vec<Edit>,
     },
 }
 
@@ -243,8 +298,10 @@ impl QueryResult {
             QueryResult::KindList { .. } => "kind.list",
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
+            QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
             QueryResult::LiveList { .. } => "live.list",
+            QueryResult::DeletePlan { .. } => "delete.plan",
         }
     }
 }

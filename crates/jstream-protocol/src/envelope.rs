@@ -196,6 +196,7 @@ mod tests {
                 Batch::single(Edit::SceneCreate {
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
+                    role: None,
                 })
                 .expecting(Rev(4)),
             ),
@@ -239,6 +240,20 @@ mod tests {
         ));
         let ok = text.replace("1e39", "3.4028235e38");
         assert!(ClientMessage::parse(&ok).is_ok());
+    }
+
+    /// A settings value written with more digits than an `f64` holds parses to the
+    /// nearest `f64`, so the message serializes and parses back to itself: the collection
+    /// file saves and reloads it unchanged. Found by the `protocol_decode` fuzz target.
+    #[test]
+    fn long_floats_parse_back_to_the_same_value() {
+        let digits = "4".repeat(110);
+        let text = format!(
+            r#"{{"type":"request","id":"r1","call":{{"kind":"batch","edits":[{{"type":"source.set_settings","source_id":"s","patch":{{"width":{digits}80.0}}}}]}}}}"#
+        );
+        let parsed = ClientMessage::parse(&text).expect("parses");
+        let json = serde_json::to_string(&parsed).expect("serializes");
+        assert_eq!(ClientMessage::parse(&json).ok(), Some(parsed));
     }
 
     #[test]

@@ -333,8 +333,5 @@ fn ended(key: Key, gesture: &Gesture, outcome: LiveOutcome) -> Ended {
 }
 
 fn invalid(field: &str, reason: &str) -> ProtocolError {
-    ProtocolError::InvalidArgument {
-        field: field.into(),
-        reason: reason.into(),
-    }
+    ProtocolError::invalid_argument(field, reason)
 }

@@ -226,7 +226,7 @@ struct Placed {
 pub(crate) struct Shot {
     /// The collection's canvas: the size every scene, nested ones included, is drawn at.
     canvas: Canvas,
-    /// The first scene in display order. `None` when the collection has no scene.
+    /// The scene on program (ADR-0030). `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
     /// The frames the copied scenes place, by source.
@@ -272,19 +272,32 @@ impl PartialEq for Shot {
     }
 }
 
-/// Copies the program scene and the scenes it nests out of `graph`, and schedules them.
-/// Items show the frames in `frames`.
+/// Copies `graph`'s first scene, as the program scene, and the scenes it nests, and
+/// schedules them. Items show the frames in `frames`.
 #[cfg(test)]
 pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
-    plan_with(graph, &mut |id| frames.get(id).map(|f| (f.clone(), None))).0
+    let first = graph
+        .state()
+        .scenes()
+        .first()
+        .map(|scene| scene.id().clone());
+    plan_with(graph, first.as_ref(), &mut |id| {
+        frames.get(id).map(|f| (f.clone(), None))
+    })
+    .0
 }
 
-/// [`plan`], asking `frame` for the frame of each source an item it reaches places and
-/// when that frame is next replaced. Returns the shot and the earliest such time, when
-/// it should be planned again.
-pub(crate) fn plan_with(graph: &Graph, frame: &mut FrameOf<'_>) -> (Shot, Option<MediaTime>) {
+/// Copies the program scene `program` (ADR-0030) and the scenes it nests out of
+/// `graph`, and schedules them, asking `frame` for the frame of each source an item it
+/// reaches places and when that frame is next replaced. Returns the shot and the
+/// earliest such time, when it should be planned again.
+pub(crate) fn plan_with(
+    graph: &Graph,
+    program: Option<&SceneId>,
+    frame: &mut FrameOf<'_>,
+) -> (Shot, Option<MediaTime>) {
     let state = graph.state();
-    let program = state.scenes().first().map(|scene| scene.id().clone());
+    let program = program.cloned();
     let mut shot = Shot {
         canvas: state.canvas(),
         program: program.clone(),

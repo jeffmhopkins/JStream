@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:1edd3ad6b397a52d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values (cascade from ARCH#threading): re-read R-RT-001..006; the render thread reads live values through an arc-swap parameter channel and frees replaced ones on the collector, as R-RT-003 asks; text unchanged" }
+verified = { hash = "b3:fe7c31980c2d005a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: cascade only (this PR doesn't edit the section); re-read earlier this session, and main's changes here are main's verified text; holds" }
 -->
 
 <a id="R-RT-001"></a>
@@ -451,7 +451,7 @@ The PR shows before and after.
 <!-- @rule
 status = "active"
 enforced_by = ["ci:test"]
-applies_to = ["crates/**", "tests/**"]
+applies_to = ["crates/**", "apps/**", "tests/**"]
 -->
 Tests need no network, real devices or physical GPU, unless they are platform tests
 behind `hw-tests`.
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:bd0a03031d7ab70d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values (cascade from ARCH#protocol): re-read R-API-001..004; live values are additive (new actions, query, events, optional Batch.ends_gesture), so a minor bump at the slot; tool names stay valid (live)" }
+verified = { hash = "b3:b5059c215b776f16", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: cascade only (this PR doesn't edit the section); re-read earlier this session, and main's changes here are main's verified text; holds" }
 -->
 
 <a id="R-API-001"></a>
@@ -540,9 +540,13 @@ status = "active"
 enforced_by = ["test:jstream_server::rejects_missing_token", "test:jstream_server::rejects_foreign_origin"]
 applies_to = ["crates/jstream-server/**", "crates/jstream-mcp/**"]
 -->
-Every HTTP, WebSocket and MCP listener requires the control token (even on localhost) and
-validates the `Host` header, and the `Origin` header when one is present. Listeners bind
-to `127.0.0.1` by default
+Every HTTP, WebSocket and MCP listener requires the control token or a paired device's
+token (even on localhost), except `POST /api/v1/pair` while a pairing code is open
+([ADR-0044](adr/0044-pairing-remote-browsers.md)) and `GET /pair` on a TLS listener
+([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
+device token, never the control token, as the `__Host-jstream_device` cookie. Every
+listener validates the `Host` header, and
+the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>

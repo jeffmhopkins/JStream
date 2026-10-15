@@ -10,9 +10,9 @@ use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Sourc
 use crate::target::{record_path_problem, rtmp_url_problem};
 use crate::touched::Touched;
 use jstream_protocol::{
-    Batch, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId, ItemTransform,
-    KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
-    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneRole, Settings, SourceId,
+    Batch, Blocker, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId,
+    ItemTransform, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
+    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, Settings, SourceId,
     SourceKind,
 };
 use serde_json::Value;
@@ -115,9 +115,23 @@ fn field(at: usize, name: &str) -> String {
 }
 
 pub(crate) fn invalid(at: usize, name: &str, reason: impl Into<String>) -> ProtocolError {
+    ProtocolError::invalid_argument(field(at, name), reason)
+}
+
+/// The `invalid_argument` that refuses deleting `target` while `blockers` refer to it.
+fn blocked(at: usize, name: &str, target: &Node, blockers: Vec<Blocker>) -> ProtocolError {
+    let list: Vec<String> = blockers
+        .iter()
+        .map(|b| format!("{} `{}` ({})", b.entity, b.id, b.field))
+        .collect();
     ProtocolError::InvalidArgument {
         field: field(at, name),
-        reason: reason.into(),
+        reason: format!(
+            "{target} is still referred to by {}; remove those references first, or send \
+             the batch `delete.plan` returns",
+            list.join(", ")
+        ),
+        blockers,
     }
 }
 
@@ -271,7 +285,11 @@ fn apply_edit(
         return applied;
     }
     match edit {
-        Edit::SceneCreate { scene_id, name } => {
+        Edit::SceneCreate {
+            scene_id,
+            name,
+            role,
+        } => {
             check_id(scene_id.as_str(), at, "scene_id")?;
             check_name(name, at)?;
             if state.scene_index(scene_id).is_some() {
@@ -280,7 +298,7 @@ fn apply_edit(
             state.scenes.push(Scene {
                 id: scene_id.clone(),
                 name: name.clone(),
-                role: SceneRole::Scene,
+                role: role.unwrap_or_default(),
                 items: Vec::new(),
             });
             Ok(vec![Edit::SceneDelete {
@@ -309,48 +327,22 @@ fn apply_edit(
         }
         Edit::SceneDelete { scene_id } => {
             let si = find_scene(state, scene_id)?;
-            let shown_by: Vec<&str> = state
-                .sources()
-                .filter(|s| matches!(&s.kind, SourceKind::Scene { scene_id: t } if t == scene_id))
-                .map(|s| s.id.as_str())
-                .collect();
-            if !shown_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "scene_id",
-                    format!(
-                        "scene `{scene_id}` is shown by scene sources {}; delete them first",
-                        shown_by.join(", ")
-                    ),
-                ));
-            }
-            let referred_by = deps::referrers(state, &Node::Scene(scene_id.clone()));
-            if !referred_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "scene_id",
-                    format!(
-                        "scene `{scene_id}` is referred to by {}; clear those settings first",
-                        referred_by.join(", ")
-                    ),
-                ));
+            let target = Node::Scene(scene_id.clone());
+            let blockers = deps::blockers(state, &target);
+            if !blockers.is_empty() {
+                return Err(blocked(at, "scene_id", &target, blockers));
             }
             let scene = state.scenes.remove(si);
             let mut inverse = vec![Edit::SceneCreate {
                 scene_id: scene.id.clone(),
                 name: scene.name.clone(),
+                role: (!scene.role.is_scene()).then_some(scene.role),
             }];
             // Re-created scenes are appended, so only a scene that wasn't last moves back.
             if si != state.scenes.len() {
                 inverse.push(Edit::SceneReorder {
                     scene_id: scene.id.clone(),
                     index: wire_index(si)?,
-                });
-            }
-            if scene.role != SceneRole::Scene {
-                inverse.push(Edit::SceneSetRole {
-                    scene_id: scene.id.clone(),
-                    role: scene.role,
                 });
             }
             // Re-adding bottom to top puts each item back at its own index.
@@ -606,27 +598,10 @@ fn apply_edit(
             if state.source(source_id).is_none() {
                 return Err(not_found(EntityKind::Source, source_id.as_str()));
             }
-            let used_by: Vec<&str> = state.placements(source_id).map(|i| i.id.as_str()).collect();
-            if !used_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "source_id",
-                    format!(
-                        "source `{source_id}` is placed by items {}; remove them first",
-                        used_by.join(", ")
-                    ),
-                ));
-            }
-            let referred_by = deps::referrers(state, &Node::Source(source_id.clone()));
-            if !referred_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "source_id",
-                    format!(
-                        "source `{source_id}` is referred to by {}; clear those settings first",
-                        referred_by.join(", ")
-                    ),
-                ));
+            let target = Node::Source(source_id.clone());
+            let blockers = deps::blockers(state, &target);
+            if !blockers.is_empty() {
+                return Err(blocked(at, "source_id", &target, blockers));
             }
             let source = state
                 .sources

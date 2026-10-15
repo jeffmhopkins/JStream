@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:11efc85f3c4376a1", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values, second pass: cascade from my later edits to ARCH#threading (collector frees replaced live values), protocol design (never-steps line, 0.11 note) and server design (EVENT_BUFFER sizing); re-read earlier this session, holds" }
+verified = { hash = "b3:ee64d831491efd68", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: cascade only (this PR doesn't edit the section); re-read earlier this session, and main's changes here are main's verified text; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

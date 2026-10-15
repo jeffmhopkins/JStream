@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:fe6c01ebd0f4cee6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2 N6: Serving bullet rewrapped; main.rs crate doc now says the audit log records batches, undos, redos and actions (not queries); purpose text holds" }
+verified = { hash = "b3:ba52f5f3dcaeb8c8", by = "agent:claude@session_01PZRAdnkMzURQaUtof2W6W2", note = "Round 1 B1: Tests bullet now says WS sets the key and starts the stream, MCP starts the recording (matches e2e.rs); rest of Purpose re-read, holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -40,6 +40,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
+- **Virtual camera registration** (`register.rs`, Windows only): `--register-vcam`
+  registers the media source DLL shipped beside the daemon, and startup logs a warning
+  when the registration names another folder ([Design](#design)).
 - **Build script** (`build.rs`): delay-loads the Media Foundation DLLs on Windows
   (MSVC), so that check can run at all.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
@@ -50,12 +53,19 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   crash hook in a child process; the publish opener and the live engine on the
   platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
-  SIGINT; `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE
-  headers to check that the backends' Media Foundation DLLs are delay-loaded and none
-  is a load-time import).
+  SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
+  daemon makes it live, on the platform fakes with the CPU compositor, behind the
+  server with MCP on, where MCP builds a scene and creates an RTMP output to a local
+  loopback sink and a recording, the WebSocket client sets the key and starts the
+  stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
+  received and the recorded MP4. The binary has no backends off Windows, so it runs
+  in process; `tests/delay_load.rs`,
+  Windows MSVC only, which reads the built binary's PE headers to check that the
+  backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
-Not here yet: serving the web UI (it waits on `jstream-server`,
-[jstream-server › Design](../../crates/jstream-server/README.md#design)),
+Not here yet: serving the web UI (`jstream-server` serves one from
+`ServerConfig::ui_dir`, [jstream-server › Design](../../crates/jstream-server/README.md#design),
+but the daemon has no flag for it yet),
 YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
@@ -68,7 +78,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:694a71b7535885d9", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2: only main.rs/serve.rs doc comments changed (audit wording); Usage options, Collection file and Audit log bullets re-read and hold" }
+verified = { hash = "b3:71f39c73730f3eae", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 B2: exit-code 0 row now includes a successful --register-vcam; N1: Virtual camera bullet says an already-current registration keeps the file's ACL as it is" }
 -->
 
 ```sh
@@ -87,6 +97,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
+| `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
 | `-V`, `--version` | Prints the daemon and protocol versions. |
 | `-h`, `--help` | Prints the help. |
 
@@ -140,6 +151,18 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   and before touching the token file. If Media Foundation is there but has no AAC
   encoder, it does the same with `error: Media Foundation's AAC encoder is not
   installed: …`. Listing the codecs fails with exit 1.
+- **Virtual camera (Windows).** `jstream-daemon --register-vcam` registers
+  `jstream_vcam_windows.dll` from the daemon's own folder machine-wide, as the Windows
+  camera Frame Server requires. From a normal prompt it shows one UAC prompt and runs
+  itself elevated, without a window. It prints `virtual camera: registered <dll>`, adding
+  the old path when the registration named another folder, or `virtual camera: already
+  registered (<dll>)` without asking for elevation, leaving the registration and the
+  file's ACL as they are (a DLL registered with `regsvr32`, or rebuilt in place, keeps
+  whatever ACL it has). A missing DLL, a declined prompt or a
+  failed registration exits 1; from an administrator prompt the error says what failed.
+  At startup the daemon logs a warning when the registration names another folder (a
+  moved install), and an `info` line when there is none. Elsewhere `--register-vcam`
+  fails with exit 1.
 - **Collection file.** With `--collection`, the engine loads the file at startup
   (upgrading an older version) and replaces it atomically after every applied batch,
   undo and redo, before the call returns. A file that can't be read, holds no
@@ -158,8 +181,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Stopped by a signal, or printed the help or version |
-| 1 | Failed: the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -168,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:be777e762fbe79bc", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values, second pass: cascade from my later edits to ARCH#threading (collector frees replaced live values), protocol design (never-steps line, 0.11 note) and server design (EVENT_BUFFER sizing); re-read earlier this session, holds" }
+verified = { hash = "b3:74c0963a6afae44d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: cascade only (this PR doesn't edit the section); re-read earlier this session, and main's changes here are main's verified text; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -212,6 +235,15 @@ verified = { hash = "b3:be777e762fbe79bc", by = "agent:claude@session_01WG1uLVaz
   linker warning LNK4199, which CI's `-D warnings` turns into an error.
   `tests/delay_load.rs` checks the built binary's import tables, so CI's Windows job
   proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib imports.
+- **Virtual camera registration** (`register.rs`). `--register-vcam` is a separate mode
+  that exits without serving, so it creates no logs or token. The registry and ACL work
+  is `jstream-platform-windows`'s (`register_vcam`), because the daemon has no `unsafe`.
+  A non-elevated daemon doesn't write: it relaunches itself elevated with the same fixed
+  argument (`run_elevated`), then reads the registration back, so success is judged by
+  what the registry holds rather than by the hidden child's output. A registration that
+  already names this DLL is left alone, so repeating the command never prompts. The
+  startup check (`log_status`) only logs: the daemon serves without the camera, and
+  `WindowsVcam::start` refuses to start an unregistered camera on its own.
 - **Collection file and audit log** (`serve.rs`, `main.rs`). The daemon only passes
   them to the engine: `Engine::with_collection_file` loads and saves the collection,
   and `with_audit` takes a `jstream_core::AuditFile`, whose writer thread appends

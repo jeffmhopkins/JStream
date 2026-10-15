@@ -22,6 +22,13 @@ pub enum SourceError {
         /// The kind asked for.
         kind_id: String,
     },
+    /// The kind is audio-only: the engine records its sources through the platform's
+    /// audio I/O ([`AudioTarget`](crate::AudioTarget)), and they make no frames.
+    #[error("the `{kind_id}` source kind is audio-only and makes no frames")]
+    AudioOnly {
+        /// The kind asked for.
+        kind_id: String,
+    },
     /// A setting is missing or doesn't have its descriptor's type. The engine checks
     /// settings before a source exists, so this means a caller skipped that check.
     #[error("setting `{param}`: {reason}")]

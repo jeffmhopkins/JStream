@@ -6,13 +6,13 @@
 //! naming and classification checks see every variant.
 
 use crate::{
-    Action, Batch, Call, CallResult, Canvas, ClientId, ClientMessage, Command, CommandClass, Crop,
-    DropCounts, Edit, EntityKind, ErrorResponse, Event, EventMessage, Finite32, FitMode, Hello,
-    IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo,
-    OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
-    RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
-    SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
-    Vec2, Welcome, json_schema,
+    Action, Batch, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
+    CommandClass, Crop, DeleteTarget, DropCounts, Edit, EntityKind, ErrorResponse, Event,
+    EventMessage, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo,
+    ItemTransform, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm,
+    ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev,
+    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings,
+    Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
     AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
@@ -32,6 +32,12 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::SceneCreate {
             scene_id: SceneId::new("scn_1"),
             name: "Main".into(),
+            role: None,
+        },
+        Edit::SceneCreate {
+            scene_id: SceneId::new("scn_grp"),
+            name: "Lower third".into(),
+            role: Some(SceneRole::Group),
         },
         Edit::SceneRename {
             scene_id: SceneId::new("scn_1"),
@@ -315,6 +321,9 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::LiveCancel {
             gesture_id: GestureId::new("drag_1"),
         },
+        Action::SceneSwitch {
+            scene_id: SceneId::new("scn_2"),
+        },
     ]
 }
 
@@ -356,8 +365,19 @@ pub(crate) fn queries() -> Vec<Query> {
             kind_id: "color".into(),
         },
         Query::OutputList,
+        Query::StudioGet,
         Query::EncoderList,
         Query::LiveList,
+        Query::DeletePlan {
+            target: DeleteTarget::Scene {
+                scene_id: SceneId::new("scn_mask"),
+            },
+        },
+        Query::DeletePlan {
+            target: DeleteTarget::Source {
+                source_id: SourceId::new("src_cam"),
+            },
+        },
     ]
 }
 
@@ -652,6 +672,12 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             rev: Rev(12),
             outputs: output_infos(),
         },
+        QueryResult::StudioGet {
+            program_scene: Some(SceneId::new("scn_2")),
+        },
+        QueryResult::StudioGet {
+            program_scene: None,
+        },
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
@@ -662,6 +688,24 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 client_id: ClientId::new("cli_7"),
                 values: live_values(),
             }],
+        },
+        QueryResult::DeletePlan {
+            rev: Rev(12),
+            edits: vec![
+                Edit::ItemRemove {
+                    item_id: ItemId::new("itm_mask"),
+                },
+                Edit::SourceSetSettings {
+                    source_id: SourceId::new("src_cam"),
+                    patch: [("mask", Value::Null)].into_iter().collect(),
+                },
+                Edit::SourceDelete {
+                    source_id: SourceId::new("src_mask_scene"),
+                },
+                Edit::SceneDelete {
+                    scene_id: SceneId::new("scn_mask"),
+                },
+            ],
         },
     ]
 }
@@ -706,6 +750,16 @@ pub(crate) fn events() -> Vec<Event> {
             state,
         });
     }
+    events.push(Event::StudioChanged {
+        program_scene: Some(SceneId::new("scn_2")),
+        client_id: ClientId::new("cli_7"),
+        request_id: Some(RequestId::new("r2")),
+    });
+    events.push(Event::StudioChanged {
+        program_scene: None,
+        client_id: ClientId::new("cli_8"),
+        request_id: None,
+    });
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::StatsTick {
         seq: 4,
@@ -755,9 +809,25 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
             expected: Rev(4),
             current: Rev(5),
         },
+        ProtocolError::invalid_argument("edits.0.name", "must not be empty"),
         ProtocolError::InvalidArgument {
-            field: "edits.0.name".into(),
-            reason: "must not be empty".into(),
+            field: "edits.0.scene_id".into(),
+            reason: "scene `scn_mask` is still referred to by source `src_mask_scene` \
+                     (kind.scene_id), source `src_cam` (settings.mask); remove those \
+                     references first, or send the batch `delete.plan` returns"
+                .into(),
+            blockers: vec![
+                Blocker {
+                    entity: EntityKind::Source,
+                    id: "src_mask_scene".into(),
+                    field: "kind.scene_id".into(),
+                },
+                Blocker {
+                    entity: EntityKind::Source,
+                    id: "src_cam".into(),
+                    field: "settings.mask".into(),
+                },
+            ],
         },
         ProtocolError::UndoConflict {
             step_rev: Rev(9),

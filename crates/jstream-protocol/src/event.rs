@@ -2,7 +2,7 @@
 
 use crate::command::Edit;
 use crate::history::HistoryDirection;
-use crate::id::{ClientId, GestureId, OutputId, RequestId, Rev};
+use crate::id::{ClientId, GestureId, OutputId, RequestId, Rev, SceneId};
 use crate::live::LiveOutcome;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -38,6 +38,22 @@ pub enum Event {
         output_id: OutputId,
         /// Its new state.
         state: OutputState,
+    },
+    /// The scene on program changed: after a `scene.switch`, or after a batch, undo or
+    /// redo deleted the program scene (program moves to the first remaining scene) or
+    /// created the collection's first scene (it goes on program). Studio state is runtime state
+    /// (ADR-0030), so the event carries no `rev`; a `state.changed` for the same edits
+    /// comes first.
+    #[serde(rename = "studio.changed")]
+    StudioChanged {
+        /// The scene now on program. Omitted when the collection has no scene left.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        program_scene: Option<SceneId>,
+        /// The client whose request caused it.
+        client_id: ClientId,
+        /// That client's request ID, so it can match the event to its own response.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<RequestId>,
     },
     /// This connection's queued events were dropped because the client read them too
     /// slowly: the server keeps a bounded buffer per connection and empties it when it
@@ -111,6 +127,7 @@ impl Event {
             Event::StatsTick { .. } => Some("stats.tick"),
             Event::LiveChanged { .. } => Some("live.changed"),
             Event::LiveEnded { .. } => Some("live.ended"),
+            Event::StudioChanged { .. } => Some("studio.changed"),
             Event::Unknown => None,
         }
     }
