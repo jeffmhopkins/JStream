@@ -168,7 +168,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:18a55818b0bf0ddf", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2 N6: collection/audit bullet rewrapped, text unchanged; engine() doc now says audit records batches, undos, redos and actions; rest re-read and holds" }
+verified = { hash = "b3:8149347ede9c7296", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review round 1, merge of main (#203 B2-f3, #234 A4, A6 collection/audit): daemon's A6 collection/audit text and Live on Windows text hold; a loaded collection's audio sources are recorded by the engine with no daemon change" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:e77cd4fd5eccea8a", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#196 B5, #226 A3, #207, #233, #229, #230): stamp-only conflicts, both sides kept; main's test-list additions (blocked-send stop, trickle peer) sit beside C5's audio tests and Audio sources bullet; holds" }
+verified = { hash = "b3:001996cca97cf534", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review round 1, merge of main (#203 B2-f3, #234 A4, A6 collection/audit): main's audit/daemon lines and C5's Audio sources bullet and tests both kept; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -152,7 +152,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:7283b1c58d558176", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#207 bounded output.stop) into A6: took main's stamp; re-read; #207's STOP_DRAIN/OUTPUT_GRACE stop prose kept, A6's audit-log and collection-file lines (daemon injects AuditFile in its log dir, --collection turns the file on) and Not yet (app asset folder only) hold" }
+verified = { hash = "b3:dfeb2f7b55ba3436", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review round 1, merge of main (#203 B2-f3, #234 A4, A6 collection/audit): re-read against #203 (control mock undo, no core text change) and A6 (daemon injects AuditFile, --collection wired; with_collection_file calls audio.sync so loaded audio sources are recorded); Not yet merged: main's app-asset line plus C5's status/listing bullet and new N4 bullet on the default mic/desktop fallback vs ADR-0028; AudioInputs::close now clears statuses before closing streams (N2), text unaffected" }
 -->
 
 ### Engine and sessions
