@@ -504,7 +504,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:acec851b35f8fa00", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1 (protocol README only changed): re-read; History bullet (undo_conflict, protocol 0.10) still holds" }
+verified = { hash = "b3:415e020d4c5b0d5c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; Edits bullet (canvas.set_size/item.set_geometry at 0.11) and History bullet hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -652,7 +652,7 @@ verified = { hash = "b3:f87823856265c90a", by = "agent:claude@session_01SS5BBdaw
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:d4c7ac3c7850d9fe", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into E3a: body is main's (C6's nested-scene render_image sentence kept); re-read steps 1-2 against gpu/capture.rs (one GPU copy into JStream-allocated shared NT-handle textures, opened in D3D12 via wgpu-hal; D3D11 signals a per-stream fence the wgpu queue waits on, the queue signals the release) and the one-scene paragraph against C6" }
+verified = { hash = "b3:c39815529eedb369", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: E3a's capture steps (shared NT-handle textures, fence) from main and B3's one-scene compositor placement forms both present and accurate" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

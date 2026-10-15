@@ -102,7 +102,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:124d3cf1910b12af", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1: re-read Undo and redo requests; check order (key, expected_rev, stack) and the keep-step case now match core engine.rs history() and core README Order of checks/Conflicts; reading of ADR-0032's 'checked first' stated" }
+verified = { hash = "b3:e37fd17b91df6495", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: main's history order list kept; undo_conflict paragraph now also names setting the canvas size and says an item's transform and geometry are one property, matching history.rs Prop::Placement and Touched.canvas" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -392,7 +392,9 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
 - `undo_conflict` (`step_rev`, and the `client_id` and `rev` of the conflicting batch)
   refuses an undo or redo when another client's batch after it changed a property the
   step sets, created or deleted an object the step touches, touched an object the step
-  creates or deletes, also reordered the scenes, or made its edits no longer apply. An
+  creates or deletes, also reordered the scenes or also set the canvas size, or made its edits
+  no longer apply. An item's transform and its geometry are one property, its
+  placement. An
   edit touches the objects it creates, deletes or edits and the ones it places or
   names, such as an item's source. What the step touches is taken both from when it was recorded and from
   the edits it would apply now. Nothing is applied and the step is dropped, so the next
