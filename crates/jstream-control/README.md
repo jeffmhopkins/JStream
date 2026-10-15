@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:ee786dac6ee29625", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; describes the Control trait and mock generally, nothing privacy-specific to change" }
+verified = { hash = "b3:c77d4e2199884e02", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 round 2 (main's virtual camera, mixes 0.19, claim_layers); privacy now protocol 0.20: cascade; mock purpose unchanged" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:0972f84d662d80d6", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): added the mock's privacy.set/get/changed with replay" }
+verified = { hash = "b3:0b5d490d9ccaa37d", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 round 2 (main's virtual camera, mixes 0.19, claim_layers); privacy now protocol 0.20: re-read; privacy mock bullet and vcam/mix bullets coexist correctly" }
 -->
 
 ### The trait
@@ -125,7 +125,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
-    reasons), `output.set_target` on a recording output, and an `unknown` output kind,
+    reasons), `output.set_target` on a recording or virtual-camera output (the mock
+    accepts a `virtual_cam` output, as the engine does), and an `unknown` output kind,
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`

@@ -933,17 +933,7 @@ pub(crate) fn compose(
         return present(compositor, cache, &shown, view.privacy, readback);
     };
     let direct = output == canvas;
-    for pass in nested {
-        cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
-    }
-    if !direct {
-        cache.layer(
-            compositor,
-            &GpuKey::Program,
-            canvas.width(),
-            canvas.height(),
-        )?;
-    }
+    claim_layers(compositor, cache, shot, view.mix, output)?;
     let cache = &*cache;
     let image = |key: &GpuKey| {
         cache.get(key).ok_or_else(|| RenderError::Invalid {
@@ -1007,7 +997,7 @@ fn present(
 
 /// Keeps the privacy blur's layers for an output of `output`'s size in the cache, so
 /// they are there, and allocated, before the screen is turned on.
-fn privacy_layers(
+pub(crate) fn privacy_layers(
     compositor: &Compositor,
     cache: &mut ResourceCache<GpuKey>,
     output: FrameSize,
@@ -1018,6 +1008,39 @@ fn privacy_layers(
             &GpuKey::Privacy(at.width(), at.height()),
             at.width(),
             at.height(),
+        )?;
+    }
+    Ok(())
+}
+
+/// Marks the layers [`compose`] draws `mix` at `output` through as used in the cache's
+/// current frame, allocating any that are missing, without drawing: each nested
+/// scene's, and the program layer when `output` isn't the canvas size. The render
+/// thread calls it for every mix not due on a tick, so a mix with a divisor keeps its
+/// layers between the ticks it draws on and a steady frame allocates no texture.
+///
+/// # Errors
+/// What the compositor reports for a layer it allocates.
+pub(crate) fn claim_layers(
+    compositor: &mut Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    shot: &Shot,
+    mix: Option<&VideoMixId>,
+    output: FrameSize,
+) -> Result<(), RenderError> {
+    let canvas = shot.canvas()?;
+    let Some((_, nested)) = shot.passes_of(mix).split_last() else {
+        return Ok(());
+    };
+    for pass in nested {
+        cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+    }
+    if output != canvas {
+        cache.layer(
+            compositor,
+            &GpuKey::Program,
+            canvas.width(),
+            canvas.height(),
         )?;
     }
     Ok(())
@@ -1266,8 +1289,8 @@ pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
 pub(crate) mod tests {
     use super::{
         CaptureFrame, FIRST_RETRY, Frame, GpuKey, MAX_NESTING, MAX_RETRY, OpenBackoff, Placed,
-        Shot, SourceFrameError, SourceRef, View, base64, compose, decode_base64, decode_png, draw,
-        encode_png, fit, is_no_adapter, schedule,
+        Shot, SourceFrameError, SourceRef, View, base64, claim_layers, compose, decode_base64,
+        decode_png, draw, encode_png, fit, is_no_adapter, schedule,
     };
     use jstream_media::FrameSize;
     use jstream_protocol::{Canvas, ProtocolError, QueryResult, Rev, SceneId, SourceId};
@@ -1834,6 +1857,67 @@ pub(crate) mod tests {
         // frame that last used the layers.
         let _ = frame_at(&mut compositor, &mut cache, &flat, None, canvas);
         assert_eq!(cache.pending(), 0, "freed after the frame fence");
+    }
+
+    /// Mixes drawn on different ticks keep their layers: on a tick where only the
+    /// program (drawn straight at the canvas size) is due, the half-rate mix claims the
+    /// program layer it fits from, so nothing is retired or allocated tick after tick.
+    #[test]
+    fn a_mix_keeps_its_layers_between_the_ticks_it_draws_on() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let nested = chain(2);
+        let canvas = nested.canvas().expect("canvas");
+        let small = FrameSize::new(32, 18).expect("invariant: non-zero");
+        use jstream_protocol::VideoMixId;
+        let half = VideoMixId::new("half");
+        let mut tick = |cache: &mut ResourceCache<GpuKey>, index: u32| {
+            cache.begin_frame();
+            compose(
+                &mut compositor,
+                cache,
+                &nested,
+                View::default(),
+                None,
+                canvas,
+                true,
+            )
+            .expect("program");
+            if index.is_multiple_of(2) {
+                compose(
+                    &mut compositor,
+                    cache,
+                    &nested,
+                    View {
+                        mix: Some(&half),
+                        privacy: None,
+                    },
+                    None,
+                    small,
+                    true,
+                )
+                .expect("half");
+            } else {
+                claim_layers(&mut compositor, cache, &nested, Some(&half), small).expect("claim");
+            }
+            drop(cache.end_frame(&compositor));
+        };
+        tick(&mut cache, 0);
+        let program = cache
+            .get(&GpuKey::Program)
+            .expect("the mix's layer")
+            .texture()
+            .clone();
+        let live = cache.live();
+        for index in 1..6 {
+            tick(&mut cache, index);
+            assert_eq!((cache.live(), cache.pending()), (live, 0), "tick {index}");
+            assert!(
+                cache.get(&GpuKey::Program).expect("kept").texture() == &program,
+                "tick {index} kept the program layer"
+            );
+        }
     }
 
     /// A failed adapter open is answered from the cache until its wait is over, and

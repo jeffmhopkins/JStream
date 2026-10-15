@@ -216,7 +216,7 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
-        /// Every video mix, ordered by ID. Missing (from a server older than 0.17)
+        /// Every video mix, ordered by ID. Missing (from a server older than 0.19)
         /// parses as empty.
         #[serde(default)]
         video_mixes: Vec<VideoMixInfo>,

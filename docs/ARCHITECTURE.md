@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:bcf5d3053a8f0044", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: Hosts table desktop row adds the first cut (Windows, WebView2, fresh in-memory token handed to the page) with a README link; diagram and the new apps/jstream-desktop/src/main.rs (a thin entry point) fit the shape" }
+verified = { hash = "b3:2b244546dfef74f8", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Crate-map daemon row (N3) now says the daemon registers and publishes the virtual camera via a virtual_cam output, matching serve.rs windows_backends" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:bcf5d3053a8f0044", by = "agent:claude@session_01D6iWjpMk
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:928b559944b79c2d", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: re-read; jstream-plugin-proto row now matches its new manifest summary (layer 0, no unsafe); lint-deps passes; plugin-clap and plugin-host rows stay planned" }
+verified = { hash = "b3:b565e139a0c83a2b", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: re-read; added the jstream-ui-e2e row (layer 6, test-only harness under crates/jstream-ui/tests/e2e/mock-daemon, depends on control+server, no unsafe); lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -155,6 +155,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
+| 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
@@ -166,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:5eb19470cd7fc547", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): encoder sharing and privacy bullets now say what is built (owner key, blur on/off) and what isn't (look, slate, muted sources)" }
+verified = { hash = "b3:bee48b4e8dff6ea5", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 round 2 (main's virtual camera, mixes 0.19, claim_layers); privacy now protocol 0.20: re-read sharing and privacy bullets beside the vcam-mix note; hold" }
 -->
 
 ```
@@ -373,13 +374,14 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Outputs, ordered by ID, with their `kind`, an optional `encoder_profile` and an
   optional `video_mix`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
-  container: mp4 }`, the path checked to be absolute and to end in a file name. A stream
+  container: mp4 }`, the path checked to be absolute and to end in a file name, or
+  `VirtualCam`, which has no settings and ignores its profile. A stream
   key is never collection state: it lives in the OS credential store
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
   H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. Video mixes
-  (protocol 0.18), ordered by ID, each with a name besides the fields above: the
+  (protocol 0.19), ordered by ID, each with a name besides the fields above: the
   resolution's sides even and 16 to 8192, the divisor 1 to 60. An output with no mix
   shows `Program` at the capture size and base rate; a mix an output shows can't be
   deleted. Outputs share a session by mix and profile. `Preview` shows `Program` until
@@ -390,10 +392,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   geometry, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's buses and chains, the
-  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
-  `outputs`, `encoders` and `video_mixes`. The collection file saves everything built so
-  far, encoder profiles, video mixes, each output's profile and mix and
-  `duplicated_from` included
+  `YouTube` kind, a virtual camera's video mix (it always shows the program), and
+  everything outside `sources`, `scenes`, `outputs`, `encoders` and `video_mixes`. The
+  collection file saves everything built so far, encoder profiles, video mixes, each
+  output's profile and mix and `duplicated_from` included
   ([Persistence](#persistence)).
   The program scene is built in `jstream-core` as runtime state, so the file doesn't
   hold it (no preview scene yet).
@@ -542,7 +544,7 @@ sources; not built yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e05f90a723a84644", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): privacy screen bullet no longer planned (0.19, get, replay as first event); encoder sessions bullet names dedicated" }
+verified = { hash = "b3:76cb2b96982c309d", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 round 2 (main's virtual camera, mixes 0.19, claim_layers); privacy now protocol 0.20: privacy bullet and dedicated now 0.20; mixes 0.19; virtual_cam 0.18" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -561,14 +563,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
+  `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
   `video_mix.create`, `video_mix.update` and `video_mix.delete` configure video mixes
   (an input, a resolution and a divisor of the base rate), and `output.set_video_mix`
-  points an output at one or back at the program (protocol 0.18). A mix an output shows
+  points an output at one or back at the program (protocol 0.19). A mix an output shows
   can't be deleted, and a mix showing a scene blocks that scene's delete.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
@@ -595,7 +598,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
   rather than overwrite another client's later change (protocol 0.10).
-- **Privacy screen** (protocol 0.19): the action `privacy.set { on }` on the master
+- **Privacy screen** (protocol 0.20): the action `privacy.set { on }` on the master
   stage, never undoable or batchable and with no `rev` change; every change emits
   `privacy.changed { on }`, naming the client and request, to every client, and every
   `privacy.set` goes to the audit log with the state it asked for
@@ -608,7 +611,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   that stage is covered by the privacy screen.
 - **Encoder sessions** (protocol 0.13): `output.status` reports, per running output,
   its encoder session's profile, the other outputs sharing it and whether the session is
-  dedicated to it because of its own video chain (0.19), plus the sessions and hardware
+  dedicated to it because of its own video chain (0.20), plus the sessions and hardware
   sessions in use. A profile's settings and the output's video mix at start
   count, so an output started after `encoder.update` gets a session of its own, and
   outputs on different mixes never share one. Planned: when the encoder refuses a
@@ -617,7 +620,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
-  (protocol 0.18), `video.snapshot` → the program mix as a PNG in the
+  (protocol 0.19), `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
@@ -676,7 +679,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:ca87f89221eab2bd", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): added privacy to the tool nouns; rest re-read and holds" }
+verified = { hash = "b3:065098753a04a1ea", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 round 2 (main's virtual camera, mixes 0.19, claim_layers); privacy now protocol 0.20: tool nouns include privacy and video_mix; tools.snap regenerated" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -879,7 +882,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:6687f3e90cf9bb6a", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:6dba6d0d451bf0cb", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 round 2 (merge of main with G3b virtual camera; mixes now 0.19): cascade from persist code; text has no version or kind list the merge changed" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

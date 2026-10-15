@@ -3,7 +3,7 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId,
+    Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId, OutputKind,
     ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId, SourceKind,
     parity,
 };
@@ -67,7 +67,9 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 }
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
-/// after it, and scene `b` made a group, in one more batch: rev 2.
+/// after it, and scene `b` made a group, in one more batch: rev 2. That batch also
+/// deletes the virtual camera `vcam`, which the parity collection gained after the
+/// fixture was written; `a_virtual_camera_round_trips` covers it.
 fn fixture_graph() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds());
     let applied = graph.apply_batch(&parity::collection());
@@ -79,6 +81,9 @@ fn fixture_graph() -> Graph {
             Edit::SceneSetRole {
                 scene_id: SceneId::new("b"),
                 role: SceneRole::Group,
+            },
+            Edit::OutputDelete {
+                output_id: OutputId::new("vcam"),
             },
         ],
         None,
@@ -125,6 +130,29 @@ fn an_empty_collection_round_trips() {
             "sources": [],
             "outputs": []
         }))
+    );
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// A virtual camera output saves as its bare kind and loads back the same.
+#[test]
+fn a_virtual_camera_round_trips() {
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[Edit::OutputCreate {
+            output_id: OutputId::new("cam"),
+            kind: OutputKind::VirtualCam,
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert!(
+        saved["outputs"].as_array().is_some_and(
+            |outputs| outputs.contains(&json!({"id": "cam", "kind": {"type": "virtual_cam"}}))
+        ),
+        "{json}"
     );
     assert_eq!(load(&json), Ok(graph));
 }

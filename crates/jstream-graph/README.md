@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:4dd4be6db3fd4580", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; only Output::has_video_chain stub added, purpose holds" }
+verified = { hash = "b3:eaf5e52d4655c156", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 round 2 (main's virtual camera, mixes 0.19, claim_layers); privacy now protocol 0.20: re-read Output bullet (vcam, mix); has_video_chain stub doesn't change it" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -50,9 +50,10 @@ codes, so the engine passes them to clients unchanged.
   `State::encoding_of` gives the encoding an output starts with.
 - `VideoMix`: a video mix, an ID, a name and the protocol's `VideoMix` (an input, a
   resolution and a divisor of the base frame rate).
-- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, or a recording
-  to an MP4 file), the encoder profile it uses, if not the default, and the video mix
-  it shows, if not the program. Whether it
+- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, a recording
+  to an MP4 file, or the virtual camera, which has nothing to check), the encoder
+  profile it uses, if not the default (a virtual camera encodes nothing, so it ignores
+  its profile), and the video mix it shows, if not the program. Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -119,8 +120,8 @@ the batch **touched**.
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
   `\…`, `C:\…` or `C:/…`, the same on every platform, as for an absolute asset), or
   doesn't end in a file name; whether it is absolute on the engine's own machine, and
-  whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording fails with
-  `invalid_argument` (it has no RTMP target). `output.delete` is undone by `output.create` with its kind, and
+  whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
+  `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
   with `invalid_argument`, in edit order. The `OutputDelete` inverse also restores the
@@ -254,14 +255,14 @@ seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
 two video mixes that two outputs show,
-scene `b` made a group, a clone and a `duplicated_from` naming a missing source) plus a source whose
+scene `b` made a group, a clone and a `duplicated_from` naming a missing source, less the virtual camera the parity collection gained later) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none, and one without
 `video_mixes` or any `video_mix` likewise; a profile's
-round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
+round trip; a virtual camera's round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile or mix, and a mix naming a missing
 scene, among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
