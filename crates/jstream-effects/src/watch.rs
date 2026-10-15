@@ -1,11 +1,13 @@
 //! Hot reload: a watcher over a folder of pack folders, polled by its owner.
 //!
 //! Each [`PackWatcher::poll`] lists the pack folders (sub-folders holding an
-//! `effect.toml`) and stamps every file in each one by modification time and size. A
-//! folder whose stamp changed is reloaded, and the poll reports which kinds appeared,
+//! `effect.toml`) and stamps each one's manifest and the shader files that manifest
+//! named when it was last read, by modification time and size (or absence). A folder
+//! whose stamp changed is reloaded, and the poll reports which kinds appeared,
 //! changed or disappeared, for the engine's `kind.changed` events (ADR-0025). A reload
 //! that fails keeps the last good version of the pack live and reports the error once,
-//! so a half-saved shader never takes an effect off the air.
+//! so a half-saved shader never takes an effect off the air. A folder refused because
+//! another folder holds its pack ID is retried in the poll that frees the ID.
 //!
 //! Polling, not OS notifications: it needs no dependency and behaves the same on every
 //! platform and file system, and a pack is a handful of small files. The cost is the
@@ -21,12 +23,6 @@ use crate::pack::{Effect, MANIFEST, Pack};
 
 /// A poll interval that feels immediate to someone editing a shader.
 pub const DEFAULT_POLL_INTERVAL: Duration = Duration::from_millis(500);
-
-/// The most files stamped in one pack folder; files past it are not watched.
-const MAX_STAMPED_FILES: usize = 512;
-
-/// How deep into a pack folder files are stamped.
-const MAX_DEPTH: usize = 4;
 
 /// What happened to one kind in a poll.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,11 +45,14 @@ pub struct Changes {
     pub errors: Vec<PackError>,
 }
 
-/// A stamp of every file in a pack folder: path, modification time and size.
-type Stamp = Vec<(PathBuf, Option<SystemTime>, u64)>;
+/// A stamp of a pack folder's watched files: each one's modification time and size, or
+/// `None` while it is missing.
+type Stamp = Vec<Option<(Option<SystemTime>, u64)>>;
 
 #[derive(Debug)]
 struct Folder {
+    /// The manifest, then the shaders it named when last read.
+    watched: Vec<PathBuf>,
     stamp: Stamp,
     pack: Option<Pack>,
 }
@@ -93,6 +92,8 @@ impl PackWatcher {
             .filter(|dir| !present.contains(dir))
             .cloned()
             .collect();
+        // Whether a pack ID was given up, so a folder refused as a duplicate may now load.
+        let mut released = false;
         for dir in gone {
             if let Some(Folder {
                 pack: Some(pack), ..
@@ -100,48 +101,79 @@ impl PackWatcher {
             {
                 tracing::info!(pack = pack.id(), "effect pack removed");
                 diff(Some(&pack), None, &mut changes.kinds);
+                released = true;
             }
         }
-        for dir in present {
-            let stamp = stamp(&dir);
-            if self.folders.get(&dir).is_some_and(|f| f.stamp == stamp) {
-                continue;
+        for dir in &present {
+            let unchanged = self
+                .folders
+                .get(dir)
+                .is_some_and(|f| f.stamp == stamp(&f.watched));
+            if !unchanged {
+                released |= self.reload(dir, &mut changes);
             }
-            let loaded = Pack::load(&dir, &self.prelude).and_then(|pack| {
-                let taken = self.folders.iter().find(|(other, f)| {
-                    **other != dir && f.pack.as_ref().is_some_and(|p| p.id() == pack.id())
-                });
-                match taken {
-                    Some((first, _)) => Err(PackError::DuplicatePack {
-                        path: dir.join(MANIFEST),
-                        id: pack.id().to_owned(),
-                        first: first.clone(),
-                    }),
-                    None => Ok(pack),
-                }
-            });
-            let folder = self.folders.entry(dir).or_insert(Folder {
-                stamp: Vec::new(),
-                pack: None,
-            });
-            folder.stamp = stamp;
-            match loaded {
-                Ok(pack) => {
-                    tracing::info!(
-                        pack = pack.id(),
-                        effects = pack.effects().len(),
-                        "effect pack loaded"
-                    );
-                    diff(folder.pack.as_ref(), Some(&pack), &mut changes.kinds);
-                    folder.pack = Some(pack);
-                }
-                Err(error) => {
-                    tracing::warn!(%error, "effect pack not loaded");
-                    changes.errors.push(error);
-                }
+        }
+        if released {
+            let unloaded: Vec<PathBuf> = self
+                .folders
+                .iter()
+                .filter(|(_, f)| f.pack.is_none())
+                .map(|(dir, _)| dir.clone())
+                .collect();
+            for dir in unloaded {
+                self.reload(&dir, &mut changes);
             }
         }
         changes
+    }
+
+    /// Loads the pack in `dir` and records what to watch. Returns whether the folder
+    /// gave up a pack ID (its pack now has another one).
+    fn reload(&mut self, dir: &Path, changes: &mut Changes) -> bool {
+        // The stamp is taken before the load, so an edit during it is seen next poll.
+        let watched = watched_files(dir);
+        let now = stamp(&watched);
+        let loaded = Pack::load(dir, &self.prelude).and_then(|pack| {
+            let taken = self.folders.iter().find(|(other, f)| {
+                other.as_path() != dir && f.pack.as_ref().is_some_and(|p| p.id() == pack.id())
+            });
+            match taken {
+                Some((first, _)) => Err(PackError::DuplicatePack {
+                    path: dir.join(MANIFEST),
+                    id: pack.id().to_owned(),
+                    first: first.clone(),
+                }),
+                None => Ok(pack),
+            }
+        });
+        let folder = self.folders.entry(dir.to_owned()).or_insert(Folder {
+            watched: Vec::new(),
+            stamp: Vec::new(),
+            pack: None,
+        });
+        folder.watched = watched;
+        folder.stamp = now;
+        match loaded {
+            Ok(pack) => {
+                tracing::info!(
+                    pack = pack.id(),
+                    effects = pack.effects().len(),
+                    "effect pack loaded"
+                );
+                diff(folder.pack.as_ref(), Some(&pack), &mut changes.kinds);
+                let released = folder
+                    .pack
+                    .as_ref()
+                    .is_some_and(|old| old.id() != pack.id());
+                folder.pack = Some(pack);
+                released
+            }
+            Err(error) => {
+                tracing::warn!(%error, "effect pack not loaded");
+                changes.errors.push(error);
+                false
+            }
+        }
     }
 
     /// The packs loaded now, by folder.
@@ -169,29 +201,26 @@ fn pack_folders(root: &Path) -> Vec<PathBuf> {
     dirs
 }
 
-/// Every file under `dir`, to [`MAX_DEPTH`] and [`MAX_STAMPED_FILES`], sorted.
-fn stamp(dir: &Path) -> Stamp {
-    let mut out = Vec::new();
-    let mut pending = vec![(dir.to_owned(), 0)];
-    while let Some((at, depth)) = pending.pop() {
-        let Ok(entries) = std::fs::read_dir(&at) else {
-            continue;
-        };
-        for entry in entries.filter_map(Result::ok) {
-            let Ok(meta) = entry.metadata() else {
-                continue;
-            };
-            if meta.is_dir() {
-                if depth < MAX_DEPTH {
-                    pending.push((entry.path(), depth + 1));
-                }
-            } else if out.len() < MAX_STAMPED_FILES {
-                out.push((entry.path(), meta.modified().ok(), meta.len()));
-            }
-        }
+/// The manifest in `dir`, then each shader it names, if it reads and parses.
+fn watched_files(dir: &Path) -> Vec<PathBuf> {
+    let manifest = dir.join(MANIFEST);
+    let mut files = vec![manifest.clone()];
+    if let Ok(shaders) = crate::pack::shader_files(&manifest) {
+        files.extend(shaders.into_iter().map(|s| dir.join(s)));
     }
-    out.sort();
-    out
+    files
+}
+
+/// Each file's modification time and size, or `None` while it is missing.
+fn stamp(files: &[PathBuf]) -> Stamp {
+    files
+        .iter()
+        .map(|f| {
+            std::fs::metadata(f)
+                .ok()
+                .map(|m| (m.modified().ok(), m.len()))
+        })
+        .collect()
 }
 
 /// The kind changes from `old` to `new`.

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-effects/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-effects", "crates/jstream-render/README.md#filters", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0035-clap-plugins-out-of-process.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:630327823f62a82c", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 stacked: re-read; drawing paragraph (ExternalFilter impl, video_filter, FILTER_PRELUDE, reload rebuild) matches pack.rs and the draw test; fixture removed" }
+verified = { hash = "b3:7c026dcd0c3b9b5e", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "Carried #359 round 1 (B1, N1-N3) onto the stacked hookup; re-read hot reload, contract (overrides) and drawing paragraphs against watch.rs, shader.rs, pack.rs" }
 -->
 
 Layer-3 loader for third-party **WGSL effect packs**, the data-only extension point of
@@ -53,9 +53,11 @@ order, at group 0, binding 4, as `p`), then the effect's file. `bool` and `enum`
 `u32` (an enum is its option's index), `int` is `i32`, `float` is `f32`, and `color` is a
 `vec4<f32>` of linear-light RGB with straight alpha. The effect defines
 `@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>` and may add functions, constants
-and `var<private>` globals. It may not add bindings, immediates or entry points.
+and `var<private>` globals. It may not add bindings, immediates, overrides (the host has
+no value for them) or entry points.
 `Pack::load` validates the whole text with naga (all validation flags, no optional
-capabilities, so a pack runs on every adapter) and checks that contract. Errors carry the
+capabilities, so a pack runs on every adapter) and checks that contract. The prelude is
+validated on its own first, so a host mistake is named as one. Errors carry the
 line in the effect's own file. `Effect::uniforms` writes the `Params` bytes for a
 settings map, reading a missing or invalid value as its default. A test checks the
 layout against the offsets naga computes.
@@ -68,14 +70,17 @@ changes. A test draws an effect on the test adapter, changes its settings in pla
 draws it again after a reload.
 
 **Hot reload** (`PackWatcher`). The owner polls (`DEFAULT_POLL_INTERVAL`, 500 ms). Each
-poll lists the sub-folders of the packs folder that hold an `effect.toml`, stamps every
-file in them by modification time and size, and reloads a folder whose stamp changed. It
-reports kinds added, changed or removed, for `kind.changed`, and the errors of packs
-that failed. A failed reload keeps the last good version live and is reported once. A
-second folder with a pack ID that is already loaded is refused. Polling needs no
-dependency and behaves the same on every file system. The cost is the poll's latency,
-and an edit that keeps a file's size within the file system's timestamp resolution is
-seen on the next change.
+poll lists the sub-folders of the packs folder that hold an `effect.toml`. It stamps
+each folder's manifest and the shader files that manifest named when last read, by
+modification time and size (or absence, so a named shader that appears later is seen),
+and reloads a folder whose stamp changed. Other files in the folder (a `.git`, notes)
+are never read. A poll reports kinds added, changed or removed, for `kind.changed`, and
+the errors of packs that failed. A failed reload keeps the last good version live and is
+reported once. A second folder with a pack ID that is already loaded is refused, and
+retried in the poll that frees the ID (the first folder removed, or its pack renamed).
+Polling needs no dependency and behaves the same on every file system. The cost is the
+poll's latency, and an edit that keeps a file's size within the file system's timestamp
+resolution is seen on the next change.
 
 Not here yet: listing pack kinds in `kind.list` and running the watcher in the engine, and pack
 transitions (ADR-0037 §1).
