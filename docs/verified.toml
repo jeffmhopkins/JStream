@@ -3,7 +3,7 @@
 # blank line per entry let parallel PRs that re-verify different inputs usually merge.
 
 ["ARCH#browser-source"."body"]
-stamp = { hash = "b3:8cc1b893df3a63f1", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:8cc1b893df3a63f1", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: the intro now says the browser source is built in jstream-browser (ADR-0046, its README) but not yet wired into a host or the program mix, which matches the code; S4's choices and results untouched" }
 
 ["ARCH#browser-source"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:b60d7d189cb798d6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:b60d7d189cb798d6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the layer-3 jstream-browser row (BrowserBackend seam, page audio and CSS, CEF backend behind feature cef, unsafe yes) and names jstream-browser-helper under apps/*; CEF moves off the jstream-platform-windows row; all match each crate's jstream metadata, lint-deps passes; main's jstream-anim row sits beside them" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -21,7 +21,7 @@ stamp = { hash = "b3:a84629b45a0a2be7" }
 stamp = { hash = "b3:b35ca6baf4367119" }
 
 ["ARCH#crate-map"."file:apps/jstream-browser-helper/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:cf6060ce34ff18c9", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:cf6060ce34ff18c9", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the layer-3 jstream-browser row (BrowserBackend seam, page audio and CSS, CEF backend behind feature cef, unsafe yes) and names jstream-browser-helper under apps/*; CEF moves off the jstream-platform-windows row; all match each crate's jstream metadata, lint-deps passes; main's jstream-anim row sits beside them" }
 
 ["ARCH#crate-map"."file:apps/jstream-cli/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:dbacb2dd7907964d" }
@@ -39,13 +39,13 @@ stamp = { hash = "b3:324421806c43a0e9" }
 stamp = { hash = "b3:9ffc9ae352b160a3" }
 
 ["ARCH#crate-map"."file:crates/jstream-browser/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:6282f3e532fac12a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:6282f3e532fac12a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the layer-3 jstream-browser row (BrowserBackend seam, page audio and CSS, CEF backend behind feature cef, unsafe yes) and names jstream-browser-helper under apps/*; CEF moves off the jstream-platform-windows row; all match each crate's jstream metadata, lint-deps passes; main's jstream-anim row sits beside them" }
 
 ["ARCH#crate-map"."file:crates/jstream-control/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e5fef95eb12cb895" }
 
 ["ARCH#crate-map"."file:crates/jstream-core/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:bec6a08ffccb0e76", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:bec6a08ffccb0e76", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the layer-3 jstream-browser row (BrowserBackend seam, page audio and CSS, CEF backend behind feature cef, unsafe yes) and names jstream-browser-helper under apps/*; CEF moves off the jstream-platform-windows row; all match each crate's jstream metadata, lint-deps passes; main's jstream-anim row sits beside them" }
 
 ["ARCH#crate-map"."file:crates/jstream-encode/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:8b934df550ca875e" }
@@ -84,7 +84,7 @@ stamp = { hash = "b3:45a0daff6f397ade" }
 stamp = { hash = "b3:419939266a782736" }
 
 ["ARCH#crate-map"."file:crates/jstream-sources/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:429b9cd304cab013", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:429b9cd304cab013", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the layer-3 jstream-browser row (BrowserBackend seam, page audio and CSS, CEF backend behind feature cef, unsafe yes) and names jstream-browser-helper under apps/*; CEF moves off the jstream-platform-windows row; all match each crate's jstream metadata, lint-deps passes; main's jstream-anim row sits beside them" }
 
 ["ARCH#crate-map"."file:crates/jstream-types/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e7dbb93ef26bf6b8" }
@@ -426,7 +426,7 @@ stamp = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDH
 stamp = { hash = "b3:8dc9a0c76e46621c" }
 
 ["ARCH#shape"."body"]
-stamp = { hash = "b3:89cad8268d19aaa5", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:89cad8268d19aaa5", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: hosts table gains the jstream-browser-helper row (not a host; the exe CEF starts its subprocesses as, shipped beside the host's exe), matching its Cargo.toml metadata (layer 6, no unsafe) and main.rs; main's rows unchanged" }
 
 ["ARCH#shape"."dep:docs/adr/0001-library-first-engine.md"]
 stamp = { hash = "b3:7a1c016d1f87fdaf" }
@@ -435,10 +435,10 @@ stamp = { hash = "b3:7a1c016d1f87fdaf" }
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["ARCH#shape"."file:apps/jstream-browser-helper/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:cf6060ce34ff18c9", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:cf6060ce34ff18c9", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: hosts table gains the jstream-browser-helper row (not a host; the exe CEF starts its subprocesses as, shipped beside the host's exe), matching its Cargo.toml metadata (layer 6, no unsafe) and main.rs; main's rows unchanged" }
 
 ["ARCH#shape"."file:apps/jstream-browser-helper/src/main.rs"]
-stamp = { hash = "b3:81f5ba35d6efa0cd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:81f5ba35d6efa0cd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: hosts table gains the jstream-browser-helper row (not a host; the exe CEF starts its subprocesses as, shipped beside the host's exe), matching its Cargo.toml metadata (layer 6, no unsafe) and main.rs; main's rows unchanged" }
 
 ["ARCH#shape"."file:apps/jstream-cli/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:dbacb2dd7907964d" }
@@ -846,7 +846,7 @@ stamp = { hash = "b3:0fd49566ae310db7" }
 stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's, the CLI's commands are unchanged by D5; holds" }
 
 ["CRATE-jstream-cli#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:8487582a56fd34f6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:8487582a56fd34f6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale only via the crate-map apps/* row, which now names jstream-browser-helper; the CLI's text names no browser code; holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:5ae0e8dd6e0d9eee" }
@@ -954,7 +954,7 @@ stamp = { hash = "b3:d7db1d06b04d10fc" }
 stamp = { hash = "b3:edefe86e076ea4e3" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:515db2dc8c902730", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
+stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:4b7f99a329a36029" }
@@ -972,7 +972,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
-stamp = { hash = "b3:fd4246515e332976", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:fd4246515e332976", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:5e06b48ac662790f" }
@@ -981,7 +981,7 @@ stamp = { hash = "b3:5e06b48ac662790f" }
 stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:9bf96ff70481b881", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
+stamp = { hash = "b3:98296f7ad634452f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -993,7 +993,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:f49d5448404f02f8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:f49d5448404f02f8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1008,7 +1008,7 @@ stamp = { hash = "b3:29301fe6ecd05436" }
 stamp = { hash = "b3:06fe384b67b62cfe" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
-stamp = { hash = "b3:95f2767a189e8f2f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:95f2767a189e8f2f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
@@ -1044,7 +1044,7 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:4fa634e0a92724f8" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:1be763883388d12c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
+stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:732249ad50d11c2c" }
@@ -1059,7 +1059,7 @@ stamp = { hash = "b3:c9688aabcb558c82" }
 stamp = { hash = "b3:cc39789a9b4f72e9" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:3bb09282dddfc00c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:3bb09282dddfc00c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1071,7 +1071,7 @@ stamp = { hash = "b3:5e06b48ac662790f" }
 stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:9bf96ff70481b881", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
+stamp = { hash = "b3:98296f7ad634452f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -1083,7 +1083,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:f49d5448404f02f8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:f49d5448404f02f8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1098,7 +1098,7 @@ stamp = { hash = "b3:29301fe6ecd05436" }
 stamp = { hash = "b3:06fe384b67b62cfe" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
-stamp = { hash = "b3:95f2767a189e8f2f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:95f2767a189e8f2f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
@@ -1134,7 +1134,7 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:4fa634e0a92724f8" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:1be763883388d12c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
+stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:732249ad50d11c2c" }
@@ -1185,7 +1185,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:861da27967b6506b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#360, #299 D6, #381) into #328: took main's stamp; re-read; main changes no daemon code, only core#design's activity-gain text, which the daemon text doesn't name; this PR's /DELAYLOAD, LNK4199 and delay_load.rs text still matches build.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:515db2dc8c902730", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
+stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via core#design, which now describes Engine::with_browser and a browser page's own audio (Recorded::Own); the daemon wires no with_browser and its Design names no audio sources or page audio; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:2c41053918072ae6" }
@@ -1224,7 +1224,7 @@ stamp = { hash = "b3:5b73caa28ffd99e3" }
 stamp = { hash = "b3:b37caba12b27c4e9", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b follow-up: re-read; Serving bullet holds (the live engine now carries WindowsVcam, detailed in Design); Tests bullet's delay_load.rs sentence covers mfsensorgroup.dll now in the delayed list" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:8487582a56fd34f6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:8487582a56fd34f6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale only via the crate-map apps/* row, which now names jstream-browser-helper; the daemon creates no browser backend (no with_browser in apps/), and its text names none; holds" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:0c6280460499ee3c" }
@@ -1323,7 +1323,7 @@ stamp = { hash = "b3:558b5c5512b30191" }
 stamp = { hash = "b3:ec6f85c97d250939", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:8487582a56fd34f6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:8487582a56fd34f6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale only via the crate-map apps/* row, which now names jstream-browser-helper; the desktop app creates no browser backend yet; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:c539140aae7561d4" }
@@ -1725,13 +1725,13 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:b60d7d189cb798d6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:b60d7d189cb798d6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via the crate map (new jstream-browser row, CEF off the platform-windows row) and R-UNSAFE-001 (adds jstream-browser); the GPU frame design is untouched, and the browser backend's shared-texture copy uses GpuFrame as described; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
-stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via the crate map (new jstream-browser row, CEF off the platform-windows row) and R-UNSAFE-001 (adds jstream-browser); the GPU frame design is untouched, and the browser backend's shared-texture copy uses GpuFrame as described; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -1815,7 +1815,7 @@ stamp = { hash = "b3:7522c9a00d99ef52", by = "agent:claude@session_01Wfrx1wPtLnD
 stamp = { hash = "b3:ac6493f8088539b9" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
-stamp = { hash = "b3:43948c5058fe4611", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:43948c5058fe4611", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via its crate-map row, which drops the CEF browser backend (now in jstream-browser), and R-UNSAFE-001 (adds jstream-browser); this README never described CEF, its text holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:27f72f3f6ef95752" }
@@ -1824,7 +1824,7 @@ stamp = { hash = "b3:27f72f3f6ef95752" }
 stamp = { hash = "b3:c60cba487fc0a5e5" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/RULES.md#unsafe"]
-stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via its crate-map row, which drops the CEF browser backend (now in jstream-browser), and R-UNSAFE-001 (adds jstream-browser); this README never described CEF, its text holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/adr/0014-media-clock.md"]
 stamp = { hash = "b3:68451099d1cf8c6d" }
@@ -2307,7 +2307,7 @@ stamp = { hash = "b3:933d0c4ef1b02ecc" }
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:76a0bd9be3b1d5ce", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:76a0bd9be3b1d5ce", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:dfba6103702005f0" }
@@ -2322,16 +2322,16 @@ stamp = { hash = "b3:04b853b872d31424" }
 stamp = { hash = "b3:234830343d1d1b94" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/browser.rs"]
-stamp = { hash = "b3:1bf858d2952869b0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:1bf858d2952869b0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/color.rs"]
-stamp = { hash = "b3:52ebcec35599e793", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:52ebcec35599e793", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/describe.rs"]
 stamp = { hash = "b3:1e76d8540f8523a1" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/error.rs"]
-stamp = { hash = "b3:323098405e74f422", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:323098405e74f422", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/image/decode.rs"]
 stamp = { hash = "b3:6ae3f673fe0d6d0b" }
@@ -2340,13 +2340,13 @@ stamp = { hash = "b3:6ae3f673fe0d6d0b" }
 stamp = { hash = "b3:c4299f8d4d3cdecb" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/lib.rs"]
-stamp = { hash = "b3:fba46fd30ae6b5fa", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:fba46fd30ae6b5fa", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/registry.rs"]
-stamp = { hash = "b3:56d6987ba076744f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:56d6987ba076744f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/source.rs"]
-stamp = { hash = "b3:ef5b0035cfbd689e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:ef5b0035cfbd689e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/mod.rs"]
 stamp = { hash = "b3:34314ba6e93e9e21" }
@@ -2355,7 +2355,7 @@ stamp = { hash = "b3:34314ba6e93e9e21" }
 stamp = { hash = "b3:c3408e030cf73654" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/browser.rs"]
-stamp = { hash = "b3:a886220b5abd4b1e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:a886220b5abd4b1e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/data/anim.webp"]
 stamp = { hash = "b3:9d858ccee8b712ef" }
@@ -2373,10 +2373,10 @@ stamp = { hash = "b3:dbb67160c5d2f421" }
 stamp = { hash = "b3:fc3b1214b3ce4e96" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/sources.rs"]
-stamp = { hash = "b3:7a6860ce7e1ce8ac", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:7a6860ce7e1ce8ac", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/text.rs"]
-stamp = { hash = "b3:df9bfd5ccf0cf15b", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:df9bfd5ccf0cf15b", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-types#purpose"."body"]
 stamp = { hash = "b3:f826effbf89b6964", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-types row is unchanged and this Purpose still matches it" }
@@ -2604,7 +2604,7 @@ stamp = { hash = "b3:ecfd9b5f74db77b1" }
 stamp = { hash = "b3:1c343ec4bf85722c" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/RULES.md#unsafe"]
-stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale only via R-UNSAFE-001, which adds jstream-browser to the unsafe crates; the vcam text is unaffected; holds" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
@@ -2787,7 +2787,7 @@ stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:0047ff70349b6728", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#dependency-lint"."body"]
-stamp = { hash = "b3:d561541a097b3449", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:d561541a097b3449", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: the unsafe bullet names the browser crate (jstream-browser joins UNSAFE_CRATES); the native-code bullet says lint-deps sees the default-feature graph, so cef-dll-sys is covered by its allowlist entry and cargo deny --all-features; matches lint_deps.rs and the amended R-UNSAFE-001" }
 
 ["DOCS#dependency-lint"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -2805,10 +2805,10 @@ stamp = { hash = "b3:5a4289040223e5dc" }
 stamp = { hash = "b3:c6836c98530b7bf5" }
 
 ["DOCS#dependency-lint"."dep:docs/RULES.md#R-UNSAFE-001"]
-stamp = { hash = "b3:be44fad4353278d8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:be44fad4353278d8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: the unsafe bullet names the browser crate (jstream-browser joins UNSAFE_CRATES); the native-code bullet says lint-deps sees the default-feature graph, so cef-dll-sys is covered by its allowlist entry and cargo deny --all-features; matches lint_deps.rs and the amended R-UNSAFE-001" }
 
 ["DOCS#dependency-lint"."file:xtask/src/lint_deps.rs"]
-stamp = { hash = "b3:d7c98922d23bc7f0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:d7c98922d23bc7f0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: the unsafe bullet names the browser crate (jstream-browser joins UNSAFE_CRATES); the native-code bullet says lint-deps sees the default-feature graph, so cef-dll-sys is covered by its allowlist entry and cargo deny --all-features; matches lint_deps.rs and the amended R-UNSAFE-001" }
 
 ["DOCS#governance"."body"]
 stamp = { hash = "b3:45d7638cdee2c505", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for ADR-0038 renumbered from 0036: governance.rs strips only one-'> '-line adr-status blocks from accepted ADRs before comparing; accepted-ADR and Status banner bullets match, protected list unchanged" }
