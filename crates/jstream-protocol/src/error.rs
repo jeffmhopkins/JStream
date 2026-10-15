@@ -75,8 +75,8 @@ pub enum ProtocolError {
         /// When a `scene.delete` or `source.delete` is refused because other objects still
         /// refer to its target: every one of those references, in a stable order. The
         /// `delete.plan` query returns the batch that removes them with the target. Empty
-        /// otherwise, and then omitted. Missing (from a server that predates
-        /// `delete.plan`) parses as empty.
+        /// otherwise, and then omitted. Missing (from a server older than 0.15)
+        /// parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         blockers: Vec<Blocker>,
     },

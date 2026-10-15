@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:1e8df0fbc198149d", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Commands list is F3's with item.set_source; version line says 0.14 for references and clones, 0.13 encoder profiles; parity bullet merges encoder profiles with clone and dangling duplicated_from" }
+verified = { hash = "b3:7087dc44ec771c09", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: version line says 0.15 for delete.plan and blockers, 0.14 references and clones; Queries bullet keeps encoder.list and adds delete.plan/DeleteTarget; Errors bullet names Blocker" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -85,8 +85,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.14 because of
-  references and clones (`item.set_source`, `duplicated_from`); 0.13 added encoder
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.15 because of
+  `delete.plan` and the `blockers` detail on `invalid_argument`; 0.14 added references
+  and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
   `item.move`, a scene's `role` and the placement edits' `scene_id`), 0.11 the canvas
   and the geometry wire surface ([Item geometry](#design)), 0.10 the `history` calls,
@@ -117,7 +118,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:1b5b1d4bc6777520", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; references paragraph marks item.set_source 0.14; F3's encoder sections hold beside it" }
+verified = { hash = "b3:6b59c1521d465bbf", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; envelope example at 0.15; Deletes bullet, delete.plan in Queries, blockers row and OQ12 hold beside main's groups, encoder and references text; blockers doc says older than 0.15" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -137,8 +138,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":11},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":11},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":15},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":15},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}

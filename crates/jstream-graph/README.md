@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:5de498de12175cfb", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Model list has Source's duplicated_from, Item's set_source and F3's Encoder/Output; collection-file paragraph lists duplicated_from and encoders; tests paragraph names both fixtures' additions and both round-trip tests" }
+verified = { hash = "b3:c1258a3fbf9a4296", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; Reading keeps delete.plan with main's encoder.list ordering; Tests keep B9's plan property check and B1's persist tests; duplicated_from is a plain link, not a blocker, so deps::blockers is unchanged" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

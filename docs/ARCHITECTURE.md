@@ -517,7 +517,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:acc4143a7ef93dd2", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; Edits bullet holds, F3's 0.13 encoder text intact; item.set_source is additive" }
+verified = { hash = "b3:77cfd048070daeb1", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; delete.plan and blockers marked protocol 0.15; main's encoder, groups and references bullets hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -582,7 +582,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
-  schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` → the
+  schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source with everything that refers to it, and the `rev`
   it was planned at; later `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, …).
@@ -597,8 +597,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   rate) come in a low-rate `youtube.stats` event and a query.
 - **Errors** carry a stable machine-readable `code`, detail fields and a message. A
   `scene.delete` or `source.delete` refused because something still refers to its
-  target lists every such reference in `invalid_argument`'s `blockers`
-  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
+  target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
+  [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
 - **Binary streams** (WebSocket binary frames): preview video and meters. Not designed
   yet, except the meter frame's fields
   ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
@@ -632,7 +632,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:39a1787bc51a7934", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: tools.snap measured 143129 bytes after F3 and B5, so the text says about 145 KB" }
+verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; tool list includes delete and encoder; tools.snap 146 KB, text says about 145 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
