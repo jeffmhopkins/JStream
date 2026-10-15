@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:16ce29b435307b03", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#294 merge of main (#297 daemon vcam, #286, #237): re-read main's design (WindowsVcam backend, mfsensorgroup delay-load, MFCreateVirtualCamera probe); stale via server#design's shutdown paragraph from this PR; Signals bullet (serve_with_shutdown closes connections with 1001) still holds, now also waiting for the closes before main.rs drops the engine; holds" }
+verified = { hash = "b3:28e4de8f24a8455c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#294 merge of main (#295 clock swap, #309): took main's stamp; re-read whole section; main's clock-swap sentence in core#design fits (QpcClock via with_backends); this PR's server#design shutdown paragraph keeps the Signals bullet true (serve_with_shutdown closes connections with 1001 and now waits for the closes); holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
