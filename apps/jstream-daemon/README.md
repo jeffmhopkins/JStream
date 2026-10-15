@@ -151,7 +151,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1fe6569ba18f6b1f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (A3 #226 daemon, #229, #230), protocol 0.15 still one past main's 0.14: stamp conflict only; A3's Windows wiring text re-read, Y3 adds no daemon code and the daemon has no with_youtube yet" }
+verified = { hash = "b3:89ad67ae4c1cd3fb", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3 live engine, #193 vcam pacing) into #207: took main's stamp; stale via core#design's depends_on; re-read every Design bullet incl. A3's live engine, publish opener (Weak engine, PublishError::new, connect_rtmp) and MF delay-load; #207 changes no daemon code or opener API; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
