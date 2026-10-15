@@ -13,6 +13,7 @@ mod error;
 mod event;
 mod finite;
 mod geometry;
+mod history;
 mod id;
 mod kind;
 mod output;
@@ -37,12 +38,13 @@ pub use geometry::{
     CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, Placed,
     ProjectedQuad, Size, legacy_quad,
 };
+pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
 };
-pub use output::{OutputInfo, OutputKind, RtmpTarget, SecretString};
+pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
 pub use query::{ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};

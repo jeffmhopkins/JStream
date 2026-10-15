@@ -3,6 +3,8 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod history;
+
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
@@ -490,11 +492,13 @@ fn events_reach_every_subscriber_in_order() {
             rev: Rev(1),
             client_id: agent.client_id().expect("agent"),
             request_id: Some(by_agent.id),
+            cause: None,
         },
         Event::StateChanged {
             rev: Rev(2),
             client_id: user.client_id().expect("user"),
             request_id: Some(by_user.id),
+            cause: None,
         },
         changed(OutputState::Starting),
         changed(OutputState::Active),
@@ -700,6 +704,7 @@ fn the_engine_answers_like_the_mock() {
                 rev,
                 client_id: ClientId::new("client"),
                 request_id,
+                cause: None,
             },
             other => other,
         }
@@ -1679,7 +1684,10 @@ fn deleting_a_source_drops_its_frame() {
 // any machine. The GPU path itself is covered by the tests above.
 
 mod cpu_pipeline {
-    use super::{block_on, code, connected, drain, output_call, output_state, output_steps};
+    use super::{
+        batch, block_on, code, connected, drain, edits, output_call, output_state, output_steps,
+    };
+    use crate::InProcessControl;
     use crate::runtime::{DrawFn, OpenDraw, cpu_draw};
     use crate::{Engine, LinkState, LivePublish, PublishError, RecordingPublish};
     use jstream_control::{Control, EventStream};
@@ -1693,7 +1701,7 @@ mod cpu_pipeline {
         MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
         VideoEncoderConfig, VideoSurface,
     };
-    use jstream_protocol::{Event, OutputId, OutputState};
+    use jstream_protocol::{Edit, Event, OutputId, OutputKind, OutputState, RecordContainer};
     use std::panic::{self, AssertUnwindSafe};
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{Arc, Condvar, Mutex, mpsc};
@@ -2878,6 +2886,209 @@ mod cpu_pipeline {
         );
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
     }
+
+    // --- Item: a recording output writes fragmented MP4 to the path it names.
+
+    /// A directory under the system temp dir, removed on drop.
+    struct TempDir(std::path::PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir()
+                .join(format!("jstream-core-record-{}-{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).expect("temp dir");
+            Self(dir)
+        }
+
+        fn join(&self, name: &str) -> std::path::PathBuf {
+            self.0.join(name)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// An engine with no publish target and no opener, and the recording output `rec`
+    /// created through the protocol, recording to `path`.
+    fn recording_engine(
+        fakes: &Fakes,
+        draw: OpenDraw,
+        path: &std::path::Path,
+    ) -> (Engine, InProcessControl, EventStream) {
+        let engine = Engine::new()
+            .with_backends(share(&fakes.backends))
+            .with_draw(draw);
+        let control = connected(&engine);
+        let events = control.events();
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: OutputKind::Record {
+                    path: path.to_str().expect("a UTF-8 temp path").into(),
+                    container: RecordContainer::Mp4,
+                },
+            }]),
+        )
+        .expect("output.create");
+        (engine, control, events)
+    }
+
+    /// The top-level MP4 boxes of `bytes`, by type.
+    fn boxes(bytes: &[u8]) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut at = 0;
+        while at + 8 <= bytes.len() {
+            let size = u32::from_be_bytes(bytes[at..at + 4].try_into().expect("4 bytes")) as usize;
+            found.push(String::from_utf8_lossy(&bytes[at + 4..at + 8]).into_owned());
+            if size < 8 {
+                break;
+            }
+            at += size;
+        }
+        found
+    }
+
+    /// `output.start` on a recording output needs no publish target: it records to the
+    /// collection's path as `<path>.part` while active, and `output.stop` renames it
+    /// into place, an `ftyp`, a `moov` and then fragments.
+    #[test]
+    fn a_recording_output_writes_mp4_to_its_path() {
+        let dir = TempDir::new("writes");
+        let path = dir.join("show.mp4");
+        let part = dir.join("show.mp4.part");
+        let fakes = fakes();
+        let (engine, control, mut events) = recording_engine(&fakes, cpu_draw(), &path);
+        drain(&mut events);
+
+        block_on(control.call(output_call("rec", true))).expect("output.start");
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Starting, OutputState::Active]
+        );
+        assert!(part.exists(), "nothing is written to the .part name");
+        assert!(!path.exists(), "the destination exists before the stop");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine.output_stats().is_some_and(|stats| {
+                    stats.video_subscriber.delivered >= 70 && stats.audio_subscriber.delivered >= 10
+                })
+            }),
+            "media never reached the recording"
+        );
+        block_on(control.call(output_call("rec", false))).expect("output.stop");
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Stopping, OutputState::Stopped]
+        );
+
+        assert!(!part.exists(), "the .part file was not renamed");
+        let bytes = std::fs::read(&path).expect("the finished recording");
+        let found = boxes(&bytes);
+        assert_eq!(found.first().map(String::as_str), Some("ftyp"), "{found:?}");
+        assert_eq!(found.get(1).map(String::as_str), Some("moov"), "{found:?}");
+        let fragments = found.iter().filter(|name| *name == "moof").count();
+        assert!(
+            fragments >= 2,
+            "a keyframe every two seconds over more than two seconds: {found:?}"
+        );
+        assert_eq!(
+            found.iter().filter(|name| *name == "mdat").count(),
+            fragments,
+            "{found:?}"
+        );
+    }
+
+    /// A recording never overwrites: a start whose path is taken fails with
+    /// `action_failed`, settles `failed`, and leaves the existing file as it was.
+    #[test]
+    fn a_recording_start_fails_when_the_file_exists() {
+        let dir = TempDir::new("exists");
+        let path = dir.join("show.mp4");
+        std::fs::write(&path, b"keep me").expect("existing file");
+        let fakes = fakes();
+        let (engine, control, mut events) = recording_engine(&fakes, cpu_draw(), &path);
+        drain(&mut events);
+
+        let err = block_on(control.call(output_call("rec", true))).expect_err("refused");
+        assert_eq!(code(&err), Some("action_failed"));
+        assert!(err.to_string().contains("opening the recording"), "{err}");
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Starting, OutputState::Failed]
+        );
+        assert!(engine.output_stats().is_none());
+        assert_eq!(std::fs::read(&path).ok().as_deref(), Some(&b"keep me"[..]));
+        assert!(!dir.join("show.mp4.part").exists());
+    }
+
+    /// The collection takes `/…` and `C:\…` on every platform; a path that is not
+    /// absolute on the engine's machine fails the start rather than recording to a
+    /// relative name in the working directory.
+    #[test]
+    fn a_recording_path_not_absolute_here_fails_the_start() {
+        let foreign = if cfg!(windows) {
+            "/jstream-record-test/show.mp4"
+        } else {
+            "C:\\jstream-record-test\\show.mp4"
+        };
+        let fakes = fakes();
+        let (_engine, control, mut events) =
+            recording_engine(&fakes, cpu_draw(), std::path::Path::new(foreign));
+        drain(&mut events);
+
+        let err = block_on(control.call(output_call("rec", true))).expect_err("refused");
+        assert_eq!(code(&err), Some("action_failed"));
+        assert!(err.to_string().contains("not absolute"), "{err}");
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Starting, OutputState::Failed]
+        );
+        assert!(!std::path::Path::new(&format!("{foreign}.part")).exists());
+    }
+
+    /// A start that fails after its recording was opened (here, the compositor) removes
+    /// the `.part` file, so a later start with a working compositor records.
+    #[test]
+    fn a_failed_recording_start_leaves_no_part_file() {
+        let dir = TempDir::new("failed-start");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let working = Arc::new(AtomicBool::new(false));
+        let draw: OpenDraw = {
+            let working = Arc::clone(&working);
+            Arc::new(move || {
+                if working.load(Ordering::Acquire) {
+                    cpu_draw()()
+                } else {
+                    Err("no adapter".to_owned())
+                }
+            })
+        };
+        let (_engine, control, mut events) = recording_engine(&fakes, draw, &path);
+        drain(&mut events);
+
+        let err = block_on(control.call(output_call("rec", true))).expect_err("refused");
+        assert_eq!(code(&err), Some("action_failed"));
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Starting, OutputState::Failed]
+        );
+        assert!(
+            !dir.join("show.mp4.part").exists(),
+            "the .part file was left"
+        );
+        assert!(!path.exists());
+
+        working.store(true, Ordering::Release);
+        block_on(control.call(output_call("rec", true))).expect("output.start");
+        block_on(control.call(output_call("rec", false))).expect("output.stop");
+        assert!(path.exists(), "the second start did not record");
+    }
 }
 
 fn rtmp_output(url: &str) -> jstream_protocol::OutputKind {
@@ -3098,8 +3309,8 @@ fn stream_key_actions_report_without_naming_the_key() {
 }
 
 /// R-SEC-001: a stream key set through the protocol reaches the credential store and
-/// nothing else: not the reply, an event, `state.get`, `output.list`, `output.status`
-/// or the engine's log lines.
+/// nothing else: not the reply, an event, `state.get`, `output.list`, `output.status`,
+/// the engine's log lines or its audit log.
 pub(crate) fn check_secrets_are_redacted() {
     use jstream_platform::StreamKeyStore;
     use jstream_platform::fake::MemoryKeyStore;
@@ -3158,7 +3369,10 @@ pub(crate) fn check_secrets_are_redacted() {
     const KEY: &str = "live_REDACT-ME-9c41";
     let logs = Logs::default();
     let store = MemoryKeyStore::new();
-    let engine = Engine::new().with_key_store(Arc::new(store.clone()));
+    let audit = Arc::new(crate::AuditMemory::new());
+    let engine = Engine::new()
+        .with_key_store(Arc::new(store.clone()))
+        .with_audit(audit.clone());
     let control = connected(&engine);
     let mut events = control.events();
 
@@ -3196,9 +3410,175 @@ pub(crate) fn check_secrets_are_redacted() {
         .join("\n");
     assert!(!logged.is_empty(), "the engine logged the calls");
     seen.push(logged);
+    let audited: Vec<String> = audit.entries().iter().map(|e| e.to_json_line()).collect();
+    assert!(
+        audited
+            .iter()
+            .any(|line| line.contains("\"output.set_key\"")),
+        "the key action was audited: {audited:?}"
+    );
+    seen.extend(audited);
     for text in &seen {
         assert!(!text.contains("REDACT-ME"), "the key leaked: {text}");
     }
     let stored = store.get("out_yt").expect("get").expect("stored");
     assert_eq!(stored.expose(), KEY, "the key reached the store");
+}
+
+/// The audit log gets one entry per batch and action, with the client and its latest
+/// `hello` name, the request, the
+/// call, the edits by name, the `rev` before and after and the result code; queries are
+/// not recorded, and an idempotent retry is marked as replayed.
+#[test]
+fn batches_and_actions_are_audited() {
+    let audit = Arc::new(crate::AuditMemory::new());
+    let engine = Engine::new()
+        .with_output(OutputId::new("out_1"))
+        .with_audit(audit.clone());
+    let control = connected(&engine);
+    let other = engine.connect();
+    let named = |client_name: &str| Hello {
+        protocol: PROTOCOL_VERSION,
+        client_name: client_name.into(),
+    };
+    block_on(other.hello(named("claude-code"))).expect("handshake");
+    // A second `hello` keeps the client ID and renames the client in the log.
+    block_on(other.hello(named("claude-desktop"))).expect("again");
+
+    batch(&control, Batch::single(create("a"))).expect("first");
+    batch(
+        &other,
+        edits(vec![create("b"), webcam(), add("b", "cam", "webcam")]),
+    )
+    .expect("second");
+    let error = batch(&control, Batch::single(create("a"))).expect_err("duplicate");
+    assert_eq!(code(&error), Some("already_exists"));
+    query(&control, Query::SceneList).expect("scene.list");
+    let mut keyed = Batch::single(create("c"));
+    keyed.idempotency_key = Some(IdempotencyKey::new("k1"));
+    batch(&control, keyed.clone()).expect("keyed");
+    batch(&control, keyed).expect("retry");
+    block_on(control.call(output_call("out_1", true))).expect("start");
+    block_on(control.call(output_call("nope", true))).expect_err("unknown output");
+
+    let entries = audit.entries();
+    let names: Vec<_> = entries.iter().map(|e| e.client_name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "test",
+            "claude-desktop",
+            "test",
+            "test",
+            "test",
+            "test",
+            "test"
+        ]
+    );
+    let summary: Vec<_> = entries
+        .iter()
+        .map(|e| {
+            (
+                e.client_id.as_str(),
+                e.request_id.as_str(),
+                e.call,
+                e.edits.clone(),
+                e.output_id.as_ref().map(OutputId::as_str),
+                (e.rev_before.0, e.rev_after.0),
+                e.error,
+                e.replayed,
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (
+                "client_1",
+                "req_1",
+                "batch",
+                vec!["scene.create"],
+                None,
+                (0, 1),
+                None,
+                false
+            ),
+            (
+                "client_2",
+                "req_1",
+                "batch",
+                vec!["scene.create", "source.create", "item.add"],
+                None,
+                (1, 2),
+                None,
+                false
+            ),
+            (
+                "client_1",
+                "req_2",
+                "batch",
+                vec!["scene.create"],
+                None,
+                (2, 2),
+                Some("already_exists"),
+                false
+            ),
+            (
+                "client_1",
+                "req_4",
+                "batch",
+                vec!["scene.create"],
+                None,
+                (2, 3),
+                None,
+                false
+            ),
+            (
+                "client_1",
+                "req_5",
+                "batch",
+                vec!["scene.create"],
+                None,
+                (3, 3),
+                None,
+                true
+            ),
+            (
+                "client_1",
+                "req_6",
+                "output.start",
+                vec![],
+                Some("out_1"),
+                (3, 3),
+                None,
+                false
+            ),
+            (
+                "client_1",
+                "req_7",
+                "output.start",
+                vec![],
+                Some("nope"),
+                (3, 3),
+                Some("not_found"),
+                false
+            ),
+        ]
+    );
+    let line = entries[1].to_json_line();
+    assert!(
+        line.starts_with("{\"time\":\"")
+            && line.contains(
+                "\"client_id\":\"client_2\",\"client_name\":\"claude-desktop\",\
+             \"request_id\":\"req_1\",\"call\":\"batch\",\
+             \"edits\":[\"scene.create\",\"source.create\",\"item.add\"],\
+             \"rev_before\":1,\"rev_after\":2,\"result\":\"ok\"}"
+            ),
+        "{line}"
+    );
+    // Arguments never reach the log: not the scene's name nor the source's.
+    assert!(
+        !line.contains("Webcam") && !line.contains("\"B\""),
+        "{line}"
+    );
 }

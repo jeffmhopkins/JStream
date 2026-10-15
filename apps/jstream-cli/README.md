@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:40bcd2eae02a4021", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155, 0.8) into A5: re-read; Running bullet (mcp and output set-key read the BufRead) and contents list hold for args.rs with both source.rename and the output commands" }
+verified = { hash = "b3:981187ded0c79d9b", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; contents list (output set-key reads stdin) holds; run.rs still prints a state.changed cause" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:ef7e1b0211c4ba8d", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: Edits bullet merged to say every edit but settings is supported (args.rs arity has source.rename and the three output edits; source.set_settings has no form); output commands, Stream keys bullet (now with the 4096-byte input cap from read_key, review N1) and Reads bullet match run.rs" }
+verified = { hash = "b3:ca23828e30a23c33", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): output commands and exit table from #166 hold; the event line's undo/redo suffix and exit code 20 for undo_conflict/history_empty still match run.rs/exit.rs" }
 -->
 
 ```sh
@@ -107,9 +107,10 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
-  which is the whole target of the only output kind so far (generic RTMP). An argument
-  without an `rtmp` or `rtmps` scheme is a usage error, which leaves other spellings
-  free for later output kinds; the engine checks the rest. Neither message repeats
+  which is the whole target of a generic RTMP output. The CLI has no form for a
+  recording output yet. An argument without an `rtmp` or `rtmps` scheme is a usage
+  error, which leaves other spellings free for later output kinds; the engine checks
+  the rest. Neither message repeats
   the URL.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
@@ -123,7 +124,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
-  the `state.changed` event it causes. With `--json`, each result is one line of JSON
+  the `state.changed` event it causes; an event an undo or redo caused ends with
+  `undo` or `redo`. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
   protocol version doesn't know are skipped, as the protocol asks.
@@ -198,14 +200,14 @@ for example:
 | 17 | `invalid_argument` |
 | 18 | `action_failed` |
 | 19 | `internal` |
-| 20 | an error code this CLI doesn't know (from a newer engine) |
+| 20 | an error code this CLI doesn't know (from a newer engine), and `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send |
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:97399bf670f90c91", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: re-read; parsing, block_on, connector, opt-in mock, writers (mcp and set-key read the BufRead) and MCP bullets unaffected by source.rename or the key-input cap" }
+verified = { hash = "b3:a7797f30fdad8605", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; #166's BufRead note holds, history adds nothing CLI-side beyond the event cause" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

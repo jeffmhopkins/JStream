@@ -1,4 +1,5 @@
-//! Validation of an output's target: the RTMP(S) server URL an output publishes to.
+//! Validation of an output's target: the RTMP(S) server URL an output publishes to,
+//! and the file a recording output writes.
 //!
 //! The collection is saved in plain text, so a URL must never carry a credential
 //! (R-SEC-001, docs/RULES.md#R-SEC-001). The stream key goes to the OS credential store
@@ -9,9 +10,51 @@
 //!
 //! The rejection reasons are fixed text. They never repeat the URL, which might hold a
 //! key.
+//!
+//! A recording path is checked for its shape only, the same on every platform:
+//! absolute in either Unix or Windows form, with no `..` segment, and ending in a file
+//! name. Whether it is absolute on the engine's own machine, whether its directory
+//! exists, and whether a file is already there, is checked by `output.start`, when the
+//! recording is opened.
 
 /// The longest URL accepted, in bytes.
 pub(crate) const MAX_URL_LEN: usize = 2048;
+/// The longest recording path accepted, in bytes.
+pub(crate) const MAX_PATH_LEN: usize = 4096;
+
+/// Why `path` is not an acceptable recording path, or `None` when it is.
+///
+/// The check is the same on every platform, as `check_asset_path` is for an absolute
+/// asset: `/…`, `\…`, `C:/…` or `C:\…`, with `/` or `\` separators, no `..` segment,
+/// and a file name last. The engine checks again, when it opens the file, that the
+/// path is absolute on its own machine.
+pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
+    if path.is_empty() {
+        return Some("must not be empty");
+    }
+    if path.len() > MAX_PATH_LEN {
+        return Some("must be at most 4096 bytes");
+    }
+    if path.chars().any(char::is_control) {
+        return Some("must not contain control characters");
+    }
+    let bytes = path.as_bytes();
+    let drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\');
+    if !(path.starts_with(['/', '\\']) || drive) {
+        return Some("must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`");
+    }
+    let mut segments = path.split(['/', '\\']);
+    if segments.clone().any(|segment| segment == "..") {
+        return Some("must not contain a `..` segment");
+    }
+    match segments.next_back() {
+        Some("" | ".") | None => Some("must end in a file name"),
+        Some(_) => None,
+    }
+}
 
 /// Why `url` is not an acceptable RTMP(S) server URL, or `None` when it is.
 pub(crate) fn rtmp_url_problem(url: &str) -> Option<&'static str> {
@@ -79,7 +122,45 @@ fn host_port_problem(authority: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_URL_LEN, rtmp_url_problem};
+    use super::{MAX_PATH_LEN, MAX_URL_LEN, record_path_problem, rtmp_url_problem};
+
+    #[test]
+    fn recording_paths_are_accepted() {
+        for path in [
+            "/show.mp4",
+            "/home/me/Videos/show.mp4",
+            "/home/me/Videos/show",
+            "/home/me/My Videos/show 2.mp4",
+            "C:\\Users\\me\\Videos\\show.mp4",
+            "C:/Users/me/Videos/show.mp4",
+            "\\\\server\\share\\show.mp4",
+            "/home/me/.hidden.mp4",
+        ] {
+            assert_eq!(record_path_problem(path), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn bad_recording_paths_are_rejected() {
+        let long = format!("/{}", "a".repeat(MAX_PATH_LEN));
+        for path in [
+            "",
+            long.as_str(),
+            "show.mp4",
+            "Videos/show.mp4",
+            "C:show.mp4",
+            "/Videos/show\n.mp4",
+            "/Videos/show\0.mp4",
+            "/",
+            "/Videos/",
+            "C:\\Videos\\",
+            "/Videos/.",
+            "/Videos/..",
+            "/home/me/../other/show.mp4",
+        ] {
+            assert!(record_path_problem(path).is_some(), "{path:?} was accepted");
+        }
+    }
 
     #[test]
     fn server_urls_are_accepted() {
