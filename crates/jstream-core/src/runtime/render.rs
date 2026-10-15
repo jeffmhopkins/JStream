@@ -5,7 +5,8 @@
 //!
 //! The control side publishes an immutable [`RenderSnapshot`] through `arc-swap`, under
 //! the collection lock, and only when what the program mix draws changed. The render
-//! thread and the snapshot thread load it without taking that lock. The render thread
+//! thread loads it without taking that lock. `video.snapshot` reads it with `rev` under
+//! the lock and hands it to the snapshot thread, which never loads it. The render thread
 //! stamps the generation it adopted in [`RenderHub`]'s reader slot, so the control side
 //! can tell when a committed change is on screen; a snapshot it lets go of goes to the
 //! pipeline's collector thread to be freed (R-RT-003).

@@ -371,7 +371,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:b53354403aab317a", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: took main's pointer paragraph in place of the output-pipeline detail; E1's model text (render snapshot through arc-swap, generation stamp, Collector row naming both collectors) stays as the engine-wide model and doesn't contradict core #runtime" }
+verified = { hash = "b3:5213e22cb1eb8e49", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186: render snapshot paragraph now says only the render thread loads it lock-free; video.snapshot reads it with rev under the collection lock and its thread only receives it (Engine::video_snapshot); re-plan triggers include undo/redo and a collection file's load" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -448,12 +448,13 @@ lock-free parameter channels. On the wire they are live values, committed by one
 at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
-The **render snapshot** is built. After every applied batch and every stored source
-frame, the control side re-plans the program mix under the collection lock: the
+The **render snapshot** is built. After every applied batch, undo and redo, every
+stored source frame and a collection file's load, the control side re-plans the program mix under the collection lock: the
 reachable scenes, the frames they show and the passes that draw them. It publishes
 that as the next render generation only when it draws something new, so a batch that
-touches nothing on program publishes nothing. The render thread and `video.snapshot`'s
-thread load it without the lock, and the render thread draws through a `jstream-render`
+touches nothing on program publishes nothing. The render thread loads it without the
+lock. `video.snapshot` reads it together with `rev` under the lock on the control path,
+and its thread only receives the snapshot. The render thread draws through a `jstream-render`
 resource cache keyed by source and by nested scene and depth. A frame that shows what
 the last one showed allocates no texture: an unchanged frame is not uploaded again and
 each nested scene is redrawn into the layer it had. An image no frame references is

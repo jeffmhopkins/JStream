@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:548e864cb0868064", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: B1's Tests and Collection file bullets are main's beside E1's bullets; the Not-yet line drops persistence and keeps the audio/outputs snapshots" }
+verified = { hash = "b3:c1538e65725b50dd", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186: re-read; only render.rs module-doc wording changed, purpose contents unaffected" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -132,7 +132,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bf611e7fa88cc5aa", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: the render-snapshot paragraph now names undo/redo and a collection file's load among the re-plans (with_collection_file publishes after replacing the graph; tests/collection.rs checks the loaded program scene); B1's Collection file subsection is main's; Not-yet line keeps both sides (persistence built, audio/outputs snapshots not)" }
+verified = { hash = "b3:fcbd6de7feb1b825", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186: lock-order paragraph now says the render thread loads the render snapshot with no lock and video.snapshot reads it under the collection lock; matches engine.rs video_snapshot and runtime/render.rs" }
 -->
 
 ### Engine and sessions
@@ -616,8 +616,9 @@ release it before taking the collection lock. A source must not call back into t
 engine while that mutex is held. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The render snapshot is published under the collection
-lock (which makes the control side its one writer) and loaded by the render and
-snapshot threads with no lock at all. A stream's poll takes only its queue's lock. No lock
+lock (which makes the control side its one writer) and loaded by the render thread
+with no lock at all. `video.snapshot` reads it under the collection lock and the
+snapshot thread only receives it. A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
@@ -734,7 +735,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:87fed6ac34327e35", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: carried E1's output-pipeline paragraph over (program mix from the render snapshot, capture fallback, render collector) with main's recording and stats text; matches pipeline.rs and runtime/render.rs" }
+verified = { hash = "b3:fe919610018a8fcf", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186: re-read; output pipeline text (render thread reads the render snapshot, collector) unchanged and still matches runtime/render.rs after the module-doc wording fix" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
