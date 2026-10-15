@@ -60,9 +60,9 @@ depends_on = ["docs/adr/0019-review-gate-v2.md"]
 4. Read enough of the surrounding code to understand callers and invariants. The diff
    alone is not enough.
 5. **A wave PR** (head `wave/*`, base `main`; [ADR-0055](docs/adr/0055-wave-branches.md))
-   carries PRs you already passed into the wave. Review what they didn't see: the merge
-   commits between them, conflict resolutions, and anything committed to the wave branch
-   directly. The full CI on the wave PR covers the rest.
+   carries PRs you already passed into the wave. Review what they didn't see: the sync
+   merge commits that brought `main` in and their conflict resolutions
+   (`git show --remerge-diff <merge>`). The full CI on the wave PR covers the rest.
 
 <a id="checks"></a>
 ## Step 2: Review
@@ -123,7 +123,8 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
   (e.g. `accepted` when the maintainer rejected it). A maintainer-tier ADR still **awaiting** a valid
   decision is not a blocking finding: it gets `escalate` (see the verdict table);
 - a security problem;
-- a red required CI check caused by this PR.
+- a red required CI check caused by this PR. On a PR into a `wave/*` branch, a red `fmt`,
+  `clippy (ubuntu-latest)`, `docs` or `pr-title` counts as required too.
 
 **Non-blocking** (doesn't prevent `pass`): style, naming, suggestions, questions, and
 **pre-existing problems** the PR didn't introduce. List those as follow-ups, which the

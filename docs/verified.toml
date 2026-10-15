@@ -2943,19 +2943,19 @@ stamp = { hash = "b3:c40bfcab7de124d7", by = "agent:claude", note = "New. merge-
 stamp = { hash = "b3:df8b08f4a74bee6c", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }
 
 ["RUNBOOK-WAVES#landing"."body"]
-stamp = { hash = "b3:6f47a95a7fc720ea", by = "agent:claude", note = "New. The wave PR into main runs ci.yml fully and review-gate dispatches after-review (base not wave/); REVIEW#gather covers its review." }
+stamp = { hash = "b3:6ae91e98d6488857", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
 
 ["RUNBOOK-WAVES#landing"."dep:REVIEW.md#gather"]
-stamp = { hash = "b3:453c6d19613a9fc9", by = "agent:claude", note = "New. The wave PR into main runs ci.yml fully and review-gate dispatches after-review (base not wave/); REVIEW#gather covers its review." }
+stamp = { hash = "b3:8bf3f0afb967b2ae", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
 
 ["RUNBOOK-WAVES#landing"."dep:docs/adr/0055-wave-branches.md#decision"]
-stamp = { hash = "b3:37506ea8006733af", by = "agent:claude", note = "New. The wave PR into main runs ci.yml fully and review-gate dispatches after-review (base not wave/); REVIEW#gather covers its review." }
+stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
 
 ["RUNBOOK-WAVES#owner"."body"]
-stamp = { hash = "b3:650161de67b0441f", by = "agent:claude", note = "New. Owner duties match ADR-0055 decision; sync PRs because the wave/* ruleset only takes PRs." }
+stamp = { hash = "b3:3a71f5c50a47e8d9", by = "agent:claude", note = "Sync PRs now auto-merge with mergeMethod MERGE, matching ADR-0055's sync-PR bullet and the ruleset allowing merge commits." }
 
 ["RUNBOOK-WAVES#owner"."dep:docs/adr/0055-wave-branches.md#decision"]
-stamp = { hash = "b3:37506ea8006733af", by = "agent:claude", note = "New. Owner duties match ADR-0055 decision; sync PRs because the wave/* ruleset only takes PRs." }
+stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Sync PRs now auto-merge with mergeMethod MERGE, matching ADR-0055's sync-PR bullet and the ruleset allowing merge commits." }
 
 ["RUNBOOK-WAVES#protocol"."body"]
 stamp = { hash = "b3:df9a842e2252a01f", by = "agent:claude", note = "New. Keeps the queue order by routing every PROTOCOL_VERSION bump to the earliest wave." }
@@ -2964,10 +2964,10 @@ stamp = { hash = "b3:df9a842e2252a01f", by = "agent:claude", note = "New. Keeps 
 stamp = { hash = "b3:27ef1830af9f4a1c", by = "agent:claude", note = "New. Keeps the queue order by routing every PROTOCOL_VERSION bump to the earliest wave." }
 
 ["RUNBOOK-WAVES#which-wave"."body"]
-stamp = { hash = "b3:1b0fec0502e03064", by = "agent:claude", note = "New. Targets match ADR-0055 and ci.yml's wave/ base check; protocol bumps go to the earliest wave." }
+stamp = { hash = "b3:30468b372b42a1aa", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
 
 ["RUNBOOK-WAVES#which-wave"."dep:docs/adr/0055-wave-branches.md#decision"]
-stamp = { hash = "b3:37506ea8006733af", by = "agent:claude", note = "New. Targets match ADR-0055 and ci.yml's wave/ base check; protocol bumps go to the earliest wave." }
+stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
 
 ["SECURITY#scope"."body"]
 stamp = { hash = "b3:06282b84a1425ad4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: control API bullet now names the TLS-only pairing page and the device-only cookie, per R-SEC-002's amended text; other bullets unchanged" }

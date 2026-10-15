@@ -34,8 +34,9 @@ There is one open wave per milestone group: `wave/m1` (M1a to M1d), `wave/m2` an
 A stacked PR keeps the PR below it as its base. Only the bottom of a stack targets a wave.
 
 To move an open PR, change its base with the GitHub MCP tool `update_pull_request`
-(`base: "wave/m1"`), then bring that wave in ([Keeping current](#current)). Never close and
-reopen a PR to move it.
+(`base: "wave/m1"`), then bring that wave in ([Keeping current](#current)) and push. Changing
+the base doesn't re-run CI, so a PR moved without a push keeps the checks it ran against its
+old base. Never close and reopen a PR to move it.
 
 <a id="current"></a>
 ## Keeping a PR current
@@ -63,7 +64,9 @@ The coordinator names one thread as the owner of each wave. The owner:
 2. Keeps the wave current with `main`. A `wave/*` branch only takes PRs, so the owner
    branches off the wave, runs `cargo xtask docs merge-main`, verifies the stale
    sections, and opens a **sync PR** into the wave titled `chore(wave): merge main into
-   wave/m1`. Do this whenever another wave lands, before cutting.
+   wave/m1`. Turn on auto-merge with `mergeMethod: MERGE`, never squash: a squashed sync
+   leaves `main` out of the wave's history, and the same conflicts come back at the next
+   sync. Do this whenever another wave lands, before cutting.
 3. Cuts the wave ([Landing a wave](#landing)).
 4. Fixes what the wave's full CI run finds, with fix PRs into the wave. The thread that
    wrote the failing change helps if it is still running.
@@ -81,13 +84,19 @@ Cut a wave when every PR still targeting it is merged, or draft, or blocked on t
 maintainer, and at least one PR has merged into it. Then:
 
 1. Create the next wave (`wave/m1-2`) from `main`, and move every open PR that targets the
-   wave onto it, drafts included. Nothing may merge into a wave after it is cut.
+   wave onto it, drafts included. Nothing may merge into a wave after it is cut. Until the
+   cut wave lands, a moved PR's diff also shows that wave's changes; once it lands, the
+   owner syncs the new wave and each moved PR merges it again.
 2. Sync the wave with `main` if it conflicts.
 3. Open the PR from the wave into `main`, titled `chore(wave): land wave/m1`. List each PR
-   it carries, with its number and title. Turn on auto-merge (squash).
-4. The reviewer reviews the sync merges and fix PRs ([REVIEW.md](../../REVIEW.md#gather)).
-   Every check runs, then the after-review Windows, macOS and end-to-end jobs.
-5. After it merges, delete the wave branch. Every PR into it is already merged or moved.
+   it carries, with its number and title. Copy in the "Governance change" section of every
+   carried PR that had one, and apply `governance-approved` if any did: `governance` diffs
+   the whole wave against `main`. Turn on auto-merge (squash).
+4. The reviewer reviews the sync merges ([REVIEW.md](../../REVIEW.md#gather)); the PRs into
+   the wave were reviewed already. Every check runs, then the after-review Windows, macOS
+   and end-to-end jobs.
+5. GitHub deletes the wave branch when it merges. Every PR into it is already merged or
+   moved; one still open would be moved to `main` without a CI run.
 
 <a id="protocol"></a>
 ## Protocol versions

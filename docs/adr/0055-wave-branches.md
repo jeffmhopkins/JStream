@@ -24,16 +24,22 @@ re-merge churn dominate how long a change takes to land.
 ## Decision
 Work can land in batches through **wave branches** named `wave/<name>`:
 - A wave branch starts from `main`. Builders open their PRs against it, and the reviewer
-  reviews each one as usual. Those PRs run only the quick checks: `fmt`, Linux `clippy`,
-  `docs`, `lint-deps`, `gate-test`, `pr-title` and `review-gate`. They skip `test`, `doc`,
-  `deny`, `wasm` and the after-review platform jobs.
+  reviews each one as usual. Those PRs skip only `test`, `doc`, `deny`, `wasm` and the
+  after-review platform jobs; every other check, `governance` included, runs as on any PR.
 - They squash-merge into the wave branch once `review-gate` passes. A `wave/*` ruleset
-  requires only `review-gate`, so auto-merge works there.
+  requires a PR and `review-gate`, so auto-merge works there, and allows squash and merge
+  commits.
+- The wave's owner brings `main` into the wave through a **sync PR** that lands as a merge
+  commit, never a squash, so `main` becomes an ancestor of the wave and later merges don't
+  re-conflict on what was already resolved.
 - One PR from the wave branch into `main` runs every check, including the after-review
   platform jobs. The reviewer reviews what the wave's PRs didn't show: merge commits,
   conflict resolutions and direct commits to the wave branch ([REVIEW.md](../../REVIEW.md#gather)).
 - The wave's owner keeps it merged with `main`, fixes failures the full run finds, and
   opens the PR into `main` when the wave is ready.
+
+This amends [ADR-0054](0054-platform-ci-after-review.md) for PRs into `wave/*` only: they
+skip the Linux tests and the after-review dispatch. Everything else in ADR-0054 stands.
 
 PRs straight into `main` keep working exactly as before. Which branch each PR targets, who
 owns a wave and how it lands are in the [waves runbook](../runbooks/waves.md).
