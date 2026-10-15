@@ -74,7 +74,7 @@ context, the CPU fallback (opened as configured, with its reason) for a backend 
 GPU path, one that refuses the context and one whose GPU encoder fails to open, and a
 GPU session that is opened in NV12, encodes a ring of two targets and leaves the
 producer holding the only clone of each, and fails on a CPU frame. A machine with no
-wgpu adapter skips them, except on CI.
+wgpu adapter skips the ones that need a context, except on CI.
 
 <a id="design"></a>
 ## Design

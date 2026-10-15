@@ -39,7 +39,7 @@ stamp = { hash = "b3:9ffc9ae352b160a3" }
 stamp = { hash = "b3:e5fef95eb12cb895" }
 
 ["ARCH#crate-map"."file:crates/jstream-core/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:a8d2d95e5d1a7c3b" }
+stamp = { hash = "b3:cb32d22b5a1fd6ba", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; jstream-core Cargo.toml adds a cfg(windows) dev-dependency and hw-tests feature only, its row and layer unchanged; lint-deps passes; holds" }
 
 ["ARCH#crate-map"."file:crates/jstream-effects/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:100b037ae75599a7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
@@ -135,7 +135,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:112f148ae88f982d" }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:6412cfa1dc90c301", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
+stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c: one-scene paragraph adds that step 5's encoder side is built (Codecs::on_context, D3D11 copy with fences, open_on fallback) and that nothing writes encode targets yet; steps 1-6 unchanged" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -146,20 +146,23 @@ stamp = { hash = "b3:e413bab2e84c75e1" }
 ["ARCH#gpu-pipeline"."file:crates/jstream-platform-windows/src/gpu/d3d.rs"]
 stamp = { hash = "b3:74636e2565276acc" }
 
+["ARCH#gpu-pipeline"."file:crates/jstream-platform-windows/src/gpu/encode.rs"]
+stamp = { hash = "b3:a962082ddbf74417" }
+
 ["ARCH#gpu-pipeline"."file:crates/jstream-platform-windows/src/gpu/mod.rs"]
-stamp = { hash = "b3:1f10a420e9f6a9bc" }
+stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/Cargo.toml"]
 stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:99bce65cb31e7d4f", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
+stamp = { hash = "b3:47d78ccae6c3ccc8", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: stale via the render README file (main's benchmarks paragraph); re-read the as-built paragraph and steps 1-6, still match render and core; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:071eeba73136670c" }
+stamp = { hash = "b3:8e0dd43ba922fd3d" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:5641b05dca77952a" }
@@ -168,7 +171,7 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:bb5175d8f36e082d" }
+stamp = { hash = "b3:705e6506274fa233" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
@@ -177,7 +180,7 @@ stamp = { hash = "b3:219665bab5be0284" }
 stamp = { hash = "b3:f1de9efc6510e1ea" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/image.rs"]
-stamp = { hash = "b3:0edf4c378e3b8335" }
+stamp = { hash = "b3:e2eefb59f2b0e692" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
 stamp = { hash = "b3:0ed7d39913b73022" }
@@ -192,7 +195,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:eaa109533b8798d8" }
+stamp = { hash = "b3:ff7828f70313a653" }
 
 ["ARCH#mcp"."body"]
 stamp = { hash = "b3:9ca86438d4d9c457", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
@@ -876,7 +879,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:f8d3caba075c6078", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
+stamp = { hash = "b3:3ae51bc71fb2e704", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger after merging main and #325's head: re-read; E3b's capture import/scaled-fill text and main's #392 test-helper change sit together; F6 changes only codec choice in pipeline.rs and the FLV tagger choice in sink.rs, neither described here beyond Runtime's Video codecs paragraph; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
@@ -894,7 +897,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
-stamp = { hash = "b3:82b99f798fcea13a" }
+stamp = { hash = "b3:744c35ebb8f3b343", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:5e06b48ac662790f" }
@@ -936,10 +939,10 @@ stamp = { hash = "b3:9ceafdfcc04ac858" }
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/mod.rs"]
-stamp = { hash = "b3:b5aa5ea1644b6fdd" }
+stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:976b8a234d4f9a45" }
+stamp = { hash = "b3:df6c51401eb24225", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger after merging main and #325's head: re-read; E3b's capture import/scaled-fill text and main's #392 test-helper change sit together; F6 changes only codec choice in pipeline.rs and the FLV tagger choice in sink.rs, neither described here beyond Runtime's Video codecs paragraph; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -948,7 +951,7 @@ stamp = { hash = "b3:cd76a871c2ae751d" }
 stamp = { hash = "b3:8ffcf66ee4ab36b2" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/sink.rs"]
-stamp = { hash = "b3:9597d8d3fe05859a" }
+stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger after merging main and #325's head: re-read; E3b's capture import/scaled-fill text and main's #392 test-helper change sit together; F6 changes only codec choice in pipeline.rs and the FLV tagger choice in sink.rs, neither described here beyond Runtime's Video codecs paragraph; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/vcam.rs"]
 stamp = { hash = "b3:20b9282859764b8b" }
@@ -957,13 +960,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:918fe91ec11037de" }
+stamp = { hash = "b3:62d7ac855f8e3c18", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:c7afb7b2bff7299a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only tests.rs's cpu_pipeline poll helpers changed: pump_until and wait_until wait up to a 30 s HANG_BOUND instead of 5 s (#392). Design describes engine behaviour (start's 10 s compositor-open bound, RenderHub::caught_up polled by tests) and states no test-helper deadline; no engine code changed, so it holds" }
+stamp = { hash = "b3:70be1c9adab557ed", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger after merging main and #325's head: re-read; E3b's capture import/scaled-fill text and main's #392 test-helper change sit together; F6 changes only codec choice in pipeline.rs and the FLV tagger choice in sink.rs, neither described here beyond Runtime's Video codecs paragraph; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -974,14 +977,20 @@ stamp = { hash = "b3:732249ad50d11c2c" }
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
 
+["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/gpu_capture.rs"]
+stamp = { hash = "b3:7044ce3554a51e59", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
+
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/history.rs"]
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/sources.rs"]
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
+["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/windows_gpu.rs"]
+stamp = { hash = "b3:f16b463f8715a669", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
+
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:5609012e8331a22f", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
+stamp = { hash = "b3:16f9cf99beaad101", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1026,10 +1035,10 @@ stamp = { hash = "b3:9ceafdfcc04ac858" }
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/mod.rs"]
-stamp = { hash = "b3:b5aa5ea1644b6fdd" }
+stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:976b8a234d4f9a45" }
+stamp = { hash = "b3:df6c51401eb24225", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger after merging main (#392, #395, ADR-0053) and #325's head: re-read; Contents and Tests match pipeline.rs (video_codec), sink.rs (enhanced RTMP tagger, MP4 H.264-only refusal and its unit tests) and tests.rs's HANG_BOUND helpers; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1038,7 +1047,7 @@ stamp = { hash = "b3:cd76a871c2ae751d" }
 stamp = { hash = "b3:8ffcf66ee4ab36b2" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/sink.rs"]
-stamp = { hash = "b3:9597d8d3fe05859a" }
+stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger after merging main (#392, #395, ADR-0053) and #325's head: re-read; Contents and Tests match pipeline.rs (video_codec), sink.rs (enhanced RTMP tagger, MP4 H.264-only refusal and its unit tests) and tests.rs's HANG_BOUND helpers; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/vcam.rs"]
 stamp = { hash = "b3:20b9282859764b8b" }
@@ -1047,13 +1056,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:918fe91ec11037de" }
+stamp = { hash = "b3:62d7ac855f8e3c18", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:c7afb7b2bff7299a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only tests.rs's cpu_pipeline poll helpers changed: pump_until and wait_until share a 30 s HANG_BOUND instead of 5 s (#392). The Tests list (render and mixer panics reported as failed on the CPU stand-in, the stage-failure, late-tick, teardown tests) names no deadline and still holds; no engine code changed" }
+stamp = { hash = "b3:70be1c9adab557ed", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger after merging main (#392, #395, ADR-0053) and #325's head: re-read; Contents and Tests match pipeline.rs (video_codec), sink.rs (enhanced RTMP tagger, MP4 H.264-only refusal and its unit tests) and tests.rs's HANG_BOUND helpers; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -1064,11 +1073,17 @@ stamp = { hash = "b3:732249ad50d11c2c" }
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
 
+["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/gpu_capture.rs"]
+stamp = { hash = "b3:7044ce3554a51e59", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
+
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/history.rs"]
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/sources.rs"]
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: PR changes only src/tests/sources.rs, moving the animation-by-itself test onto FakeClock via set_source_clock (#293); the Tests list and engine description still hold." }
+
+["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/windows_gpu.rs"]
+stamp = { hash = "b3:f16b463f8715a669", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/tests/mcp.rs"]
 stamp = { hash = "b3:678b488c706f11fa" }
@@ -1077,7 +1092,7 @@ stamp = { hash = "b3:678b488c706f11fa" }
 stamp = { hash = "b3:993e780364d6f4d3" }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:50a6bc0982573317", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
+stamp = { hash = "b3:4a686106f6ff0e36", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:27f72f3f6ef95752" }
@@ -1086,10 +1101,10 @@ stamp = { hash = "b3:27f72f3f6ef95752" }
 stamp = { hash = "b3:f2c3ac9292e67cf2" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/mod.rs"]
-stamp = { hash = "b3:b5aa5ea1644b6fdd" }
+stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:976b8a234d4f9a45" }
+stamp = { hash = "b3:df6c51401eb24225", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger: re-read the Video codecs paragraph against pipeline.rs video_codec (H.264 only from the protocol) and sink.rs (HEVC/AV1 enhanced RTMP tags, config from first keyframe, MP4 refuses non-H.264); holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1098,7 +1113,7 @@ stamp = { hash = "b3:cd76a871c2ae751d" }
 stamp = { hash = "b3:8ffcf66ee4ab36b2" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/sink.rs"]
-stamp = { hash = "b3:9597d8d3fe05859a" }
+stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger: re-read the Video codecs paragraph against pipeline.rs video_codec (H.264 only from the protocol) and sink.rs (HEVC/AV1 enhanced RTMP tags, config from first keyframe, MP4 refuses non-H.264); holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/vcam.rs"]
 stamp = { hash = "b3:20b9282859764b8b" }
@@ -1107,7 +1122,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:f8d3caba075c6078" }
+stamp = { hash = "b3:3ae51bc71fb2e704", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger: stale only via core#design; daemon design names no codec choice and is unchanged by F6; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:4347075071d4ca18", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Signals bullet against the server design change: the signal future is serve_with_shutdown's, which still closes open connections with code 1001; now also waits for closes before returning, which this bullet doesn't contradict." }
@@ -1332,7 +1347,7 @@ stamp = { hash = "b3:c605dc3799e8d4cc" }
 stamp = { hash = "b3:08d1db37fb68e030" }
 
 ["CRATE-jstream-encode#design"."body"]
-stamp = { hash = "b3:469ca075b74bfbaf", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Performance bullet matches benches/session.rs" }
+stamp = { hash = "b3:9abb2b5acc27b6d8", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (70d5ce5) into #325: re-read E3c's GPU frames subsection and Not yet beside main's benchmarks (benches/session.rs) text; both hold" }
 
 ["CRATE-jstream-encode#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -1355,8 +1370,11 @@ stamp = { hash = "b3:6cf396d8a1731016" }
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/fanout.rs"]
 stamp = { hash = "b3:876cc2224e1406f8" }
 
+["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/gpu_tests.rs"]
+stamp = { hash = "b3:eb3c1c7c45d57a54" }
+
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/lib.rs"]
-stamp = { hash = "b3:69895501654ddc46" }
+stamp = { hash = "b3:dca502d9616aae14" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/registry.rs"]
 stamp = { hash = "b3:6a8de9fcad8ead85" }
@@ -1368,10 +1386,10 @@ stamp = { hash = "b3:55ea3a587b34caad" }
 stamp = { hash = "b3:df3b8e35c3661ab4" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/video.rs"]
-stamp = { hash = "b3:21668f51b28f0233" }
+stamp = { hash = "b3:6c1b99c4b8c63792" }
 
 ["CRATE-jstream-encode#purpose"."body"]
-stamp = { hash = "b3:1ac237caa31707d0", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale via ARCH data-model; no encode text concerns audio routing; holds" }
+stamp = { hash = "b3:9f95f4d2d15eb904", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (6b987c5) into #325: stamp-only conflict; re-read E3c's open_on/VideoPath/wgpu dev-dep/gpu_tests text against #219's D5 restamp; applied review N1 (skips only the tests that need a context); holds" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-encode"]
 stamp = { hash = "b3:984f333744172f87" }
@@ -1391,8 +1409,11 @@ stamp = { hash = "b3:6cf396d8a1731016" }
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/fanout.rs"]
 stamp = { hash = "b3:876cc2224e1406f8" }
 
+["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/gpu_tests.rs"]
+stamp = { hash = "b3:eb3c1c7c45d57a54" }
+
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/lib.rs"]
-stamp = { hash = "b3:69895501654ddc46" }
+stamp = { hash = "b3:dca502d9616aae14" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/registry.rs"]
 stamp = { hash = "b3:6a8de9fcad8ead85" }
@@ -1404,7 +1425,7 @@ stamp = { hash = "b3:55ea3a587b34caad" }
 stamp = { hash = "b3:df3b8e35c3661ab4" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/video.rs"]
-stamp = { hash = "b3:21668f51b28f0233" }
+stamp = { hash = "b3:6c1b99c4b8c63792" }
 
 ["CRATE-jstream-graph#purpose"."body"]
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
@@ -1683,13 +1704,13 @@ stamp = { hash = "b3:4a6d6e6f01f968f4" }
 stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 
 ["CRATE-jstream-platform#gpu-frames"."body"]
-stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
+stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (6b987c5) into #325: stamp-only conflict; E3c encoder text (on_context, release fence, FrameSync::platform, LUID filter) unchanged; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
 stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge cascade from ARCH#crate-map: re-read; the crate-map body is unchanged apart from the stamp move, nothing in it bears on GPU frames; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:6412cfa1dc90c301" }
+stamp = { hash = "b3:a6f6991c32106b42" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:9074e32b08b81d5b" }
@@ -1698,7 +1719,7 @@ stamp = { hash = "b3:9074e32b08b81d5b" }
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:ac6493f8088539b9", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
+stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: Codecs::on_context and FrameSync::platform bullets hold; Not yet combines main's video_devices item with E3c's vcam and vendor-ID items; holds" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:e204cadb57ccceae" }
@@ -1731,13 +1752,13 @@ stamp = { hash = "b3:f0a2d34cd26f9151" }
 stamp = { hash = "b3:4c383cdea1e1ca60" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/capture.rs"]
-stamp = { hash = "b3:9d77cc24947fd900" }
+stamp = { hash = "b3:d0428542e93b8a89" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/clock.rs"]
 stamp = { hash = "b3:34c4d1c416af47c3" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/codec.rs"]
-stamp = { hash = "b3:f7ce23061cfbb76d" }
+stamp = { hash = "b3:64d00588cf8e082d" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/error.rs"]
 stamp = { hash = "b3:7d8f9a5250232107" }
@@ -1746,7 +1767,7 @@ stamp = { hash = "b3:7d8f9a5250232107" }
 stamp = { hash = "b3:f0faa7b84c4c4c37" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/gpu.rs"]
-stamp = { hash = "b3:7711b9f3083b64e2" }
+stamp = { hash = "b3:2552398d7fe9d54c" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/id.rs"]
 stamp = { hash = "b3:8019c83df5cad30a" }
@@ -1770,10 +1791,10 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:7522c9a00d99ef52", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Re-read WindowsVcam Start: probe then HKLM check, matching sink.rs; the N-edition wording holds for this crate's hosts in general. The sink.rs change only moved registered()'s doc back above it (B1)" }
+stamp = { hash = "b3:a9fd83061ddd54cb", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger: re-read the video encoder bullets (Format per codec, H.264/HEVC/AV1, software MFT H.264 only, shared bullets now 'Video encoders, both paths') against codec/video.rs and codec/mod.rs; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:ac6493f8088539b9" }
+stamp = { hash = "b3:94ddd281fa3bc568" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:dfa8602587609b6c" }
@@ -1830,7 +1851,7 @@ stamp = { hash = "b3:bc308dcc158e28d4" }
 stamp = { hash = "b3:2843d6ac31fa1d3a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/wgc.rs"]
-stamp = { hash = "b3:2946612c32823272" }
+stamp = { hash = "b3:3c32bd9bae965208" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/clock.rs"]
 stamp = { hash = "b3:bcbc90e406de91b4" }
@@ -1838,14 +1859,14 @@ stamp = { hash = "b3:bcbc90e406de91b4" }
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/aac.rs"]
 stamp = { hash = "b3:0b4fe8918cdd233a" }
 
-["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/h264.rs"]
-stamp = { hash = "b3:a5e1bd2cf0f9cd5e" }
-
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mf.rs"]
-stamp = { hash = "b3:c5d1fa497918f58d" }
+stamp = { hash = "b3:b132c98638f816bf" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mod.rs"]
-stamp = { hash = "b3:e7ff5e49bb280c63" }
+stamp = { hash = "b3:280836575fbff613", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger: re-read the video encoder bullets (Format per codec, H.264/HEVC/AV1, software MFT H.264 only, shared bullets now 'Video encoders, both paths') against codec/video.rs and codec/mod.rs; holds" }
+
+["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/video.rs"]
+stamp = { hash = "b3:51c9f9ef6d62337d", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on the ledger: re-read the video encoder bullets (Format per codec, H.264/HEVC/AV1, software MFT H.264 only, shared bullets now 'Video encoders, both paths') against codec/video.rs and codec/mod.rs; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/com.rs"]
 stamp = { hash = "b3:c237392a0b5423fa" }
@@ -1859,8 +1880,11 @@ stamp = { hash = "b3:e413bab2e84c75e1" }
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/gpu/d3d.rs"]
 stamp = { hash = "b3:74636e2565276acc" }
 
+["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/gpu/encode.rs"]
+stamp = { hash = "b3:a962082ddbf74417" }
+
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/gpu/mod.rs"]
-stamp = { hash = "b3:1f10a420e9f6a9bc" }
+stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/lib.rs"]
 stamp = { hash = "b3:9c4ac5054362a8e3" }
@@ -2073,7 +2097,7 @@ stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c594f42e1b065295" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:7f2a94f0736d9611", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
+stamp = { hash = "b3:69374f6949f04237", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -2082,7 +2106,7 @@ stamp = { hash = "b3:24c0e2f735f7e770" }
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:071eeba73136670c" }
+stamp = { hash = "b3:8e0dd43ba922fd3d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:5641b05dca77952a" }
@@ -2091,7 +2115,7 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:bb5175d8f36e082d" }
+stamp = { hash = "b3:705e6506274fa233", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
@@ -2100,7 +2124,7 @@ stamp = { hash = "b3:219665bab5be0284" }
 stamp = { hash = "b3:f1de9efc6510e1ea" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/image.rs"]
-stamp = { hash = "b3:0edf4c378e3b8335" }
+stamp = { hash = "b3:e2eefb59f2b0e692", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/lib.rs"]
 stamp = { hash = "b3:0ed7d39913b73022" }
@@ -2115,19 +2139,19 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:eaa109533b8798d8" }
+stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:79c89d3a788a641a", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: render's link to ARCH Threads for the cache hand-off still points at the model's State-to-RT-threads text; holds" }
+stamp = { hash = "b3:7bb23bacf002a8e0", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c: stale via platform gpu-frames and ARCH; render untouched, still does no NV12 conversion or encode-target export (Not in this cut holds); holds" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
-stamp = { hash = "b3:3c3b2d799f3dc3f1" }
+stamp = { hash = "b3:74089efe2d4ea366" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-render"]
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:6412cfa1dc90c301" }
+stamp = { hash = "b3:a6f6991c32106b42" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2139,7 +2163,7 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Cargo.toml only adds the criterion dev-dependency and the composite bench target" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:071eeba73136670c" }
+stamp = { hash = "b3:8e0dd43ba922fd3d" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:5641b05dca77952a" }
@@ -2148,7 +2172,7 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:bb5175d8f36e082d" }
+stamp = { hash = "b3:705e6506274fa233" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
@@ -2157,7 +2181,7 @@ stamp = { hash = "b3:219665bab5be0284" }
 stamp = { hash = "b3:f1de9efc6510e1ea" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/image.rs"]
-stamp = { hash = "b3:0edf4c378e3b8335" }
+stamp = { hash = "b3:e2eefb59f2b0e692" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
 stamp = { hash = "b3:0ed7d39913b73022" }
@@ -2172,10 +2196,10 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:eaa109533b8798d8" }
+stamp = { hash = "b3:ff7828f70313a653" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:d6b297a7651495df", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph matches benches/composite.rs (every item rotated, CI panics without an adapter)" }
+stamp = { hash = "b3:d2dc1d36012c166b", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (#361 benchmarks) into #219: re-read; main's criterion Benchmarks paragraph sits beside E3b's GPU-frames-through-the-cache test text; benches compile against E3b's compositor (workspace clippy --all-targets clean); holds" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
@@ -2187,7 +2211,7 @@ stamp = { hash = "b3:7db1a4e21a6cee80" }
 stamp = { hash = "b3:e2b28a2df72d9e17" }
 
 ["CRATE-jstream-render#testing"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:eaa109533b8798d8" }
+stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU-frames-through-the-cache test text matches the_cache_imports_gpu_frames_without_keeping_their_holds in tests.rs; holds" }
 
 ["CRATE-jstream-server#design"."body"]
 stamp = { hash = "b3:4347075071d4ca18", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
@@ -2613,10 +2637,10 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
 ["CRATE-jstream-youtube#purpose"."body"]
-stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via platform#purpose (Audio and FakeAudioIo lines); Secret and OAuthTokenStore text unchanged; holds" }
+stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: stale via platform#purpose only; Secret and OAuthTokenStore text unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:ac6493f8088539b9" }
+stamp = { hash = "b3:94ddd281fa3bc568" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:e3b27ea549009815" }
