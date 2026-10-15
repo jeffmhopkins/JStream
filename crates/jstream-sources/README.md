@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:aa7736453174613a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge-only round (main merged in): re-read against main's changes and this PR's browser additions; both hold together" }
+verified = { hash = "b3:9416cf39b58da517", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 youtube_chat preset: re-read; video parsing, blank on empty, default CSS, browser settings reuse checked against youtube_chat.rs, browser::open and tests/youtube_chat.rs" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -114,6 +114,18 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `frame` is a transparent frame of the page's size, and the page's audio is the
   source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a
   backend's failure is `SourceError::Browser`. Dropping the source closes the page.
+- `youtube_chat` ("YouTube chat"): a preset of `browser` that shows a live video's chat
+  through YouTube's public popout chat page, with no sign-in and no Google OAuth client
+  (ADR-0051, proposed). `video` takes the video's ID or a `youtube.com/watch?v=`,
+  `youtube.com/live/`, `youtube.com/live_chat?v=` or `youtu.be/` link (with or without
+  `www.` or `m.`); the ID must be letters, digits, `-` and `_` only, so it can't reshape
+  the page's URL, and anything else is refused naming `video`. Empty is a blank page. A
+  channel's `/live` link names no video, so it is refused. `width` (400), `height`
+  (600), `fps` and `css` work as in `browser`; the default CSS (`YOUTUBE_CHAT_CSS`)
+  makes the page transparent and hides the header, ticker and message box, so only
+  messages show. It only shows chat: sending, featuring and moderating need the
+  optional API path. YouTube owns the page, so if YouTube changes it, the default CSS
+  may stop hiding things.
 - `display`, `media`, `webcam` and `window` are described only, with the settings B4
   gave them: sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.

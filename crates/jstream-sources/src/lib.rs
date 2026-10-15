@@ -8,7 +8,8 @@
 //! `text` (a string drawn with a TrueType or OpenType font, read with `skrifa`), and
 //! `browser` (a web page rendered off screen by the injected
 //! [`BrowserBackend`] from [`Context::browser`], its
-//! frames on the GPU and its audio a [`SourceAudio`]). The
+//! frames on the GPU and its audio a [`SourceAudio`]), with its `youtube_chat` preset
+//! (a live video's public popout chat page, no sign-in). The
 //! audio-only kinds (`audio_input`, `desktop_audio` and `app_audio`) make no frames: the
 //! engine records the [`AudioTarget`] their settings name. The other built-in kinds are
 //! described only. Driving sources from the engine's render
@@ -28,6 +29,7 @@ mod image;
 mod registry;
 mod source;
 mod text;
+mod youtube_chat;
 
 pub use audio::AudioTarget;
 pub use error::SourceError;
@@ -36,3 +38,4 @@ pub use error::SourceError;
 pub use jstream_browser::BrowserBackend;
 pub use registry::Registry;
 pub use source::{AssetRoots, Context, Limits, Source, SourceAudio, SourceKind, needs_restart};
+pub use youtube_chat::YOUTUBE_CHAT_CSS;
