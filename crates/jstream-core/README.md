@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:f81a25ff88b37abc", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 merge of main (B3): re-read; with_collection_file and Collection file bullets still match engine.rs and collection.rs; B3's snapshot canvas text unaffected" }
+verified = { hash = "b3:50920f12c00b9db7", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 Windows build fix: collection.rs only moved its File import into the Unix directory flush; Collection file bullet unchanged" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -121,7 +121,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ac49c6c29e047ef1", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 merge of main (B3): re-read Collection file subsection against engine.rs save_collection and collection.rs; unchanged by B3, which touched snapshot and history only" }
+verified = { hash = "b3:feedd32d30216d04", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 Windows build fix: re-read Collection file subsection; the write path (tmp, sync, rename, Unix-only dir flush, 0600) is unchanged" }
 -->
 
 ### Engine and sessions
