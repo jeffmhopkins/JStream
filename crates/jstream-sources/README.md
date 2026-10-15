@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:cc08e81ab6d3b669", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 N1: Windows walk split out of open_inside into walk_below (takes the already-resolved path below the root); Assets paragraph's walk description unchanged and still holds; Tests sentence now says the Windows test refuses links both at resolve and in the walk on its own" }
+verified = { hash = "b3:aa7736453174613a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge-only round (main merged in): re-read against main's changes and this PR's browser additions; both hold together" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
