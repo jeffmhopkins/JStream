@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:f5704400b6add912", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review round 2, merge of main (#239 B2-f2 touched sets in graph): main's Touched-from-graph history text and C5's Audio sources bullet/tests both kept; rewrapped the Tests bullet's 'stream-key actions' line (N5); holds" }
+verified = { hash = "b3:9834f6266df6591f", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B2-f2 #239 touched sets moved to jstream-graph) into C2: re-read; B2-f2's History bullet (graph's Touched set) and Tests list kept as main has them; C2 adds only the live text-source test in src/tests/sources.rs, covered by the Tests list; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -151,7 +151,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9a62a5e94c3b3671", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review round 2, merge of main (#239 B2-f2 touched sets in graph): main's undo touched-set and collection-file wording changes don't overlap C5's Audio sources/Locking/Not yet text; engine.rs keeps audio.sync beside both live.sync calls (load and changed); holds" }
+verified = { hash = "b3:009884b53e67a92d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B2-f2 #239 touched sets moved to jstream-graph) into C2: re-read; B2-f2's Conflicts paragraph (Touched from jstream-graph, encoder objects/props) and A6 audit/collection prose kept as main has them; C2 adds only a source test this section doesn't describe; holds" }
 -->
 
 ### Engine and sessions

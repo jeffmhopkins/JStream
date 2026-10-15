@@ -80,11 +80,51 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `AudioTarget::of(kind, settings)` reads from their settings (see `jstream-core`'s
   *Audio sources*). Both settings are free text rather than a list of what is present,
   so a collection naming an unplugged device still loads.
-- `display`, `media`, `text`, `webcam` and `window` are described only, with the
-  settings B4 gave them: sources of them can be created and configured, and `create`
-  fails with `SourceError::NotBuilt`.
+- `text`: the `text` string drawn with the `font` asset (TrueType or OpenType, or the
+  first font of a collection), or with the bundled font when it is `null`. Fonts are
+  read with `skrifa` and glyph outlines rasterised with `ab_glyph_rasterizer`, unhinted.
+  `size` is the em size in pixels, as CSS's `font-size`. Lines break at `\n`; with a
+  `wrap_width` above 0 they also wrap at spaces, and a word wider than the wrap breaks
+  inside the word. The line box is as wide as the widest line, or `wrap_width` when it
+  wraps, and `align` places each line within it. `outline_width` grows the glyphs by
+  that many pixels in `outline_color`, drawn under the fill; `background` fills the
+  whole frame, which is the line box plus `padding` on every side, grown to fit any
+  glyph ink or outline that reaches past it. Every setting but `font` is live: an update
+  redraws the frame, and a new font needs a new source. There is no shaping and no
+  kerning: each character is its font's glyph for that code point, placed by its
+  advance, so kerning, ligatures, complex scripts and right-to-left text need a shaper
+  later. A character the font lacks draws its `.notdef` box; tabs draw as one space and
+  other control characters are dropped. The outline comes from an exact Euclidean
+  distance transform of the fill, so its cost doesn't grow with its width. Fill, outline
+  and background are blended on sRGB values, not in linear light. The frame must fit
+  `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
+  with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
+  naming `text`.
+- `display`, `media`, `webcam` and `window` are described only, with the settings B4
+  gave them: sources of them can be created and configured, and `create` fails with
+  `SourceError::NotBuilt`.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
+
+**Bundled font.** `assets/fonts/Roboto-Regular-subset.ttf` is the text source's
+default font and the one its tests draw with: Roboto Regular by Google, under the
+Apache License 2.0 (`assets/fonts/LICENSE-Roboto.txt`). It was cut from
+`src/hinted/Roboto-Regular.ttf` in [googlefonts/roboto](https://github.com/googlefonts/roboto)
+(Roboto 2.001047, SHA-256
+`56a45233d29f11b4dfb86d248e921939d115778f87325e7ae8cc108383d6664d`) with fontTools 4.67:
+
+```sh
+fonttools subset Roboto-Regular.ttf \
+  --unicodes="U+0020-007E,U+00A0-017F,U+2010-2027,U+2030-203A,U+20AC,U+2122,U+FFFD" \
+  --no-hinting --layout-features='' --drop-tables+=GPOS,GSUB,GDEF,gasp \
+  --name-IDs='*' --notdef-outline --output-file=Roboto-Regular-subset.ttf
+```
+
+The subset keeps Basic Latin, Latin-1, Latin Extended-A, common punctuation, the euro
+and trademark signs and the replacement character, about 22 KB. Hinting and the
+OpenType layout tables are dropped, because the text source neither hints nor shapes.
+The name table, which carries the copyright and licence notice, is kept whole. Text in
+other scripts needs a `font` asset that covers it.
 
 **Assets.** `AssetRoots::resolve` resolves a `collection` or `app` path through
 symlinks and rejects one that leaves its root; an `absolute` path is used as it is.
@@ -104,10 +144,17 @@ undecodable file is an error from `create`, never from the edit that set it.
 **Dependencies.** `jstream-media` (frames and the media clock), `jstream-protocol`
 (descriptors, settings and references), `serde_json` (setting values), `thiserror`
 (`SourceError`), and the pure-Rust decoders `png`, `zune-jpeg` with `zune-core`,
-`image-webp` and `gif`, each with default features off
+`image-webp` and `gif`, and for fonts `skrifa` (with `read-fonts`, `font-types`,
+`bytemuck`, `yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with default
+features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
+(RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
-**Tests.** Unit tests cover colour parsing, animation timing and reading an audio target from settings. `tests/sources.rs`
-runs every kind through the public API on files in a temporary folder: PNG, GIF and
+**Tests.** Unit tests cover colour parsing, animation timing, the text outline's
+distance transform and reading an audio target from settings. `tests/sources.rs` checks
+the registry and runs the colour and image kinds through the public API on files in a
+temporary folder: PNG, GIF and
 lossless WebP files are encoded by the test, and `tests/data` holds a JPEG, a lossy
-WebP and an animated WebP made once with Pillow, as the test's header describes.
+WebP and an animated WebP made once with Pillow, as the test's header describes. `tests/text.rs` draws with the
+bundled font: wrapping, alignment, padding, outline, live updates, font assets and
+limits, plus golden PNGs in `tests/data/text` (`JSTREAM_BLESS=1` rewrites them).
