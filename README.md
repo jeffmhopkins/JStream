@@ -47,10 +47,10 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 86% | 30 | 3 | 2 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 33% | 7 | 9 | 5 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 32% | 7 | 10 | 5 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 11% | 1 | 1 | 7 |
 
-76 of 109 items are merged; 7 of those still wait on a run on Windows hardware.
+76 of 110 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -172,7 +172,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M2</b> UI: 7 of 21 merged</summary>
+<summary><b>M2</b> UI: 7 of 22 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -188,6 +188,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U1 | Preview stream | ✅ merged | #251 |
 | U5 | Tauri desktop app | 🧪 merged, Windows run pending: desktop app check | #258 |
 | Q3 | UI end-to-end tests | 🔍 in review | #309 |
+| Q4 | Performance benchmarks | 🔍 in review | #361 |
 | T1 | Studio mode and transitions | 🔍 in review | #260 |
 | T1u | Studio-mode UI | ⏳ planned |  |
 | E2 | Video mixes | 🔍 in review | #259 |
@@ -207,7 +208,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ⏳ planned |  |
-| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned |  |
+| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned | #359 |
 | 3D1 | 3D transforms: rendering ADR and spike | 🔍 in review | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned |  |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
