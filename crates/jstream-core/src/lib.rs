@@ -16,7 +16,7 @@
 //! [`Engine::with_collection_file`](engine::Engine::with_collection_file), the collection
 //! is loaded from a file and saved there after every change.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0032-live-edits-and-undo.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, crates/jstream-core/README.md#runtime, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0032-live-edits-and-undo.md
 
 #![forbid(unsafe_code)]
 
