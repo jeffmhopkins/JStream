@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b4650be831c06275", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: src change is one envelope test; contents list and layer description unchanged" }
+verified = { hash = "b3:4f1c1ac55db36756", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -129,7 +129,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:7aa5f3f591196354", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 (N2): sentence now says non-integer numbers are f64; rest is main's text" }
+verified = { hash = "b3:878d8634a7886495", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

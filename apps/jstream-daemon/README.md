@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1e583a28e2b0b269", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main into #253: stale via jstream-server#design, whose only change is that the subprotocol names come from jstream-control; daemon design names no subprotocol, holds" }
+verified = { hash = "b3:0a8bf51209359351", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

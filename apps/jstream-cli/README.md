@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f2f2278743d2e4c4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed: the item.move cycle golden now expects the mock's cycle path; error format (error: <message> (<code>)) and exit code 17 unchanged" }
+verified = { hash = "b3:bd12601c4675d76f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -237,7 +237,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fbd4a9d27c04d5d8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed (cycle reason golden names the path); design bullets don't quote engine reasons" }
+verified = { hash = "b3:dc114dd8740040c0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
