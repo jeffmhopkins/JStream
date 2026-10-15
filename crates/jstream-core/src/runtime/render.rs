@@ -100,13 +100,9 @@ impl RenderHub {
     /// The fence pairs with the one in [`RenderReader::start`]: the caller published
     /// the snapshot before asking, and the thread cleared its marker before loading, so
     /// at least one of them sees the other's store.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the live-value handover (ADR-0032) polls it; live edits are not built"
-        )
-    )]
+    ///
+    /// Only tests poll it until live edits exist, so it is compiled for them alone.
+    #[cfg(test)]
     pub(crate) fn caught_up(&self, generation: u64) -> bool {
         fence(Ordering::SeqCst);
         match self.adopted.load(Ordering::SeqCst) {

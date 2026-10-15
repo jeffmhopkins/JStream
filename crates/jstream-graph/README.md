@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:767f24f532d7cc15", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Model lists kinds, settings and outputs; Settings, references, Outputs (target.rs, apply_with_running) and deps.rs cycle bullets checked against apply.rs/deps.rs/read.rs; property test now generates rename, set_settings and output edits (below(20))" }
+verified = { hash = "b3:a5e1f468dc01df2f", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Dependency only (E1 added the program mix's 8-level draw limit to ARCH data-model): the graph still accepts any acyclic depth and rejects cycles; model bullets unchanged" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

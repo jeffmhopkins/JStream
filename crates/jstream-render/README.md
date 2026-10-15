@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:10dfd4b0711bd43d", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): rewrote the nested-scene bullet (render_image returns an Image on this compositor that the caller places; depth and cycles are jstream-core's); plus review N5 helper rename; other bullets unchanged against main" }
+verified = { hash = "b3:291e69242e752e2e", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: nested-scene bullet now names layer/render_into/render_image; new ResourceCache bullet (keyed reuse, freed after the last frame that used it, handed back as Reclaimed); Not-in-this-cut now says the render thread and snapshots are jstream-core's; checked against compositor.rs, image.rs, cache.rs" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -105,7 +105,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:f5d2dd7954337afa", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): added the render_image paragraph after pass 2 (new Rgba16Float RENDER_ATTACHMENT|TEXTURE_BINDING texture per call, read as premultiplied, one submit ordered before the outer one) and the render_image resources row; plus review N5 helper rename; render's passes, staging and readback unchanged" }
+verified = { hash = "b3:01bbf2adca1aaa4f", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: intro now says the render thread is core's and the cache hands freed images back (R-RT-003); pass 3 adds render_into (layer checks, kept target view, queue ordering) and rewrite_rgba8; resources table adds layer and ResourceCache rows plus a ResourceCache paragraph (begin/upload/layer/end_frame, on_submitted_work_done fence, non-blocking poll, failed frame defers to next fence); checked against cache.rs, compositor.rs, image.rs" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -257,7 +257,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:2c900748814f915f", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Review N5: the render_image tests are three pixel tests plus an ownership check (four tests), now stated so; rest unchanged" }
+verified = { hash = "b3:c3e389523b0855fc", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: added the layer and cache tests (render_into redraw and refusals, rewrite_rgba8, cache reuse/rewrite/replace by key, freeing only after the frame fence); matches tests.rs" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:bd5137389f3420a8", by = "agent:claude@session_01Ut2Cuz7uioyngsXQuKGFMP", note = "#156 review N1/N2: re-read Purpose against the manifest description change and the ends_recording doc (create-time errors count as never started); the record paragraph's error bullet still matches error.rs, crate-map row unchanged" }
+verified = { hash = "b3:d49fc0cc4f90a70b", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Dependency only (E1 changed ARCH threading): the RTMP client and record sink are untouched; nothing here describes render threads or snapshots" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

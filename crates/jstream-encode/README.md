@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:25adfbd736d4a356", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): stale via ARCH#data-model only; encode reads no collection outputs or settings; API and tests unchanged" }
+verified = { hash = "b3:0c01da543ef7260d", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Dependency only (E1 changed ARCH threading and data-model): the render side still pushes one video mix into a session; nothing here describes the render snapshot or nesting" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

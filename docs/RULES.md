@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e33b2a7a9766038f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-RT-001..006 against the handover text: a SeqCst store, load or fence allocates, locks and waits on nothing, so the rules hold unchanged" }
+verified = { hash = "b3:aeba068b8f953fa9", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: re-read R-RT-001..006 against the threading changes: render-snapshot adoption is an arc-swap load, a pointer compare and a SeqCst store; freed objects go to a collector; rules unchanged" }
 -->
 
 <a id="R-RT-001"></a>

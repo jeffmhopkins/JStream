@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:5d5148d1cf21bd10", by = "agent:claude@session_01CinhSCRTBiaJNaiD4w6CUq", note = "Y2: re-read the purpose section; new OAuth tokens bullet (OAuthTokenStore set/get/clear/is_set per account, Secret only, separate from StreamKeyStore, refresh tokens only, no token in errors) and MemoryTokenStore in Fakes match keys.rs and fake.rs; the rest is unchanged" }
+verified = { hash = "b3:81b6a8eea823805b", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Dependency only (E1 changed ARCH threading): platform traits and fakes untouched; nothing here describes the render snapshot or collector" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -128,7 +128,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:67d6e52f031b91b6", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#141, G1 crate-map rows) into C6 #147: the jstream-platform row is unchanged, and C6's ARCH gpu-pipeline render_image sentence keeps render on the platform device when present, never writing the NV12 target" }
+verified = { hash = "b3:a0da63afdfe73b5b", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Dependency only (E1 changed ARCH gpu-pipeline and crate-map): render still composites on the platform device when present or its own software device, never the NV12 target; ResourceCache doesn't change the interop design" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

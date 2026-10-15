@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ab2169e2c211fe79", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: re-read the map; the jstream-outputs row names recording as its Cargo description now does (#156); vcam-proto row holds; B4 adds no layer edge" }
+verified = { hash = "b3:822be76c26d759ac", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: only jstream-core's Cargo.toml changed (arc-swap dependency); the core row (layer 5, Engine, threads) and every other row still match their manifests" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:469cd47b05c605ba", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Built so far merged: settings checked and stored complete, settings-reference edges and delete rejection (B4), and outputs with Rtmp Generic url (#142); Not yet drops settings and keeps kind versions; checked against graph model/mod.rs" }
+verified = { hash = "b3:cd429ed209655eff", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1 (#147 N2): Scenes-as-sources bullet now states the 8-level nesting limit of the program mix for clients (live output and video.snapshot, debug log); matches snapshot::MAX_NESTING and visit(); rest of the section unchanged" }
 -->
 
 ```
@@ -365,7 +365,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:ba6900fcfb9b0d02", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#136, #146) into #133: prose is main's; re-read the section: the Collector row and 'collector thread ... not this cut' hold with #133's InputControl keep-alive (rings freed on the control plane); #136's bounded drain and #146's keyframe requests don't touch audio teardown" }
+verified = { hash = "b3:8eb5b85202bf7762", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: Output pipeline paragraph now has the render thread drawing the program mix from the render snapshot at the encoder size (display sources show the capture; no scene = capture fills); Collector row is per output for the render thread; new render-snapshot paragraph (plan under the lock, publish only on change, cache keyed by source and scene+depth, fence-based freeing, collector hand-off, stopped marker on a fatal error); handover heading says generation and reader slot are built; checked against runtime/render.rs, pipeline.rs, snapshot.rs and render cache.rs" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -477,8 +477,10 @@ each nested scene is redrawn into the layer it had. An image no frame references
 retired, then freed once the GPU has finished the last frame that used it (a
 `Queue::on_submitted_work_done` fence the cache polls without blocking). The render
 thread hands those images, and each render snapshot it replaces, to the output's
-collector thread ([R-RT-003](RULES.md#R-RT-003)). The audio and outputs snapshots are
-not built.
+collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
+reader slot as the handover below says. When a fatal error stops its drawing it
+publishes the stopped marker too: it adopts nothing more and only repeats the frame it
+last drew until teardown. The audio and outputs snapshots are not built.
 
 **Live-value handover** (decided; the render generation and its reader slot are built,
 the parameter channels and the gesture release are not): the engine learns that a real-time
@@ -662,7 +664,7 @@ verified = { hash = "b3:cc2b2df213a2b7f3", by = "agent:claude@session_011XVJmf1Y
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:d9ef248382cce5c7", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): added the sentence that a nested scene goes through render_image as an on-GPU Rgba16Float image placed in its parent, with the caller bounding depth; plus review N5 rename; steps 1-6, S1 table and output path unchanged" }
+verified = { hash = "b3:d26d09005596402c", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "E1: one-scene compositor paragraph now names render_into/layer for reused nested-scene layers and ResourceCache freeing after the frame that last used an image; render thread placed in jstream-core; steps 1-6, S1 result and output path unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
