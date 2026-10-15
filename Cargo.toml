@@ -28,7 +28,12 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 # OS randomness (the daemon's control token). Already in the tree through tungstenite's
 # `rand`, so the version matches it.
 getrandom = { version = "0.3", default-features = false }
+# GIF decoding for the image source (ADR-0031: pure-Rust image crates). No default
+# features: `color_quant` only matters for encoding RGBA frames.
+gif = { version = "0.14", default-features = false, features = ["std"] }
 globset = { version = "0.4", default-features = false }
+# WebP decoding (still and animated) for the image source (ADR-0031).
+image-webp = { version = "0.2", default-features = false }
 insta = { version = "1", default-features = false }
 jstream-audio = { path = "crates/jstream-audio" }
 jstream-control = { path = "crates/jstream-control" }
@@ -43,6 +48,7 @@ jstream-platform = { path = "crates/jstream-platform" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }
+jstream-sources = { path = "crates/jstream-sources" }
 jstream-vcam-proto = { path = "crates/jstream-vcam-proto" }
 jstream-youtube = { path = "crates/jstream-youtube" }
 # PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
@@ -85,6 +91,10 @@ windows = { version = "=0.62.2", default-features = false }
 # `#[implement]` (COM callbacks) expands to `windows_core::` paths, so it is a direct
 # dependency at the version `windows` uses.
 windows-core = { version = "=0.62.2", default-features = false }
+# JPEG decoding for the image source (ADR-0031), and `zune-core` for its options. No
+# `log`; the `x86` and `neon` features keep the SIMD paths, chosen at run time.
+zune-core = { version = "0.5", default-features = false, features = ["std"] }
+zune-jpeg = { version = "0.5", default-features = false, features = ["std", "x86", "neon"] }
 
 # Editing this table is a governance change (R-GOV-001). See docs/RULES.md for each rule.
 [workspace.lints.rust]
