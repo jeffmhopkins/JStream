@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:7d85d5650335326e", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#205 collection file, E1, Y1) into B5: re-read; B5 text kept beside main's; replaced main's stale 'Nothing is persisted yet' (untrue since #205) with the collection file, duplicated_from included" }
+verified = { hash = "b3:d428d3edfd1ae212", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Round 6 note: Not yet no longer lists kind versions on stored settings (persist/ records kind_version since #205); it lists the settings migrations that are still missing, matching ARCH#persistence" }
 -->
 
 ```
@@ -362,7 +362,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the URL checked to carry no credential, or `Record { path, container: mp4 }`, the path
   checked to be absolute and to end in a file name. A stream key is never collection state: it
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
-  Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
+  Not yet: settings migrations between kind versions (a source saved at another
+  version is refused on load), filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, the transition fields, 3D
   geometry, `scene.create`'s optional `role`, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
