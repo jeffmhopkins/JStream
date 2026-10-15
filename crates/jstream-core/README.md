@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:a16cc48af14d796d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (G3b VirtualCam #213, #275, #292) into C9: with_backends keeps G3b's vcam take and C9's set_media in one function; re-read main's virtual-camera text beside C9's media text; holds" }
+verified = { hash = "b3:950db22132664bbd", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (e1e2a94: #295 clock-swap replan, G3b daemon vcam #297, Q3 #309, #286, #237) into C9: main's purpose text kept beside C9's media text; re-read, holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -164,7 +164,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4879bec163436e04", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (G3b VirtualCam #213, #275, #292) into C9: with_backends keeps G3b's vcam take and C9's set_media in one function; re-read main's virtual-camera text beside C9's media text; holds" }
+verified = { hash = "b3:7628b8572e2f89cc", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (e1e2a94: #295 clock-swap replan, G3b daemon vcam #297, Q3 #309, #286, #237) into C9: Live sources paragraph merges main's clock-swap sentence with C9's plan numbering and Backends::media sentences; live.rs keeps main's set_clock and C9's set_media; re-read" }
 -->
 
 ### Engine and sessions
@@ -464,9 +464,11 @@ built: one that a plan reaches after plans that didn't (its item was hidden, or 
 scene wasn't the program) is told so first (`Source::show`), so a media file can
 restart, including the first time it is shown. Sources run on the media clock of the
 backends the host injects (`with_backends`), else on a monotonic clock of the engine's
-own, and `media` sources play through those backends' media files
-(`Backends::media`); before any are injected a `media` source fails to build
-(`NoBackend`), and injecting them rebuilds every source. `collection` asset
+own. A clock swap restarts every running source's timing and drops the re-plan timed
+on the old clock: the thread re-plans at once on the new one. `media` sources play
+through the injected backends' media files (`Backends::media`); before any are
+injected a `media` source fails to build (`NoBackend`), and injecting them rebuilds
+every source. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
 for every `app` reference, the asset is unreadable and the source draws nothing.
 

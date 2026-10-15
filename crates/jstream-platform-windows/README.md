@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:52ace67d2eb217e6", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (CL1 part 1 #272, #266) into C9: main only restamped these via ARCH crate-map's jstream-plugin-proto row; text untouched; MfMediaDecoders bullet holds" }
+verified = { hash = "b3:b316e7326d6add8d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (e1e2a94: #295 clock-swap replan, G3b daemon vcam #297, Q3 #309, #286, #237) into C9: main's text kept beside C9's MfMediaDecoders bullet and delay-load list; re-read, holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -305,8 +305,11 @@ The code is ported from spikes S1 to S3. This first cut has:
     other `VcamFormat` is `Unsupported`. Frames are system-memory BGRA
     (`VideoSurface::Cpu`, any stride); GPU frames are `Unsupported` for now (a GPU
     path would copy the engine's texture into the ring on the D3D11 side).
-  - **Start:** the media source must already be registered machine-wide, so `start`
-    checks for its `HKLM` class key first and is `Unsupported` without it (registering
+  - **Start:** `start` first checks that `mfsensorgroup.dll` loads from System32 and
+    exports `MFCreateVirtualCamera` (Windows 11), and is `Unsupported` without it, so a
+    binary that delay-loads the DLL gets an error rather than a delay-load exception on
+    Windows 10 or an N edition. The media source must already be registered
+    machine-wide, so `start` then checks for its `HKLM` class key and is `Unsupported` without it (registering
     is `jstream-daemon --register-vcam`, through `register_vcam` below). It then creates, on a D3D11 device of its own
     on the default hardware adapter, a ring of three shared BGRA textures and a shared
     fence, plus the control block. They are named in **this session's namespace**,

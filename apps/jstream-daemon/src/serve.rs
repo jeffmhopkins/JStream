@@ -64,11 +64,13 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
 }
 
 /// The Windows backends. Creating them opens no device: each opens what it needs when
-/// a pipeline starts. Windows has no virtual camera sink yet.
+/// a pipeline starts. The virtual camera (`WindowsVcam`) checks on `output.start` that
+/// this Windows has one and that it is registered (`--register-vcam`).
 #[cfg(windows)]
 fn windows_backends() -> anyhow::Result<Backends> {
     use jstream_platform_windows::{
         MfCodecs, MfMediaDecoders, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu,
+        WindowsVcam,
     };
     Ok(Backends {
         clock: Arc::new(QpcClock::new().context("could not open the QPC media clock")?),
@@ -78,7 +80,7 @@ fn windows_backends() -> anyhow::Result<Backends> {
         codecs: Arc::new(MfCodecs::new()),
         gpu: Arc::new(WindowsGpu::new()),
         media: Arc::new(MfMediaDecoders::new()),
-        vcam: None,
+        vcam: Some(Box::new(WindowsVcam::new())),
     })
 }
 
