@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0050"
+id = "ADR-0053"
 title = "Per-input verification stamps in one ledger file"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0050: Per-input verification stamps in one ledger file
+# ADR-0053: Per-input verification stamps in one ledger file
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

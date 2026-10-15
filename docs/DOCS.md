@@ -37,7 +37,7 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   can hash manifests as their `#jstream-meta` view
   ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)). Stamps are one entry per
   input in `docs/verified.toml`, and `cargo xtask docs migrate` moved the inline ones there
-  ([ADR-0050](adr/0050-per-input-verification-ledger.md)).
+  ([ADR-0053](adr/0053-per-input-verification-ledger.md)).
 - **Unmatched globs** ([R-DOC-012](RULES.md#R-DOC-012)): `covers` globs that match no
   tracked file fail (warn in drafts; retired docs are exempt); `applies_to` globs are
   checked for validity only. `verify` refuses while untracked files match the section's
@@ -59,7 +59,7 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
   `origin/main`, resolves conflicts that are only between stamps, moves inline stamps a
-  branch from before ADR-0050 still has, and lists the sections left stale.
+  branch from before ADR-0053 still has, and lists the sections left stale.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -234,7 +234,7 @@ It lists:
 -->
 
 A section's **stamp** is one entry per input in [`docs/verified.toml`](verified.toml),
-the ledger ([ADR-0050](adr/0050-per-input-verification-ledger.md)). Each entry holds a
+the ledger ([ADR-0053](adr/0053-per-input-verification-ledger.md)). Each entry holds a
 BLAKE3 digest (16 hex chars, `b3:` prefix) of its input as it was when the section was last
 verified against a change to it. The inputs, and their keys, are:
 
@@ -338,7 +338,7 @@ Nothing about history is stored in the files. `xtask docs log` derives it from g
 - **Date, author and PR** come from that squash-merge commit.
 - **Verifications** are the commits that changed its entries in `docs/verified.toml`, with
   the `by` and note of the first changed entry that has them (or, before
-  [ADR-0050](adr/0050-per-input-verification-ledger.md), its inline `verified` line). A
+  [ADR-0053](adr/0053-per-input-verification-ledger.md), its inline `verified` line). A
   commit that changed the stamp without a new `by` and note (`docs migrate`, or a merge
   that took main's entry) is shown as a restamp.
 - **Reviews** of a whole doc are the commits that changed its `reviewed` line. The log of

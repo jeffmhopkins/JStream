@@ -38,7 +38,7 @@ depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
 - New external URL → register it in `docs/external.toml`. Repeated value → `docs/facts.toml`.
 - New crate root → add its `//! Docs:` line.
 - Never edit `docs/verified.toml` by hand. Only `docs verify` writes it (apart from
-  `docs migrate`, which moves inline stamps from before ADR-0050 there and never moves a
+  `docs migrate`, which moves inline stamps from before ADR-0053 there and never moves a
   stale one, and `docs merge-main`, which only keeps main's committed entries).
 - To bring `main` into your branch, run `cargo xtask docs merge-main`. It resolves
   conflicts between stamps and leaves every other conflict to you. Then re-read and

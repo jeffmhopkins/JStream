@@ -230,7 +230,7 @@ fn without_lines(text: &str, drop: &[usize]) -> String {
     out
 }
 
-/// The line of an inline `verified` stamp (from before ADR-0050) in a section's
+/// The line of an inline `verified` stamp (from before ADR-0053) in a section's
 /// `@section` block, if it has one.
 fn inline_stamp(doc: &parse::Doc, section: &parse::Section) -> Option<usize> {
     let (start, end) = section.block?;
@@ -245,7 +245,7 @@ fn inline_stamp(doc: &parse::Doc, section: &parse::Section) -> Option<usize> {
 
 /// `docs verify <DOC-ID#anchor | path#anchor> --by <who> --note <text>`: records that a
 /// section was re-read and still holds, by writing its inputs' current hashes into the
-/// ledger (ADR-0050). It also drops ledger stamps of sections that no longer need one.
+/// ledger (ADR-0053). It also drops ledger stamps of sections that no longer need one.
 fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
     let note = check_stamp(by, note)?;
     let (doc_ref, anchor) = target
@@ -291,7 +291,7 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
     let keep = stamped_sections(&l.docs);
     ledger.prune(&|k| keep.contains(k));
     ledger.write(root)?;
-    // A branch from before ADR-0050 may still carry the section's inline stamp.
+    // A branch from before ADR-0053 may still carry the section's inline stamp.
     if let Some(k) = inline_stamp(doc, section) {
         std::fs::write(root.join(&doc.path), without_lines(&doc.text, &[k]))
             .with_context(|| format!("writing {}", doc.path))?;
@@ -315,7 +315,7 @@ pub(crate) struct Migrate {
     pub(crate) pruned: Vec<String>,
 }
 
-/// `docs migrate`: moves inline `verified` stamps (from before ADR-0050) into the ledger.
+/// `docs migrate`: moves inline `verified` stamps (from before ADR-0053) into the ledger.
 /// A stamp whose hash still matches the section becomes a ledger stamp of its current
 /// inputs, with its `by` and `note` on the `body` entry. A stamp that no longer matches is
 /// dropped, never moved, so the section is reported stale until someone re-reads it. Every
@@ -966,7 +966,7 @@ mod tests {
         f.git(&["commit", "-q", "-m", msg]);
     }
 
-    /// ADR-0050 with `docs merge-main`: two branches that change different covered files
+    /// ADR-0053 with `docs merge-main`: two branches that change different covered files
     /// of one section and re-verify it merge without a conflict, and the section stays
     /// fresh; changing the same covered file conflicts on its ledger entry, which takes
     /// main's and leaves the section stale; any other conflict is left alone and the
@@ -1071,7 +1071,7 @@ mod tests {
         );
     }
 
-    /// ADR-0050 transition: a branch from before the ledger re-stamped a section inline and
+    /// ADR-0053 transition: a branch from before the ledger re-stamped a section inline and
     /// added a new section with an inline stamp; main moved every stamp to the ledger.
     /// `docs merge-main` takes main's side of the inline conflict, then moves the new
     /// section's stamp to the ledger in a second commit.
@@ -1082,7 +1082,7 @@ mod tests {
                 "<!-- @doc\nid = \"{id}\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"{glob}\"]\nverified = {{ hash = \"H\", by = \"agent:old\", note = \"note\" }}\n-->\n{text}\n"
             )
         };
-        // Writes the pre-ADR-0050 hash into `path`'s inline stamp, as the old verify did.
+        // Writes the pre-ADR-0053 hash into `path`'s inline stamp, as the old verify did.
         let stamp_inline = |f: &Fixture, path: &str, glob: &str| {
             let l = load(&f.0).expect("invariant: the fixture is readable");
             let by_path: BTreeMap<&str, &parse::Doc> =
@@ -1182,7 +1182,7 @@ mod tests {
         );
     }
 
-    /// ADR-0050 migration: `docs migrate` moves an inline stamp that still holds into the
+    /// ADR-0053 migration: `docs migrate` moves an inline stamp that still holds into the
     /// ledger (its by and note on `body`), drops one that doesn't without moving it, drops
     /// ledger stamps of sections that are gone, and a second run changes nothing.
     #[test]
@@ -1202,7 +1202,7 @@ mod tests {
             (ledger::PATH, orphan),
         ]);
         let f = Fixture::new("migrate", &files);
-        // A's inline stamp holds (the pre-ADR-0050 hash of the tree); S's does not.
+        // A's inline stamp holds (the pre-ADR-0053 hash of the tree); S's does not.
         let l = load(&f.0).expect("invariant: the fixture is readable");
         let by_path: BTreeMap<&str, &parse::Doc> =
             l.docs.iter().map(|d| (d.path.as_str(), d)).collect();

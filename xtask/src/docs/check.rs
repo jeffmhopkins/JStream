@@ -49,7 +49,7 @@ pub(crate) struct Repo<'a> {
     pub(crate) rules_md: String,
     /// Every tracked file, for `covers` globs and hashing.
     pub(crate) files: Files<'a>,
-    /// The ledger (ADR-0050), as [`check_ledger`] returns it.
+    /// The ledger (ADR-0053), as [`check_ledger`] returns it.
     pub(crate) ledger: Ledger,
 }
 
@@ -205,7 +205,7 @@ fn check_doc_meta(doc: &Doc, out: &mut Vec<Diag>) {
     }
 }
 
-/// Reads the ledger (ADR-0050) and checks it: it must parse and be in canonical form, and
+/// Reads the ledger (ADR-0053) and checks it: it must parse and be in canonical form, and
 /// stamps of sections that no longer need one are reported. A missing or broken ledger is
 /// returned empty, so every stamped section is then stale.
 pub(crate) fn check_ledger(root: &Path, docs: &[Doc], out: &mut Vec<Diag>) -> Ledger {
@@ -298,7 +298,7 @@ fn check_section_meta(
             line,
             format!(
                 "section `{anchor}` has an inline `verified` stamp; stamps live in {} \
-                 (ADR-0050): run `cargo xtask docs migrate`",
+                 (ADR-0053): run `cargo xtask docs migrate`",
                 ledger::PATH
             ),
         ));

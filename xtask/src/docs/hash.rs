@@ -1,5 +1,5 @@
 //! Hash-bound verification (docs/DOCS.md#verification). A section has one hash per input,
-//! each stamped separately in the ledger (ADR-0050):
+//! each stamped separately in the ledger (ADR-0053):
 //! 1. its own body text, normalized (metadata blocks removed, LF endings, trailing
 //!    whitespace stripped, surrounding blank lines trimmed);
 //! 2. every tracked file its `covers` globs match, by content hash (never the ledger);
@@ -307,7 +307,7 @@ impl<'a> Files<'a> {
         Ok(self
             .paths
             .iter()
-            // The ledger holds the stamps, so no section can cover it (ADR-0050).
+            // The ledger holds the stamps, so no section can cover it (ADR-0053).
             .filter(|p| p.as_str() != super::ledger::PATH)
             .filter_map(|p| {
                 let hits: Vec<bool> = entries
@@ -349,7 +349,7 @@ fn dep_text(dep: &str, by_path: &BTreeMap<&str, &Doc>) -> Option<String> {
     }
 }
 
-/// A section's inputs, each with its hash, keyed as in the ledger (ADR-0050): `body` for
+/// A section's inputs, each with its hash, keyed as in the ledger (ADR-0053): `body` for
 /// its own text, `file:<path>` for each tracked file its `covers` match
 /// (`file:<path>#jstream-meta` when hashed as its jstream view), and `dep:<reference>` for
 /// each `depends_on` target. The section is fresh when the ledger records exactly these.
@@ -381,7 +381,7 @@ pub(crate) fn inputs(
     Ok(out)
 }
 
-/// The single hash an inline `verified` stamp held before ADR-0050 moved stamps to the
+/// The single hash an inline `verified` stamp held before ADR-0053 moved stamps to the
 /// ledger. Only `docs migrate` uses it, to tell which inline stamps still held.
 pub(crate) fn legacy_section_hash(
     doc: &Doc,

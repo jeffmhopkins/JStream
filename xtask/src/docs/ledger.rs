@@ -1,4 +1,4 @@
-//! The verification ledger, `docs/verified.toml` (docs/DOCS.md#verification, ADR-0050).
+//! The verification ledger, `docs/verified.toml` (docs/DOCS.md#verification, ADR-0053).
 //!
 //! A section's stamp is one entry per input (its own text, each covered file, each
 //! `depends_on` target), each with the hash that input had when someone last re-read the
@@ -19,7 +19,7 @@ use super::hash::toml_str;
 pub(crate) const PATH: &str = "docs/verified.toml";
 
 const HEADER: &str = "\
-# Verification stamps: one entry per section input (docs/DOCS.md#verification, ADR-0050).
+# Verification stamps: one entry per section input (docs/DOCS.md#verification, ADR-0053).
 # Written by `cargo xtask docs verify`; never edit by hand. The blank line after each entry
 # lets parallel PRs that re-verify different inputs of a section merge without a conflict.
 ";

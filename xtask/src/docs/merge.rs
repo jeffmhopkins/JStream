@@ -2,9 +2,9 @@
 //! stamps, by taking main's side (docs/DOCS.md#verification).
 //!
 //! Parallel PRs that re-verify the same input of a section conflict on its ledger entry
-//! (ADR-0050). Neither side re-read the combination, so after the merge the section has to
+//! (ADR-0053). Neither side re-read the combination, so after the merge the section has to
 //! be re-read anyway; which entry the merge keeps doesn't matter, only that the section is
-//! reported as stale. A branch from before ADR-0050 also conflicts on the inline
+//! reported as stale. A branch from before ADR-0053 also conflicts on the inline
 //! `verified` lines main moved to the ledger; main's side (no line) is taken the same way,
 //! and inline stamps the branch added are then moved by `docs migrate`. Every other
 //! conflict is left untouched for a person.
@@ -146,7 +146,7 @@ pub(crate) fn merge_main(root: &Path) -> Result<Merge> {
 }
 
 /// After a merge commit: runs `docs migrate` and commits what it changed, if anything, so
-/// inline stamps a branch from before ADR-0050 added reach the ledger.
+/// inline stamps a branch from before ADR-0053 added reach the ledger.
 fn migrate_inline(root: &Path) -> Result<Option<super::Migrate>> {
     let m = super::migrate(root)?;
     git_ok(root, &["add", "-u"])?;
@@ -165,7 +165,7 @@ fn migrate_inline(root: &Path) -> Result<Option<super::Migrate>> {
             "commit",
             "-q",
             "-m",
-            "docs: move inline verified stamps to docs/verified.toml (ADR-0050)",
+            "docs: move inline verified stamps to docs/verified.toml (ADR-0053)",
         ],
     )?;
     Ok(Some(m))
@@ -225,7 +225,7 @@ fn sides(text: &str) -> Result<(String, String, Vec<Hunk>), String> {
     Ok((ours.concat(), theirs.concat(), hunks))
 }
 
-/// Resolves every conflict in the ledger to main's side (ADR-0050). Any conflict there is
+/// Resolves every conflict in the ledger to main's side (ADR-0053). Any conflict there is
 /// between stamps, and a section whose entry is taken from main is stale whenever the
 /// branch changed that input, so it is reported for a re-read. The result must parse; it is
 /// rewritten canonically. Returns it and the sections whose stamp differs from the

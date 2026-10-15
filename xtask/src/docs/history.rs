@@ -1,7 +1,7 @@
 //! `docs log`: a doc's or section's history, derived from git (docs/DOCS.md#history).
 //! Nothing about history is stored in the files: revisions are the first-parent commits
 //! that changed the normalized body, verifications are the commits that changed the
-//! section's ledger entries (or, before ADR-0050, its inline `verified` line), and reviews
+//! section's ledger entries (or, before ADR-0053, its inline `verified` line), and reviews
 //! are the commits that changed the `reviewed` line.
 
 use std::path::Path;
@@ -83,9 +83,9 @@ pub(crate) struct Log {
 #[derive(Debug, PartialEq, Eq)]
 struct State {
     body: Option<String>,
-    /// The inline `verified` (before ADR-0050) or `reviewed` stamp.
+    /// The inline `verified` (before ADR-0053) or `reviewed` stamp.
     stamp: Option<Stamp>,
-    /// The section's ledger entries (ADR-0050).
+    /// The section's ledger entries (ADR-0053).
     entries: Option<ledger::Stamp>,
 }
 
@@ -470,7 +470,7 @@ mod tests {
         );
     }
 
-    /// ADR-0050: moving an inline stamp to the ledger is a restamp; a later verification is
+    /// ADR-0053: moving an inline stamp to the ledger is a restamp; a later verification is
     /// the changed entry's by and note, and a change with no new by and note is a restamp.
     #[test]
     fn ledger_entries_fold_into_stamps() {

@@ -1,4 +1,4 @@
-# Verification stamps: one entry per section input (docs/DOCS.md#verification, ADR-0050).
+# Verification stamps: one entry per section input (docs/DOCS.md#verification, ADR-0053).
 # Written by `cargo xtask docs verify`; never edit by hand. The blank line after each entry
 # lets parallel PRs that re-verify different inputs of a section merge without a conflict.
 
@@ -334,11 +334,11 @@
 
 ["CLAUDE#docs-duty"]
 
-"body" = { hash = "b3:14908506631bd1e7", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: DOCS#verification now stores stamps in docs/verified.toml; the hash bullet now says never edit the ledger by hand and names docs migrate instead of rehash; merge-main bullet says stamp conflicts; notes duty unchanged" }
+"body" = { hash = "b3:7444919d28801154", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 in this section and DOCS#verification; the ledger, migrate and merge-main bullets are otherwise unchanged and still hold" }
 
 "dep:docs/DOCS.md#notes" = { hash = "b3:c9eda3a5d59efec7" }
 
-"dep:docs/DOCS.md#verification" = { hash = "b3:41129b2c61f893ac", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: DOCS#verification now stores stamps in docs/verified.toml; the hash bullet now says never edit the ledger by hand and names docs migrate instead of rehash; merge-main bullet says stamp conflicts; notes duty unchanged" }
+"dep:docs/DOCS.md#verification" = { hash = "b3:8a1d316178a17353", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 in this section and DOCS#verification; the ledger, migrate and merge-main bullets are otherwise unchanged and still hold" }
 
 ["CLAUDE#pr-loop"]
 
@@ -1888,29 +1888,29 @@
 
 ["DOCS#bootstrap"]
 
-"body" = { hash = "b3:8758c926376e2f75", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"body" = { hash = "b3:e81f0d324bdcfa8a", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
-"file:xtask/src/docs/backrefs.rs" = { hash = "b3:ba285841b70c7e29", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/backrefs.rs" = { hash = "b3:ba285841b70c7e29", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
-"file:xtask/src/docs/check.rs" = { hash = "b3:6bd6da8c4e14a6a5", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/check.rs" = { hash = "b3:cecdd2bf0a8097e8", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
-"file:xtask/src/docs/generate.rs" = { hash = "b3:0225a3d9dee611c2", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/generate.rs" = { hash = "b3:0225a3d9dee611c2", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
-"file:xtask/src/docs/govern.rs" = { hash = "b3:34cbbe36abdc6774", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/govern.rs" = { hash = "b3:34cbbe36abdc6774", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
-"file:xtask/src/docs/hash.rs" = { hash = "b3:47f2638e8778ff07", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/hash.rs" = { hash = "b3:954859db5a28872d", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
-"file:xtask/src/docs/history.rs" = { hash = "b3:da94cddb8a942901", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/history.rs" = { hash = "b3:e9526047eb0b1865", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
-"file:xtask/src/docs/ledger.rs" = { hash = "b3:6f3db2a13cab1237", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/ledger.rs" = { hash = "b3:91ade9f5061b4177", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
-"file:xtask/src/docs/merge.rs" = { hash = "b3:898779ce7a1834df", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/merge.rs" = { hash = "b3:2bf6bf429340ee0a", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
-"file:xtask/src/docs/mod.rs" = { hash = "b3:3df60a105143a5c7", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/mod.rs" = { hash = "b3:f5cac74f5cab4e63", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
-"file:xtask/src/docs/parse.rs" = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/parse.rs" = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
-"file:xtask/src/docs/progress.rs" = { hash = "b3:0047ff70349b6728", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+"file:xtask/src/docs/progress.rs" = { hash = "b3:0047ff70349b6728", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#dependency-lint"]
 
