@@ -117,7 +117,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:b807a1fccddde6c3", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: re-read the table; no crate's jstream-meta changed in this PR (core only gains a hw-tests feature and a Windows dev-dependency); rows hold; lint-deps passes" }
+verified = { hash = "b3:27921abbc8ae8d0d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5 (with #283 merged): re-read rows; C8's jstream-browser row, platform-windows row without CEF and the browser-helper apps entry, beside #219's unchanged rows; lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -701,7 +701,7 @@ verified = { hash = "b3:55a0e0a9c09649f1", by = "agent:claude@session_01Wfrx1wPt
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:2b01c95ee7bafc72", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: one-scene compositor paragraph adds the built GPU path (context compositor, Capture::on_context, cached import with per-frame hold, PRESENT hand-back) and the CPU fallback with readback for encode; steps 1-6 unchanged" }
+verified = { hash = "b3:073327a41796a933", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5: one-scene paragraph adds browser pages imported on the same context as premultiplied sRGB; steps 1-6 unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -750,7 +750,9 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
-(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
+browser source's page paints on the same context and is imported the same way, read
+as premultiplied sRGB (`import_premultiplied`), CEF's layout. The
 composite is still read back to the CPU for the encoder. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
 the output path below.

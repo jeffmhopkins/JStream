@@ -16,6 +16,15 @@
 //!
 //! A source with audio of its own (`browser`) hands it to the program stage's audio
 //! inputs once it is built ([`LiveSources::audio`], `crate::audio_sources`).
+//!
+//! A `browser` source paints on the GPU (ADR-0021). While a program stage runs on a
+//! platform GPU context, the browser engine paints on that context's device
+//! ([`LiveSources::use_gpu`]), and the plan takes each source's newest texture
+//! (`Source::gpu_frame`) in place of its transparent stand-in, which the render thread
+//! samples where it is. Pages repaint on their own, so such a source asks for a re-plan
+//! every program frame, as an animation asks at its next frame; a page that has not
+//! painted yet asks too. Without a context the browser engine has no device and the
+//! source shows its stand-in.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -24,11 +33,12 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
-use jstream_platform::MediaClock;
+use jstream_platform::{ContextKey, GpuContext, GpuFrame, MediaClock};
 use jstream_protocol::{Settings, SourceId, SourceKind};
 use jstream_sources::{BrowserBackend, Context, Registry, Source, SourceAudio, SourceError};
 
 use crate::lock;
+use crate::runtime::{FRAME_DEN, FRAME_NUM};
 use crate::snapshot::Frame;
 
 /// What the `jstream-sources` thread calls back into: the engine, held weakly so the
@@ -52,6 +62,9 @@ pub(crate) struct LiveSources {
     host: Weak<dyn LiveHost>,
     /// Whether the thread has been started.
     started: bool,
+    /// The program stage's GPU context, which the browser engine paints on, while one
+    /// runs.
+    context: Option<ContextKey>,
 }
 
 /// What the engine wants for one source, and what it runs now.
@@ -69,6 +82,8 @@ struct Running {
     /// When it was built, on the media clock: its time zero.
     start: MediaTime,
     shown: Option<(Arc<VideoFrame>, Frame)>,
+    /// The texture it showed last, for a source that paints on the GPU.
+    shown_gpu: Option<(GpuFrame, Frame)>,
 }
 
 /// One source to build.
@@ -115,6 +130,7 @@ impl LiveSources {
             worker: Arc::new(Worker::new(Arc::new(SystemClock::new()))),
             host,
             started: false,
+            context: None,
         }
     }
 
@@ -135,6 +151,19 @@ impl LiveSources {
         self.ctx.browser = Some(browser);
         for entry in self.entries.values_mut().filter(|e| e.kind == "browser") {
             entry.settings = Settings::new();
+        }
+    }
+
+    /// Gives the browser engine the program stage's GPU context to paint on, or takes
+    /// it away (`None`) when the stage stops. A browser engine set after this gets the
+    /// device from the next stage.
+    pub(crate) fn use_gpu(&mut self, context: Option<&GpuContext>) {
+        self.context = context.map(GpuContext::key);
+        if let Some(browser) = &self.ctx.browser {
+            browser.use_device(context);
+        }
+        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+            running.shown_gpu = None;
         }
     }
 
@@ -215,6 +244,7 @@ impl LiveSources {
                 source,
                 start: self.worker.now(),
                 shown: None,
+                shown_gpu: None,
             }),
             // A kind that is described but not built yet draws what it drew before C1b:
             // a `display` source shows the pipeline's capture.
@@ -245,7 +275,38 @@ impl LiveSources {
         now: MediaTime,
         versions: &mut u64,
     ) -> Option<(Frame, Option<MediaTime>)> {
-        let running = self.entries.get_mut(source_id)?.running.as_mut()?;
+        let entry = self.entries.get_mut(source_id)?;
+        let running = entry.running.as_mut()?;
+        if let Some(context) = &self.context {
+            let next = next_program_frame(now);
+            if let Some(texture) = running.source.gpu_frame() {
+                let frame = match &running.shown_gpu {
+                    Some((shown, frame)) if *shown == texture => frame.clone(),
+                    _ => {
+                        *versions = versions.saturating_add(1);
+                        let frame = Frame::from_gpu(texture.clone(), context.clone(), *versions);
+                        running.shown_gpu = Some((texture, frame.clone()));
+                        frame
+                    }
+                };
+                return Some((frame, next));
+            }
+            if entry.kind == "browser" {
+                // Not painted yet: the stand-in, until a re-plan finds the first paint.
+                let (frame, _) = Self::cpu_frame(source_id, running, now, versions)?;
+                return Some((frame, next));
+            }
+        }
+        Self::cpu_frame(source_id, running, now, versions)
+    }
+
+    /// [`Self::frame`] from the source's CPU frame.
+    fn cpu_frame(
+        source_id: &SourceId,
+        running: &mut Running,
+        now: MediaTime,
+        versions: &mut u64,
+    ) -> Option<(Frame, Option<MediaTime>)> {
         let at = since(now, running.start);
         let video = match running.source.frame(at) {
             Ok(video) => video,
@@ -334,6 +395,14 @@ fn since(now: MediaTime, start: MediaTime) -> MediaTime {
     now.checked_sub(start)
         .and_then(|t| t.rescale(Timebase::MILLIS, Rounding::Down))
         .unwrap_or_else(|_| MediaTime::zero(Timebase::MILLIS))
+}
+
+/// One program frame after `now`, when a source that paints on the GPU is planned again.
+fn next_program_frame(now: MediaTime) -> Option<MediaTime> {
+    let period = MediaTime::new(1, Timebase::new(FRAME_NUM, FRAME_DEN).ok()?)
+        .rescale(now.timebase(), Rounding::Up)
+        .ok()?;
+    now.checked_add(period).ok()
 }
 
 /// The clock time `change` after `start`, rounded up so the frame is due by then.

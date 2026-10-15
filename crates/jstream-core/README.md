@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:95ce68c7b46d25bd", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (program stage, vcam, studio) into #219: Runtime bullet now combines main's shared program stage with E3b's GPU-context compositing and CPU fallback; Tests bullet keeps gpu_capture.rs and windows_gpu.rs (hw-tests, ignored); holds" }
+verified = { hash = "b3:a2fcb4a9e6ada1f4", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5 (with #283 merged): Tests bullet adds the browser page on the stage context test and the own-context snapshot test; C8's with_browser and page-audio text kept; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -120,8 +120,11 @@ state machine. Contents:
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), which capture path an output takes and each
-  fallback, and an output compositing GPU capture frames, on a software device that
-  stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
+  fallback, an output compositing GPU capture frames, and a browser page painting on
+  the stage's context, composited as premultiplied red and given back the device when
+  the stage stops, on a software device that stands in for the platform's
+  (`src/tests/gpu_capture.rs`), a page's GPU frame drawing only on its own context in
+  `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, behind
   `hw-tests` and ignored), the
   pipeline against the platform fakes
@@ -173,7 +176,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4534c05d0f409f99", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: render-thread paragraph now says the capture path is chosen when the program stage opens (main's shared stage); allocation list combines the GPU import bind group with main's vcam tap buffers; holds" }
+verified = { hash = "b3:5bc66358795955d5", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5: Live sources now says use_gpu lends the stage context to the browser, frames carry ContextKey, compose imports premultiplied only on that context, re-plan every 1/30 s while a context is set; Snapshots names the browser import; C8's text kept; matches live.rs, snapshot.rs, engine.rs" }
 -->
 
 ### Engine and sessions
@@ -397,7 +400,8 @@ changed. `video.snapshot` reads `rev` and the published snapshot together under 
 lock and hands both to the snapshot thread.
 
 `snapshot::compose` draws a `Shot` for both threads through a `jstream-render`
-`ResourceCache` keyed by `GpuKey`: a source's upload, the capture's (an upload of a
+`ResourceCache` keyed by `GpuKey`: a source's upload (or the import of a `browser`
+page's texture, see *Live sources*), the capture's (an upload of a
 CPU frame, or an import of the platform's texture, `ResourceCache::import`), a nested
 scene's layer at its depth, and the program at the canvas size. An unchanged frame is not
 uploaded again, and each nested scene is redrawn into the layer it had
@@ -429,8 +433,18 @@ is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 `Source`: the program stage records them (*Audio sources*). A `browser` source opens
 its page in the backend the host gave `with_browser` (none by default, so it draws
 nothing and logs `NoBackend`); giving one rebuilds the `browser` sources already there.
-Its page's picture is a GPU frame the program mix doesn't draw yet, so it shows as
-transparent. `LiveSources::audio` lists every running source's own audio
+Its page's picture is a GPU frame (`Source::gpu_frame`): while a program stage runs on
+a platform GPU context, the stage hands that context to the live sources
+(`Engine::use_gpu`, `LiveSources::use_gpu`), which pass it to the browser engine
+(`BrowserBackend::use_device`), and takes it back first when the stage stops. The plan
+then shows the page's newest texture in place of its transparent stand-in, as a
+`Frame` that carries the context's `ContextKey`. `compose` imports it, premultiplied
+sRGB (`ResourceCache::import_premultiplied`), only on a compositor of that context;
+anywhere else, `video.snapshot` included, it draws nothing. A page repaints on its
+own, so while a context is set a `browser` source asks for a re-plan every program
+frame (1/30 s), painted yet or not, as an animation asks at its next frame; a texture
+equal to the last one keeps its version, so the shot doesn't change. Without a
+context the page shows its stand-in, transparent. `LiveSources::audio` lists every running source's own audio
 (`Source::audio`) for *Audio sources*.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
@@ -982,7 +996,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:7695ee1c6ce0a4ae", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: Capture path paragraph now says opening the program stage asks GpuInterop; launch_program binds OpenedCapture context first and gpu_captures is a program-stage counter beside readbacks, as pipeline.rs does; main's shared-stage text kept; holds" }
+verified = { hash = "b3:be6a803d74bcafee", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5: Capture path adds the stage lending its context to the browser engine and taking it back first on stop or failed open (GpuSources in launch_program and Program::drop); holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -1005,7 +1019,10 @@ the render thread samples where they are, with no CPU copy, and counts
 (`OutputStats::gpu_captures`). Each fallback is logged and keeps the output running on
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
 opens its own device, software adapter first), a backend with no GPU path or one that
-refuses the context, and a GPU capture that does not start. The render loop drops the
+refuses the context, and a GPU capture that does not start. With a context, the stage
+also lends it to the browser engine, so `browser` pages paint on it and the render
+thread samples them there too (*Live sources* in Design); the stage takes it back
+first when it stops, and on a failed open. The render loop drops the
 held frame, the compositor and the capture stream before the context, so the
 platform's state goes first as `GpuContext` requires.
 

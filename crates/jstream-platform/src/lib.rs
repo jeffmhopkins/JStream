@@ -37,7 +37,7 @@ pub use codec::{
     RateControl, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
 };
 pub use error::PlatformError;
-pub use gpu::{AdapterId, FrameSync, GpuContext, GpuFrame, GpuInterop};
+pub use gpu::{AdapterId, ContextKey, FrameSync, GpuContext, GpuFrame, GpuInterop};
 pub use id::DeviceId;
 pub use keys::{OAuthTokenStore, Secret, StreamKeyStore};
 pub use surface::VideoSurface;

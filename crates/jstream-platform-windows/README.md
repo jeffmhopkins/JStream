@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:858e64be3674c9b1", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: stale via platform#purpose and wgc.rs on_context; GPU path bullet still says the engine reaches on_gpu through Capture::on_context; main's text unchanged; holds" }
+verified = { hash = "b3:8ec56e88c4826540", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5 (with #283 merged): stale via platform#purpose and crate-map only; README text unchanged and holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

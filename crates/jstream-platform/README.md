@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:fce18f71efa79855", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: Capture bullet carries main's frames_undecodable text and E3b's Capture::on_context; Not yet combines the engine compositing GPU frames with main's video_devices item; holds" }
+verified = { hash = "b3:88a8bfffcea0712a", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5: GPU interop bullet adds GpuContext::key / ContextKey and why wgpu Device equality isn't enough (per-instance IDs, seen as a wgpu-core panic in a two-instance test); rest re-read after merging #283, holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -40,7 +40,10 @@ Contents:
   platform. It is `#[non_exhaustive]`.
 - **GPU interop** ([GPU frames](#gpu-frames)): `GpuInterop` (`Send + Sync`) opens the
   engine's `GpuContext` (adapter, device, queue, `AdapterId`, and the platform's own
-  state, which drops first) and allocates NV12 `encode_target`s. A `GpuFrame` holds a
+  state, which drops first) and allocates NV12 `encode_target`s. `GpuContext::key`
+  is a `ContextKey`, equal only for the same context: `wgpu::Device` equality compares
+  IDs each wgpu instance numbers from zero, so it can't tell two instances' devices
+  apart. A `GpuFrame` holds a
   `wgpu::Texture`, its `VideoFrameInfo` and an `Arc<dyn FrameSync>`; `GpuFrame::stage`
   stages its fence wait and signal around the engine's next submit. Frames compare by
   texture, hold and info.
@@ -140,7 +143,7 @@ is filled, with `MfVideoDevices` on Windows and `MfMjpegDecoder` as its
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:bfb820cd3edebbf6", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: stamp-only conflict; re-read the E3b text (render samples capture frames on the context, encoders' GPU input next) against capture.rs and gpu.rs; holds" }
+verified = { hash = "b3:0e06f60ffba56037", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5: intro adds render sampling browser page frames on the context; GpuContext bullet adds key(); matches gpu.rs" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
@@ -148,8 +151,9 @@ The design for frames that stay on the GPU, which ARCH's pipeline needs (capture
 Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene on
-that device when the engine has one, sampling capture frames there, and opens its own
-(software adapter first) when it does not; it does not write the NV12 encode target. The encoders' GPU input comes next.
+that device when the engine has one, sampling capture frames there, and the frames a
+browser source's page paints on it, and opens its own (software adapter first) when it
+does not; it does not write the NV12 encode target. The encoders' GPU input comes next.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -177,6 +181,9 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
       engine has one, so capture, render and encode share one adapter. With no interop it
       opens its own, software adapter first. On a hybrid-GPU machine where sharing an
       adapter isn't possible, the platform says so (ARCH step 6).
+    - `GpuContext::key()` identifies the context (a `ContextKey`, compared by
+      allocation), so the engine can tell whether a texture is on the context a
+      compositor runs on. wgpu's own `Device` equality is per instance and can't.
     - The platform keeps the raw objects it took from the device (S1's
       `ID3D12Device` clone) inside its own state. It releases them before the wgpu device,
       as ARCH step 2 requires: `GpuContext` drops the platform's state first.

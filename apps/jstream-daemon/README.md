@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:ba52f5f3dcaeb8c8", by = "agent:claude@session_01PZRAdnkMzURQaUtof2W6W2", note = "Round 1 B1: Tests bullet now says WS sets the key and starts the stream, MCP starts the recording (matches e2e.rs); rest of Purpose re-read, holds" }
+verified = { hash = "b3:bd542a479bc9a242", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5 (with #283 merged): stale via crate-map apps row (adds jstream-browser-helper); the daemon wires no browser yet; holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:e6cf3e1e4b4a142d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: stale via core#design only; daemon backends text (WgcCapture etc, devices open when a pipeline starts) still holds with the GPU path opening the device at program-stage open; holds" }
+verified = { hash = "b3:ebdb113f727c56bb", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5 (with #283 merged): stale via core#design (browser GPU frames, use_gpu) only; the daemon calls neither; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
