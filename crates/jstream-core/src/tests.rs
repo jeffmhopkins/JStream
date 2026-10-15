@@ -878,6 +878,9 @@ fn the_engine_answers_like_the_mock() {
         Call::Batch(Batch::single(webcam())),
         Call::Batch(Batch::single(create("a")).expecting(Rev(1))),
         Call::Batch(Batch::single(add("a", "i9", "webcam")).expecting(Rev(2))),
+        // The parity collection reorders `b` first, so `b` goes on program: switching to
+        // `a` moves it, a second switch is a no-op, and deleting `a` below (`b` can't go
+        // while `a` nests it) moves it back to `b`.
         switch_call("a"),
         switch_call("a"),
         switch_call("ghost"),
@@ -941,6 +944,16 @@ fn the_engine_answers_like_the_mock() {
     let mock_events: Vec<Event> = drain(&mut mock_events).into_iter().map(normalize).collect();
     assert_eq!(real_events, mock_events);
     assert!(real_events.len() >= 5);
+    let programs: Vec<_> = real_events
+        .iter()
+        .filter_map(|event| match event {
+            Event::StudioChanged { program_scene, .. } => {
+                Some(program_scene.as_ref().map(SceneId::as_str))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(programs, [Some("b"), Some("a"), Some("b")]);
 }
 
 /// Backends without a publish target do not start a pipeline and leave the output
@@ -3706,6 +3719,44 @@ pub(crate) fn check_secrets_are_redacted() {
     }
     let stored = store.get("out_yt").expect("get").expect("stored");
     assert_eq!(stored.expose(), KEY, "the key reached the store");
+}
+
+/// `scene.switch` is audited like every action, naming its scene, and a switch to an
+/// unknown scene with its error code (ADR-0030).
+#[test]
+fn scene_switch_is_audited() {
+    let audit = Arc::new(crate::AuditMemory::new());
+    let engine = Engine::new().with_audit(audit.clone());
+    let control = connected(&engine);
+    batch(&control, edits(vec![create("a"), create("b")])).expect("scenes");
+    block_on(control.call(switch_call("b"))).expect("switch");
+    block_on(control.call(switch_call("ghost"))).expect_err("unknown scene");
+
+    let entries = audit.entries();
+    let switches: Vec<_> = entries
+        .iter()
+        .skip(1)
+        .map(|e| {
+            (
+                e.call,
+                e.scene_id.as_ref().map(SceneId::as_str),
+                (e.rev_before.0, e.rev_after.0),
+                e.error,
+            )
+        })
+        .collect();
+    assert_eq!(
+        switches,
+        [
+            ("scene.switch", Some("b"), (1, 1), None),
+            ("scene.switch", Some("ghost"), (1, 1), Some("not_found")),
+        ]
+    );
+    assert!(
+        entries[1].to_json_line().contains(",\"scene_id\":\"b\","),
+        "{:?}",
+        entries[1].to_json_line()
+    );
 }
 
 /// The audit log gets one entry per batch and action, with the client and its latest

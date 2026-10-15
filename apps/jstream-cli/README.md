@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:75e80f9d5bfc8517", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2 history 0.10) into B3 at 0.11: re-read; contents list holds for args.rs/run.rs with B2's history cause and B3's geometry: None" }
+verified = { hash = "b3:48f11b4a9989a45d", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; contents list holds for args.rs/run.rs with scene switch and studio get added" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:bfbfdab2c4076796", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Edits bullet now says protocol 0.11's canvas.set_size/item.set_geometry are not in the CLI; B2's undo/redo cause suffix and exit-code row hold" }
+verified = { hash = "b3:e63eddc4937d552d", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B2, B8, canvas) into B10: re-read; scene switch and studio get rows hold beside main's history and canvas rows" }
 -->
 
 ```sh
@@ -129,7 +129,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
-  the `state.changed` event it causes; an event an undo or redo caused ends with
+  the `state.changed` (or `studio.changed`) event it causes; an event an undo or redo caused ends with
   `undo` or `redo`. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
@@ -214,7 +214,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e8613ebfa1f33687", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; parsing, connector, mock and MCP proxy bullets hold" }
+verified = { hash = "b3:f8f879e8857a6a45", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; Output bullet names studio.changed beside state.changed and the undo/redo suffix; rest holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

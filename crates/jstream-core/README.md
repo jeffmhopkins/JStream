@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:776be5d7a3dab550", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; History bullet (B2) and Snapshot/canvas text (B3) both hold; history.rs now also handles item.set_geometry and canvas.set_size" }
+verified = { hash = "b3:59eaa4e4510bd09d", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; Studio bullet and Runtime bullet now say the render thread composites the capture alone (N2); audit and history contents hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -54,7 +54,8 @@ state machine. Contents:
   collection lock that `scene.switch` sets and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. The render thread reads the
-  platform capture mailbox, composites one scene and reads the frame back. The mixer
+  platform capture mailbox, composites the capture alone (not yet a scene) and reads the
+  frame back. The mixer
   thread polls the media clock. Encode threads live in the encoder sessions. The
   output thread muxes FLV and publishes it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
@@ -118,7 +119,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:47f70b5587157701", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; core prose unchanged by the merge; Snapshots canvas/placement and undo touched-set (placement, canvas size) text hold against snapshot.rs and history.rs" }
+verified = { hash = "b3:ef2b86e79f6f8f4e", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read Program scene (reconciled after batch, undo and redo in changed()), Snapshots, Audit log (scene_id for scene.switch); holds" }
 -->
 
 ### Engine and sessions
@@ -616,7 +617,7 @@ Every agent action goes to the audit log
 the time, `client_id`, the client's name from its latest `hello` (`client_name`, cut
 to 128 bytes; `client_id`s restart at `client_1` with the engine, so the name is what
 says which agent acted across restarts), the session's `request_id`, the call (`batch`,
-`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id`, the `rev` before and
+`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id` or `scene_id` (`scene.switch`), the `rev` before and
 after, the result (`ok` or the error code), and `replayed` for a batch, undo or redo whose
 idempotency key had already been applied. It holds no argument of any call: no names,
 settings, URLs or keys, so `output.set_key` records only that action on that output

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d46a278a46d73d8a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; crate shape unchanged" }
+verified = { hash = "b3:5d5cfa8162c194b9", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; holds" }
 -->
 
 ```
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:dfe3957b0f391551", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Built so far says canvas at protocol 0.11; rest holds" }
+verified = { hash = "b3:d00c62b7f529d4a8", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; studio removed from the collection tree, program is runtime state (ADR-0030), main's canvas text kept" }
 -->
 
 ```
@@ -507,7 +507,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:415e020d4c5b0d5c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; Edits bullet (canvas.set_size/item.set_geometry at 0.11) and History bullet hold" }
+verified = { hash = "b3:1a0713f6d3b2ef90", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; scene.switch example and Program scene bullet at 0.12 now cover batch, undo or redo; main's canvas and history bullets hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -537,7 +537,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Program scene** (protocol 0.12, [ADR-0030](adr/0030-studio-state-and-scene-switching.md)):
   the action `scene.switch { scene_id }` puts a scene on program with a cut, with no
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
-  change of it, including the ones a batch causes by creating the first scene or
+  change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,
@@ -616,7 +616,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:f87823856265c90a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: grouped tools list includes canvas and history; tools.snap now about 102 KB, so the text says about 100 KB" }
+verified = { hash = "b3:7f4ce16ac6d55fe7", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; studio in the tool list beside canvas and history" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
