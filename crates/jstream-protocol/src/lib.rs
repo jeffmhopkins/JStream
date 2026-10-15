@@ -26,7 +26,8 @@ mod settings;
 mod version;
 
 pub use command::{
-    Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole, SourceKind, Vec2,
+    Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole,
+    SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileInfo, EncoderSessionInfo,

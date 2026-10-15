@@ -10,10 +10,10 @@ use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Sourc
 use crate::target::{record_path_problem, rtmp_url_problem};
 use crate::touched::Touched;
 use jstream_protocol::{
-    Batch, Blocker, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId,
-    ItemTransform, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
-    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneRole, Settings,
-    SourceId, SourceKind,
+    Batch, BlendMode, Blocker, Canvas, Crop, Edit, EntityKind, Finite32, GeometryError,
+    ItemGeometry, ItemId, ItemTransform, KindDescriptor, Media, OutputId, OutputKind,
+    ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference, Rev, RtmpTarget,
+    SceneId, SceneRole, Settings, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -367,6 +367,8 @@ fn apply_edit(
             source_id,
             transform,
             geometry,
+            opacity,
+            blend,
         } => {
             check_id(item_id.as_str(), at, "item_id")?;
             let si = find_scene(state, scene_id)?;
@@ -393,12 +395,19 @@ fn apply_edit(
                     Placement::Legacy(transform.unwrap_or(ItemTransform::IDENTITY))
                 }
             };
+            let opacity = opacity.unwrap_or(Finite32::ONE);
+            check_opacity(opacity, at)?;
+            let blend = blend.unwrap_or_default();
+            check_blend(blend, at)?;
             state.scenes[si].items.push(Item {
                 id: item_id.clone(),
                 source_id: source_id.clone(),
                 placement,
                 crop: Crop::NONE,
                 visible: true,
+                opacity,
+                blend,
+                effects: Vec::new(),
             });
             Ok(vec![Edit::ItemRemove {
                 item_id: item_id.clone(),
@@ -501,6 +510,30 @@ fn apply_edit(
                 item_id: item_id.clone(),
                 scene_id: scene_id.clone(),
                 visible: old,
+            }])
+        }
+        Edit::ItemSetOpacity {
+            item_id,
+            scene_id,
+            opacity,
+        } => {
+            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
+            check_opacity(*opacity, at)?;
+            let old = std::mem::replace(&mut item.opacity, *opacity);
+            Ok(vec![Edit::ItemSetOpacity {
+                item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
+                opacity: old,
+            }])
+        }
+        Edit::ItemSetBlend { item_id, blend } => {
+            let (si, ii) = find_item(state, item_id)?;
+            check_blend(*blend, at)?;
+            let item = item_mut(state, (si, ii))?;
+            let old = std::mem::replace(&mut item.blend, *blend);
+            Ok(vec![Edit::ItemSetBlend {
+                item_id: item_id.clone(),
+                blend: old,
             }])
         }
         Edit::SourceCreate {
@@ -721,6 +754,30 @@ fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolErro
         .map_err(|err| invalid(at, "geometry", err.to_string()))
 }
 
+/// Rejects an opacity outside [0, 1] (ADR-0023 §1).
+fn check_opacity(opacity: Finite32, at: usize) -> Result<(), ProtocolError> {
+    if !(0.0..=1.0).contains(&opacity.get()) {
+        return Err(invalid(at, "opacity", "must be from 0 to 1"));
+    }
+    Ok(())
+}
+
+/// Rejects a blend mode the compositor doesn't draw yet, so stored state never claims
+/// one (ADR-0023 §1). Only `normal` is drawn so far.
+fn check_blend(blend: BlendMode, at: usize) -> Result<(), ProtocolError> {
+    if !blend.is_normal() {
+        return Err(invalid(
+            at,
+            "blend",
+            format!(
+                "`{}` is not drawn by the compositor yet; only `normal` is",
+                blend.as_str()
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn check_canvas_side(value: u32, at: usize, name: &str) -> Result<(), ProtocolError> {
     if value == 0 || value > MAX_CANVAS_EDGE {
         return Err(invalid(
@@ -859,6 +916,8 @@ fn restore_item(
         source_id: item.source_id.clone(),
         transform,
         geometry,
+        opacity: (item.opacity != Finite32::ONE).then_some(item.opacity),
+        blend: (!item.blend.is_normal()).then_some(item.blend),
     }];
     if index != top {
         edits.push(Edit::ItemReorder {

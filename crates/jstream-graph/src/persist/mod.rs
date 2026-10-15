@@ -15,8 +15,9 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
-    OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneRole, Settings, SourceId, SourceKind,
+    BlendMode, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, Finite32, ItemGeometry,
+    ItemId, ItemTransform, OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneRole, Settings,
+    SourceId, SourceKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -135,6 +136,16 @@ struct FileItem {
     geometry: Option<ItemGeometry>,
     crop: Crop,
     visible: bool,
+    /// The alpha multiplier (ADR-0023); omitted at 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    opacity: Option<Finite32>,
+    /// The blend mode; omitted at `normal`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    blend: Option<BlendMode>,
+    /// Per-placement effects, reserved (ADR-0023 §1): accepted so that item effects can
+    /// come later without a migration, never written, and refused unless empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    effects: Vec<Value>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -206,6 +217,9 @@ impl Graph {
                                 geometry,
                                 crop: item.crop,
                                 visible: item.visible,
+                                opacity: (item.opacity != Finite32::ONE).then_some(item.opacity),
+                                blend: (!item.blend.is_normal()).then_some(item.blend),
+                                effects: Vec::new(),
                             }
                         })
                         .collect(),
@@ -381,6 +395,11 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                     "{object}: exactly one of `transform` and `geometry` must be set"
                 )));
             }
+            if !item.effects.is_empty() {
+                return Err(LoadError::Parse(format!(
+                    "{object}: `effects` is reserved and must be empty"
+                )));
+            }
             edits.push((
                 object.clone(),
                 Edit::ItemAdd {
@@ -389,6 +408,8 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                     source_id: item.source_id.clone(),
                     transform: item.transform,
                     geometry: item.geometry,
+                    opacity: item.opacity,
+                    blend: item.blend,
                 },
             ));
             if item.crop != Crop::NONE {

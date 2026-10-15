@@ -6,7 +6,7 @@
 //! naming and classification checks see every variant.
 
 use crate::{
-    Action, Batch, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
+    Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
     CommandClass, Crop, DeleteTarget, DropCounts, Edit, EntityKind, ErrorResponse, Event,
     EventMessage, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo,
     ItemTransform, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm,
@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
 pub(crate) fn edits() -> Vec<Edit> {
-    vec![
+    let mut edits = vec![
         Edit::SceneCreate {
             scene_id: SceneId::new("scn_1"),
             name: "Main".into(),
@@ -54,6 +54,8 @@ pub(crate) fn edits() -> Vec<Edit> {
             source_id: SourceId::new("src_cam"),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         },
         Edit::ItemAdd {
             scene_id: SceneId::new("scn_1"),
@@ -61,6 +63,8 @@ pub(crate) fn edits() -> Vec<Edit> {
             source_id: SourceId::new("src_cam"),
             transform: Some(ItemTransform::IDENTITY),
             geometry: None,
+            opacity: None,
+            blend: None,
         },
         Edit::ItemAdd {
             scene_id: SceneId::new("scn_1"),
@@ -68,6 +72,13 @@ pub(crate) fn edits() -> Vec<Edit> {
             source_id: SourceId::new("src_cam"),
             transform: None,
             geometry: Some(corner_box()),
+            opacity: Finite32::new(0.75),
+            blend: Some(BlendMode::Normal),
+        },
+        Edit::ItemSetOpacity {
+            item_id: ItemId::new("itm_3"),
+            scene_id: None,
+            opacity: Finite32::new(0.5).expect("finite"),
         },
         Edit::ItemRemove {
             item_id: ItemId::new("itm_1"),
@@ -230,7 +241,13 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::EncoderDelete {
             profile_id: EncoderProfileId::new("enc_old"),
         },
-    ]
+    ];
+    // Every blend mode, though the engine draws only `normal` so far.
+    edits.extend(BlendMode::ALL.map(|blend| Edit::ItemSetBlend {
+        item_id: ItemId::new("itm_3"),
+        blend,
+    }));
+    edits
 }
 
 /// A recording profile: 12000 kbit/s VBR peaking at 20000, hardware preferred.
@@ -524,6 +541,8 @@ fn item_infos() -> Vec<ItemInfo> {
             }),
             crop: Crop::NONE,
             visible: true,
+            opacity: Finite32::new(0.5).expect("finite"),
+            blend: BlendMode::Normal,
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
@@ -542,6 +561,8 @@ fn item_infos() -> Vec<ItemInfo> {
                 bottom: 0,
             },
             visible: false,
+            opacity: Finite32::ONE,
+            blend: BlendMode::Normal,
         },
     ]
 }

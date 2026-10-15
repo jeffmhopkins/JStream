@@ -27,13 +27,17 @@
 //! - Every output's encoder profile exists, and every profile holds an encoding the
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
 //!
-//! The structs have private fields so that later additions (source `filters[]`, item
-//! `effects[]`, the full 3D transform) don't break callers.
+//! - Every item's opacity is in [0, 1], and its blend mode is one the compositor draws
+//!   (`normal` so far). Its `effects[]` is empty: per-placement effects are reserved
+//!   (ADR-0023 §1), and [`Effect`] has no values yet.
+//!
+//! The structs have private fields so that later additions (source `filters[]`, the full
+//! 3D transform) don't break callers.
 
 use jstream_protocol::{
-    Canvas, Crop, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
-    KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole, Settings,
-    SourceId, SourceKind,
+    BlendMode, Canvas, Crop, EncoderProfile, EncoderProfileId, Finite32, ItemGeometry, ItemId,
+    ItemTransform, KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole,
+    Settings, SourceId, SourceKind,
 };
 use std::collections::BTreeMap;
 
@@ -283,6 +287,9 @@ pub struct Item {
     pub(crate) placement: Placement,
     pub(crate) crop: Crop,
     pub(crate) visible: bool,
+    pub(crate) opacity: Finite32,
+    pub(crate) blend: BlendMode,
+    pub(crate) effects: Vec<Effect>,
 }
 
 impl Item {
@@ -310,7 +317,29 @@ impl Item {
     pub fn visible(&self) -> bool {
         self.visible
     }
+
+    /// Its alpha multiplier, in [0, 1].
+    pub fn opacity(&self) -> Finite32 {
+        self.opacity
+    }
+
+    /// How it composites onto what is below it.
+    pub fn blend(&self) -> BlendMode {
+        self.blend
+    }
+
+    /// Its per-placement effects: always empty, since item effects are reserved
+    /// (ADR-0023 §1).
+    pub fn effects(&self) -> &[Effect] {
+        &self.effects
+    }
 }
+
+/// One per-placement effect. Reserved (ADR-0023 §1): the model carries an item's
+/// `effects[]` so that item effects can come later without a migration, but there are
+/// none yet, so this type has no values and every item's list is empty.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Effect {}
 
 /// One output's configuration: what it is and where it sends. Whether it runs is runtime
 /// state, kept by the engine, and its stream key is in the OS credential store.

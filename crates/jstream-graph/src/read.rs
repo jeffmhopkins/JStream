@@ -214,6 +214,8 @@ impl Item {
             geometry,
             crop: self.crop,
             visible: self.visible,
+            opacity: self.opacity,
+            blend: self.blend,
         }
     }
 }

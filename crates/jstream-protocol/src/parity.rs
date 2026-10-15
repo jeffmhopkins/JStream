@@ -10,12 +10,12 @@
 //! Docs: crates/jstream-protocol/README.md#purpose
 
 use crate::{
-    AudioCodec, AudioEncoding, Batch, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId,
-    EncoderProfileInfo, EntityKind, Finite32, FitMode, HardwarePreference, ItemGeometry, ItemId,
-    ItemInfo, ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind,
-    PlacementForm, ProtocolError, Query, QueryResult, RateControl, RecordContainer, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId, SourceInfo,
-    SourceKind, Vec2, VideoCodec, VideoEncoding,
+    AudioCodec, AudioEncoding, Batch, BlendMode, Canvas, Crop, Edit, EncoderProfile,
+    EncoderProfileId, EncoderProfileInfo, EntityKind, Finite32, FitMode, HardwarePreference,
+    ItemGeometry, ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor, OutputId,
+    OutputInfo, OutputKind, PlacementForm, ProtocolError, Query, QueryResult, RateControl,
+    RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId,
+    SourceInfo, SourceKind, Vec2, VideoCodec, VideoEncoding,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -39,8 +39,8 @@ pub fn kinds() -> Vec<KindDescriptor> {
 
 /// The batch that builds the fixture collection from an empty one: a 1280×720 canvas,
 /// scenes `b` then `a` (created `a` first, then reordered), source `cam` placed twice in
-/// `a` (the second placement moved, cropped, hidden and reordered to the bottom) and once
-/// in `b` with a geometry, scene `b` nested in `a` through the scene source `b_src`, the
+/// `a` (the second placement moved, cropped, hidden, set to opacity 0.25 and reordered to
+/// the bottom) and once in `b` with a geometry and opacity 0.5, scene `b` nested in `a` through the scene source `b_src`, the
 /// RTMP outputs `yt` and `tw` (`tw`'s target changed after it was created), the
 /// recording output `rec`, and the encoder profiles `hq` (updated after it was created,
 /// used by `rec`) and `low` (used by `yt`, `tw` keeping the engine's default). Then the
@@ -64,6 +64,8 @@ pub fn collection() -> Batch {
         source_id: SourceId::new(source),
         transform: None,
         geometry: None,
+        opacity: None,
+        blend: None,
     };
     Batch {
         edits: vec![
@@ -99,6 +101,15 @@ pub fn collection() -> Batch {
                 scene_id: None,
                 visible: false,
             },
+            Edit::ItemSetOpacity {
+                item_id: ItemId::new("i3"),
+                scene_id: None,
+                opacity: QUARTER,
+            },
+            Edit::ItemSetBlend {
+                item_id: ItemId::new("i3"),
+                blend: BlendMode::Normal,
+            },
             Edit::ItemReorder {
                 item_id: ItemId::new("i3"),
                 index: 0,
@@ -113,6 +124,8 @@ pub fn collection() -> Batch {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: Some(BOXED),
+                opacity: Some(HALF),
+                blend: Some(BlendMode::Normal),
             },
             Edit::OutputCreate {
                 output_id: OutputId::new("yt"),
@@ -339,6 +352,8 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 source_id: SourceId::new("ghost"),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             }),
             ProtocolError::NotFound {
                 entity: EntityKind::Source,
@@ -392,10 +407,42 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 source_id: SourceId::new("cam"),
                 transform: Some(ItemTransform::IDENTITY),
                 geometry: Some(BOXED),
+                opacity: None,
+                blend: None,
             }),
             invalid(
                 "edits.0.geometry",
                 "send either `transform` or `geometry`, not both",
+            ),
+        ),
+        (
+            Batch::single(Edit::ItemSetOpacity {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+                opacity: finite(1.5),
+            }),
+            invalid("edits.0.opacity", "must be from 0 to 1"),
+        ),
+        (
+            Batch::single(Edit::ItemAdd {
+                scene_id: SceneId::new("a"),
+                item_id: ItemId::new("i9"),
+                source_id: SourceId::new("cam"),
+                transform: None,
+                geometry: None,
+                opacity: Some(finite(-0.5)),
+                blend: None,
+            }),
+            invalid("edits.0.opacity", "must be from 0 to 1"),
+        ),
+        (
+            Batch::single(Edit::ItemSetBlend {
+                item_id: ItemId::new("i1"),
+                blend: BlendMode::Multiply,
+            }),
+            invalid(
+                "edits.0.blend",
+                "`multiply` is not drawn by the compositor yet; only `normal` is",
             ),
         ),
         (
@@ -953,6 +1000,18 @@ const BOXED_VIEW: ItemTransform = ItemTransform {
     ..ItemTransform::IDENTITY
 };
 
+/// `i4`'s opacity, set by `item.add`.
+const HALF: Finite32 = match Finite32::new(0.5) {
+    Some(value) => value,
+    None => Finite32::ONE,
+};
+
+/// `i3`'s opacity, set by `item.set_opacity`.
+const QUARTER: Finite32 = match Finite32::new(0.25) {
+    Some(value) => value,
+    None => Finite32::ONE,
+};
+
 const CROP: Crop = Crop {
     left: 1,
     top: 2,
@@ -970,6 +1029,8 @@ fn items_of_a() -> Vec<ItemInfo> {
         geometry: None,
         crop: Crop::NONE,
         visible: true,
+        opacity: Finite32::ONE,
+        blend: BlendMode::Normal,
     };
     vec![
         ItemInfo {
@@ -980,6 +1041,8 @@ fn items_of_a() -> Vec<ItemInfo> {
             geometry: None,
             crop: CROP,
             visible: false,
+            opacity: QUARTER,
+            blend: BlendMode::Normal,
         },
         plain("i1", "cam_copy"),
         plain("i2", "b_src"),
@@ -996,5 +1059,7 @@ fn items_of_b() -> Vec<ItemInfo> {
         geometry: Some(BOXED),
         crop: Crop::NONE,
         visible: true,
+        opacity: HALF,
+        blend: BlendMode::Normal,
     }]
 }

@@ -35,7 +35,8 @@
             "right": 0,
             "bottom": 0
           },
-          "visible": true
+          "visible": true,
+          "opacity": 0.5
         }
       ]
     },
@@ -63,7 +64,8 @@
             "right": 3,
             "bottom": 4
           },
-          "visible": false
+          "visible": false,
+          "opacity": 0.25
         },
         {
           "id": "i1",

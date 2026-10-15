@@ -1,8 +1,9 @@
 //! Queries: reads with no effect on state, and their results.
 
-use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
+use crate::command::{BlendMode, Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
+use crate::finite::Finite32;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
@@ -353,4 +354,15 @@ pub struct ItemInfo {
     pub crop: Crop,
     /// Whether it is drawn.
     pub visible: bool,
+    /// Its alpha multiplier, from 0 to 1. Missing (from a server older than this field)
+    /// parses as 1.
+    #[serde(default = "opaque")]
+    pub opacity: Finite32,
+    /// How it composites onto what is below it. Missing parses as `normal`.
+    #[serde(default)]
+    pub blend: BlendMode,
+}
+
+fn opaque() -> Finite32 {
+    Finite32::ONE
 }

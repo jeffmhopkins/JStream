@@ -113,6 +113,8 @@ fn populated() -> MockEngine {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
             Edit::ItemAdd {
                 scene_id: SceneId::new("main"),
@@ -120,6 +122,8 @@ fn populated() -> MockEngine {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
         ],
         expected_rev: None,
@@ -286,10 +290,10 @@ fn item_list_golden() {
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"item.list","rev":2,"#,
             r#""scene_id":"main","items":[{"item_id":"cam_1","source_id":"cam","placement":"legacy","#,
             r#""transform":{"position":{"x":0.0,"y":0.0},"scale":{"x":1.0,"y":1.0},"rotation_deg":0.0},"#,
-            r#""crop":{"left":0,"top":0,"right":0,"bottom":0},"visible":true},"#,
+            r#""crop":{"left":0,"top":0,"right":0,"bottom":0},"visible":true,"opacity":1.0,"blend":"normal"},"#,
             r#"{"item_id":"cam_2","source_id":"cam","placement":"legacy","#,
             r#""transform":{"position":{"x":100.0,"y":50.5},"scale":{"x":0.5,"y":0.5},"rotation_deg":-90.0},"#,
-            r#""crop":{"left":0,"top":0,"right":10,"bottom":0},"visible":false}]}}}"#,
+            r#""crop":{"left":0,"top":0,"right":10,"bottom":0},"visible":false,"opacity":1.0,"blend":"normal"}]}}}"#,
             "\n"
         ))
     );
@@ -327,7 +331,7 @@ fn state_get_golden() {
     );
     let item = |id: &str| {
         format!(
-            r#"{{"item_id":"{id}","source_id":"cam","placement":"legacy","transform":{{"position":{{"x":0.0,"y":0.0}},"scale":{{"x":1.0,"y":1.0}},"rotation_deg":0.0}},"crop":{{"left":0,"top":0,"right":0,"bottom":0}},"visible":true}}"#
+            r#"{{"item_id":"{id}","source_id":"cam","placement":"legacy","transform":{{"position":{{"x":0.0,"y":0.0}},"scale":{{"x":1.0,"y":1.0}},"rotation_deg":0.0}},"crop":{{"left":0,"top":0,"right":0,"bottom":0}},"visible":true,"opacity":1.0,"blend":"normal"}}"#
         )
     };
     assert_eq!(

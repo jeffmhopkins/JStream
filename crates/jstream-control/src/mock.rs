@@ -20,11 +20,11 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
-    EncoderProfileId, EncoderProfileInfo, EntityKind, Event, GeometryError, Hello, HistoryCall,
-    HistoryDirection, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId,
-    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
+    Action, Batch, BlendMode, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
+    EncoderProfileId, EncoderProfileInfo, EntityKind, Event, Finite32, GeometryError, Hello,
+    HistoryCall, HistoryDirection, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform,
+    OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError,
+    Query, QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
     SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind,
     Welcome,
 };
@@ -421,6 +421,8 @@ struct Item {
     geometry: Option<ItemGeometry>,
     crop: Crop,
     visible: bool,
+    opacity: Finite32,
+    blend: BlendMode,
 }
 
 impl State {
@@ -873,6 +875,8 @@ impl Collection {
                 source_id,
                 transform,
                 geometry,
+                opacity,
+                blend,
             } => {
                 check_id(item_id.as_str(), at, "item_id")?;
                 let index = self.existing_scene(&scene_id)?;
@@ -894,6 +898,10 @@ impl Collection {
                     (None, Some(geometry)) => geometry_view(&geometry, at)?,
                     (transform, None) => transform.unwrap_or(ItemTransform::IDENTITY),
                 };
+                let opacity = opacity.unwrap_or(Finite32::ONE);
+                check_opacity(opacity, at)?;
+                let blend = blend.unwrap_or_default();
+                check_blend(blend, at)?;
                 self.scenes[index].items.push(item_id.clone());
                 self.items.insert(
                     item_id.clone(),
@@ -904,6 +912,8 @@ impl Collection {
                         geometry,
                         crop: Crop::NONE,
                         visible: true,
+                        opacity,
+                        blend,
                     },
                 );
                 vec![Edit::ItemRemove { item_id }]
@@ -1007,6 +1017,29 @@ impl Collection {
                     item_id,
                     scene_id,
                     visible: old,
+                }]
+            }
+            Edit::ItemSetOpacity {
+                item_id,
+                scene_id,
+                opacity,
+            } => {
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
+                check_opacity(opacity, at)?;
+                let old = std::mem::replace(&mut item.opacity, opacity);
+                vec![Edit::ItemSetOpacity {
+                    item_id,
+                    scene_id,
+                    opacity: old,
+                }]
+            }
+            Edit::ItemSetBlend { item_id, blend } => {
+                let item = self.existing_item(&item_id)?;
+                check_blend(blend, at)?;
+                let old = std::mem::replace(&mut item.blend, blend);
+                vec![Edit::ItemSetBlend {
+                    item_id,
+                    blend: old,
                 }]
             }
             Edit::SourceCreate {
@@ -1402,6 +1435,8 @@ impl Collection {
                     geometry: item.geometry,
                     crop: item.crop,
                     visible: item.visible,
+                    opacity: item.opacity,
+                    blend: item.blend,
                 })
             })
             .collect()
@@ -1605,6 +1640,8 @@ fn restore_item(
         source_id: item.source_id.clone(),
         transform,
         geometry,
+        opacity: (item.opacity != Finite32::ONE).then_some(item.opacity),
+        blend: (!item.blend.is_normal()).then_some(item.blend),
     }];
     if index != top {
         edits.push(Edit::ItemReorder {
@@ -1627,6 +1664,30 @@ fn restore_item(
         });
     }
     Ok(edits)
+}
+
+/// Rejects an opacity outside [0, 1], as `jstream-graph` does.
+fn check_opacity(opacity: Finite32, at: usize) -> Result<(), ProtocolError> {
+    if !(0.0..=1.0).contains(&opacity.get()) {
+        return Err(invalid(at, "opacity", "must be from 0 to 1"));
+    }
+    Ok(())
+}
+
+/// Rejects every blend mode but `normal`, which is all the engine draws, as
+/// `jstream-graph` does.
+fn check_blend(blend: BlendMode, at: usize) -> Result<(), ProtocolError> {
+    if !blend.is_normal() {
+        return Err(invalid(
+            at,
+            "blend",
+            format!(
+                "`{}` is not drawn by the compositor yet; only `normal` is",
+                blend.as_str()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Whether an output in `state` is not running: `stopped` or `failed`.
@@ -1853,11 +1914,11 @@ mod tests {
     use super::MockEngine;
     use crate::{Control, ControlError, EventStream};
     use jstream_protocol::{
-        Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
-        EncoderProfileId, EntityKind, Event, Hello, HistoryCall, HistoryDirection, HistoryOp,
-        IdempotencyKey, ItemId, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
-        PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, Rev, RtmpTarget,
-        SceneId, SceneRole, SecretString, Settings, SourceId, SourceKind, parity,
+        Action, Batch, BlendMode, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
+        EncoderProfileId, EntityKind, Event, Finite32, Hello, HistoryCall, HistoryDirection,
+        HistoryOp, IdempotencyKey, ItemId, ItemTransform, OutputId, OutputInfo, OutputKind,
+        OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, Rev,
+        RtmpTarget, SceneId, SceneRole, SecretString, Settings, SourceId, SourceKind, parity,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -1930,6 +1991,8 @@ mod tests {
             source_id: SourceId::new(source),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         }
     }
 
@@ -2020,6 +2083,8 @@ mod tests {
                     source_id: SourceId::new("webcam"),
                     transform: None,
                     geometry: None,
+                    opacity: None,
+                    blend: None,
                 },
                 Edit::SceneRename {
                     scene_id: SceneId::new("intro"),
@@ -2047,6 +2112,8 @@ mod tests {
             source_id: SourceId::new("webcam"),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         });
         assert_eq!(batch(&*control, readd), Ok(Rev(3)));
     }
@@ -2603,6 +2670,8 @@ mod tests {
                     source_id: SourceId::new("cam"),
                     transform: None,
                     geometry: None,
+                    opacity: None,
+                    blend: None,
                 },
             ],
             expected_rev: None,
@@ -2928,6 +2997,50 @@ mod tests {
         assert_eq!(batch(&*control, delete), Ok(Rev(5)));
         assert_eq!(undo(&*control), Ok((Rev(6), Rev(5), 2, 1)));
         assert_eq!(state(&*control), grouped);
+    }
+
+    /// `item.set_opacity` undoes to the old value, and removing a faded item comes back
+    /// faded, as `jstream-graph`'s inverses do.
+    #[test]
+    fn undo_restores_opacity_and_a_removed_items_opacity() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let setup = Batch {
+            edits: vec![create("a"), webcam(), add("a", "i1", "webcam")],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let before = state(&*control);
+        let fade = Batch {
+            edits: vec![
+                Edit::ItemSetOpacity {
+                    item_id: ItemId::new("i1"),
+                    scene_id: None,
+                    opacity: Finite32::new(0.25).expect("finite"),
+                },
+                Edit::ItemSetBlend {
+                    item_id: ItemId::new("i1"),
+                    blend: BlendMode::Normal,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, fade), Ok(Rev(2)));
+        let faded = state(&*control);
+        assert_ne!(faded, before);
+        assert_eq!(undo(&*control), Ok((Rev(3), Rev(2), 1, 1)));
+        assert_eq!(state(&*control), before);
+        assert_eq!(redo(&*control), Ok((Rev(4), Rev(2), 2, 0)));
+        assert_eq!(state(&*control), faded);
+
+        let remove = Batch::single(Edit::ItemRemove {
+            item_id: ItemId::new("i1"),
+        });
+        assert_eq!(batch(&*control, remove), Ok(Rev(5)));
+        assert_eq!(undo(&*control), Ok((Rev(6), Rev(5), 2, 1)));
+        assert_eq!(state(&*control), faded);
     }
 
     #[test]

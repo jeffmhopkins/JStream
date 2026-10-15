@@ -37,6 +37,56 @@ source: crates/jstream-mcp/src/tests.rs
             ],
             "type": "object"
           },
+          "BlendMode": {
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers. The compositor blends in linear light and draws\n`normal` only so far; the engine rejects every other mode with `invalid_argument`\nuntil it draws it, so a client can read the list without the engine claiming it.",
+            "oneOf": [
+              {
+                "const": "normal",
+                "description": "Source-over: the item covers what is below it, by its alpha.",
+                "type": "string"
+              },
+              {
+                "const": "additive",
+                "description": "Adds the item's colour to what is below it.",
+                "type": "string"
+              },
+              {
+                "const": "multiply",
+                "description": "Multiplies the colours, which darkens.",
+                "type": "string"
+              },
+              {
+                "const": "screen",
+                "description": "The inverse of multiplying the inverses, which lightens.",
+                "type": "string"
+              },
+              {
+                "const": "overlay",
+                "description": "Multiply or screen, depending on the colour below.",
+                "type": "string"
+              },
+              {
+                "const": "darken",
+                "description": "The darker of the two colours, per channel.",
+                "type": "string"
+              },
+              {
+                "const": "lighten",
+                "description": "The lighter of the two colours, per channel.",
+                "type": "string"
+              },
+              {
+                "const": "difference",
+                "description": "The absolute difference of the colours.",
+                "type": "string"
+              },
+              {
+                "const": "exclusion",
+                "description": "Like difference, with lower contrast.",
+                "type": "string"
+              }
+            ]
+          },
           "Crop": {
             "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
             "properties": {
@@ -166,6 +216,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.\n\nThe item's placement is `geometry` when that is sent, else a legacy placement:\n`transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).\nSending both is `invalid_argument`.",
                 "properties": {
+                  "blend": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlendMode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The initial blend mode, checked like `item.set_blend`'s. Omitted means\n`normal`."
+                  },
                   "geometry": {
                     "anyOf": [
                       {
@@ -180,6 +241,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The new item's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "opacity": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The initial opacity, checked like `item.set_opacity`'s. Omitted means 1."
                   },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -214,7 +286,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, and its placement in the field matching\nits form (`transform` or `geometry`), then `item.reorder` to its old stacking\nposition (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
+                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, and `item.set_visible` if it was hidden.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -360,6 +432,63 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "visible"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by\n`opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items\nare added at 1. Inverse: `item.set_opacity` with the previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "opacity": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The alpha multiplier, from 0 (invisible) to 1 (as the source draws it)."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.set_opacity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "opacity"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes how an item composites onto what is below it (ADR-0023 §1). A mode the\ncompositor doesn't draw yet is `invalid_argument`, so stored state never claims\nsomething that isn't drawn; today that is every mode but `normal`. Inverse:\n`item.set_blend` with the previous mode.",
+                "properties": {
+                  "blend": {
+                    "$ref": "#/$defs/BlendMode",
+                    "description": "The new blend mode. Items are added with `normal`."
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "type": {
+                    "const": "item.set_blend",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "blend"
                 ],
                 "type": "object"
               },
@@ -1852,9 +1981,59 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "history"
     },
     {
-      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "BlendMode": {
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers. The compositor blends in linear light and draws\n`normal` only so far; the engine rejects every other mode with `invalid_argument`\nuntil it draws it, so a client can read the list without the engine claiming it.",
+            "oneOf": [
+              {
+                "const": "normal",
+                "description": "Source-over: the item covers what is below it, by its alpha.",
+                "type": "string"
+              },
+              {
+                "const": "additive",
+                "description": "Adds the item's colour to what is below it.",
+                "type": "string"
+              },
+              {
+                "const": "multiply",
+                "description": "Multiplies the colours, which darkens.",
+                "type": "string"
+              },
+              {
+                "const": "screen",
+                "description": "The inverse of multiplying the inverses, which lightens.",
+                "type": "string"
+              },
+              {
+                "const": "overlay",
+                "description": "Multiply or screen, depending on the colour below.",
+                "type": "string"
+              },
+              {
+                "const": "darken",
+                "description": "The darker of the two colours, per channel.",
+                "type": "string"
+              },
+              {
+                "const": "lighten",
+                "description": "The lighter of the two colours, per channel.",
+                "type": "string"
+              },
+              {
+                "const": "difference",
+                "description": "The absolute difference of the colours.",
+                "type": "string"
+              },
+              {
+                "const": "exclusion",
+                "description": "Like difference, with lower contrast.",
+                "type": "string"
+              }
+            ]
+          },
           "Crop": {
             "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
             "properties": {
@@ -2082,6 +2261,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.\n\nThe item's placement is `geometry` when that is sent, else a legacy placement:\n`transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).\nSending both is `invalid_argument`.",
                 "properties": {
+                  "blend": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlendMode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The initial blend mode, checked like `item.set_blend`'s. Omitted means\n`normal`."
+                  },
                   "geometry": {
                     "anyOf": [
                       {
@@ -2096,6 +2286,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The new item's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "opacity": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The initial opacity, checked like `item.set_opacity`'s. Omitted means 1."
                   },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -2130,7 +2331,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, and its placement in the field matching\nits form (`transform` or `geometry`), then `item.reorder` to its old stacking\nposition (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
+                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, and `item.set_visible` if it was hidden.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -2276,6 +2477,63 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "visible"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by\n`opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items\nare added at 1. Inverse: `item.set_opacity` with the previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "opacity": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The alpha multiplier, from 0 (invisible) to 1 (as the source draws it)."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.set_opacity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "opacity"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes how an item composites onto what is below it (ADR-0023 §1). A mode the\ncompositor doesn't draw yet is `invalid_argument`, so stored state never claims\nsomething that isn't drawn; today that is every mode but `normal`. Inverse:\n`item.set_blend` with the previous mode.",
+                "properties": {
+                  "blend": {
+                    "$ref": "#/$defs/BlendMode",
+                    "description": "The new blend mode. Items are added with `normal`."
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "type": {
+                    "const": "item.set_blend",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "blend"
                 ],
                 "type": "object"
               },

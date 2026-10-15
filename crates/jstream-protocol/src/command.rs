@@ -92,12 +92,19 @@ pub enum Edit {
         /// `item.set_geometry`'s.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         geometry: Option<ItemGeometry>,
+        /// The initial opacity, checked like `item.set_opacity`'s. Omitted means 1.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        opacity: Option<Finite32>,
+        /// The initial blend mode, checked like `item.set_blend`'s. Omitted means
+        /// `normal`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blend: Option<BlendMode>,
     },
     /// Removes an item from its scene. The source itself stays. Inverse: `item.add` with
-    /// the removed item's scene, ID and source, and its placement in the field matching
-    /// its form (`transform` or `geometry`), then `item.reorder` to its old stacking
-    /// position (unless it was on top), `item.set_crop` if it was cropped, and
-    /// `item.set_visible` if it was hidden.
+    /// the removed item's scene, ID and source, its placement in the field matching its
+    /// form (`transform` or `geometry`), and its opacity and blend where they differ from
+    /// the defaults, then `item.reorder` to its old stacking position (unless it was on
+    /// top), `item.set_crop` if it was cropped, and `item.set_visible` if it was hidden.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -164,6 +171,30 @@ pub enum Edit {
         scene_id: Option<SceneId>,
         /// Whether the item is drawn. Items are visible when added.
         visible: bool,
+    },
+    /// Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by
+    /// `opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items
+    /// are added at 1. Inverse: `item.set_opacity` with the previous value.
+    #[serde(rename = "item.set_opacity")]
+    ItemSetOpacity {
+        /// The item to change.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+        /// The alpha multiplier, from 0 (invisible) to 1 (as the source draws it).
+        opacity: Finite32,
+    },
+    /// Changes how an item composites onto what is below it (ADR-0023 §1). A mode the
+    /// compositor doesn't draw yet is `invalid_argument`, so stored state never claims
+    /// something that isn't drawn; today that is every mode but `normal`. Inverse:
+    /// `item.set_blend` with the previous mode.
+    #[serde(rename = "item.set_blend")]
+    ItemSetBlend {
+        /// The item to change.
+        item_id: ItemId,
+        /// The new blend mode. Items are added with `normal`.
+        blend: BlendMode,
     },
     /// Moves an item to another stacking position in its scene. Inverse: `item.reorder`
     /// back to its previous index.
@@ -384,6 +415,8 @@ impl Edit {
             Edit::ItemReorder { .. } => "item.reorder",
             Edit::SceneReorder { .. } => "scene.reorder",
             Edit::ItemSetCrop { .. } => "item.set_crop",
+            Edit::ItemSetOpacity { .. } => "item.set_opacity",
+            Edit::ItemSetBlend { .. } => "item.set_blend",
             Edit::ItemSetSource { .. } => "item.set_source",
             Edit::SourceCreate { .. } => "source.create",
             Edit::SourceRename { .. } => "source.rename",
@@ -665,6 +698,78 @@ impl Crop {
     };
 }
 
+/// How an item composites onto what is below it (ADR-0023 §1, register D13).
+///
+/// The list is the modes the UI offers. The compositor blends in linear light and draws
+/// `normal` only so far; the engine rejects every other mode with `invalid_argument`
+/// until it draws it, so a client can read the list without the engine claiming it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum BlendMode {
+    /// Source-over: the item covers what is below it, by its alpha.
+    #[default]
+    Normal,
+    /// Adds the item's colour to what is below it.
+    Additive,
+    /// Multiplies the colours, which darkens.
+    Multiply,
+    /// The inverse of multiplying the inverses, which lightens.
+    Screen,
+    /// Multiply or screen, depending on the colour below.
+    Overlay,
+    /// The darker of the two colours, per channel.
+    Darken,
+    /// The lighter of the two colours, per channel.
+    Lighten,
+    /// The absolute difference of the colours.
+    Difference,
+    /// Like difference, with lower contrast.
+    Exclusion,
+}
+
+impl BlendMode {
+    /// Every mode, in the order the UI lists them.
+    pub const ALL: [BlendMode; 9] = [
+        BlendMode::Normal,
+        BlendMode::Additive,
+        BlendMode::Multiply,
+        BlendMode::Screen,
+        BlendMode::Overlay,
+        BlendMode::Darken,
+        BlendMode::Lighten,
+        BlendMode::Difference,
+        BlendMode::Exclusion,
+    ];
+
+    /// The mode with this wire name.
+    pub fn from_name(name: &str) -> Option<BlendMode> {
+        BlendMode::ALL
+            .into_iter()
+            .find(|mode| mode.as_str() == name)
+    }
+
+    /// Whether this is the default mode, `normal`.
+    pub fn is_normal(&self) -> bool {
+        *self == BlendMode::Normal
+    }
+
+    /// The mode's wire name (`normal`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BlendMode::Normal => "normal",
+            BlendMode::Additive => "additive",
+            BlendMode::Multiply => "multiply",
+            BlendMode::Screen => "screen",
+            BlendMode::Overlay => "overlay",
+            BlendMode::Darken => "darken",
+            BlendMode::Lighten => "lighten",
+            BlendMode::Difference => "difference",
+            BlendMode::Exclusion => "exclusion",
+        }
+    }
+}
+
 /// What a source shows.
 ///
 /// Serialized with an internal `type` tag. A source is one shared instance: every item
@@ -713,7 +818,7 @@ impl SceneRole {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, Batch, Command, CommandClass, Edit};
+    use super::{Action, Batch, BlendMode, Command, CommandClass, Edit};
     use crate::id::{IdempotencyKey, OutputId, Rev, SceneId};
     use serde_json::json;
 
@@ -776,6 +881,16 @@ mod tests {
             assert!(serde_json::from_str::<Edit>(&text).is_err(), "{x} accepted");
         }
         assert_eq!(super::Vec2::new(f32::INFINITY, 0.0), None);
+    }
+
+    /// `as_str` is the wire name serde writes, for every mode, and `from_name` reads it.
+    #[test]
+    fn blend_mode_names_match_the_wire() {
+        for mode in BlendMode::ALL {
+            assert_eq!(serde_json::to_value(mode).ok(), Some(json!(mode.as_str())));
+            assert_eq!(BlendMode::from_name(mode.as_str()), Some(mode));
+        }
+        assert_eq!(BlendMode::from_name("dissolve"), None);
     }
 
     #[test]
