@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:4e5e41574e23ebcc", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: Queries bullet names capture.targets and CaptureTargetInfo; version 0.19 sentence; matches query.rs and version.rs" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -38,10 +37,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `item.set_visible`, `item.set_source`, `canvas.set_size`, `source.create`,
   `source.rename`, `source.set_settings`, `source.duplicate`, `source.delete`,
   `output.create`, `output.set_target`, `output.set_encoder`, `output.delete`,
-  `encoder.create`, `encoder.update`, `encoder.delete`), with `ItemTransform`
-  (deprecated), `Crop`, `SourceKind` and `SceneRole`;
+  `encoder.create`, `encoder.update`, `encoder.delete`, `source.set_audio`,
+  `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`,
+  `send.remove`), with `ItemTransform` (deprecated), `Crop`, `SourceKind` and
+  `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch`);
+  `scene.switch`, `audio.reset_loudness`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
@@ -53,11 +54,16 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
   and `EncoderSessionInfo`, the per-output sharing `output.status` reports
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+- **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
+  `SourceAudio` and `AudioFollow`, a source's audio settings; `BusInfo` and `SendInfo`,
+  the buses and the send matrix as reads report them; the fader range and its shared
+  check (`gain_db_problem`); and `SourceMeter`, `BusMeter` and `Loudness`, the readings
+  a `meters.tick` carries.
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `encoder.list`, `video.snapshot`, `kind.list`, `kind.describe`,
-  `delete.plan` (with its `DeleteTarget`), `studio.get` and `capture.targets`, with
-  `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo` and
-  `CaptureTargetInfo` shapes the reads report. `state.get` carries the `Canvas`, and `ItemInfo`
+  `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
+  `kind.describe`, `delete.plan` (with its `DeleteTarget`), `studio.get` and
+  `capture.targets`, with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo`,
+  `ItemInfo` and `CaptureTargetInfo` shapes the reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
   mix as a PNG.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
@@ -69,12 +75,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No kind is defined here.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
-  `events.dropped` and `stats.tick`.
+  `events.dropped`, `stats.tick` and `meters.tick`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
-- **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs, `Rev`, and
-  `PROTOCOL_VERSION`.
+- **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs (`BusId::master()` is
+  the one fixed ID, `master`), `Rev`, and `PROTOCOL_VERSION`.
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
   NaN, infinity and out-of-range numbers at construction and deserialization. Computed
   results (`CanvasPoint`, `ContentRect`, `LegacyQuad`) use plain `f32`.
@@ -86,8 +92,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
-  the `capture.targets` query; 0.18 added the `virtual_cam` output kind, 0.17 `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.20 because of
+  the `capture.targets` query; 0.19 added
+  audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
+  `audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
+  `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
@@ -107,13 +116,17 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
   URL, recording path and encoder profile checks, and `item.set_source` and
   `duplicated_from`, included). The collection also holds a clone made with
-  `source.duplicate` and `item.set_source`, and a `duplicated_from` naming a missing
-  source.
+  `source.duplicate` and `item.set_source`, a `duplicated_from` naming a missing
+  source, and audio: a microphone with its fader, mute and sends, two buses (one
+  deleted again with its send), a renamed and faded bus, a duplicated microphone with a
+  send removed, and a disabled nested scene. The rejected batches cover the bus limit,
+  the master bus, fader ranges, and sources with no audio or no fader of their own.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
-  the kinds an implementation must describe for the batch to apply (`webcam`, with no
-  parameters, so every implementation reports the same empty settings). It changes no
+  the kinds an implementation must describe for the batch to apply (`mic`, with audio
+  and no video, and `webcam`, with video and no audio, neither with parameters, so every
+  implementation reports the same empty settings and audio defaults). It changes no
   message, so it never changes `PROTOCOL_VERSION`.
 
 <a id="design"></a>
@@ -121,7 +134,6 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:9a61a9ee57269b93", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets: query entry (kind, target, name, size, primary omitted when false, no rev, action_failed) matches query.rs and the fixtures" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -141,8 +153,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":15},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":15},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":19},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":19},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -248,6 +260,39 @@ optional `scene_id`, fixed now so that keyframe scenes can arrive additively (AD
 §2). Absent, or the item's own scene, changes the item. Until keyframe scenes exist,
 any other existing scene is `invalid_argument` on `edits.N.scene_id`, and a missing one
 `not_found`. An inverse keeps the addressing of the edit it undoes.
+
+### Audio
+
+[ADR-0028](../../docs/adr/0028-audio-model-v2.md) makes audio part of the collection
+(0.19). An **audio source** is one whose kind has audio (`KindDescriptor.audio`), or a
+`scene` source, whose audio is what the scene shows. Its `SourceInfo.audio` holds
+`enabled`, `follow` (`always` or `when_shown`), its fader `gain_db` and `muted`; every
+other source omits `audio`. A new source takes its kind's defaults: on, at 0 dB,
+unmuted, following `always` for a kind with audio and no video (an audio input) and
+`when_shown` for every other audio source, a `scene` source included.
+`source.set_audio { source_id, enabled?, follow?, gain_db?, muted? }` sets any of them
+and needs at least one. A `scene` source has no fader, mute or sends of its own: its
+`gain_db` and `muted` stay 0 and false, and setting either is `invalid_argument`.
+
+**Buses** are collection objects with an ID, a name and a fader (`gain_db`, `muted`).
+Every collection has the master bus, ID `master`, named `Master`; it can be renamed and
+faded but never deleted. `bus.create`, `bus.rename`, `bus.set_fader` and `bus.delete`
+manage the others, at most 16 buses in all. **Sends** route a source's audio into a
+bus, post-fader, at a gain: `send.set { source_id, bus_id, gain_db }` creates one or
+changes its gain, `send.remove` removes it. Only a source with a channel of its own
+sends, so not a `scene` source. A new channel source sends to the master at 0 dB.
+Deleting a bus removes the sends into it, and deleting a source removes its sends;
+the inverses put them back. Every gain is in dB from −100 to +24; silence is `muted`.
+
+Buses never feed buses (ADR-0028), so a send always runs from a source to a bus, and
+an audio routing cycle can't be expressed. A routing check comes with filters, the
+first thing that could feed one bus from another. The mixer has filter chains (D7b),
+but filters are not in the protocol yet. `follow`'s activity gain is the engine's (D6); the
+protocol only stores it.
+
+Levels and loudness are runtime state: `meters.tick` carries them (see
+[Events](#design)), never a query, and `audio.reset_loudness` restarts the master's
+integrated loudness, an action because it changes no collection state.
 
 ### Kinds and settings
 
@@ -387,12 +432,15 @@ Queries read and never change `rev`. Those that read the collection state carry 
   pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
-  missing from a pre-0.13 server, it parses as empty). A client reads it on connecting, and again after a
-  `state.changed` it didn't cause.
+  missing from a pre-0.13 server, it parses as empty), and the `buses` and `sends`
+  (as `bus.list`; missing from a pre-0.19 server, both parse as empty). A client reads
+  it on connecting, and again after a `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
-  its name, `SourceKind` and settings.
+  its name, `SourceKind`, settings and, for an audio source, its `audio`.
+- `bus.list`: the buses, ordered by ID (the master among them), and every send,
+  ordered by bus and then by source, at a `rev` (0.19).
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
 - `output.list`: the outputs, ordered by ID (outputs have no display order), each with
@@ -419,7 +467,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   its `size` in pixels when the OS reports one, and `primary` (omitted when `false`)
   for the display an empty `display` target captures. Runtime state, so no `rev`; a
   source can still name a window closed since. `action_failed` when the engine has no
-  capture backend or the OS refuses the list. Added in 0.19.
+  capture backend or the OS refuses the list. Added in 0.20.
 - `delete.plan {target}`: the batch that deletes a scene or source (`target` is
   `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
   everything that refers to it, as `edits` and the `rev` it was planned at, or
@@ -475,8 +523,13 @@ with the scene's `role` (omitted for `scene`), `scene.reorder` unless it was las
 each item's restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings and its
-`duplicated_from`, undoing `item.set_source` is `item.set_source` back, and undoing
-`source.set_settings` is a patch of the old values. Deleting a source that items still
+`duplicated_from`, then `source.set_audio` and `send.set` (or `send.remove` of the
+default master send) for whatever audio differs from the kind's defaults; undoing
+`item.set_source` is `item.set_source` back, and undoing
+`source.set_settings` is a patch of the old values. Undoing `bus.delete` is
+`bus.create`, `bus.set_fader` unless the fader was at its default, and a `send.set` for
+each send the bus had; `source.set_audio`, `bus.set_fader` and `send.set` are each
+undone by the same edit with the old values, and a new send by `send.remove`. Deleting a source that items still
 place or a setting refers to, or a scene that a `scene` source shows or a setting refers
 to, is rejected, so no edit removes more than the object it names. `jstream-graph`'s property
 test checks that applying a random batch and then its inverse restores the state
@@ -510,7 +563,9 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
   step sets, created or deleted an object the step touches, touched an object the step
   creates or deletes, also reordered the scenes or also set the canvas size, or made its edits
   no longer apply. An item's transform and its geometry are one property, its
-  placement, and which source it places (`item.set_source`) is another. An
+  placement, and which source it places (`item.set_source`) is another. Each audio
+  field a `source.set_audio` or `bus.set_fader` sets is its own property, and a send is
+  an object of its own, which uses its source and its bus. An
   edit touches the objects it creates, deletes or edits and the ones it places or
   names, such as an item's source. What the step touches is taken both from when it was recorded and from
   the edits it would apply now. Nothing is applied and the step is dropped, so the next
@@ -574,6 +629,14 @@ After `welcome`, the server pushes every event to every client.
   built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
   those meters exist, as later optional fields. Audience figures are `youtube.stats`
   ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)).
+- `meters.tick {sources, buses}` is one reading of the audio levels (0.19), about ten
+  a second while the mixer runs; an idle engine emits none. Each routed source and
+  each bus has `peak` (the largest absolute sample since the previous tick) and `rms`
+  (over the latest mixer block), linear full scale per channel, left then right. The
+  master bus also has `true_peak` (BS.1770, since the previous tick) and `loudness`:
+  `momentary`, `short_term` and `integrated` LUFS, each absent until there is enough
+  audio above the absolute gate. Each tick is a full reading, so a client that misses
+  one loses nothing; nothing numbers them.
 
 ### Errors
 

@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:cbcd93a7ae788a4c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (e1e2a94) into #219: re-read main's WindowsVcam Start text (mfsensorgroup probe then HKLM) beside E3b's on_context sentence in the GPU path bullet; both match sink.rs and capture; holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

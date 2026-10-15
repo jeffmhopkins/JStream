@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:742790454bf352fc", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review N6: dropped C3's duplicate Windows junction/symlink test, main's #295 test covers #224; README text unchanged, holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
