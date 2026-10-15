@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:d8b5dad861ddbab3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V1 pack kinds landed under src/filter/pack; filters are still pointed to Filters and the chain runtime is still not here; holds" }
+verified = { hash = "b3:2a7c3014cde3b90d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1: re-read Purpose; the merge only moves FrameSync staging and narrows an allow in filter/; Purpose still points filters at #filters and the chain runtime at V0; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:e707a2cfffd85237", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V1 pack kinds; passes, resources and placement unchanged, filter draws are per apply_filter as Filters says; holds" }
+verified = { hash = "b3:98367bd423d426dc", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1: re-read Design against compositor.rs apply_filter (staging now after encode) and the V1 pack; no new thread, I/O or steady-path allocation; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:19fa28b5f9ebce24", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Added the V1 pack paragraph (seven kinds, their settings, colour space and scroll offset decisions); harness text and not-wired note still hold" }
+verified = { hash = "b3:b530c6057cc98420", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1: harness bullets now say FrameSync staged after recording and frame.time wraps daily, matching compositor.rs and prelude.wgsl; consistent with the pack's scroll, which computes its offset in f64 on the CPU (pack/scroll.rs); V1 kind text unchanged; holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -304,7 +304,10 @@ kinds.
   so a filter can change the source's reported size (aspect ratio, padding).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
-  that move or hold frames. An imported input's `FrameSync` is staged before the submit.
+  that move or hold frames. An imported input's `FrameSync` is staged once the pass has
+  recorded, right before the submit. The prelude's `frame.time` is that time wrapped
+  to a day (better than 10 ms in an `f32`) and jumps back once a day, so a kind that
+  moves with time computes its phase on the CPU in `f64` and passes it in its `Params`.
 - A pass records fullscreen draws through `Ctx::draw`. Every filter shader is appended
   to one prelude (`prelude.wgsl`) that defines the fullscreen triangle, the bindings
   (input, a linear clamp sampler, a `Frame` uniform with the input, output and aux

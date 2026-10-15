@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:10a301dfb91a4c0d", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; kinds and audio filters bullets, audio inputs running filters, tests list; holds" }
+verified = { hash = "b3:5808939fda27c916", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge-only round (main e1e2a94: #295, #309): re-read; B7's kinds/audio filters/inputs/tests text unchanged beside main's #295 live-source re-plan text; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -27,7 +27,8 @@ host hands them an `InProcessControl` as a `dyn Control`.
 The control plane is the scene graph, the sessions and `video.snapshot`.
 `output.start` runs the media pipeline when the host calls
 `with_backends` and gives it a publish target (`with_publish` or
-`with_publish_opener`); a recording output needs no publish target. Without backends, an output action stays the placeholder
+`with_publish_opener`); a recording output needs no publish target, nor does a
+virtual camera, which publishes to the backends' `VcamSink`. Without backends, an output action stays the placeholder
 state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
@@ -83,7 +84,9 @@ state machine. Contents:
   clock. Encode threads live in the encoder sessions, one per encoder profile in use,
   shared by the outputs on that profile. Each output's own thread muxes FLV and
   publishes it, or muxes MP4 and records it
-  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
+  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
+  thread converts and publishes the frames the render thread sends it through a tap
+  (`runtime/vcam.rs`).
 - **History** (`history.rs`): per-client undo and redo
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
   stacks, built from the inverse batches `Graph::apply` returns, and the log of what
@@ -127,7 +130,10 @@ state machine. Contents:
   (renamed into place on stop, refused when the file exists or the path is not
   absolute on this machine, no `.part` file left by a failed start), recording while
   streaming on one shared encoder session (and separate sessions on separate
-  profiles), a render panic failing both outputs, overload drops from a
+  profiles), a virtual camera publishing the program as BGRA at the canvas size
+  (fitted into a canvas of another size, started again after a stop, running beside
+  a stream, refused without a camera in the backends or while another output uses
+  it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
   fake encoder and the mixer reported in `stats.tick`, render and mixer panics
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
   the hidden `Engine::with_cpu_compositor`), audio sources becoming mixer inputs on the CPU
@@ -164,7 +170,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:512791f210147d8f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; serde_json dependency, touched properties, opacity in linear light, audio filter chain paragraph, Not yet; main's D8 master chain text consistent; holds" }
+verified = { hash = "b3:d743d6deac274a28", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge-only round (main e1e2a94: #295, #309): re-read; B7's serde_json, touched, opacity and audio filter chain text unchanged beside #295's clock-swap re-plan; independent; holds" }
 -->
 
 ### Engine and sessions
@@ -471,7 +477,9 @@ the source hands out a different one, so a still image is uploaded once. The pla
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image advances on the clock and a still one is
 never re-planned. Sources run on the media clock of the backends the host injects
-(`with_backends`), else on a monotonic clock of the engine's own. `collection` asset
+(`with_backends`), else on a monotonic clock of the engine's own. A clock swap
+restarts every running source's timing and drops the re-plan timed on the old clock:
+the thread re-plans at once on the new one. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
 for every `app` reference, the asset is unreadable and the source draws nothing.
 
@@ -666,6 +674,32 @@ dropped and counted in `output_packets`. Disk writes run on the output thread an
 may block; the encoder subscriber queues absorb that and drop when full, without
 holding up a stream on the same session.
 
+**Virtual camera.** `with_backends` takes the backends' `VcamSink` out and keeps it for
+the engine's life. When the collection's output is `VirtualCam`, the start takes that
+sink and joins the program stage like any output (opening it when no other output
+runs), but with no encoder session (`launch_vcam`, `runtime/vcam.rs`). With no sink it
+fails with `action_failed` before `starting`: `this engine has no virtual camera`, or
+`the virtual camera is in use by another output` when another `VirtualCam` output has
+it. It starts the camera at the canvas size the collection has then, as BGRA8 at
+1/30 s (a refusal fails the start with `starting the virtual camera: <reason>`), hands
+the render thread a tap, and starts the output's camera thread, `jstream-vcam`. The
+tap and that thread share only the output's stop flag and two bounded channels, never
+a lock ([R-RT-003](../../docs/RULES.md#R-RT-003)). Each tick the tap copies the
+program frame (RGBA) into a buffer the camera thread handed back and sends it,
+without blocking: with a frame still waiting, it drops this one and counts it in
+`output_stats`' output drops. The camera thread converts each frame to BGRA at the
+canvas size (as is when the program frame is the canvas size, otherwise fitted inside
+it, centred, by nearest neighbour, with black bars), publishes it and hands the
+buffer back. It runs beside streams and recordings on the same program frame, and
+`output_stats` counts no encoder input for it. A publish error fails that output
+alone, through its own failure line; the others keep running. Once the camera thread
+ends (a stop, or a failed publish) it stops the camera and returns the sink to the
+engine, as a start that fails does, so the next start finds it. A stop sets the flag
+and waits for that as it waits for any output thread (`STOP_DRAIN` plus the grace);
+the render thread never waits on it, and the tap leaves on its next tick, to the
+collector. A canvas resize applies from the next start. The daemon's backends don't
+carry `WindowsVcam` yet; that wiring is the daemon's.
+
 Once the pipeline is `active`, a fatal error on any pipeline thread is sent on a
 channel: a `send_tag` or `poll` failure, a recording write failure, an encoder stream that ends before the
 pipeline was told to stop (the encoder failed, or its session closed), and the
@@ -713,7 +747,9 @@ it: it stores its generation in the hub's reader slot (one `SeqCst` store) and h
 the snapshot it held to the program stage's `jstream-collector` thread. The GPU images the
 cache frees go there too, and so does the input of an encoder session that has
 finished (the session may already be gone, leaving that input the last reference to
-its shared state and channel), so nothing the render thread lets go of is freed on it
+its shared state and channel), and so does a virtual camera's tap that leaves (once
+its camera thread has ended it holds the last reference to the channels and the stop
+flag), so nothing the render thread lets go of is freed on it
 ([R-RT-003](../../docs/RULES.md#R-RT-003)). The mixer thread hands a finished audio
 input to the same collector. The thread clears the stopped marker
 before its first load (`SeqCst`, then a fence), and publishes it again when it stops
@@ -721,7 +757,7 @@ or a fatal error stops its drawing, so `RenderHub::caught_up` treats it as caugh
 ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading), "Live-value handover"; only
 tests poll it until live edits exist). The collector ends when the render and mixer
 threads have dropped their senders, and the program stage (`Program`) joins it right
-after them. While the stage has no encoder session it draws nothing but still adopts
+after them. While the stage has no encoder session and no virtual camera it draws nothing but still adopts
 each new snapshot, so it never holds a gesture up. The compositor
 and its cache drop on the render thread when it exits, after the tick loop. What it rides out
 and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
@@ -731,7 +767,8 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 - **Fatal, reported:** a 31st composite error in a row, a panic inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
   thread then keeps pushing the last frame until the pipeline stops, so the stream
-  does not freeze before the teardown.
+  does not freeze before the teardown. A virtual camera's publish error is not
+  the render thread's: it fails only that output, which leaves the stage.
 - The render and mixer threads both catch a panic at their boundary. A fatal error
   becomes `output.state_changed` `failed`, the error event this protocol has. A
   mixer panic, a rejected mix block
@@ -741,7 +778,10 @@ The render thread reuses its capture, composite and readback buffers, and its GP
 textures through the cache. Each tick allocates one frame-sized buffer, the frame the
 encoder session takes ownership of (`VideoInput::push` cannot hand buffers back), the
 item list `compose` fills once per tick, the frame-fence callback, and the
-premultiplied copy of a capture that changed; the mixer likewise copies each block
+premultiplied copy of a capture that changed. A virtual camera's tap reuses the
+buffers its camera thread hands back, so it allocates only until they circulate; the
+camera thread allocates the BGRA frame it publishes, one per frame, off the render
+thread. The mixer likewise copies each block
 into the buffer `AudioInput::push` keeps. Not measured. The mixer thread
 polls the audio sources' inputs into 48 kHz stereo blocks. Encode
 sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
@@ -930,13 +970,13 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:037387eaec0b2653", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
+verified = { hash = "b3:3f20bc1b0c367a9b", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at e7e7433 (#272 CLAP filter contract and mixer side, #266 canvas styles); stamp-only conflicts; re-read main's text beside this PR's virtual-camera text; no jstream-core code changed by the merge; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
 [ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading) that is built.
 `output.start`, once the host has injected platform backends and a publish target
-(a recording output needs none), starts it and emits `output.state_changed` from the
+(a recording output or a virtual camera needs none), starts it and emits `output.state_changed` from the
 control thread. The render thread calls the platform capture mailbox and, on each
 1/30 s tick, composites the program mix from the render snapshot (see *Snapshots* in
 Design) at the encoder size: the program scene and the scenes it nests, with every
@@ -951,9 +991,11 @@ last `output.stop` tears it down, and starts are serialized. Encode threads are 
 ones inside the encoder sessions: outputs with the same encoder profile share one
 session, and the render and mixer threads take a new session's inputs from a channel,
 never a lock, and hand a finished session's input to the collector rather than drop
-it. While the stage has no session it
-draws nothing but still adopts the latest render snapshot. Each output has its own
-output thread. An output leaving a session others still use takes what is queued for
+it. While the stage has no session and no virtual camera it
+draws nothing but still adopts the latest render snapshot. Each output but a virtual
+camera has its own output thread that muxes; a virtual camera's thread converts and
+publishes what the render thread sends it through a tap, which the render thread takes
+from a channel like a session's input and hands to the collector when it leaves. An output leaving a session others still use takes what is queued for
 it and goes; the last one drains the encoders. The output thread muxes FLV and sends
 tags to the publish target, or, for a recording output, muxes fragmented MP4 and
 writes it to the file, syncing each fragment (writes may block on the disk; the

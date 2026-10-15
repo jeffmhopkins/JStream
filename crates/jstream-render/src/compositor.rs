@@ -299,9 +299,6 @@ impl Compositor {
         }
         let (width, height) = filter.output_size(input.width(), input.height());
         let output = self.layer(width, height)?;
-        if let Some(sync) = input.sync() {
-            sync.stage(&self.gpu.queue).map_err(RenderError::Sync)?;
-        }
         let mut encoder = self
             .gpu
             .device
@@ -321,6 +318,10 @@ impl Compositor {
             clock,
         };
         filter.pass_mut().encode(&mut ctx, input, &output)?;
+        // Staged only once recording succeeded, right before the submit it arms.
+        if let Some(sync) = input.sync() {
+            sync.stage(&self.gpu.queue).map_err(RenderError::Sync)?;
+        }
         self.gpu.queue.submit([encoder.finish()]);
         Ok(output)
     }
