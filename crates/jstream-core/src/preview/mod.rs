@@ -547,9 +547,12 @@ impl Drop for PreviewHub {
 /// The hub thread: passes over the live streams until none is left, the engine is
 /// gone, or the hub is dropped.
 fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDraw) {
-    let mut draw: Option<PreviewDraw> = None;
-    let mut rgba = Vec::new();
-    let mut jpeg = Vec::new();
+    let mut canvas = Canvas {
+        open,
+        draw: None,
+        rgba: Vec::new(),
+        jpeg: Vec::new(),
+    };
     let mut works: HashMap<u64, Work> = HashMap::new();
     loop {
         let streams: Vec<Arc<PreviewStream>> = {
@@ -581,16 +584,14 @@ fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDra
                 .entry(stream.id)
                 .or_insert_with(|| Work::new(stream, now));
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                serve(
-                    stream, work, &snapshot, rev, now, open, &mut draw, &mut rgba, &mut jpeg,
-                )
+                serve(stream, work, &snapshot, rev, now, &mut canvas)
             }));
             match result {
                 Ok(Some(next)) => wake_at = wake_at.min(next),
                 Ok(None) => {}
                 Err(_) => {
                     // The compositor may be what panicked: open a new one next time.
-                    draw = None;
+                    canvas.draw = None;
                     stream.end(rev, "the preview thread panicked");
                 }
             }
@@ -607,23 +608,34 @@ fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDra
     }
 }
 
+/// What the hub thread draws and encodes with, shared by every stream it serves.
+struct Canvas<'a> {
+    /// Opens the compositor when there is none.
+    open: &'a OpenPreviewDraw,
+    /// The compositor, once opened; dropped after a panic so the next pass reopens it.
+    draw: Option<PreviewDraw>,
+    /// The last picture drawn, RGBA8.
+    rgba: Vec<u8>,
+    /// The last JPEG encoded.
+    jpeg: Vec<u8>,
+}
+
 /// One pass over one stream: forwards the packets its encoder produced, and draws and
 /// encodes a picture if it is due. Returns when it is next due, or `None` once it ended.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the hub thread's buffers, passed down rather than kept per stream"
-)]
 fn serve(
     stream: &PreviewStream,
     work: &mut Work,
     snapshot: &Arc<RenderSnapshot>,
     rev: Rev,
     now: Instant,
-    open: &OpenPreviewDraw,
-    draw: &mut Option<PreviewDraw>,
-    rgba: &mut Vec<u8>,
-    jpeg: &mut Vec<u8>,
+    canvas: &mut Canvas<'_>,
 ) -> Option<Instant> {
+    let Canvas {
+        open,
+        draw,
+        rgba,
+        jpeg,
+    } = canvas;
     if let Err(reason) = forward(stream, work, None) {
         stream.end(rev, &reason);
         return None;

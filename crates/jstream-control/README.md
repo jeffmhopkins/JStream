@@ -262,7 +262,7 @@ pulls `web-sys`.
   causes with that same ID. The connection thread routes each `response` or `error` to
   its waiting call by request ID (`welcome`, and an error without an ID, answer the
   oldest pending `hello`) and fans `event`s out to the subscriptions. Binary messages
-  are parsed as `BinaryFrame`s and queued for the stream `binary()` last opened, at
+  (array buffers, in the browser) are parsed as `BinaryFrame`s and queued for the stream `binary()` last opened, at
   most 16 (`BINARY_BUFFER`), dropping up to a keyframe when full; an unreadable one is
   skipped. The server opens its own side of the channel after `hello`, so frames
   arrive once a `preview.subscribe` succeeds.

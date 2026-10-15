@@ -519,8 +519,10 @@ frame finds the queue full, the stream's frames are dropped up to the next keyfr
 which the hub then forces (`KeyframeGate`).
 
 The display capture belongs to the program stage, so a preview draws a `display`
-source as nothing, as `video.snapshot` does. Not yet: other mixes than program, and
-the post-master stage, which come with studio mode and the master chain.
+source as nothing, as `video.snapshot` does. A `scene.switch` republishes the render
+snapshot, so the preview shows the new program scene on its next picture, with the same
+`rev` (the switch changes none). Not yet: mixes other than program, and the
+post-master stage, which come with the video mixes and the master chain.
 
 ### Events
 
