@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:e64e024557ae14a1", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: trait, errors, mock and ws bullets hold; the mock now also accepts record outputs with graph's path rule" }
+verified = { hash = "b3:5cf1ff37c74d8023", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; mock now has outputs (#166) and still answers history with internal; contents hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:12bb0846138edf20", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: added recording-path, set_target-on-recording and unknown kind/target/container checks to the mock's edit list, and recording paths to the parity sentence; matches mock.rs check_record/record_path_problem" }
+verified = { hash = "b3:0d4c5883c7b50811", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; call() lists history calls; 'no undo ... internal for what it doesn't know' holds for the mock" }
 -->
 
 ### The trait
@@ -56,9 +56,9 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
   keys its undo history and audit-log entries
   ([ADR-0013](../../docs/adr/0013-command-model.md)). A second `hello` returns the same
   identity.
-- `call(Call) -> Response`: one batch, action or query. The implementation chooses the
-  request ID and returns it in the `Response`, so the caller can match the
-  `state.changed` event its batch causes. Before `hello` it fails with
+- `call(Call) -> Response`: one batch, action, query or history call (undo, redo). The
+  implementation chooses the request ID and returns it in the `Response`, so the caller
+  can match the `state.changed` event its batch or history call causes. Before `hello` it fails with
   `handshake_required`.
 - `events() -> EventStream`: an independent subscription to every event emitted after
   the call, buffered until read, in emission order. It ends when the session or the

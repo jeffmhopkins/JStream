@@ -14,6 +14,8 @@ mod convert;
 mod id;
 #[cfg(any(windows, test))]
 mod mailbox;
+#[cfg(any(windows, test))]
+pub(crate) mod ring;
 #[cfg(windows)]
 mod targets;
 #[cfg(windows)]

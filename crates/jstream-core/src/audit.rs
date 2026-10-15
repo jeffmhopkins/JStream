@@ -1,6 +1,6 @@
-//! The audit log: one entry for every batch and action the engine executes, naming who
-//! sent it, what it was, the `rev` before and after, and how it ended (ADR-0006,
-//! ADR-0013).
+//! The audit log: one entry for every batch, undo, redo and action the engine executes,
+//! naming who sent it, what it was, the `rev` before and after, and how it ended
+//! (ADR-0006, ADR-0013, ADR-0032).
 //!
 //! Entries carry names, IDs, revisions and error codes only, never a call's arguments,
 //! so a stream key, a URL or a source's settings cannot reach the log (R-SEC-001).
@@ -40,10 +40,10 @@ pub struct AuditEntry {
     pub client_name: String,
     /// The request, as numbered by the client's session.
     pub request_id: RequestId,
-    /// `batch`, or the action's name (`output.start`).
+    /// `batch`, `history.undo`, `history.redo`, or the action's name (`output.start`).
     pub call: &'static str,
     /// A batch's edits by name (`scene.create`), in order, without their arguments.
-    /// Empty for an action.
+    /// Empty for an undo, a redo or an action.
     pub edits: Vec<&'static str>,
     /// The output an action names.
     pub output_id: Option<OutputId>,
@@ -329,10 +329,13 @@ impl Audit {
         *lock(&self.sink) = Some(sink);
     }
 
-    /// The sink, if `call` is one the log records (a batch or an action) and the host
-    /// gave one.
+    /// The sink, if `call` is one the log records (a batch, an undo or redo, or an
+    /// action) and the host gave one.
     pub(crate) fn sink_for(&self, call: &Call) -> Option<Arc<dyn AuditSink>> {
-        if !matches!(call, Call::Batch(_) | Call::Action { .. }) {
+        if !matches!(
+            call,
+            Call::Batch(_) | Call::History(_) | Call::Action { .. }
+        ) {
             return None;
         }
         lock(&self.sink).clone()
@@ -368,6 +371,7 @@ impl Pending {
                 batch.edits.iter().map(|e| e.name()).collect(),
                 None,
             ),
+            Call::History(history) => (history.op.name(), Vec::new(), None),
             Call::Action { action } => (action.name(), Vec::new(), action_output(action)),
             _ => ("unknown", Vec::new(), None),
         };
@@ -389,12 +393,16 @@ impl Pending {
     ) -> AuditEntry {
         let (rev_before, rev_after, replayed) = match result {
             // Applied now: the rev it produced is newer than any read before it ran.
-            Ok(CallResult::Batch { rev }) if *rev > self.rev_before => {
+            Ok(CallResult::Batch { rev } | CallResult::History { rev, .. })
+                if *rev > self.rev_before =>
+            {
                 (Rev(rev.0.saturating_sub(1)), *rev, false)
             }
             // An idempotent retry: it changed nothing.
-            Ok(CallResult::Batch { .. }) => (self.rev_before, self.rev_before, true),
-            // A failed batch applies nothing, and actions never change `rev`.
+            Ok(CallResult::Batch { .. } | CallResult::History { .. }) => {
+                (self.rev_before, self.rev_before, true)
+            }
+            // A failed batch, undo or redo applies nothing, and actions never change `rev`.
             _ => (self.rev_before, self.rev_before, false),
         };
         AuditEntry {

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f8c1170ccbd8db7f", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; main changed no prose here, I1's MCP-on text holds and main.rs crate doc now matches it (review B4)" }
+verified = { hash = "b3:761e5c3e899a34e5", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; #153 MCP-at-/mcp text holds; B2 only touched a daemon test pattern (cause: None)" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -127,7 +127,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:c7f7d44f2c11602c", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#170, #174) into B8 #171: re-read; daemon injects no audit sink and nothing from main changes that" }
+verified = { hash = "b3:90e8506b5ddc7f34", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#171 B8) into B2: re-read; daemon still injects no audit sink, and each MCP session's own undo history matches core's per-client history" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
