@@ -365,7 +365,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:9b6300f85c94cfbb", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (#202 merged) into #199: took main's stamp; re-read; prose is main's; #199 changes only the ring torn-frame test; holds" }
+verified = { hash = "b3:754557c24728ebad", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (#199 ring test) into #207: took main's stamp; re-read; prose is main's and still holds for #207's stop-drain and output-thread detach (detail in core README)" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
