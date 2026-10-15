@@ -3,7 +3,7 @@
 
 use super::{
     add, batch, block_on, code, connected, create, drain, edits, output_call, query, rtmp_output,
-    scene_ids, webcam,
+    scene_ids, switch_call, webcam,
 };
 use crate::Engine;
 use jstream_control::{Control, ControlError};
@@ -109,6 +109,7 @@ fn undo_and_redo_move_one_step_each_way() {
     assert_eq!(redo(&control).expect("redo"), (Rev(5), one_rev, 1, 1));
     assert_eq!(redo(&control).expect("redo"), (Rev(6), Rev(2), 2, 0));
     assert_eq!(names(&control), ["a", "b", "c"]);
+    // Removing and restoring the only scene also moves program (ADR-0030).
     assert!(matches!(
         drain(&mut events).as_slice(),
         [
@@ -116,8 +117,16 @@ fn undo_and_redo_move_one_step_each_way() {
                 cause: Some(HistoryDirection::Undo),
                 ..
             },
+            Event::StudioChanged {
+                program_scene: None,
+                ..
+            },
             Event::StateChanged {
                 cause: Some(HistoryDirection::Redo),
+                ..
+            },
+            Event::StudioChanged {
+                program_scene: Some(_),
                 ..
             },
             Event::StateChanged {
@@ -132,6 +141,80 @@ fn undo_and_redo_move_one_step_each_way() {
         Some(&ProtocolError::HistoryEmpty {
             direction: HistoryDirection::Redo
         })
+    );
+}
+
+fn program(control: &dyn Control) -> Option<SceneId> {
+    match query(control, Query::StudioGet).expect("studio.get") {
+        QueryResult::StudioGet { program_scene } => program_scene,
+        other => panic!("not a studio result: {other:?}"),
+    }
+}
+
+/// Undo and redo keep program valid like a batch does, and never put a restored scene
+/// back on program (ADR-0030).
+#[test]
+fn program_follows_undo_and_redo() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let mut events = control.events();
+    batch(&control, edits(vec![create("a"), create("b")])).expect("a and b");
+    block_on(control.call(switch_call("b"))).expect("switch");
+    batch(
+        &control,
+        one(Edit::SceneDelete {
+            scene_id: SceneId::new("b"),
+        }),
+    )
+    .expect("delete");
+    assert_eq!(program(&control), Some(SceneId::new("a")));
+    drain(&mut events);
+
+    // Undoing the delete brings b back without putting it on program.
+    undo(&control).expect("undo the delete");
+    assert_eq!(names(&control), ["a", "b"]);
+    assert_eq!(program(&control), Some(SceneId::new("a")));
+    assert!(matches!(
+        drain(&mut events).as_slice(),
+        [Event::StateChanged {
+            cause: Some(HistoryDirection::Undo),
+            ..
+        }]
+    ));
+
+    // Undoing the creating batch empties program, after the undo's own `state.changed`.
+    let undone = block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo))))
+        .expect("undo the creation");
+    assert_eq!(program(&control), None);
+    let client_id = control.client_id().expect("hello");
+    assert_eq!(
+        drain(&mut events).as_slice(),
+        [
+            Event::StateChanged {
+                rev: Rev(4),
+                client_id: client_id.clone(),
+                request_id: Some(undone.id.clone()),
+                cause: Some(HistoryDirection::Undo),
+            },
+            Event::StudioChanged {
+                program_scene: None,
+                client_id: client_id.clone(),
+                request_id: Some(undone.id),
+            },
+        ]
+    );
+
+    // Redoing it puts the first scene on program again.
+    let redone = block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Redo))))
+        .expect("redo the creation");
+    assert_eq!(program(&control), Some(SceneId::new("a")));
+    assert_eq!(
+        drain(&mut events)[1..],
+        [Event::StudioChanged {
+            program_scene: Some(SceneId::new("a")),
+            client_id,
+            request_id: Some(redone.id),
+        }]
     );
 }
 

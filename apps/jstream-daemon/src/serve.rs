@@ -292,6 +292,7 @@ mod tests {
         let batch = Batch::single(Edit::SceneCreate {
             scene_id: SceneId::new("main"),
             name: "Main".to_owned(),
+            role: None,
         });
         let applied = timely(first.call(Call::Batch(batch)))
             .await
@@ -303,6 +304,11 @@ mod tests {
             }
             other => panic!("expected state.changed, got {other:?}"),
         }
+        // The first scene went on program.
+        assert!(matches!(
+            timely(events.next()).await,
+            Some(Event::StudioChanged { .. })
+        ));
         let status = timely(second.call(Call::Query {
             query: Query::OutputStatus {
                 output_id: OutputId::new("out_1"),
@@ -590,6 +596,7 @@ mod tests {
         timely(control.call(Call::Batch(Batch::single(Edit::SceneCreate {
             scene_id: SceneId::new("main"),
             name: "Main".to_owned(),
+            role: None,
         }))))
         .await
         .expect("applied");

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:bbd03a04f132dd7c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; adds the Web UI (ui.rs) bullet, config lists the UI directory, gate covers every request; not-yet now TLS and pairing" }
+verified = { hash = "b3:a1f50d3313163f2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:95c518740af22ef4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read against ui.rs and gate.rs: Basic credentials row and paragraph, new Web UI section (paths, table, headers, CSP and trunk nonce), logging lines, open questions 2 and 3 settled" }
+verified = { hash = "b3:a0912e1d9a6dd09d", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; server passes output kinds through untouched" }
 -->
 
 ### Listening and admission
@@ -74,9 +74,10 @@ served
 |---|---|---|
 | `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra; without a port only on port 80 (below) | 403 |
 | `Origin` | absent, or `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
-| `Authorization` | `Bearer <token>`, or `Basic` credentials whose password is the token (any user name), matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` (`Basic` on the UI's paths) |
+| `Authorization` | `Bearer <token>`, or `Basic` credentials whose password is the token (any user name); without `Authorization`, the offered subprotocol `jstream.token.<token>` (below). Matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` (`Basic` on the UI's paths) |
 
-`Host` and `Authorization` must appear exactly once and `Origin` at most once, and
+`Host` must appear exactly once, `Authorization` at most once (exactly once unless the
+subprotocol carries the token) and `Origin` at most once, and
 comparisons ignore ASCII case (except the token). The `Host` check defeats DNS
 rebinding: a page on an attacker's domain that resolves to `127.0.0.1` still sends its
 own name. The `Origin` check stops foreign pages, since browsers always send `Origin` on
@@ -98,12 +99,25 @@ the user name is ignored. Credentials without a `:`, or that aren't base64 with
 padding, are refused like a wrong token. This is the same token presented differently,
 not a new kind of client (ADR-0006).
 
+**The token as a subprotocol.** `jstream-control`'s browser client can't rely on
+cached credentials (a UI served from elsewhere, or a browser that doesn't resend them),
+so it offers two subprotocols in `Sec-WebSocket-Protocol`: `jstream` and
+`jstream.token.<token>`. A request without `Authorization` may carry its token that
+way, on any `Sec-WebSocket-Protocol` line, in exactly one offered subprotocol; with
+`Authorization` present, only that counts. The upgrade selects `jstream` (browsers
+fail a connection whose offered subprotocols none were selected), never the token's,
+so the answer doesn't echo it, and like every header it is never logged. Both names
+are `jstream-control`'s constants, shared with the client
+([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
+
 **Extra hosts.** Each configured extra host must be `name:port` with one port from 1
 to 65535, and an IPv6 address must be in brackets (`[::1]:4455`), as it is in a
 request's `Host`. Any other entry (no port, two ports as in `name:80:80`, or a bare
 `fe80::1`) could never match, since the gate compares hosts with their port, so
 `Server::bind` refuses it (`ServerError::InvalidHost`) before opening the socket rather
-than ignoring it.
+than ignoring it. A configured extra origin is trusted as the server's own: a page there
+can use whatever credentials the browser holds for the server, a cached `Basic` password
+included.
 
 **Token compare.** `Token` keeps only the BLAKE3 digest of the token. The presented
 value is hashed with BLAKE3 too, and the two 32-byte digests are compared with
@@ -152,7 +166,7 @@ kept-alive connection.
 | A missing path whose last segment has no `.` (the UI's own routes) | the root's `index.html` |
 | Any other missing path, or one under `/api` or `/mcp` | 404 |
 | A path with an empty, `.` or `..` segment, or one that holds `\`, `:` or NUL (percent-escapes decoded first) | 404 |
-| A file that resolves outside the directory (a symbolic link) | 404 |
+| A file that resolves outside the directory (a symbolic link) | never served: 404, or the root's `index.html` for a name without a `.` |
 | Any other method | 405 with `Allow: GET, HEAD` |
 
 **Paths.** The path is percent-decoded segment by segment, and a segment that could step
@@ -202,13 +216,13 @@ task speaks the envelope
   readable. Binary frames get `malformed` too, until binary streams are designed.
   Messages over 4 MiB close the connection.
 - **Request IDs.** A `Control` session assigns its own IDs, which appear in the
-  `state.changed` events its calls cause. The task maps them back to the client's wire
+  `state.changed` and `studio.changed` events its calls cause. The task maps them back to the client's wire
   IDs, so a client matches its event to its response by the ID it chose, as in the
   protocol README's example. An event can arrive before the answer that reveals the
   mapping, so while calls are in flight it is held back, with every event after it to
   keep the order, until the answer arrives or nothing is left in flight (or 1024 events
-  are held). The last 1024 pairs are remembered. Other clients' `state.changed` events
-  pass unchanged: their IDs mean nothing to this client.
+  are held). The last 1024 pairs are remembered. Other clients' events pass unchanged:
+  their IDs mean nothing to this client.
 - **Slow clients.** The connection task never waits on the socket: what it sends goes
   into an outbox, and a writer that owns the socket's sending half sends it, one message
   at a time, while the task keeps reading the client and draining the session's events.
@@ -244,8 +258,8 @@ it on), `/mcp` (`MCP_PATH`) serves MCP's
 on the control port. Every request, whatever its method, first passes the same `Host`,
 `Origin` and token checks as an upgrade, with the same refusals (403, 401), so a
 request without `Origin` (a native agent) goes on to the token check, as on the
-WebSocket API: browsers send `Origin` on a cross-origin `fetch`, and the bearer token
-forces a preflight. Each body is one JSON-RPC message, answered by a
+WebSocket API: browsers send `Origin` on a cross-origin `fetch`, and a `POST` needs
+`Content-Type: application/json`, which forces a preflight. Each body is one JSON-RPC message, answered by a
 `jstream_mcp::Server` ([jstream-mcp › Design](../jstream-mcp/README.md#design)):
 
 | Request | Answer |
@@ -331,13 +345,12 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    with rustls and the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)): a TLS
    feature and its wiring. `ring` is already on the lint-deps native-code allowlist, for
    `jstream-outputs`' RTMPS, so that needs no further governance change.
-2. **Browser token.** Settled and built for the UI this server serves (see *The web
-   UI*): the browser presents the token as `Basic` credentials, which it sends on the
-   UI's WebSocket upgrade too, so the UI needs no `Sec-WebSocket-Protocol` token.
-   Checked in Chromium; whether every browser sends cached `Basic` credentials on a
-   WebSocket upgrade (Safari in particular) is open, and a `Sec-WebSocket-Protocol`
-   fallback would be the answer if one doesn't. Pairing a remote browser with a short
-   code instead of pasting the token is a maintainer-tier decision of its own.
+2. **Browser token.** Settled and built (see *`Basic` credentials* and *The token as
+   a subprotocol*): a page load presents the token as `Basic` credentials, and the
+   UI's upgrade either carries the same credentials (checked in Chromium) or offers
+   `jstream.token.<token>` ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
+   Pairing a remote browser with a short code instead of pasting the token is decided
+   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) and not built yet.
 3. **UI assets.** Settled and built (see *The web UI*). Open: caching with `ETag`s
    instead of `no-cache`, and compressed variants, if the bundle grows enough to
    matter. MCP over streamable HTTP is settled and built (see *MCP over streamable

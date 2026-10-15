@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:9b8119ee0c3297c6", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; contents list holds; mock.rs only swaps InvalidArgument literals for the constructor, including #203's running-output undo test" }
+verified = { hash = "b3:0cee9228843ca676", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; shared-names bullet is main's; mock still accepts virtual_cam" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -21,7 +21,8 @@ The `Control` trait: the one API through which every client talks to the engine
 web UI and the HTTP server are written against `dyn Control` and never link the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)); the host apps hand them an
 implementation. Layer 2: it builds on `jstream-protocol` (layer 1), is WASM-safe, and
-needs no async runtime from its callers (the native WebSocket client runs its own).
+needs no async runtime from its callers (the native WebSocket client runs its own, and
+the browser one runs on the page's event loop).
 
 Contents (a first cut; [Design](#design) explains the choices):
 - **The trait** (`control.rs`): `Control` with `hello`, `call` and `events`, and the
@@ -32,19 +33,20 @@ Contents (a first cut; [Design](#design) explains the choices):
   implementation for developing and testing clients without the engine, which
   they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
   implementation; its tests hold it to the mock's answers.
-- **WebSocket client** (`ws.rs`, feature `ws`, native targets): `WsControl` and
-  `WsConfig`, the `Control` trait over the engine's WebSocket API, and `WS_PATH`, the
-  API's path, shared with `jstream-server`.
+- **WebSocket client** (feature `ws`): `WsControl`, the `Control` trait over the
+  engine's WebSocket API, natively (`ws.rs`) and in the browser (`ws_web.rs`, `wasm32`);
+  `WsConfig` and the handshake pieces both share (`ws_config.rs`).
+- **Shared names** (`lib.rs`, no feature): `WS_PATH`, the API's path, and
+  `WS_PROTOCOL` and `WS_TOKEN_PROTOCOL_PREFIX`, the subprotocols a browser offers;
+  `jstream-server` uses the same constants, so client and server can't drift.
 - `jstream_control::protocol` re-exports `jstream-protocol`.
-
-Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:6db073177e120b24", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; connection bullet and open question 3 now say a served page gets in with Basic credentials, subprotocol as fallback; client code unchanged" }
+verified = { hash = "b3:dbd065bb673c1ddb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; set_target refusal for a virtual camera unchanged" }
 -->
 
 ### The trait
@@ -101,20 +103,20 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but protocol 0.12's `scene.set_role` and `item.move` (which answer
-  `internal`), with the checks `jstream-graph` makes, in the same order per
+- every protocol edit, with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
-  - reorder indices out of range;
+  - reorder and `item.move` indices out of range (`item.move` into another scene may
+    name one past its top);
   - a placement edit's `scene_id` naming a scene other than the item's own;
   - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
     not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or
     either while a source's settings refer to it;
-  - nesting cycles from `item.add` and `item.set_source`;
+  - nesting cycles from `item.add`, `item.set_source` and `item.move`;
   - a `source.create` whose `duplicated_from` names the source itself. Like the graph,
     the mock stores `duplicated_from` as a plain link (`source.duplicate` sets it) and
     reports it only while the source it names exists;
@@ -122,7 +124,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
-    reasons), `output.set_target` on a recording output, and an `unknown` output kind,
+    reasons), `output.set_target` on a recording or virtual-camera output (the mock
+    accepts a `virtual_cam` output, as the engine does), and an `unknown` output kind,
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
@@ -140,10 +143,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   scene), `output.list` and `encoder.list` (ordered by ID), each at the current `rev`.
   So it keeps everything an edit sets: the canvas, source names, kinds and settings,
   each item's placement (its transform, or its geometry and the transform view of it),
-  crop and visibility, each output's kind, target and encoder profile, and each
-  profile. `video.snapshot` is not one of those reads: the mock has no compositor and
-  answers it with `internal`, as it does for any protocol variant it does not
-  implement;
+  crop and visibility, each scene's role and each item's scene after an `item.move`,
+  each output's kind, target and encoder profile, and each profile. `video.snapshot`
+  is not one of those reads: the mock has no compositor and answers it with
+  `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
@@ -162,7 +165,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Each batch is a step built
   from the same inverse edits `jstream-graph` returns: a removed item comes back at its
   index with its placement in its own form (transform or geometry), crop and
-  visibility, a deleted scene at its position with its items, a deleted source with its
+  visibility, a deleted scene at its position with its role and items, `item.move`
+  back to the item's previous scene and index, `scene.set_role` back to the previous
+  role, a deleted source with its
   settings and `duplicated_from`, `item.set_source` back to the item's previous source,
   a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
@@ -181,6 +186,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - `state.changed` events carrying the request ID (and `cause` for an undo or redo), and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
+- the program scene with the engine's rules
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)): `scene.switch`
+  (`not_found` for a missing scene, no `rev`), `studio.get`, and `studio.changed` for a
+  switch and after a batch, undo or redo that creates the first scene or deletes the
+  program scene;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.
@@ -205,42 +215,59 @@ mock's own tests pin the remaining shared error paths.
 ### WebSocket client
 
 `WsControl` (feature `ws`, off by default) implements `Control` over the engine's
-WebSocket API, served by `jstream-server`. The feature's dependencies are declared for
-native targets only, so a `wasm32` build never pulls tokio, even with `ws` on.
+WebSocket API, served by `jstream-server`. The feature's dependencies are declared per
+target, so a `wasm32` build never pulls tokio, even with `ws` on, and a native one never
+pulls `web-sys`.
 
 - **Transport:** `tokio-tungstenite` on native targets, with no TLS feature: plain
   `ws://` only for now, so no `rustls` or `ring` is in the tree. TLS (rustls with the
-  ring provider, [R-DEP-006](../../docs/RULES.md#R-DEP-006)) and the browser
-  `WebSocket` through `gloo-net` on `wasm32` are open questions below.
-- **No runtime required of the caller.** `WsControl::connect` starts one thread per
-  connection running a single-threaded tokio runtime. Every future and stream it
-  returns is completed through tokio's channels, which work under any executor, so the
-  CLI's thread-parking `block_on` and the MCP stdio loop drive it as they drive the mock.
+  ring provider, [R-DEP-006](../../docs/RULES.md#R-DEP-006)) is an open question below.
+  On `wasm32` it is the browser's `WebSocket` through `web-sys`
+  ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)), which takes `ws://` and `wss://`
+  (the browser does TLS).
+- **No runtime required of the caller.** Natively, `WsControl::connect` starts one
+  thread per connection running a single-threaded tokio runtime. Every future and
+  stream it returns is completed through tokio's channels, which work under any
+  executor, so the CLI's thread-parking `block_on` and the MCP stdio loop drive it as
+  they drive the mock. In the browser there is one thread: the socket's handlers run on
+  the page's event loop and complete calls and feed streams through `futures-channel`,
+  so the UI's executor (`wasm-bindgen-futures`) drives them.
 - **Connection:** `ws://<host>:<port>`, with `/api/v1/ws` (`WS_PATH`) when the URL has
   no path, always with the control token
   ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)). It goes in the upgrade request
   rather than the URL, so it stays out of logs: an `Authorization: Bearer` header from
-  native clients. A browser can't set that header itself; a page the server serves gets
-  in with the `Basic` credentials the browser sends on its upgrade
-  ([jstream-server › Design](../jstream-server/README.md#design)). The caller supplies the token (the CLI reads it from a token file).
-  The server validates `Host`, and `Origin` when present; browsers set `Origin`
-  themselves, and the native client sends the server's own origin
-  (`http://<host>:<port>` of the URL) unless `WsConfig::origin` names another.
+  native clients, and from browsers, which can't set that header, two subprotocols in
+  `Sec-WebSocket-Protocol`: `jstream` and `jstream.token.<token>`
+  ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). The server selects `jstream`; the
+  browser client fails the connection if it selects anything else. With an empty token
+  the browser client offers no token subprotocol: the browser's cached HTTP Basic
+  credentials, whose password is the control token, carry it instead (when the engine
+  served the page behind Basic). A token that isn't an
+  HTTP token (RFC 7230 `tchar`s) can't be a subprotocol and fails `connect`; the
+  daemon's tokens are hex. `jstream-server` accepts both
+  ([jstream-server › Design](../jstream-server/README.md#design)). The caller supplies the token (the CLI
+  reads it from a token file). The server validates `Host`, and `Origin` when present;
+  browsers set `Origin` themselves (`WsConfig::origin` is ignored there), and the
+  native client sends the server's own origin (`http://<host>:<port>` of the URL)
+  unless `WsConfig::origin` names another.
 - **Session:** `hello` is the caller's first call. Requests get the IDs `req_1`,
   `req_2`, … per session, and the server reports the `state.changed` event a call
   causes with that same ID. The connection thread routes each `response` or `error` to
   its waiting call by request ID (`welcome`, and an error without an ID, answer the
   oldest pending `hello`) and fans `event`s out to the subscriptions.
-- **Failures are `Disconnected`.** An invalid or `wss://` URL, an unreachable engine, or
-  a refused upgrade (the reason names HTTP 401 for the token, 403 for `Origin` or
-  `Host`) fails `connect`. When the socket closes, pending and later calls fail with
+- **Failures are `Disconnected`.** An invalid URL (or a `wss://` one, natively), an
+  unreachable engine, or a refused upgrade fails `connect`. Natively the reason names
+  HTTP 401 for the token and 403 for `Origin` or `Host`; a browser doesn't tell the page
+  why an upgrade failed, so there the reason covers all three. When the socket closes, pending and later calls fail with
   `Disconnected` carrying the reason (the server's close reason when it gave one), and
   every event stream ends after what it buffered. Dropping the `WsControl` closes the
   socket. Reconnecting is the caller's choice (a new session, then re-read the state),
   because a new connection may get a new `client_id`.
 
-The end-to-end tests live in `jstream-server`, which runs a `MockEngine` behind a real
-server on a loopback port and drives it with this client.
+The native client's end-to-end tests live in `jstream-server`, which runs a
+`MockEngine` behind a real server on a loopback port and drives it with this client.
+The browser client has no automated test yet: it type-checks in CI's `wasm32` build,
+and the URL and token handling it shares are unit-tested natively (`ws_config.rs`).
 
 ### Open questions
 
@@ -259,10 +286,9 @@ server on a loopback port and drives it with this client.
    (correlating with an external log) would need `call` to take a `Request`.
    `jstream-server` works around it by mapping session IDs back to wire IDs
    ([jstream-server › Design](../jstream-server/README.md#design)).
-3. **Browser client.** The `wasm32` implementation comes with the web UI. Served by
-   `jstream-server`, it needs no token of its own: the browser sends the page's `Basic`
-   credentials on the upgrade. `Sec-WebSocket-Protocol` is the fallback for a browser
-   that doesn't, or a UI served from elsewhere.
+3. **Browser client.** Settled and built: `web-sys`'s `WebSocket` on `wasm32`, with the
+   token in a subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). A
+   browser test (wasm-bindgen-test against a server) is still open.
 4. **TLS.** `wss://` needs a TLS feature of `tokio-tungstenite` (rustls with ring) and
    its wiring. `ring` is already on the lint-deps native-code allowlist, for
    `jstream-outputs`' RTMPS, so that part needs no further governance change.

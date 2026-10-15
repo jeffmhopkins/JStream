@@ -14,7 +14,10 @@
 //!   let through to the token check, which is the gate (#44, R-SEC-002).
 //! - **`Authorization`** must carry the control token: `Bearer <token>`, or `Basic`
 //!   credentials whose password is the token (the user name is ignored), which is how a
-//!   browser presents it to the UI's paths and then to the UI's upgrade. The server keeps
+//!   browser presents it to the UI's paths and then to the UI's upgrade. Without
+//!   `Authorization`, an upgrade may instead offer the subprotocol `jstream.token.<token>`
+//!   beside `jstream`, which is how `jstream-control`'s browser client sends it; the
+//!   server selects `jstream`, never the token's subprotocol. The server keeps
 //!   only the token's BLAKE3 digest; the presented value is hashed too and the two
 //!   digests are compared in constant time, so the compare reveals nothing about the
 //!   token (see `Token::matches`).
@@ -35,6 +38,7 @@ use crate::config::{ServerConfig, Token};
 use crate::error::ServerError;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use jstream_control::WS_TOKEN_PROTOCOL_PREFIX;
 use std::net::{Ipv6Addr, SocketAddr};
 
 /// The default port of the `http` and `ws` schemes: a `Host` or `Origin` without a port
@@ -182,9 +186,12 @@ impl Gate {
                 return Err(Refusal::Origin);
             }
         }
-        let token = single(headers, &header::AUTHORIZATION)
-            .and_then(credentials)
-            .ok_or(Refusal::Token)?;
+        let token = if headers.contains_key(header::AUTHORIZATION) {
+            single(headers, &header::AUTHORIZATION).and_then(credentials)
+        } else {
+            subprotocol_token(headers)
+        }
+        .ok_or(Refusal::Token)?;
         if self.token.matches(&token) {
             Ok(())
         } else {
@@ -273,6 +280,21 @@ fn has_port(authority: &str) -> bool {
         Some(end) => authority[end + 1..].starts_with(':'),
         None => authority.contains(':'),
     }
+}
+
+/// The token a browser offers as the subprotocol `jstream.token.<token>`, used only when
+/// the request has no `Authorization`. Every `Sec-WebSocket-Protocol` line counts, and
+/// exactly one offered subprotocol may carry a token. The prefix is `jstream_control`'s, so
+/// client and server can't drift; that subprotocol is never selected, so never echoed.
+fn subprotocol_token(headers: &HeaderMap) -> Option<Vec<u8>> {
+    let mut tokens = headers
+        .get_all(header::SEC_WEBSOCKET_PROTOCOL)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .filter_map(|offered| offered.trim().strip_prefix(WS_TOKEN_PROTOCOL_PREFIX));
+    let token = tokens.next()?;
+    tokens.next().is_none().then(|| token.as_bytes().to_vec())
 }
 
 /// The token an `Authorization` value presents: a `Bearer` token, or the password of
@@ -774,5 +796,44 @@ mod tests {
         for bad in ["", "Zg", "Zg=", "Z===", "Zg==Zg==", "Zm9v-A==", "Zm 9"] {
             assert_eq!(base64_decode(bad), None, "{bad}");
         }
+    }
+
+    /// Without `Authorization`, the token may come as the offered subprotocol
+    /// `jstream.token.<token>`, on any `Sec-WebSocket-Protocol` line, once.
+    #[test]
+    fn the_token_may_ride_in_the_offered_subprotocols() {
+        let gate = gate(&[], &[]);
+        let offer = |lines: &[&str], authorization: Option<&str>| {
+            let mut pairs = vec![
+                (header::HOST, "127.0.0.1:4455"),
+                (header::ORIGIN, "http://127.0.0.1:4455"),
+            ];
+            pairs.extend(lines.iter().map(|l| (header::SEC_WEBSOCKET_PROTOCOL, *l)));
+            if let Some(value) = authorization {
+                pairs.push((header::AUTHORIZATION, value));
+            }
+            gate.check(&headers(&pairs))
+        };
+        assert_eq!(offer(&["jstream, jstream.token.t0ken"], None), Ok(()));
+        assert_eq!(offer(&["jstream", "jstream.token.t0ken"], None), Ok(()));
+        assert_eq!(
+            offer(&["jstream.token.wr0ng, jstream"], None),
+            Err(Refusal::Token)
+        );
+        assert_eq!(offer(&["jstream"], None), Err(Refusal::Token));
+        assert_eq!(
+            offer(&["jstream.token.t0ken, jstream.token.t0ken"], None),
+            Err(Refusal::Token),
+            "only one token"
+        );
+        // `Authorization`, when present, is the one that counts.
+        assert_eq!(
+            offer(&["jstream, jstream.token.t0ken"], Some("Bearer wrong")),
+            Err(Refusal::Token)
+        );
+        assert_eq!(
+            offer(&["jstream, jstream.token.wr0ng"], Some("Bearer t0ken")),
+            Ok(())
+        );
     }
 }

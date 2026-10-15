@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:d6dbf011986bad16", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#197 B9): re-read; B9's blockers and delete_plan text is main's, untouched by C5; only the stamp differs from main; holds" }
+verified = { hash = "b3:82526774ecb1ce02", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -48,8 +48,10 @@ codes, so the engine passes them to clients unchanged.
   ([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)).
 - `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
   `State::encoding_of` gives the encoding an output starts with.
-- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, or a recording
-  to an MP4 file) and the encoder profile it uses, if not the default. Whether it
+- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, a recording
+  to an MP4 file, or the virtual camera, which has nothing to check) and the encoder
+  profile it uses, if not the default (a virtual camera encodes nothing, so it ignores
+  its profile). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -65,8 +67,8 @@ the batch **touched**.
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
   Undo design requires: removing an item is undone by `item.add`, then `item.reorder`,
   `item.set_crop` and `item.set_visible` only where the item differed from what
-  `item.add` produces, and deleting a scene by `scene.create`, `scene.reorder` and each
-  item's restore (with `scene.set_role` for a group). The inverse carries no `expected_rev`: the engine's per-client undo
+  `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
+  group), `scene.reorder` and each item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
   history (in `jstream-core`) chooses it.
 - **Touched sets** (`touched.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
   `Touched::of(edits, inverse)` names, from a batch's edits and its inverse's (so a
@@ -114,8 +116,8 @@ the batch **touched**.
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
   `\…`, `C:\…` or `C:/…`, the same on every platform, as for an absolute asset), or
   doesn't end in a file name; whether it is absolute on the engine's own machine, and
-  whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording fails with
-  `invalid_argument` (it has no RTMP target). `output.delete` is undone by `output.create` with its kind, and
+  whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
+  `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
   with `invalid_argument`, in edit order. The `OutputDelete` inverse also restores the
@@ -129,6 +131,7 @@ the batch **touched**.
   `encoder.create`, `encoder.update` and `output.set_encoder` by the previous value).
 - **Groups and moves** ([ADR-0024](../../docs/adr/0024-scene-structure.md) §1):
   `scene.set_role` changes a scene's role and is undone by the previous role.
+  `scene.create` sets the `role` it names, or `scene` when it names none.
   `item.move` moves an item to an index in another scene (up to one past its top) or
   within its own (a reorder), keeping the whole item, and is undone by `item.move`
   back. The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
@@ -223,15 +226,23 @@ restore the batch's result. After each failed one, the graph must be unchanged. 
 after every batch, for each scene and source: a plain delete is refused exactly when
 it has blockers, the error lists them, and the `delete.plan` batch applies at the
 planned `rev`, removes the target, and undoes exactly.
+The proptest suites (`tests/properties.rs`, public API only, shrinking failures to a
+minimal batch sequence) start from a graph holding every sort of reference and apply
+random batches with free-form names, numbers and settings values: a batch that applies
+must undo and redo exactly and a failed one change nothing; and after every batch no
+reference may dangle, and each scene, source and encoder profile delete must be refused
+exactly when something refers to it, a scene's or source's with the blockers the test
+works out itself. The
+seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
-scene `b` made a group, a clone and a `duplicated_from` naming a missing source) plus a source whose
+scene `b` made a group, a clone and a `duplicated_from` naming a missing source, less the virtual camera the parity collection gained later) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none; a profile's
-round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
+round trip; a virtual camera's round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that
@@ -255,7 +266,5 @@ Planned, and kept possible by the private fields of the model types:
 - Keyframe scenes (`variant_of`, per-item `overrides`, `item.clear_override`) and the
   rest of ADR-0024: placement edits addressed to a variant will write its override, and
   the edits ADR-0040 lists will drop orphaned overrides and restore them in their
-  inverses. `scene.create`'s optional `role` comes with a change to the daemon, which
-  builds that edit; until then a batch of `scene.create` and `scene.set_role` makes a
-  group.
+  inverses.
 - Item lookup is a linear scan over scenes. An ID index can come once collections grow.
