@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-plugin-clap/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-plugin-clap", "docs/adr/0035-clap-plugins-out-of-process.md#decision", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:66f2a5ae74b61606", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "Round-1 B1/B2/N3: re-read every paragraph against plugin.rs (port_channels, MAX_PORTS/MAX_PORT_CHANNELS, Plugin !Send and its Drop leak), process.rs (Ports, every port passed, sidechains zeroed and constant, aux dropped), host.rs (HostBox freed after destroy), strings.rs, and testplugin.rs tests (sidechain, wide, destroy-thread)" }
 -->
 
 A safe wrapper over the CLAP audio plugin ABI

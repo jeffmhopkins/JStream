@@ -1859,6 +1859,42 @@ stamp = { hash = "b3:25518dc134afe9b2" }
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/video_device/stream.rs"]
 stamp = { hash = "b3:ae38f30acfef5995" }
 
+["CRATE-jstream-plugin-clap#purpose"."body"]
+stamp = { hash = "b3:152181200b2946bd", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "Round-1 B1/B2/N3: re-read every paragraph against plugin.rs (port_channels, MAX_PORTS/MAX_PORT_CHANNELS, Plugin !Send and its Drop leak), process.rs (Ports, every port passed, sidechains zeroed and constant, aux dropped), host.rs (HostBox freed after destroy), strings.rs, and testplugin.rs tests (sidechain, wide, destroy-thread)" }
+
+["CRATE-jstream-plugin-clap#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-plugin-clap"]
+stamp = { hash = "b3:7eba4b3549316e86" }
+
+["CRATE-jstream-plugin-clap#purpose"."dep:docs/RULES.md#unsafe"]
+stamp = { hash = "b3:6bae18b37405b2cc" }
+
+["CRATE-jstream-plugin-clap#purpose"."dep:docs/adr/0035-clap-plugins-out-of-process.md#decision"]
+stamp = { hash = "b3:97ad7e8e9e7724bf" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/error.rs"]
+stamp = { hash = "b3:48dcc2d5387f6b81" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/host.rs"]
+stamp = { hash = "b3:b33cd5cb312eb4a8" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/lib.rs"]
+stamp = { hash = "b3:4056601568e05b89" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/library.rs"]
+stamp = { hash = "b3:f69c1323e623c4c0" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/plugin.rs"]
+stamp = { hash = "b3:6452d7a92dbab528" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/process.rs"]
+stamp = { hash = "b3:121d390b11e45a47" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/strings.rs"]
+stamp = { hash = "b3:9d287f1810f2f80d" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/testplugin.rs"]
+stamp = { hash = "b3:439c9b06018f39a8" }
+
 ["CRATE-jstream-plugin-proto#purpose"."body"]
 stamp = { hash = "b3:db731ccc24b25277", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: new crate; re-read every bullet against lib.rs, status.rs, ring.rs, params.rs and shared.rs: field list and writers, init/config/publish_ready/ready_latency, slot seqlock, SLOTS 8, MAX_BLOCK_FRAMES 2048, MAX_DEPTH 6, DEFAULT_DEPTH 2, first_useful, 256-event param rings with corrupt counts, trust checks, tests list" }
 
