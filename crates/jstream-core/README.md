@@ -98,7 +98,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:691a514cddc6ee9b", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#155 kinds/protocol 0.8, #153 MCP over HTTP) into C6 #147: main's Queries/kinds text and C6's Snapshots nested-scene paragraph coexist; a scene source is still SourceKind::Scene, which snapshot.rs walks; the depth bound, transparency and cycle text still hold" }
+verified = { hash = "b3:7c10ce67683278ba", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (C6 #147, #134, #163) into A5: only the verified line conflicted; re-read C6's Nested scenes paragraph (inside-out passes, depth bound 8, cycle draws nothing, runtime still one scene) and the tests line, with A5's differential-script paragraph (parity collection with outputs against the merged mock); both hold" }
 -->
 
 ### Engine and sessions

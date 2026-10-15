@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b5cf903a5f2b3dcd", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Commands list both source.rename/set_settings and output edits/key actions; Queries list output.list and kind.list/describe; Outputs and Kinds-and-settings bullets; PROTOCOL_VERSION 0.8 for kinds, 0.7 outputs (version.rs)" }
+verified = { hash = "b3:41e5837c511505fa", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: parity bullet now has both A5's outputs/output.list/URL rejections and B4's kinds(); checked against the merged parity.rs; rest of the contents list is main's" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -77,8 +77,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
-  support, not wire types. One batch that builds a small collection, the exact answer
-  to every collection read of it, and the exact error for batches rejected against it.
+  support, not wire types. One batch that builds a small collection with two RTMP
+  outputs, the exact answer to every collection read of it (`output.list` included),
+  and the exact error for batches rejected against it (RTMP URL checks included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -91,7 +92,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:4e06cd0fe67b2407", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): handshake example updated to 0.8; SourceInfo settings note says 0.7 readers; Queries list has output.list, key_set and the kind queries; outputs and settings paragraphs both hold; geometry paragraph names 0.8/0.7/0.6/0.5" }
+verified = { hash = "b3:8d4105cece766a56", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: prose is main's (0.8); A5 changes only parity.rs, a test fixture, so no wire type, schema or snapshot in this section changed" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
