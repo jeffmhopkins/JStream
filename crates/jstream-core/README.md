@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:9594447bffbb367c", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3: PublishError::new public) into #207: took main's stamp; re-read; Runtime, Drop counts and Tests bullets hold with #207's blocked-send and trickle tests" }
+verified = { hash = "b3:873e9f39de802a26", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#207 bounded output.stop), protocol 0.15 still one past main's 0.14: re-read; #207's test list beside the YouTube test bullet holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -157,7 +157,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a614b642dfb99753", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3: output_kind read by the daemon's opener, PublishError::new sentence) into #207: took main's stamp; re-read the outputs, opener, output.stop and stop-drain paragraphs; main's additions and #207's bounded stop both hold" }
+verified = { hash = "b3:5808b57b56b71af0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#207 bounded output.stop), protocol 0.15 still one past main's 0.14: re-read; #207's bounded stop applies to a youtube output too, which publishes through connect_rtmp's RtmpPublish; YouTube paragraph and lock note hold" }
 -->
 
 ### Engine and sessions
