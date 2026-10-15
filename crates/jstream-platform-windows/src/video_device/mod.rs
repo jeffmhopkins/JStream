@@ -21,7 +21,7 @@ mod pairing;
 #[allow(
     clippy::duplicate_mod,
     reason = "the capture mailbox, reused without editing `capture`; to become one shared \
-              module when that is next changed"
+              module when that is next changed (#185)"
 )]
 #[path = "../capture/mailbox.rs"]
 mod mailbox;

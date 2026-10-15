@@ -37,10 +37,14 @@ pub struct MfMjpegDecoder {
     _mf: MfStarted,
 }
 
-// SAFETY: the decoder MFT is an in-proc, free-threaded object, and `MfStarted` keeps the
-// process MTA alive, so whichever thread holds the decoder (the capture thread, which
-// never initialised COM) calls it as an implicit MTA member. `decode` takes `&mut self`,
-// so one thread uses it at a time; the trait asks only for `Send`.
+// SAFETY: the decoder holds no COM object until its first `decode`, so the engine can
+// build it on one thread and move it to the capture thread. The MFT is then created,
+// used and dropped by whichever thread calls `decode` (the stream's capture thread, an
+// implicit MTA member while `MfStarted` keeps the MTA alive). Enumeration asks only for
+// synchronous, in-proc MFTs (`SYNCMFT | LOCALMFT`); Microsoft's in-box MJPEG decoder is
+// free-threaded, so moving the decoder after its first frame is sound for it too.
+// `decode` takes `&mut self`, so one thread uses it at a time; the trait asks only for
+// `Send`.
 unsafe impl Send for MfMjpegDecoder {}
 
 impl std::fmt::Debug for MfMjpegDecoder {
