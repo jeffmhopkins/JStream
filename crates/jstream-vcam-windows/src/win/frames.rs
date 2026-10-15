@@ -11,7 +11,10 @@
 //! The block is written by another process, so nothing in it is trusted blindly: the
 //! format must match the contract ([`Control::format_matches`]), the scope and session it
 //! names must be the namespace the block was found in, and after the shared objects are
-//! open the block must still be live and name the same producer.
+//! open the block must still be live and name the same producer. Before any of that, a
+//! block found in a session's namespace is used only if the session is active and the
+//! block's owner is that session's user, SYSTEM or Administrators ([`trust`](crate::trust),
+//! #180), so another logged-on user's engine can't feed this camera.
 
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -43,8 +46,10 @@ use jstream_vcam_proto::{
 };
 
 use super::log::{host_flags, log, session_id};
+use super::session;
 use super::shared::{Mapping, OwnedHandle, qpc, qpc_freq};
 use crate::pixels::{bgra_to_nv12, copy_bgra, nv12_size, test_pattern};
+use crate::trust::{check_session_block, session_of};
 
 /// How long to wait between attempts to find the block or open the shared objects.
 const RETRY: Duration = Duration::from_secs(1);
@@ -279,6 +284,11 @@ impl FrameSource {
         for name in names {
             match Mapping::open(&name) {
                 Ok(mapping) => {
+                    // Checked before anything is written into the block.
+                    if let Err(why) = trust(&mapping, &name) {
+                        failures.push(format!("{name}: refused, {why}"));
+                        continue;
+                    }
                     let c = mapping.control();
                     c.consumer_pid.store(std::process::id(), Ordering::Release);
                     c.consumer_session_id
@@ -309,6 +319,24 @@ impl FrameSource {
         }
         None
     }
+}
+
+/// Whether the block opened as `name` may be used: `Global\` blocks always (only
+/// administrators and services can create them), a `Session\<id>\` block only under
+/// [`check_session_block`]. `Err` says why not, for the log.
+fn trust(mapping: &Mapping, name: &str) -> std::result::Result<(), String> {
+    let Some(id) = session_of(name) else {
+        return Ok(());
+    };
+    let owner = mapping
+        .owner_sid()
+        .map_err(|e| format!("its owner is unreadable ({:#010x})", e.code().0))?;
+    check_session_block(
+        &owner,
+        session::user_sid(id).as_deref(),
+        session::is_active(id),
+    )
+    .map_err(|d| format!("{} (owner {owner})", d.as_str()))
 }
 
 /// The producer's ring and fence, opened on this process's own D3D11 device.
