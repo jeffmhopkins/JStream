@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1866d4b57af49a7f", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#150 shutdown tests) into I1 #153 plus review N1: MCP table now says an initialize carrying Mcp-Session-Id ends that session first, logging reason added; rest of the MCP subsection and main's shutdown text re-read against mcp.rs and tests.rs" }
+verified = { hash = "b3:5cac7b522bab1032", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read the MCP over streamable HTTP subsection against mcp.rs and main's shutdown/limits text; both hold" }
 -->
 
 ### Listening and admission

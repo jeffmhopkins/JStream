@@ -1,10 +1,11 @@
 //! `jstream-daemon`: the headless engine host. It runs a `jstream-core` `Engine` and
 //! serves it through `jstream-server`'s authenticated WebSocket API on `127.0.0.1`, one
 //! `InProcessControl` session per connection, so `jstream-cli --url …` and
-//! `jstream-cli mcp` can drive it (ADR-0001: the app only wires the engine to its
+//! `jstream-cli mcp` can drive it, and MCP over streamable HTTP on the same port, one
+//! session per MCP session (ADR-0001: the app only wires the engine to its
 //! interfaces). It creates or reuses the user-only control token file (ADR-0006), logs
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
-//! and stops gracefully on Ctrl-C. Not yet: the web UI, MCP over HTTP and `--collection`.
+//! and stops gracefully on Ctrl-C. Not yet: the web UI and `--collection`.
 //!
 //! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-daemon/README.md#purpose, apps/jstream-daemon/README.md#usage, apps/jstream-daemon/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0006-mcp-full-access.md
 

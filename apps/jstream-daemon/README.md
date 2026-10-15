@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:38bb86f9a94bca52", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1: daemon turns on MCP at /mcp; each MCP session is its own InProcessControl; Tests bullet names the raw HTTP MCP client in tests/daemon.rs" }
+verified = { hash = "b3:f8c1170ccbd8db7f", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; main changed no prose here, I1's MCP-on text holds and main.rs crate doc now matches it (review B4)" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -57,7 +57,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:66c894a3068ba2e0", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1: Output bullet adds the mcp endpoint line before listening on, matching main.rs and the help text in args.rs; options and exit codes unchanged" }
+verified = { hash = "b3:96e6a64a7ccf1aed", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; mcp endpoint line and options match main.rs/args.rs" }
 -->
 
 ```sh
@@ -127,7 +127,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:24b2deea58ad8c40", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#142 outputs/stream keys) into I1 #153: took main's line and re-read; serve.rs still builds one Engine with with_output only, and now also sets config.mcp = true, as the MCP bullet says; Listening bullet holds" }
+verified = { hash = "b3:8a0ed78550ef9209", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; serve.rs builds one Engine with with_output and sets config.mcp = true, as the MCP and Listening bullets say" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

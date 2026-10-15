@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:bed288fd85924567", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#142 test golden only) into I1 #153: contents bullets unchanged; the streamable-HTTP paragraph says jstream-server serves it, feeding Server::handle" }
+verified = { hash = "b3:993572bf1e636ad2", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; contents bullets unchanged, streamable HTTP served by jstream-server" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:4e33a06fc1523a90", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#142 output ops via generated table, tools.snap) into I1 #153: re-read Tools and the I1 Session/Async paragraphs (jstream-server /mcp, one Server per session); both hold" }
+verified = { hash = "b3:04cf05697ae74a56", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; Tools table gains kind (main), I1's Session/Async paragraphs on /mcp sessions hold" }
 -->
 
 ### Tools
@@ -59,7 +59,7 @@ below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`item`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action or query of that noun | an edit: a batch of one; an action: an action; a query: a query |
+| one per noun (`item`, `kind`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action or query of that noun | an edit: a batch of one; an action: an action; a query: a query |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
