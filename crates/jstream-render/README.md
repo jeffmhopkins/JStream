@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:10dfd4b0711bd43d", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Review N5 rename only (record_composite/record_resolve); purpose bullets unchanged and still hold" }
+verified = { hash = "b3:10dfd4b0711bd43d", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): rewrote the nested-scene bullet (render_image returns an Image on this compositor that the caller places; depth and cycles are jstream-core's); plus review N5 helper rename; other bullets unchanged against main" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -97,7 +97,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:f5d2dd7954337afa", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Review N5: renamed the pass helpers to record_composite/record_resolve; passes, render_image and resources text unchanged and still match" }
+verified = { hash = "b3:f5d2dd7954337afa", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): added the render_image paragraph after pass 2 (new Rgba16Float RENDER_ATTACHMENT|TEXTURE_BINDING texture per call, read as premultiplied, one submit ordered before the outer one) and the render_image resources row; plus review N5 helper rename; render's passes, staging and readback unchanged" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
