@@ -751,7 +751,8 @@ prs = [163]
 id = "E3c"
 milestone = "M3"
 title = "Encode from GPU frames"
-status = "planned"
+status = "review"
+prs = [325]
 
 [[item]]
 id = "X1"
