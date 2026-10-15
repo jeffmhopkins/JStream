@@ -22,7 +22,6 @@ and what they leave open. Each open gap is a GitHub issue, listed in
 ## Assets
 <!-- @section
 depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
-verified = { hash = "b3:c1425f40380e9d02", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
 -->
 
 | Asset | Why it matters | Where it lives |
@@ -85,7 +84,6 @@ Every arrow into the engine crosses one of five boundaries:
 ## Control server
 <!-- @section
 depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:9ee4513532c005a7", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "#358 B1: Accepted now names the control token cached by a browser through the Basic prompt (gate.rs Basic path, ADR-0047 consequences); rest unchanged" }
 -->
 
 **Threats:** a foreign web page driving the API (CSRF, DNS rebinding), a network peer,
@@ -118,7 +116,6 @@ before authentication and calls in flight per connection are not capped (#354).
 ## Pairing and remote browsers
 <!-- @section
 depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md"]
-verified = { hash = "b3:924140d411537f71", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "#358 B1: narrowed to what ADR-0047 and R-SEC-002 promise: a paired browser holds only its device token, and the cookie never carries the control token" }
 -->
 
 **In flight** (#265 for codes and device tokens, #288 for the pairing page and cookie).
@@ -144,7 +141,6 @@ cookie never carries the control token.
 ## Browser source
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md"]
-verified = { hash = "b3:702ae6e54812fa7e", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
 -->
 
 **In flight** (#283, #289, #290, #291, #298 and ADR-0048 on that branch). Main has only
@@ -199,7 +195,6 @@ font decoders, and no fuzzing in CI (#352). The Media Foundation file reader (in
 ## Plugins
 <!-- @section
 depends_on = ["docs/RULES.md#R-SEC-003", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:a2e8d4d69e395334", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
 -->
 
 | Kind | Trust | On main | Boundary |
@@ -226,7 +221,6 @@ non-finite samples turned to silence.
 ## MCP agents
 <!-- @section
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:c09c3caa3c4c9cff", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
 -->
 
 **Threats:** an agent following instructions hidden in text it reads (prompt
@@ -250,7 +244,6 @@ the main thing an injected instruction would aim for (#343).
 ## Secrets and the network
 <!-- @section
 depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
-verified = { hash = "b3:54bb924c2ba8eee7", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
 -->
 
 **Threats:** a key in a file, log, event or reply; a key sent to the wrong host; an
@@ -277,7 +270,6 @@ the engine only (#353).
 ## Virtual camera
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:e5473b79f24f5857", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
 -->
 
 **Threats:** another session's user reading the camera feed or injecting frames; a

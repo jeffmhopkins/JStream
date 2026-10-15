@@ -2906,3 +2906,69 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-004"]
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
+["THREAT-MODEL#assets"."body"]
+stamp = { hash = "b3:fc8f9e4fe919b269", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-001"]
+stamp = { hash = "b3:69c6131f3f1bd0fd" }
+
+["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-004"]
+stamp = { hash = "b3:f3e3a293b719fe8d" }
+
+["THREAT-MODEL#browser"."body"]
+stamp = { hash = "b3:48f170cbe7bd4d5f", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#browser"."dep:docs/adr/0021-browser-source.md"]
+stamp = { hash = "b3:64d21faa19974bc3" }
+
+["THREAT-MODEL#mcp"."body"]
+stamp = { hash = "b3:e1430f5016c0cb1e", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#mcp"."dep:docs/adr/0006-mcp-full-access.md"]
+stamp = { hash = "b3:fbe7c61707faa7bd" }
+
+["THREAT-MODEL#mcp"."dep:docs/adr/0036-mcp-events-polling-tool.md"]
+stamp = { hash = "b3:528a4d728be121b6" }
+
+["THREAT-MODEL#pairing"."body"]
+stamp = { hash = "b3:f912fc0a9873c9db", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "#358 B1: narrowed to what ADR-0047 and R-SEC-002 promise: a paired browser holds only its device token, and the cookie never carries the control token" }
+
+["THREAT-MODEL#pairing"."dep:docs/adr/0044-pairing-remote-browsers.md"]
+stamp = { hash = "b3:5670e6a5758601b2" }
+
+["THREAT-MODEL#pairing"."dep:docs/adr/0047-browser-pairing-page-and-device-cookie.md"]
+stamp = { hash = "b3:8042c8d8d5117226" }
+
+["THREAT-MODEL#plugins"."body"]
+stamp = { hash = "b3:e1e053e960486735", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#plugins"."dep:docs/RULES.md#R-SEC-003"]
+stamp = { hash = "b3:e62d5f1a75c6baa0" }
+
+["THREAT-MODEL#plugins"."dep:docs/adr/0035-clap-plugins-out-of-process.md"]
+stamp = { hash = "b3:56b6301e2e6a132b" }
+
+["THREAT-MODEL#secrets"."body"]
+stamp = { hash = "b3:af6cc0745d67f50d", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-001"]
+stamp = { hash = "b3:69c6131f3f1bd0fd" }
+
+["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-004"]
+stamp = { hash = "b3:f3e3a293b719fe8d" }
+
+["THREAT-MODEL#server"."body"]
+stamp = { hash = "b3:c4b6a3e7a16f884b", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "#358 B1: Accepted now names the control token cached by a browser through the Basic prompt (gate.rs Basic path, ADR-0047 consequences); rest unchanged" }
+
+["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
+stamp = { hash = "b3:9bcfb0336f6adad9" }
+
+["THREAT-MODEL#server"."dep:docs/adr/0006-mcp-full-access.md"]
+stamp = { hash = "b3:fbe7c61707faa7bd" }
+
+["THREAT-MODEL#vcam"."body"]
+stamp = { hash = "b3:22d241d0aeefeac2", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#vcam"."dep:docs/adr/0020-portable-windows-distribution.md"]
+stamp = { hash = "b3:febfe552adc09d5b" }
+
