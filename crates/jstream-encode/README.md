@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:2d4c500e0f4a735d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: re-read the API list (open_on, path, VideoPath), wgpu dev-dependency and gpu_tests.rs coverage beside main's text; holds" }
+verified = { hash = "b3:2c16aebc4fe358ec", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (6b987c5) into #325: stamp-only conflict; re-read E3c's open_on/VideoPath/wgpu dev-dep/gpu_tests text against #219's D5 restamp; applied review N1 (skips only the tests that need a context); holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -75,7 +75,7 @@ context, the CPU fallback (opened as configured, with its reason) for a backend 
 GPU path, one that refuses the context and one whose GPU encoder fails to open, and a
 GPU session that is opened in NV12, encodes a ring of two targets and leaves the
 producer holding the only clone of each, and fails on a CPU frame. A machine with no
-wgpu adapter skips them, except on CI.
+wgpu adapter skips the ones that need a context, except on CI.
 
 <a id="design"></a>
 ## Design
