@@ -1,5 +1,11 @@
 //! The mixer: pulls a fixed-size block from every input's ring on the engine clock,
-//! applies each input's gain, sums them into the stereo bus, and meters both.
+//! applies each input's fader, sends it into the buses, applies each bus's fader, and
+//! meters inputs and buses.
+//!
+//! **Signal order** (docs/adr/0028-audio-model-v2.md): per input, ring → fader and mute
+//! → each send's gain → bus sum. Per bus, sum → fader and mute → output. Sends are
+//! post-fader. The master bus (slot 0) is the block [`Mixer::mix`] writes out; every
+//! bus's last block is also readable with [`Mixer::bus_block`].
 //!
 //! **Time line.** Engine frame `n` is media time `n / rate` (the media clock's zero,
 //! docs/adr/0014-media-clock.md). A block is the frames `[n, n + block)`; its pts is `n`
@@ -12,28 +18,31 @@
 //! to mix is more than half a ring behind the clock, it jumps forward to the newest due
 //! block and counts the frames it skipped, rather than mixing stale or overwritten data.
 //!
-//! **Gain** changes ramp linearly across one block, so fader moves don't click.
+//! **Gain** changes ramp linearly across one block, so fader moves don't click. So do
+//! send gains, and a send that starts or stops (or whose bus is added) ramps from or to
+//! silence.
 //!
-//! **Meters** are post-gain (what each input contributes to the bus) and the bus output:
+//! **Meters** are post-fader (each input before its sends) and each bus's output:
 //! per channel, the peak held until the control plane takes it, and the latest block's
 //! RMS.
 //!
 //! [`Mixer::mix`] and [`Mixer::poll`] do not allocate, lock, block or log (R-RT-001); the
-//! buffers are sized in [`Mixer::new`], and an input the control plane adds is installed
-//! from a command that was allocated off this thread.
+//! buffers (one per bus slot) are sized in [`Mixer::new`], and an input or bus the
+//! control plane adds is installed from a command that was allocated off this thread.
 
 use std::sync::Arc;
 
 use crossbeam_channel::Receiver;
 use jstream_media::{MediaTime, Rounding, Timebase};
 
+use super::bus::{BusShared, MASTER_ID, MAX_BUSES, NO_BUS};
 use super::cmd::{self, Command, ControlPlane};
 use super::input::InputShared;
 use super::retire::Retirer;
 use super::ring::FrameRing;
-use super::shared::{Counter, GainParam, Meter, levels};
+use super::shared::levels;
 use crate::error::AudioError;
-use crate::handle::{BusControl, InputControl, InputId};
+use crate::handle::{BusControl, BusId, InputControl, InputId};
 
 /// How the mixer is set up. Fixed for the mixer's lifetime.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,15 +111,6 @@ pub struct Block {
     pub pts: MediaTime,
 }
 
-/// What the mixer thread and the control plane share for the bus.
-#[derive(Debug)]
-pub(crate) struct BusShared {
-    pub(crate) gain: GainParam,
-    pub(crate) meter: Meter,
-    pub(crate) blocks: Counter,
-    pub(crate) skipped_frames: Counter,
-}
-
 #[derive(Debug)]
 struct Slot {
     id: u64,
@@ -118,35 +118,51 @@ struct Slot {
     shared: Arc<InputShared>,
     /// The gain applied at the end of the previous block, where the next ramp starts.
     gain_now: f32,
+    /// Per bus slot, the send gain applied at the end of the previous block.
+    send_now: [f32; MAX_BUSES],
+    /// Per bus slot, the bus `send_now` was applied to. When the slot holds another
+    /// bus, the send starts again from silence.
+    send_bus: [u64; MAX_BUSES],
 }
 
-/// Adds and removes inputs while [`Mixer::poll`] runs on another thread.
+#[derive(Debug)]
+struct BusSlot {
+    id: u64,
+    shared: Arc<BusShared>,
+    /// The fader gain applied at the end of the previous block.
+    gain_now: f32,
+}
+
+/// Adds and removes inputs and buses while [`Mixer::poll`] runs on another thread.
 ///
-/// Cloning shares the command queue. [`Mixer::add_input`] is the same operation
-/// applied before it returns, for a mixer that is not running yet.
+/// Cloning shares the command queue. [`Mixer::add_input`] and [`Mixer::add_bus`] are
+/// the same operations applied before they return, for a mixer that is not running yet.
 #[derive(Clone)]
 pub struct MixerControl {
     plane: Arc<ControlPlane>,
 }
 
-/// The stereo mix bus and its inputs. Owned by the mixer thread.
+/// The stereo buses, the master among them, and their inputs. Owned by the mixer
+/// thread.
 #[derive(Debug)]
 pub struct Mixer {
     config: MixerConfig,
     timebase: Timebase,
     inputs: Vec<Slot>,
+    /// One entry per bus slot; slot 0 is always the master.
+    buses: Box<[Option<BusSlot>]>,
     commands: Receiver<Command>,
     plane: Arc<ControlPlane>,
-    bus: Arc<BusShared>,
-    bus_gain_now: f32,
+    master: Arc<BusShared>,
     /// The next block's first frame, once started.
     position: Option<i64>,
     scratch: Box<[[f32; 2]]>,
+    /// Each bus slot's sum, then its output: `block_frames` frames per slot.
     acc: Box<[[f32; 2]]>,
 }
 
 impl Mixer {
-    /// A mixer with no inputs.
+    /// A mixer with no inputs and only the master bus.
     ///
     /// # Errors
     /// [`AudioError::InvalidConfig`] when `config` doesn't [validate](MixerConfig::validate),
@@ -166,22 +182,24 @@ impl Mixer {
             config.sample_rate,
             config.ring_frames,
         ));
+        let master = Arc::new(BusShared::new());
+        let mut buses: Box<[Option<BusSlot>]> = (0..MAX_BUSES).map(|_| None).collect();
+        buses[0] = Some(BusSlot {
+            id: MASTER_ID,
+            shared: Arc::clone(&master),
+            gain_now: 1.0,
+        });
         Ok(Self {
             config,
             timebase,
             inputs: Vec::with_capacity(cmd::MAX_INPUTS),
+            buses,
             commands,
             plane,
-            bus: Arc::new(BusShared {
-                gain: GainParam::new(),
-                meter: Meter::default(),
-                blocks: Counter::default(),
-                skipped_frames: Counter::default(),
-            }),
-            bus_gain_now: 1.0,
+            master,
             position: None,
             scratch: vec![[0.0; 2]; config.block_frames].into_boxed_slice(),
-            acc: vec![[0.0; 2]; config.block_frames].into_boxed_slice(),
+            acc: vec![[0.0; 2]; MAX_BUSES * config.block_frames].into_boxed_slice(),
         })
     }
 
@@ -219,9 +237,43 @@ impl Mixer {
         }
     }
 
-    /// The bus's control handle.
+    /// Adds a bus and installs it before returning. A new bus has no sends: point
+    /// inputs at it with [`InputControl::set_send`]. Allocates: call it from the
+    /// control thread, or while setting the mixer up. While [`Self::poll`] runs on
+    /// another thread, use [`MixerControl::add_bus`].
+    ///
+    /// # Errors
+    /// [`AudioError::TooManyBuses`] past 16 buses (the master included), and
+    /// [`AudioError::CommandQueueFull`] when the mixer has not yet applied a full queue
+    /// of changes.
+    pub fn add_bus(&mut self) -> Result<BusControl, AudioError> {
+        let bus = self.control().add_bus()?;
+        self.apply_commands();
+        Ok(bus)
+    }
+
+    /// The master bus's control handle. Its output is the block [`Self::mix`] and
+    /// [`Self::poll`] write.
     pub fn bus(&self) -> BusControl {
-        BusControl::new(Arc::clone(&self.bus))
+        BusControl::new(
+            BusId::MASTER,
+            Arc::clone(&self.master),
+            Arc::clone(&self.plane),
+        )
+    }
+
+    /// Bus `bus`'s output for the last block mixed (interleaved stereo, post-fader), or
+    /// silence before the first. `None` when the mixer does not hold that bus: it was
+    /// removed, or the mixer has not applied its addition yet.
+    pub fn bus_block(&self, bus: BusId) -> Option<&[f32]> {
+        let slot = self.buses.get(bus.slot)?.as_ref()?;
+        if slot.id != bus.id {
+            return None;
+        }
+        let n = self.config.block_frames;
+        self.acc
+            .get(bus.slot * n..(bus.slot + 1) * n)
+            .map(<[[f32; 2]]>::as_flattened)
     }
 
     /// The configuration.
@@ -265,7 +317,7 @@ impl Mixer {
         let max_lag = (self.config.ring_frames / 2) as i64;
         let pos = if now.saturating_sub(due) > max_lag {
             let newest = start.saturating_sub(block);
-            self.bus
+            self.master
                 .skipped_frames
                 .add(newest.saturating_sub(pos).unsigned_abs());
             newest
@@ -285,9 +337,20 @@ impl Mixer {
         self.check_out(out)?;
         let n = self.config.block_frames;
         let end = frame.saturating_add(n as i64);
-        self.acc.fill([0.0; 2]);
-        for slot in &mut self.inputs {
-            let rep = slot.ring.read(frame, &mut self.scratch);
+        let Self {
+            inputs,
+            buses,
+            scratch,
+            acc,
+            ..
+        } = self;
+        for (bus, sum) in buses.iter().zip(acc.chunks_exact_mut(n)) {
+            if bus.is_some() {
+                sum.fill([0.0; 2]);
+            }
+        }
+        for slot in inputs.iter_mut() {
+            let rep = slot.ring.read(frame, scratch);
             slot.ring.set_read_pos(end);
             if rep.started {
                 slot.shared
@@ -295,29 +358,39 @@ impl Mixer {
                     .add((n - rep.valid.min(n)) as u64);
             }
             let target = slot.shared.gain.effective();
-            apply_gain(&mut self.scratch, slot.gain_now, target);
+            apply_gain(scratch, slot.gain_now, target);
             slot.gain_now = target;
-            let (peak, rms) = levels(&self.scratch);
+            let (peak, rms) = levels(scratch);
             slot.shared.meter.publish(peak, rms);
-            for (a, s) in self.acc.iter_mut().zip(self.scratch.iter()) {
-                a[0] += s[0];
-                a[1] += s[1];
-            }
-        }
-        let target = self.bus.gain.effective();
-        apply_gain(&mut self.acc, self.bus_gain_now, target);
-        self.bus_gain_now = target;
-        for (o, a) in out.chunks_exact_mut(2).zip(self.acc.iter_mut()) {
-            for c in 0..2 {
-                if !a[c].is_finite() {
-                    a[c] = 0.0;
+            for (k, (bus, sum)) in buses.iter().zip(acc.chunks_exact_mut(n)).enumerate() {
+                let Some(bus) = bus else { continue };
+                if slot.send_bus[k] != bus.id {
+                    slot.send_bus[k] = bus.id;
+                    slot.send_now[k] = 0.0;
                 }
-                o[c] = a[c];
+                let target = slot.shared.sends.target(k, bus.id);
+                add_with_gain(sum, scratch, slot.send_now[k], target);
+                slot.send_now[k] = target;
             }
         }
-        let (peak, rms) = levels(&self.acc);
-        self.bus.meter.publish(peak, rms);
-        self.bus.blocks.add(1);
+        for (bus, sum) in buses.iter_mut().zip(acc.chunks_exact_mut(n)) {
+            let Some(bus) = bus else { continue };
+            let target = bus.shared.gain.effective();
+            apply_gain(sum, bus.gain_now, target);
+            bus.gain_now = target;
+            for f in sum.iter_mut() {
+                for s in f.iter_mut() {
+                    if !s.is_finite() {
+                        *s = 0.0;
+                    }
+                }
+            }
+            let (peak, rms) = levels(sum);
+            bus.shared.meter.publish(peak, rms);
+            bus.shared.blocks.add(1);
+        }
+        // Slot 0 is the master.
+        out.copy_from_slice(acc[..n].as_flattened());
         self.position = Some(end);
         Ok(Block {
             frame,
@@ -326,8 +399,8 @@ impl Mixer {
         })
     }
 
-    /// Installs inputs the control plane queued, and retires the ones it removed.
-    /// Pushing stays within the capacity reserved in [`Mixer::new`].
+    /// Installs inputs and buses the control plane queued, and retires the ones it
+    /// removed. Pushing stays within the capacity reserved in [`Mixer::new`].
     fn apply_commands(&mut self) {
         while let Ok(command) = self.commands.try_recv() {
             match command {
@@ -341,15 +414,46 @@ impl Mixer {
                         ring.set_read_pos(pos);
                     }
                     let gain_now = shared.gain.effective();
+                    let send_bus: [u64; MAX_BUSES] = std::array::from_fn(|k| {
+                        self.buses[k].as_ref().map_or(NO_BUS, |bus| bus.id)
+                    });
+                    let send_now = std::array::from_fn(|k| shared.sends.target(k, send_bus[k]));
                     self.inputs.push(Slot {
                         id,
                         ring,
                         shared,
                         gain_now,
+                        send_now,
+                        send_bus,
                     });
                 }
                 Command::Remove(id) => self.retire_id(id),
+                Command::AddBus { slot, id, shared } => match self.buses.get_mut(slot) {
+                    Some(entry @ None) => {
+                        let gain_now = shared.gain.effective();
+                        *entry = Some(BusSlot {
+                            id,
+                            shared,
+                            gain_now,
+                        });
+                    }
+                    // The control plane only hands out free slots; refuse anything else.
+                    _ => self.plane.retirer().bus(shared),
+                },
+                Command::RemoveBus { slot, id } => self.retire_bus(slot, id),
             }
+        }
+    }
+
+    fn retire_bus(&mut self, slot: usize, id: u64) {
+        let Some(entry) = self.buses.get_mut(slot) else {
+            return;
+        };
+        if id == MASTER_ID || entry.as_ref().is_none_or(|bus| bus.id != id) {
+            return;
+        }
+        if let Some(bus) = entry.take() {
+            self.plane.retirer().bus(bus.shared);
         }
     }
 
@@ -386,12 +490,17 @@ impl Drop for Mixer {
                     self.plane.retirer().shared(shared);
                 }
                 Ok(Command::Remove(id)) => self.retire_id(id),
+                Ok(Command::AddBus { shared, .. }) => self.plane.retirer().bus(shared),
+                Ok(Command::RemoveBus { slot, id }) => self.retire_bus(slot, id),
                 Err(_) => break,
             }
         }
         for slot in self.inputs.drain(..) {
             self.plane.retirer().ring(slot.ring);
             self.plane.retirer().shared(slot.shared);
+        }
+        for bus in self.buses.iter_mut().filter_map(Option::take) {
+            self.plane.retirer().bus(bus.shared);
         }
     }
 }
@@ -413,6 +522,20 @@ impl MixerControl {
             InputControl::new(InputId(id), shared, ring, Arc::clone(&self.plane)),
         ))
     }
+
+    /// Adds a bus while the mixer is running. The mixer installs it at the start of its
+    /// next [`Mixer::poll`] or [`Mixer::mix`].
+    ///
+    /// # Errors
+    /// The same as [`Mixer::add_bus`].
+    pub fn add_bus(&self) -> Result<BusControl, AudioError> {
+        let (slot, id, shared) = self.plane.add_bus()?;
+        Ok(BusControl::new(
+            BusId { slot, id },
+            shared,
+            Arc::clone(&self.plane),
+        ))
+    }
 }
 
 /// Scales `frames` by a gain ramping linearly from `from` (before the first frame) to
@@ -432,6 +555,27 @@ fn apply_gain(frames: &mut [[f32; 2]], from: f32, to: f32) {
         let g = from + (to - from) * ((i + 1) as f32 / n);
         f[0] *= g;
         f[1] *= g;
+    }
+}
+
+/// Adds `src` scaled by a gain ramping linearly from `from` to `to` into `sum`, as
+/// [`apply_gain`] ramps. A send that is silent before and after costs nothing.
+fn add_with_gain(sum: &mut [[f32; 2]], src: &[[f32; 2]], from: f32, to: f32) {
+    if from == to {
+        if to == 0.0 {
+            return;
+        }
+        for (a, s) in sum.iter_mut().zip(src) {
+            a[0] += s[0] * to;
+            a[1] += s[1] * to;
+        }
+        return;
+    }
+    let n = src.len() as f32;
+    for (i, (a, s)) in sum.iter_mut().zip(src).enumerate() {
+        let g = from + (to - from) * ((i + 1) as f32 / n);
+        a[0] += s[0] * g;
+        a[1] += s[1] * g;
     }
 }
 
@@ -612,6 +756,175 @@ mod tests {
         assert_eq!(m.bus().stats().blocks, 4);
     }
 
+    fn assert_frames(block: &[f32], want: [f32; 2], what: &str) {
+        for f in block.chunks_exact(2) {
+            assert!(
+                (f[0] - want[0]).abs() < 1e-5 && (f[1] - want[1]).abs() < 1e-5,
+                "{what}: {f:?}, want {want:?}"
+            );
+        }
+    }
+
+    /// Sends are post-fader and each bus sums only what is sent to it, with its own
+    /// fader and mute, and meters its own output.
+    #[test]
+    fn sends_route_inputs_into_buses_after_the_fader() {
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        let (mut b, cb) = m.add_input(stereo48()).unwrap();
+        let aux = m.add_bus().unwrap();
+        assert_ne!(aux.id(), BusId::MASTER);
+        assert_eq!(
+            ca.send(BusId::MASTER),
+            Some(1.0),
+            "new inputs feed the master"
+        );
+        assert_eq!(ca.send(aux.id()), None, "a new bus has no sends");
+        feed(&mut a, 0.5, -0.5, 1.0);
+        feed(&mut b, 0.25, 0.25, 1.0);
+        ca.set_gain(2.0);
+        ca.set_send(aux.id(), 0.5);
+        cb.set_send_db(aux.id(), 0.0);
+        assert!(cb.remove_send(BusId::MASTER));
+        assert!(!cb.remove_send(BusId::MASTER));
+        let mut out = vec![0.0; 960];
+        m.mix(40_000, &mut out).unwrap(); // ramps
+        m.bus().take_meter();
+        aux.take_meter();
+        m.mix(40_480, &mut out).unwrap();
+        assert_frames(&out, [1.0, -1.0], "master");
+        assert_eq!(m.bus_block(BusId::MASTER).unwrap(), &out[..]);
+        let want = [0.5 + 0.25, -0.5 + 0.25];
+        assert_frames(m.bus_block(aux.id()).unwrap(), want, "aux");
+        let meter = aux.take_meter();
+        assert!((meter.peak[1] - 0.25).abs() < 1e-5 && (meter.rms[0] - 0.75).abs() < 1e-5);
+        // The input meter is post-fader, before the sends.
+        assert!((ca.take_meter().peak[0] - 1.0).abs() < 1e-5);
+
+        // A muted source feeds no bus; a bus fader touches only its own output.
+        ca.set_muted(true);
+        aux.set_gain(2.0);
+        m.mix(40_960, &mut out).unwrap();
+        m.mix(41_440, &mut out).unwrap();
+        assert_frames(&out, [0.0, 0.0], "master with its only input muted");
+        assert_frames(m.bus_block(aux.id()).unwrap(), [0.5, 0.5], "aux");
+        aux.set_muted(true);
+        m.mix(41_920, &mut out).unwrap();
+        m.mix(42_400, &mut out).unwrap();
+        assert_frames(m.bus_block(aux.id()).unwrap(), [0.0, 0.0], "muted aux");
+        assert_eq!(aux.stats().blocks, 6);
+        assert_eq!(m.bus().stats().blocks, 6);
+    }
+
+    /// A send that starts ramps up from silence over one block, and one that is removed
+    /// ramps down to it, so routing changes don't click.
+    #[test]
+    fn sends_ramp_in_and_out() {
+        let mut m = Mixer::new(config(4)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        let aux = m.add_bus().unwrap();
+        feed(&mut a, 1.0, 1.0, 1.0);
+        let mut out = vec![0.0; 8];
+        m.mix(40_000, &mut out).unwrap();
+        assert_frames(m.bus_block(aux.id()).unwrap(), [0.0, 0.0], "no send yet");
+        ca.set_send(aux.id(), 1.0);
+        m.mix(40_004, &mut out).unwrap();
+        let ramp: Vec<f32> = m
+            .bus_block(aux.id())
+            .unwrap()
+            .iter()
+            .step_by(2)
+            .copied()
+            .collect();
+        assert_eq!(ramp, [0.25, 0.5, 0.75, 1.0]);
+        m.mix(40_008, &mut out).unwrap();
+        assert_frames(m.bus_block(aux.id()).unwrap(), [1.0, 1.0], "steady");
+        assert!(ca.remove_send(aux.id()));
+        m.mix(40_012, &mut out).unwrap();
+        let ramp: Vec<f32> = m
+            .bus_block(aux.id())
+            .unwrap()
+            .iter()
+            .step_by(2)
+            .copied()
+            .collect();
+        assert_eq!(ramp, [0.75, 0.5, 0.25, 0.0]);
+        // The master was untouched throughout.
+        assert_frames(&out, [1.0, 1.0], "master");
+    }
+
+    /// Removing a bus drops it from the mix; its slot can go to a new bus, which the
+    /// old bus's sends do not reach. The master can't be removed, and the mixer holds
+    /// at most 16 buses.
+    #[test]
+    fn buses_are_added_and_removed_while_the_mixer_runs() {
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        feed(&mut a, 0.5, 0.5, 1.0);
+        let ops = m.control();
+        let aux = std::thread::spawn(move || ops.add_bus().unwrap())
+            .join()
+            .unwrap();
+        assert_eq!(
+            m.bus_block(aux.id()),
+            None,
+            "not installed before the next block"
+        );
+        ca.set_send(aux.id(), 1.0);
+        let mut out = vec![0.0; 960];
+        m.mix(40_000, &mut out).unwrap();
+        m.mix(40_480, &mut out).unwrap();
+        assert_frames(m.bus_block(aux.id()).unwrap(), [0.5, 0.5], "aux");
+        let shared = Arc::downgrade(&aux.shared_for_test());
+
+        assert!(!m.bus().remove(), "the master stays");
+        assert!(aux.remove());
+        assert!(!aux.remove());
+        m.mix(40_960, &mut out).unwrap();
+        assert_eq!(m.bus_block(aux.id()), None);
+        assert_frames(&out, [0.5, 0.5], "master");
+
+        let next = m.add_bus().unwrap();
+        assert_eq!(next.id().slot, aux.id().slot, "the freed slot is reused");
+        assert_ne!(next.id(), aux.id());
+        m.mix(41_440, &mut out).unwrap();
+        assert_frames(
+            m.bus_block(next.id()).unwrap(),
+            [0.0, 0.0],
+            "old send leaked",
+        );
+        assert_eq!(ca.send(next.id()), None);
+
+        // The removed bus's state is freed on the collector once its handle is gone.
+        drop(aux);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while shared.upgrade().is_some() {
+            assert!(std::time::Instant::now() < deadline, "bus state leaked");
+            std::thread::yield_now();
+        }
+
+        let mut extra = Vec::new();
+        while extra.len() < 14 {
+            extra.push(m.add_bus().unwrap());
+        }
+        assert!(matches!(m.add_bus(), Err(AudioError::TooManyBuses)));
+        assert!(extra[0].remove());
+        assert!(m.add_bus().is_ok());
+    }
+
+    /// A new input's sends start at their gains, like its fader: its first block
+    /// reaches the master at full level rather than ramping in from silence.
+    #[test]
+    fn a_new_input_feeds_the_master_from_its_first_block() {
+        let mut m = Mixer::new(config(4)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        feed(&mut a, 1.0, 1.0, 1.0);
+        let mut out = vec![0.0; 8];
+        m.mix(40_000, &mut out).unwrap();
+        assert_frames(&out, [1.0, 1.0], "first block at full level");
+        assert_eq!(ca.stats().underrun_frames, 0);
+    }
+
     #[test]
     fn gain_ramps_across_one_block() {
         let mut frames = [[1.0f32; 2]; 4];
@@ -620,6 +933,11 @@ mod tests {
         let mut frames = [[1.0f32; 2]; 2];
         apply_gain(&mut frames, 0.5, 0.5);
         assert_eq!(frames, [[0.5; 2]; 2]);
+        let mut sum = [[1.0f32; 2]; 4];
+        add_with_gain(&mut sum, &[[1.0; 2]; 4], 1.0, 0.0);
+        assert_eq!(sum.map(|f| f[1]), [1.75, 1.5, 1.25, 1.0]);
+        add_with_gain(&mut sum, &[[1.0; 2]; 4], 0.0, 0.0);
+        assert_eq!(sum.map(|f| f[1]), [1.75, 1.5, 1.25, 1.0]);
     }
 
     /// Reading where the input has no data is silence, counted as underrun once the

@@ -1,4 +1,5 @@
-//! Control-plane handles: gains, mutes, meters and counters of the inputs and the bus.
+//! Control-plane handles: faders, mutes, sends, meters and counters of the inputs and
+//! the buses.
 //! Every method is a few atomic operations, so the control thread never waits on a
 //! real-time thread and vice versa (docs/RULES.md#R-RT-003).
 
@@ -6,9 +7,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use crate::MeterReading;
+use crate::rt::bus::{BusShared, MASTER_ID};
 use crate::rt::cmd::ControlPlane;
 use crate::rt::input::InputShared;
-use crate::rt::mixer::BusShared;
 use crate::rt::ring::FrameRing;
 use crate::rt::shared::db_to_gain;
 
@@ -16,7 +17,26 @@ use crate::rt::shared::db_to_gain;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct InputId(pub(crate) u64);
 
-/// Controls and observes one mixer input. Cheap to clone; every clone controls the
+/// One mixer's bus. Opaque: [`BusControl::id`] produces one, and [`BusId::MASTER`]
+/// names the master bus. Ids are never reused within a mixer, so the id of a removed
+/// bus never names a later one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct BusId {
+    /// The mixer's buffer slot for the bus.
+    pub(crate) slot: usize,
+    pub(crate) id: u64,
+}
+
+impl BusId {
+    /// The master bus: every mixer has it, and every new input sends to it at 0 dB.
+    pub const MASTER: Self = Self {
+        slot: 0,
+        id: MASTER_ID,
+    };
+}
+
+/// Controls and observes one mixer input: the source's fader and mute, and its row of
+/// the send matrix. Cheap to clone; every clone controls the
 /// same input.
 ///
 /// It also holds a reference to everything the input's audio thread and the mixer
@@ -59,8 +79,8 @@ impl InputControl {
         self.plane.remove(self.id.0)
     }
 
-    /// Sets the input's gain into the bus (its send), linear. Clamped to 0..=+24 dB; NaN
-    /// is ignored. The mixer ramps to it over one block.
+    /// Sets the input's fader, linear, applied before its sends. Clamped to 0..=+24 dB;
+    /// NaN is ignored. The mixer ramps to it over one block.
     pub fn set_gain(&self, gain: f32) {
         self.shared.gain.set(gain);
     }
@@ -75,7 +95,7 @@ impl InputControl {
         self.shared.gain.get()
     }
 
-    /// Mutes or unmutes the input, keeping its gain.
+    /// Mutes or unmutes the input, keeping its gain. A muted input feeds no bus.
     pub fn set_muted(&self, muted: bool) {
         self.shared.gain.set_muted(muted);
     }
@@ -83,6 +103,30 @@ impl InputControl {
     /// Whether the input is muted.
     pub fn muted(&self) -> bool {
         self.shared.gain.muted()
+    }
+
+    /// Sends the input into `bus` (post-fader) at `gain`, linear, or changes that
+    /// send's gain. Clamped to 0..=+24 dB; NaN changes nothing. The mixer ramps to it
+    /// over one block, from silence for a new send. A send to a bus that is later
+    /// removed does nothing. `bus` must belong to this input's mixer.
+    pub fn set_send(&self, bus: BusId, gain: f32) {
+        self.shared.sends.set(bus.slot, bus.id, gain);
+    }
+
+    /// [`Self::set_send`] in dB (`-inf` keeps the send, silent).
+    pub fn set_send_db(&self, bus: BusId, db: f32) {
+        self.set_send(bus, db_to_gain(db));
+    }
+
+    /// Stops sending the input into `bus`; the mixer ramps the send out over one block.
+    /// False when there was no such send.
+    pub fn remove_send(&self, bus: BusId) -> bool {
+        self.shared.sends.clear(bus.slot, bus.id)
+    }
+
+    /// The linear gain of the input's send into `bus`, if it has one.
+    pub fn send(&self, bus: BusId) -> Option<f32> {
+        self.shared.sends.get(bus.slot, bus.id)
     }
 
     /// The input's post-gain levels; restarts the held peak.
@@ -163,18 +207,38 @@ pub struct InputStats {
     pub failed: bool,
 }
 
-/// Controls and observes the mix bus. Cheap to clone.
+/// Controls and observes one bus: its fader, mute, meter and counters. Cheap to clone;
+/// every clone controls the same bus.
 #[derive(Clone, Debug)]
 pub struct BusControl {
+    id: BusId,
     shared: Arc<BusShared>,
+    plane: Arc<ControlPlane>,
 }
 
 impl BusControl {
-    pub(crate) fn new(shared: Arc<BusShared>) -> Self {
-        Self { shared }
+    pub(crate) fn new(id: BusId, shared: Arc<BusShared>, plane: Arc<ControlPlane>) -> Self {
+        Self { id, shared, plane }
     }
 
-    /// Sets the bus's output gain, linear. Clamped to 0..=+24 dB; NaN is ignored.
+    #[cfg(test)]
+    pub(crate) fn shared_for_test(&self) -> Arc<BusShared> {
+        Arc::clone(&self.shared)
+    }
+
+    /// This bus's id, for [`InputControl::set_send`].
+    pub fn id(&self) -> BusId {
+        self.id
+    }
+
+    /// Removes this bus. The mixer drops it on its next block; sends into it stop
+    /// counting. False for the master bus, for a bus already removed, or when the
+    /// command queue could not take the removal (the bus stays).
+    pub fn remove(&self) -> bool {
+        self.plane.remove_bus(self.id.slot, self.id.id)
+    }
+
+    /// Sets the bus's fader, linear, applied after the sum. Clamped to 0..=+24 dB; NaN is ignored.
     pub fn set_gain(&self, gain: f32) {
         self.shared.gain.set(gain);
     }
@@ -208,13 +272,13 @@ impl BusControl {
     }
 }
 
-/// The bus's counters since the mixer was created.
+/// A bus's counters since it was added (for the master, since the mixer was created).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct BusStats {
     /// Blocks mixed.
     pub blocks: u64,
     /// Engine frames skipped because the mixer fell more than half a ring behind the
-    /// clock.
+    /// clock. Counted on the master bus only; every bus skips the same frames.
     pub skipped_frames: u64,
 }
