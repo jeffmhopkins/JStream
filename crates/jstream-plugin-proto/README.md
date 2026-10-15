@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-plugin-proto/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-plugin-proto", "docs/adr/0035-clap-plugins-out-of-process.md#decision"]
-verified = { hash = "b3:a128cf22c4b387f4", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 part 2 (#272 review N1): re-read; new 'One filter per block' paragraph states the contract HostFilter relies on (blocks numbered from 0, latency fixed at build, restart re-inits the block and rebuilds the filter); rest unchanged" }
 -->
 
 Layer-0 contract between the engine's mixer and the out-of-process CLAP plugin host

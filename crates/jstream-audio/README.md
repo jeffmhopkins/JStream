@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:6db1aae17b72a124", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "merge-only (main at d813d07): text is main's (activity gain, mixer-tagged buses); stale only via this PR's crate-map plugin-clap row, which this section doesn't describe; insert_host_filter bullet unchanged; holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -185,7 +184,6 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:d06627ad202b90d8", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: main's text plus D6's 'activity gains' in the mixer thread's work; holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -410,7 +408,6 @@ Run it on the target machine with
 <!-- @section
 covers = ["crates/jstream-audio/src/meter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:f77ce7451ac1f6e0", by = "agent:claude@session_01MYuHTvXyZdeQGrKJhs9Htz", note = "New section, checked against src/meter/: filter length, cutoff and measured phase agreement, 100 ms steps and windows, gates, 0.02 LU histogram range and size, rate rule, and the tests listed; ADR-0028 decision (4x true peak, momentary/short-term/integrated, allocation-free, reset action) matches" }
 -->
 
 `src/meter/` holds the broadcast meters
@@ -465,7 +462,6 @@ true-peak cases from files) are not run; they would add binary fixtures.
 <!-- @section
 covers = ["crates/jstream-audio/src/filter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:a5b7e32b71b1656a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1 (N2): re-read; no_alloc sentence now separates the master bus's own chain from the master chain and output tap chain, and Not yet says the kernels' cost is what's measured" }
 -->
 
 `src/filter/` holds the audio filter kernels

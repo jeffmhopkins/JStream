@@ -21,7 +21,6 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:7b89ede4cb2ec0e6", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "#276 review N1/N4: docs progress now matches an item named as the first word of a title group (CL1 part 1) and flags only review items whose PRs all merged; percentages round. Generated-content bullet still holds" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -31,14 +30,14 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   references (links, anchors, registered external URLs, superseded ADRs, `depends_on`), and
   facts. It runs as the `docs` CI check.
 - **Hash-bound verification** ([Hash-bound verification](#verification)): `docs check`
-  fails on any section whose stored hash no longer matches its text, covered files and
-  dependencies, and `cargo xtask docs verify` records a re-read. Every `bootstrap`
-  placeholder was replaced, each after a re-read, in the PR that added hashing. Hashes
-  skip metadata blocks, `depends_on` can name one table row, and `cargo xtask docs rehash`
-  is the one-time migration to that rule
+  fails on any section whose stamp no longer matches its text, covered files and
+  dependencies, and `cargo xtask docs verify` records a re-read. Hashes skip metadata
+  blocks and `depends_on` can name one table row
   ([ADR-0039](adr/0039-hash-ignores-metadata-and-row-dependencies.md)). A `covers` entry
   can hash manifests as their `#jstream-meta` view
-  ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)).
+  ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)). Stamps are one entry per
+  input in `docs/verified.toml`, and `cargo xtask docs migrate` moved the inline ones there
+  ([ADR-0053](adr/0053-per-input-verification-ledger.md)).
 - **Unmatched globs** ([R-DOC-012](RULES.md#R-DOC-012)): `covers` globs that match no
   tracked file fail (warn in drafts; retired docs are exempt); `applies_to` globs are
   checked for validity only. `verify` refuses while untracked files match the section's
@@ -59,8 +58,8 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `cargo xtask docs log` derives a doc's or section's history from git, and
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
-  `origin/main`, resolves conflicts that are only between `verified` stamps, and lists
-  the sections left stale.
+  `origin/main`, resolves conflicts that are only between stamps, moves inline stamps a
+  branch from before ADR-0053 still has, and lists the sections left stale.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -127,7 +126,6 @@ Every `##` heading in a tracked doc (except ADRs) is a **section**. It is writte
 <!-- @section
 covers = ["crates/jstream-render/src/compositor/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md#decision", "docs/RULES.md#R-RT-002"]
-verified = { hash = "b3:4f1c9a0e7d2b8c61", by = "agent:claude@<session-url>", note = "…" }
 -->
 ```
 
@@ -151,7 +149,9 @@ verified = { hash = "b3:4f1c9a0e7d2b8c61", by = "agent:claude@<session-url>", no
   (`docs/ARCHITECTURE.md#crate-map/jstream-core`, or `…#crate-map/apps/*` for the apps),
   so editing one row doesn't stale every crate. No matching row, or more than one, is a
   broken reference ([ADR-0039](adr/0039-hash-ignores-metadata-and-row-dependencies.md)).
-- `verified` is required when either `covers` or `depends_on` is set.
+- A section with `covers` or `depends_on` needs a stamp in `docs/verified.toml`, written by
+  `cargo xtask docs verify` ([Hash-bound verification](#verification)). A `verified` key in
+  the `@section` block is the old inline stamp and fails the check.
 - A `###` belongs to its `##`. Rules are the exception: they are `###` headings with their
   own anchor and an `@rule` block (see [Rules](#rules)).
 - ADRs use the fixed anchored headings `context`, `decision` and `consequences`, with
@@ -233,16 +233,20 @@ It lists:
 <!-- @section
 -->
 
-`verified.hash` is a BLAKE3 digest (16 hex chars, `b3:` prefix) over:
+A section's **stamp** is one entry per input in [`docs/verified.toml`](verified.toml),
+the ledger ([ADR-0053](adr/0053-per-input-verification-ledger.md)). Each entry holds a
+BLAKE3 digest (16 hex chars, `b3:` prefix) of its input as it was when the section was last
+verified against a change to it. The inputs, and their keys, are:
 
-1. the section's body text, normalized (metadata blocks removed, LF line endings,
+1. `body`: the section's body text, normalized (metadata blocks removed, LF line endings,
    trailing whitespace stripped);
-2. for each git-tracked file matched by `covers`, in sorted order: its path plus a hash
-   of its contents. In Markdown files, metadata blocks are removed first. In workflow
+2. `file:<path>`: each git-tracked file matched by `covers`, hashed by its contents. In
+   Markdown files, metadata blocks are removed first. In workflow
    files (`.github/workflows/`), the commit SHA and version comment of `uses:` pins are
    ignored, so Dependabot pin bumps don't make the specifying doc stale
    ([ADR-0018](adr/0018-ci-supply-chain-policy.md)). A file matched only through
-   `#jstream-meta` entries contributes the hash of its **jstream view** instead: its
+   `#jstream-meta` entries contributes the hash of its **jstream view** instead, under the
+   key `file:<path>#jstream-meta`: its
    `package.name`, its whole `[package.metadata.jstream]` table, and every entry of
    `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]` and their
    `[target.<cfg>.…]` variants whose key or `package =` value starts with `jstream-`,
@@ -250,8 +254,8 @@ It lists:
    count. A file that isn't a `Cargo.toml` or doesn't parse is hashed whole, and so is
    one that a plain entry also matches
    ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md));
-3. for each `depends_on` target: its reference plus a hash of its normalized body
-   (metadata blocks removed), or of its one row for a `path#anchor/<key>` reference. A
+3. `dep:<reference>`: each `depends_on` target, hashed by its normalized body (metadata
+   blocks removed), or by its one row for a `path#anchor/<key>` reference. A
    rule anchor (`RULES.md#R-…`) names the rule's text, up to the next rule or section. A
    whole-ADR target's body also leaves out its generated `adr-status` banner, so a status
    change alone doesn't make its dependents stale ([Generated content](#generated)).
@@ -265,49 +269,64 @@ after its marker, one in a code fence and one that isn't valid TOML, so text can
 from the hash by posing as metadata
 ([ADR-0039](adr/0039-hash-ignores-metadata-and-row-dependencies.md)).
 
-So the verification is stale as soon as **any** content among these changes: the
-section, a covered file (including a file being added, removed or renamed), or a section
-(or row) it depends on.
+A section is fresh when its stamp names exactly its current inputs, each with its current
+hash. So it is stale as soon as **any** content among these changes: the section, a
+covered file (including a file being added, removed or renamed), or a section (or row) it
+depends on.
 That means:
 - **No merge-base logic is needed.** Staleness is a pure function of the tree, so squash
   merges, rebases and merges from `main` all behave the same.
-- **An edit made after a verify is caught**, because the hash no longer matches.
-- **Propagation is exactly one hop.** A dependent's hash includes its target's text,
-  but not the target's covered files. A verify-only change edits only metadata, which
-  is excluded from every hash (own body, covered Markdown and dependencies alike), so it
-  never makes another section stale.
-- **Parallel PRs only conflict when they re-verify the same section**, which is a real
-  semantic conflict. After merging `main`, the hash is recomputed and the section may
-  need re-verifying against the combined change. That is correct.
+- **An edit made after a verify is caught**, because an entry no longer matches.
+- **Propagation is exactly one hop.** A dependent's `dep:` entry hashes its target's
+  text, but not the target's covered files. A verify changes only the ledger, which no
+  section can cover, so it never makes another section stale.
+- **A merge never leaves a section falsely fresh; a conflict usually leaves it stale.**
+  `docs verify` writes only the entries whose input changed or is new (they take its `by`
+  and `note`; the others keep theirs) and drops removed ones; with nothing changed it
+  writes nothing. Every entry is a `["DOC-ID#anchor"."<input>"]` header, which doesn't
+  change while the input exists, then one `stamp` line and a blank line, the last entry's
+  included. The headers and blank lines anchor git's diff, so parallel PRs that change
+  different inputs of a section usually merge with it fresh. When the ledger conflicts,
+  `docs merge-main` (below) takes main's side, which usually leaves the section stale for
+  a re-read after merging `main`.
+- **The ledger is generated.** Only `docs verify` (and `docs migrate`) writes it, in
+  sorted, canonical form; `docs check` fails on any other form, and on an inline
+  `verified` key in an `@section` block. A stamp for a section that no longer needs one
+  is reported as a warning, and the next `docs verify` or `docs migrate` drops it.
 
 Commands:
 
 ```sh
 cargo xtask docs check                         # what is stale, and why
 cargo xtask docs verify ARCH#gpu-pipeline \
-    --by agent:claude --note "…"                # re-read (or edited) and it holds: write new hash
+    --by agent:claude --note "…"                # re-read (or edited) and it holds: restamp it
 cargo xtask docs review ARCH \
     --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
 cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
 cargo xtask docs merge-main                    # merge origin/main; stamp-only conflicts take main's
-cargo xtask docs rehash                        # one-time ADR-0039 migration (below)
+cargo xtask docs migrate                       # move inline stamps to the ledger (below)
 ```
 
-`docs merge-main` fetches and merges `origin/main` into a clean working tree. A conflict
-whose two sides are only `verified` lines inside `@section` blocks takes main's line,
-because the section has to be re-read against the combined change whichever stamp is
-kept. Any other conflict, including one in a file that also has stamp conflicts, is left
-exactly as git wrote it, and the merge stays open for you to finish by hand. When every
-conflict was a stamp conflict it commits the merge and prints the sections that are now
-stale, for `docs verify` after a re-read.
+`docs merge-main` fetches and merges `origin/main` into a clean working tree. Every
+conflict in the ledger takes main's side: a merge never leaves a section falsely fresh,
+and a conflict usually leaves it stale, for a re-read. The result must parse, and is
+rewritten in canonical form. In a doc, a conflict whose two sides are only inline `verified` lines
+inside `@section` blocks (either side may have none, as when `main` moved them to the
+ledger) takes main's side too. Any other conflict, including one in a file that also has
+stamp conflicts, is left exactly as git wrote it, and the merge stays open for you to
+finish by hand. When every conflict was a stamp conflict it commits the merge, runs
+`docs migrate` and commits what that changed separately, and prints the sections that are
+now stale, for `docs verify` after a re-read.
 
-`docs rehash` moved stored hashes to the rule above when it was introduced. It rewrites
-a section's `hash` (keeping `by` and `note`) only when the stored hash is what the
-previous rule (metadata hashed, row references read as their whole section) computes for
-the current tree, or what this rule computes with row references read as their whole
-section. It decides every section against the unchanged tree before writing, so it
-can't restamp a stale section: those stay stale until someone re-reads and verifies them.
+`docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
+whose hash is still what the inline rule (one hash over all the inputs above) computes
+for the tree becomes a ledger stamp of the current inputs, with its `by` and `note` on
+`body`. One that no longer matches is dropped and not moved, so the section stays stale
+until someone re-reads and verifies it. It decides every section against the unchanged
+tree before writing, drops stamps of sections that no longer need one, and rewrites the
+ledger in canonical form. It replaced `docs rehash`, the one-time migration to ADR-0039's
+rule.
 
 <a id="history"></a>
 ## History, revisions and dates
@@ -319,8 +338,11 @@ Nothing about history is stored in the files. `xtask docs log` derives it from g
 - **Revision n** of a section is the n-th commit on `main` that changed its normalized
   body.
 - **Date, author and PR** come from that squash-merge commit.
-- **Verifications** are the commits that changed its `verified` line, with the note. A
-  commit that changed only the stored hash (`docs rehash`) is shown as a restamp.
+- **Verifications** are the commits that changed its entries in `docs/verified.toml`, with
+  the `by` and note of the first changed entry that has them (or, before
+  [ADR-0053](adr/0053-per-input-verification-ledger.md), its inline `verified` line). A
+  commit that changed the stamp without a new `by` and note (`docs migrate`, or a merge
+  that took main's entry) is shown as a restamp.
 - **Reviews** of a whole doc are the commits that changed its `reviewed` line. The log of
   a doc also shows its TTL: when the clock last restarted and when the doc is due.
 
@@ -340,7 +362,9 @@ so it never causes merge conflicts.
 
 `xtask docs check` runs on every PR (required check `docs`) and fails on:
 
-1. **Stale verifications:** any section whose computed hash differs from its stored one.
+1. **Stale verifications:** any section whose stamp in `docs/verified.toml` doesn't name
+   exactly its current inputs and hashes (the message lists the inputs that differ), any
+   inline `verified` stamp, and a ledger that doesn't parse or isn't in canonical form.
 2. **Unmatched globs:** any `covers` glob that matches no tracked file, unless the doc is
    `status = "draft"` (a warning then) or `status = "retired"` (exempt). `applies_to`
    globs only need to be valid: rules may name crates that don't exist yet
@@ -380,6 +404,13 @@ holds**. The note says what was checked and why it still holds, e.g.:
   against the diff. A note that doesn't engage with what changed is a blocking finding.
   A stock-phrase list alone is too easy to game.
 - A false verification is a bug, and gets fixed and noted like one.
+- A later `docs verify` of the same section in the same PR replaces the `by` and `note`
+  of every entry whose input changed since the previous verify. An earlier note on such an
+  entry survives only in git history (`docs log`), so the last note on each entry must
+  cover the PR's whole change to that input: it is the one the reviewer reads.
+- A verify that only drops removed inputs, or finds no input changed, records no `by` or
+  `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. Say in
+  the PR what you re-read after removing a covered file.
 - The sweep is to report each section's verify-to-edit ratio from git (not built yet,
   see [Time-based review](#ttl)). A section that gets
   re-verified far more often than it is edited has `covers` that are too broad, so
@@ -389,7 +420,6 @@ holds**. The note says what was checked and why it still holds, e.g.:
 ## Time-based review
 <!-- @section
 covers = [".github/workflows/sweep.yml"]
-verified = { hash = "b3:5c33e486425c55a6", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "Re-read against sweep.yml: new Roadmap progress step runs xtask docs progress (full history from fetch-depth 0) into the issue; added its bullet; deny, docs-due, update dry-run, override audit, one pinned issue and not-built list unchanged" }
 -->
 
 Docs also go stale when nothing in the repo changes. **Time-based checks never fail a PR.**
@@ -533,7 +563,6 @@ It also generates one block from data rather than from docs:
 <!-- @section
 covers = ["xtask/src/governance.rs", ".github/workflows/governance.yml"]
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:7ca174a635f9f963", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for ADR-0038 renumbered from 0036: governance.rs strips only one-'> '-line adr-status blocks from accepted ADRs before comparing; accepted-ADR and Status banner bullets match, protected list unchanged" }
 -->
 
 An agent could pass the gate by weakening it. These changes are **governance changes**,
@@ -609,7 +638,6 @@ disables the check, only review and the weekly audit stand behind it.
 <!-- @section
 covers = ["xtask/src/lint_deps.rs"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003", "docs/RULES.md#R-ARCH-005", "docs/RULES.md#R-UNSAFE-001", "docs/RULES.md#R-DEP-002", "docs/RULES.md#R-DEP-003"]
-verified = { hash = "b3:d8b2d33589c46f71", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 part 2: re-read against lint_deps.rs after rustfmt: unsafe bullet names the CLAP wrapper on the allowlist and the plugin_clap_users check (only jstream-plugin-host reaches jstream-plugin-clap, path in the finding, tested); clients check moved onto the shared path_to helper, behaviour unchanged" }
 -->
 
 `cargo xtask lint-deps` (CI check `lint-deps`) checks the rules whose `enforced_by` names

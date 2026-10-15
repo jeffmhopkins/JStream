@@ -17,7 +17,6 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +35,6 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:336b7adb18bc9d53", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -100,7 +98,6 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:e5ef4614b0ffbc23", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
