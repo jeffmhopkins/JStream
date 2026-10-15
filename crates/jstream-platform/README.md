@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:dced6f456fb87678", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (Y1, E1, C1a) into C4b: main's text unchanged here; re-read with C4b's Not yet (MfVideoDevices/MfMjpegDecoder exist, not in Backends; CaptureStats decode count; MJPEG Codec variant); Secret and OAuthTokenStore, which jstream-youtube relies on, unchanged" }
+verified = { hash = "b3:4d07ed3b696066de", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (H7b ADR-0042) into H1: re-read the section; main's text kept; the IDs and errors bullet's MissingComponent addition matches error.rs and nothing else in the section depends on it" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -102,7 +102,8 @@ Contents:
   codec and GPU-interop backends and its optional virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
-  (`HRESULT`, `OSStatus`, `errno`).
+  (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
+  as Media Foundation on a Windows N edition) says what the user must install.
 - **Fakes** (`fake.rs`, feature `fake`): deterministic in-memory backends for engine and
   scenario tests ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): `FakeClock` (time moves
   only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and

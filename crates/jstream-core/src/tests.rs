@@ -5,6 +5,7 @@
 
 mod collection;
 mod history;
+mod sources;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
