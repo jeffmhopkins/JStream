@@ -63,4 +63,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0050](0050-3d-transforms-rendering.md) | Drawing 3D item transforms | accepted | agent |  |
 | [ADR-0051](0051-youtube-without-a-required-oauth-client.md) | YouTube v4: no required OAuth client | accepted | maintainer |  |
 | [ADR-0053](0053-per-input-verification-ledger.md) | Per-input verification stamps in one ledger file | accepted | agent |  |
+| [ADR-0054](0054-platform-ci-after-review.md) | Run the Windows, macOS and end-to-end CI jobs after review | accepted | agent |  |
 <!-- @generated end adr-index -->
