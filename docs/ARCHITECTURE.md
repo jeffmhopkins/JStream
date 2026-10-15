@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:bcf5d3053a8f0044", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: Hosts table desktop row adds the first cut (Windows, WebView2, fresh in-memory token handed to the page) with a README link; diagram and the new apps/jstream-desktop/src/main.rs (a thin entry point) fit the shape" }
+verified = { hash = "b3:2b244546dfef74f8", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Crate-map daemon row (N3) now says the daemon registers and publishes the virtual camera via a virtual_cam output, matching serve.rs windows_backends" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:bcf5d3053a8f0044", by = "agent:claude@session_01D6iWjpMk
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:928b559944b79c2d", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: re-read; jstream-plugin-proto row now matches its new manifest summary (layer 0, no unsafe); lint-deps passes; plugin-clap and plugin-host rows stay planned" }
+verified = { hash = "b3:b565e139a0c83a2b", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: re-read; added the jstream-ui-e2e row (layer 6, test-only harness under crates/jstream-ui/tests/e2e/mock-daemon, depends on control+server, no unsafe); lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -155,6 +155,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
+| 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
@@ -166,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:f524cd0416ff55b7", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; B7 Source/Filter rows, Filters bullet, Built so far and Not yet merged with main's ADR-0030 dependency; holds" }
+verified = { hash = "b3:4d380df8b9958fec", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (G3b #213): re-read; B7 Source/Filter rows and Filters bullet beside main's VirtualCam output text; ADR-0026 dependency kept; holds" }
 -->
 
 ```
@@ -378,7 +379,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `compressor`, `limiter`, `delay`). No video filter kind is built in yet.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
-  container: mp4 }`, the path checked to be absolute and to end in a file name. A stream
+  container: mp4 }`, the path checked to be absolute and to end in a file name, or
+  `VirtualCam`, which has no settings and ignores its profile. A stream
   key is never collection state: it lives in the OS credential store
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
   H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
@@ -391,7 +393,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   geometry, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses and chains, the
-  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
+  `YouTube` kind, and everything outside `sources`, `scenes`,
   `outputs` and `encoders`. The collection file saves everything built so
   far, encoder profiles, each output's profile and `duplicated_from` included
   ([Persistence](#persistence)).
@@ -539,7 +541,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f0f3aad0184ad054", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Edits bullet's opacity/blend and filter edits sit beside main's scene.switch text; no version number until the queue bump; holds" }
+verified = { hash = "b3:01075f248f4782e2", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (G3b #213): re-read; B7 edits bullet beside main's virtual_cam 0.18 sentence; B7 names no version until its queue bump; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -558,7 +560,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
+  `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
@@ -670,7 +673,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:2f74f99cfb552b17", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; tool list has filter and studio; tools.snap is now 181142 bytes, text says about 181 KB; holds" }
+verified = { hash = "b3:d7965698ca1720f8", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (G3b #213): re-read; tools.snap is now 182774 bytes, text says about 183 KB; tool list holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -684,7 +687,7 @@ verified = { hash = "b3:2f74f99cfb552b17", by = "agent:claude@session_01BL6HM3DJ
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 181 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 183 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -714,7 +717,7 @@ verified = { hash = "b3:2f74f99cfb552b17", by = "agent:claude@session_01BL6HM3DJ
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:410f63811da049ee", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V2 multi-pass filters; apply_filter still draws one Rgba16Float image into another of the reported size; holds" }
+verified = { hash = "b3:9e9a89ce5f63e412", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V2: re-read; the merge changes no text here, filters still draw one premultiplied image into one of the filter's output_size, chain runtime unbuilt; holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -875,7 +878,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:2e69a6274102064a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; kind_version refusal for filters, opacity/blend/enabled written when non-default, effects empty; holds against persist" }
+verified = { hash = "b3:61cfc9af988156bc", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (G3b #213): re-read; B7's filter/opacity persistence sentence beside main's virtual_cam save; holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

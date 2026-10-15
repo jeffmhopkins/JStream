@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:d2490546c7c57297", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V2 multi-pass filters; the chain runtime is still not here, the passes are; holds" }
+verified = { hash = "b3:2329e77ca7458263", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V2: re-read Purpose; the merge only moves FrameSync staging and narrows an allow in filter/; Purpose still points filters at #filters and the chain runtime at V0; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:0410dfb0e078b386", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V2 multi-pass filters; added the video delay's held frames to the resources table; the rest holds" }
+verified = { hash = "b3:3bd09bd790b7e4d9", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V2: re-read Design against compositor.rs apply_filter (staging now after encode) and the multipass kinds; no new thread, I/O or steady-path allocation; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -281,7 +281,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:042625d576b81fd2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V2 kinds (blur, pixelate, drop_shadow, outline, glow, video_delay) described with their settings, tap bounds, bounds growth and the delay ring cap; checked against src/filter/multipass" }
+verified = { hash = "b3:9a2e17bb78e09948", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V2: harness bullets now say FrameSync staged after recording and frame.time wraps daily, matching compositor.rs and prelude.wgsl; video_delay reads ctx.clock().seconds (f64), not frame.time, so it fits; V2 kind text unchanged; holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -305,7 +305,10 @@ kinds.
   so a filter can change the source's reported size (aspect ratio, padding).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
-  that move or hold frames. An imported input's `FrameSync` is staged before the submit.
+  that move or hold frames. An imported input's `FrameSync` is staged once the pass has
+  recorded, right before the submit. The prelude's `frame.time` is that time wrapped
+  to a day (better than 10 ms in an `f32`) and jumps back once a day, so a kind that
+  moves with time computes its phase on the CPU in `f64` and passes it in its `Params`.
 - A pass records fullscreen draws through `Ctx::draw`. Every filter shader is appended
   to one prelude (`prelude.wgsl`) that defines the fullscreen triangle, the bindings
   (input, a linear clamp sampler, a `Frame` uniform with the input, output and aux
