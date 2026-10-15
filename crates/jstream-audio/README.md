@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:6ede8dcf7dfe2c74", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272 CL1) into #143: text is main's (insert_host_filter, CLAP tests); stale through ARCH#threading, whose CLAP-hosts paragraph matches #272's and whose other changes are this PR's wording; holds" }
+verified = { hash = "b3:594550e1f0eb84e6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#240 D5 audio, protocol 0.19) into #143: took main's stamp; re-read; main's text (core's mixer thread meters the master block); stale only via ARCH#threading, where this PR's rewrap and marker wording name nothing in this crate; holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -33,7 +33,8 @@ master chain on every bus that feeds an output, output taps with their own chain
 outputs that encode their own audio, and each bus's output before the master chain for
 monitoring. Activity gains (audio that follows the program), sidechain keys in the mixer
 and the monitor devices themselves come later. The true-peak and loudness meters
-([Meters](#meters)) exist as DSP but don't run in the mixer yet.
+([Meters](#meters)) exist as DSP but don't run in the mixer yet; `jstream-core`'s
+mixer thread runs them on the master block the mixer returns.
 
 **Time line.** Engine frame `n` is media time `n / rate` on the media clock
 ([ADR-0014](../../docs/adr/0014-media-clock.md)), with `rate` the engine rate (48 kHz by
@@ -58,7 +59,10 @@ stamped on the clock, and no device is the master.
   `BusControl`; `BusControl::remove` removes it, and `Mixer::bus` is the master's,
   which can't be removed. Like inputs, buses change through the command queue while
   `poll` runs. At most 16 buses, the master included. A bus's `BusId` is never reused,
-  so a send to a removed bus stays inert even after a new bus takes its buffer.
+  so a send to a removed bus stays inert even after a new bus takes its buffer. It is
+  also tagged with its mixer, so an input ignores another mixer's bus,
+  `Mixer::bus_block` answers `None` for one and `add_output_tap` refuses one
+  (`Removed`); `BusId::MASTER` names every mixer's master.
 - `InputControl::set_send` (linear or dB, 0 to +24 dB) sends the input into a bus
   after its fader and mute, or changes that send's gain; `remove_send` stops it. A new
   bus has no sends. A send that starts, stops or changes ramps over one block.
@@ -176,7 +180,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:1e1b37c509499833", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272 CL1) into #143: CLAP filters paragraph is main's and agrees with ARCH#threading's merged CLAP-hosts paragraph (late block bypassed with delayed dry signal, counted in the shared block); holds" }
+verified = { hash = "b3:ae2ca22b3f80f021", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#240 D5 audio, protocol 0.19) into #143: took main's stamp; re-read; main's mixer-tag and output-tap text; stale via ARCH#threading's rewrap and 'clears the marker to a value below every generation' wording, which agrees with the rt thread model here; holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -273,7 +277,10 @@ is two atomic stores: the gain first, then the target, with release ordering so 
 mixer never applies a stale gain to a new target (a retarget only happens once the old
 bus is gone from the slot). A send counts only while its slot
 holds the bus it names. Bus ids are never reused, so a send to a removed bus stays
-silent even after another bus takes the slot. The mixer remembers which bus each send's
+silent even after another bus takes the slot. Each `ControlPlane` takes a tag from a
+process-wide counter when its mixer is made, and stamps it on its `BusId`s; the
+control handles check it before touching a send or adding an output tap, so another
+mixer's bus id never reaches the matrix or a tap (the master's id carries tag 0, valid for any mixer). The mixer remembers which bus each send's
 ramp was for, and starts again from silence when that changes. Skipping silent sends
 keeps the cost at one pass over the block per active send. Sends are post-fader only,
 as ADR-0028 decides.

@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6b2374a054974572", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of #143 into #273: re-read; Sessions bullet's engine-answer-races-deadline text (#273) matches session.rs handshake(); #143's zero-limit paragraph and main's subprotocol sentence kept; holds" }
+verified = { hash = "b3:da4a77cf4d210f14", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of #143 (with main at 94fb25d, #240 D5 audio) into #273: re-read; #273's Sessions text (engine's hello answer races the handshake deadline) matches session.rs handshake(); #143's zero-limit paragraph and #240's meters.tick open-question text kept; holds" }
 -->
 
 ### Listening and admission
@@ -379,8 +379,10 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    event buffer, and on overflow the server drops the queued events and sends one
    `events.dropped` notice, so the engine is never slowed down by one client. What is
    left open is tuning: whether 1024 events suits `stats.tick` (about once a second
-   while a pipeline runs) and the high-rate meters still to come, or wants a byte
-   limit or per-event-kind limits once they exist.
+   while a pipeline runs) and `meters.tick` (about ten a second while the mixer runs,
+   so 1024 events are under two minutes of them), or wants a byte limit or
+   per-event-kind limits, such as keeping only the newest meter reading as
+   `jstream-mcp` does.
 8. **Limit tuning.** The connection limits (see *Listening and admission*) are a
    conservative first cut. Whether a remote bind wants a per-peer cap as well, or the
    host app should expose the limits, is open. Settled: the handshake timeout counts
