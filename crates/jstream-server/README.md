@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:edf5009f933857d6", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (U0, U3b, U4, U5, B6-r, B10) into U2: purpose unchanged by main; web UI and token bullets hold" }
+verified = { hash = "b3:a1f50d3313163f2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:81b5fa2b0e767808", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 amended for /pair and the cookie, neither built yet; the gate described here is the current code and remains true until the implementation PR, which will update it; holds" }
+verified = { hash = "b3:a0912e1d9a6dd09d", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; server passes output kinds through untouched" }
 -->
 
 ### Listening and admission
@@ -106,7 +106,9 @@ so it offers two subprotocols in `Sec-WebSocket-Protocol`: `jstream` and
 way, on any `Sec-WebSocket-Protocol` line, in exactly one offered subprotocol; with
 `Authorization` present, only that counts. The upgrade selects `jstream` (browsers
 fail a connection whose offered subprotocols none were selected), never the token's,
-so the answer doesn't echo it, and like every header it is never logged.
+so the answer doesn't echo it, and like every header it is never logged. Both names
+are `jstream-control`'s constants, shared with the client
+([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
 
 **Extra hosts.** Each configured extra host must be `name:port` with one port from 1
 to 65535, and an IPv6 address must be in brackets (`[::1]:4455`), as it is in a

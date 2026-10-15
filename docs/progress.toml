@@ -526,8 +526,9 @@ prs = [194]
 id = "G3b"
 milestone = "M1c"
 title = "VirtualCam output kind"
-status = "review"
+status = "hardware"
 prs = [213]
+note = "WindowsVcam in the daemon's backends, then a camera run"
 
 [[item]]
 id = "G3c"
@@ -769,6 +770,8 @@ id = "CL1"
 milestone = "M3"
 title = "CLAP plugin host"
 status = "planned"
+prs = [272]
+note = "part 1 merged"
 
 [[item]]
 id = "WA1"
