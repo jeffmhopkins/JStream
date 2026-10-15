@@ -699,7 +699,7 @@ verified = { hash = "b3:55a0e0a9c09649f1", by = "agent:claude@session_01Wfrx1wPt
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:2b01c95ee7bafc72", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: one-scene compositor paragraph adds the built GPU path (context compositor, Capture::on_context, cached import with per-frame hold, PRESENT hand-back) and the CPU fallback with readback for encode; steps 1-6 unchanged" }
+verified = { hash = "b3:b57d94f70fe04da3", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c: one-scene paragraph adds that step 5's encoder side is built (Codecs::on_context, D3D11 copy with fences, open_on fallback) and that nothing writes encode targets yet; steps 1-6 unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -749,7 +749,12 @@ sampled with no CPU copy, the frame's fence hold is staged on each submit that r
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
 (step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
-composite is still read back to the CPU for the encoder. Still outside this crate: the render
+composite is still read back to the CPU for the encoder. Step 5's encoder side is built:
+on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
+on D3D11 into a texture of their own, fence-synchronized both ways, and
+`jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
+([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
+Nothing writes the encode targets yet. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
 the output path below.
 

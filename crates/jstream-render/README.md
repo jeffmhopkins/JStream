@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:64e3fb7d39f91fce", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: ResourceCache bullet adds imports that keep their frame hold only for the frame that draws them; staging ends the submit with the PRESENT transition (record_release), removed from Not in this cut; matches cache.rs and compositor.rs" }
+verified = { hash = "b3:d364263ac771d2f4", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c: stale via platform gpu-frames and ARCH; render untouched, still does no NV12 conversion or encode-target export (Not in this cut holds); holds" }
 -->
 
 One scene, composited on the GPU with wgpu
