@@ -687,6 +687,13 @@ prs = [258]
 note = "desktop app check"
 
 [[item]]
+id = "Q3"
+milestone = "M2"
+title = "UI end-to-end tests"
+status = "review"
+prs = [309]
+
+[[item]]
 id = "T1"
 milestone = "M2"
 title = "Studio mode and transitions"

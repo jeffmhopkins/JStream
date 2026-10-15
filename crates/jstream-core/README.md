@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:2dcf735e7d6032e0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#297, #286) into #143: re-read main's purpose text; this PR's tests/mcp.rs change is only block_on's doc comment (hello wait timer), Tests bullet still describes tests/mcp.rs; holds" }
+verified = { hash = "b3:363feecbdcd22c78", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#295 clock swap) into #143: re-read; main's live.rs set_clock fix fits the Live sources bullet, this PR's tests/mcp.rs change is block_on's doc comment only; ARCH crate-map entry unchanged in meaning by this PR's ARCH edits; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -162,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e6d045266787a69b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#241 N1: differential script adds an item.list b query after the redo, compared like the other calls; the script paragraph holds" }
+verified = { hash = "b3:67ca169f728f9e96", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286, #297): re-read main's design text (differential script paragraph) beside this PR's clock-swap sentence in the live-sources paragraph; different paragraphs; swap sentence still matches LiveSources::set_clock; holds" }
 -->
 
 ### Engine and sessions
@@ -457,7 +457,9 @@ the source hands out a different one, so a still image is uploaded once. The pla
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image advances on the clock and a still one is
 never re-planned. Sources run on the media clock of the backends the host injects
-(`with_backends`), else on a monotonic clock of the engine's own. `collection` asset
+(`with_backends`), else on a monotonic clock of the engine's own. A clock swap
+restarts every running source's timing and drops the re-plan timed on the old clock:
+the thread re-plans at once on the new one. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
 for every `app` reference, the asset is unreadable and the source draws nothing.
 

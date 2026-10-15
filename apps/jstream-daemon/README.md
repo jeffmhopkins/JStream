@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:7fdc1a969344cd0b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#297 daemon vcam) into #143: re-read main's design incl. WindowsVcam backend, mfsensorgroup delay-load and register-vcam; dep change is this PR's server zero-limit check, unreachable here since serve.rs only sets bind and mcp over ServerConfig::new defaults; holds" }
+verified = { hash = "b3:3faeecfc67fca609", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#295 clock swap, #237, #309) into #143: re-read whole section; core#design's new clock-swap sentence fits (daemon supplies QpcClock via with_backends); server#design's zero-limit refusal is unreachable here since serve.rs sets only bind and mcp over ServerConfig::new defaults; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
