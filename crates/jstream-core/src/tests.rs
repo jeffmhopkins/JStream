@@ -363,7 +363,8 @@ fn queries_match_the_parity_fixture() {
         ),
         Ok(QueryResult::OutputStatus {
             output_id: OutputId::new("rec"),
-            state: OutputState::Stopped
+            state: OutputState::Stopped,
+            key_set: false,
         })
     );
     let missing = query(
