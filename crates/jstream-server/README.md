@@ -42,6 +42,9 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
   session and back, with the bounded outbox that keeps a slow client from holding up
   its events.
+- **Preview frames** (`preview.rs`): the session's binary channel, queued per
+  connection and sent as WebSocket binary messages, dropping up to the next keyframe
+  when the client reads slowly.
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
 Not here yet: TLS and pairing ([Open questions](#design)).

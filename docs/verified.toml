@@ -189,7 +189,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:9ca86438d4d9c457", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
+stamp = { hash = "b3:df852e7f05dbe37d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool list incl. preview matches tools.rs/tests (19 tools); tools.snap is 183139 bytes so 'about 183 KB' holds; preview.subscribe fails with action_failed over MCP" }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:8eea55b34b97d6a9" }
@@ -204,10 +204,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:b75a7acae167b65c" }
+stamp = { hash = "b3:a7b5799cf1938ec1", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool list incl. preview matches tools.rs/tests (19 tools); tools.snap is 183139 bytes so 'about 183 KB' holds; preview.subscribe fails with action_failed over MCP" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:0bc178fa258b5061" }
+stamp = { hash = "b3:99ac70785f202198", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool list incl. preview matches tools.rs/tests (19 tools); tools.snap is 183139 bytes so 'about 183 KB' holds; preview.subscribe fails with action_failed over MCP" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -228,7 +228,7 @@ stamp = { hash = "b3:38834e7ab012f7ec" }
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:a9ee7e6a5b49c7c0" }
+stamp = { hash = "b3:5818453cbe01d991", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool list incl. preview matches tools.rs/tests (19 tools); tools.snap is 183139 bytes so 'about 183 KB' holds; preview.subscribe fails with action_failed over MCP" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -273,7 +273,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:d638c6ca8019b15d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B5, filters join the audio edits once they are in the protocol, the mixer has chains since D7b; rest holds at 0.19" }
+stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -285,16 +285,16 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:07915c072e50c894" }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:0586c86d070168f2" }
+stamp = { hash = "b3:aa75adb8b06f7891", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
-stamp = { hash = "b3:e55527bc3d425ace" }
+stamp = { hash = "b3:a421c4283dce201f", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/error.rs"]
 stamp = { hash = "b3:50448c966c4de2f0" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/lib.rs"]
-stamp = { hash = "b3:4f5eb7fab55f6c55" }
+stamp = { hash = "b3:348f342795dc88ae", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
 stamp = { hash = "b3:0f11e860c80c48d5" }
@@ -303,31 +303,31 @@ stamp = { hash = "b3:0f11e860c80c48d5" }
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/ws.rs"]
-stamp = { hash = "b3:f37b52c47e4cc8a1" }
+stamp = { hash = "b3:1fb6803a7c4f8625", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/ws_config.rs"]
 stamp = { hash = "b3:d7db1d06b04d10fc" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/ws_web.rs"]
-stamp = { hash = "b3:edefe86e076ea4e3" }
+stamp = { hash = "b3:9ea40675fcea7ce1", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/Cargo.toml"]
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:23193768000a7279" }
+stamp = { hash = "b3:cf1c22203e6e4b7e", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:e08032e34676ac01" }
+stamp = { hash = "b3:3cc940ee388748ab", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e099f7b8aaaaa173" }
+stamp = { hash = "b3:e0cb44e8efdae762", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:da4b9ef5e429cca2" }
+stamp = { hash = "b3:00b08a8a958896ed", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -345,7 +345,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:c012a3b785dfd6b5" }
+stamp = { hash = "b3:21417cbdaf52afc4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -360,13 +360,16 @@ stamp = { hash = "b3:353359feae2606b3" }
 stamp = { hash = "b3:9d53e1d6be49311f" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:9199a0226a0eda2b" }
+stamp = { hash = "b3:faf6f5fe57bbaef7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:489f2e86af7bf320" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:68a1255a9a5f2f73" }
+
+["ARCH#protocol"."file:crates/jstream-protocol/src/preview.rs"]
+stamp = { hash = "b3:bef95243a1b983f0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
 stamp = { hash = "b3:13f2fa2d982a7e24" }
@@ -378,13 +381,13 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:e9b7b4a0b8273b20" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:c594f42e1b065295" }
+stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-server/Cargo.toml"]
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:61f19fc11430f41c" }
+stamp = { hash = "b3:6abd056769538dbd", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
 stamp = { hash = "b3:0dfbb49d28e2b62a" }
@@ -396,7 +399,7 @@ stamp = { hash = "b3:78515d947c87dfd0" }
 stamp = { hash = "b3:aa923cddbd9a536f" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:ae3b3e60a2f4de54" }
+stamp = { hash = "b3:e823fe89e73f45b7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -404,11 +407,14 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 ["ARCH#protocol"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:05057d7979293830" }
 
+["ARCH#protocol"."file:crates/jstream-server/src/preview.rs"]
+stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
+
 ["ARCH#protocol"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:1ab10d4f98ace68a" }
+stamp = { hash = "b3:9439ff1cadedf9ac", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:933d0c4ef1b02ecc" }
+stamp = { hash = "b3:2985cf3530dcb662", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -420,7 +426,7 @@ stamp = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDH
 stamp = { hash = "b3:8dc9a0c76e46621c" }
 
 ["ARCH#shape"."body"]
-stamp = { hash = "b3:3053310b2b1a2656", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Crate-map daemon row (N3) now says the daemon registers and publishes the virtual camera via a virtual_cam output, matching serve.rs windows_backends" }
+stamp = { hash = "b3:51a31c386d7e626f", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): diagram line 'binary frames: preview' holds; meters stay JSON (meters.tick); hosts table is main's" }
 
 ["ARCH#shape"."dep:docs/adr/0001-library-first-engine.md"]
 stamp = { hash = "b3:7a1c016d1f87fdaf" }
@@ -447,7 +453,7 @@ stamp = { hash = "b3:f7c235327227029b" }
 stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
 ["ARCH#threading"."body"]
-stamp = { hash = "b3:27f72f3f6ef95752", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; main's render-snapshot paragraph (render thread loads lock-free, video.snapshot reads under the lock) kept as is; this PR's CLAP hosts paragraph (shared block and mixer side built, host/restarts/stats.tick not yet, dry-signal bypass) checked against rt/host.rs" }
+stamp = { hash = "b3:332461263fa49830", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview row (brief collection lock, own compositor, full queue not drawn) matches PreviewSource for Shared; Mixer/other rows are main's" }
 
 ["ARCH#threading"."dep:docs/adr/0014-media-clock.md"]
 stamp = { hash = "b3:68451099d1cf8c6d" }
@@ -564,7 +570,7 @@ stamp = { hash = "b3:c14e3114d974adb4", by = "agent:claude@session_01PpGi5RaafND
 stamp = { hash = "b3:308082ece28cb86f" }
 
 ["CRATE-jstream-audio#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:27f72f3f6ef95752" }
+stamp = { hash = "b3:332461263fa49830", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via ARCH#threading's Preview row only; section text is main's; holds" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/error.rs"]
 stamp = { hash = "b3:d8e9ac73d567425f" }
@@ -669,7 +675,7 @@ stamp = { hash = "b3:e5a6edbd7802a068" }
 stamp = { hash = "b3:b6e44fd4493acdd6", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: main's text plus D6's 'activity gains' in the mixer thread's work; holds" }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:27f72f3f6ef95752" }
+stamp = { hash = "b3:332461263fa49830", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via ARCH#threading's Preview row only; section text is main's; holds" }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/RULES.md#R-RT-001"]
 stamp = { hash = "b3:3221ab22f6747616" }
@@ -732,7 +738,7 @@ stamp = { hash = "b3:3e63f714aef88590" }
 stamp = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4b7f99a329a36029" }
+stamp = { hash = "b3:b28ed6be99b7ece8", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via control design; CLI opens no binary channel; holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
@@ -801,10 +807,10 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c7379cddeb275056" }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:4b7f99a329a36029", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): stale via graph persist only; the mock has no collection file; text holds" }
+stamp = { hash = "b3:b28ed6be99b7ece8", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -816,13 +822,13 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:07915c072e50c894" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/control.rs"]
-stamp = { hash = "b3:e55527bc3d425ace" }
+stamp = { hash = "b3:a421c4283dce201f", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/error.rs"]
 stamp = { hash = "b3:50448c966c4de2f0" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/lib.rs"]
-stamp = { hash = "b3:4f5eb7fab55f6c55" }
+stamp = { hash = "b3:348f342795dc88ae", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
 stamp = { hash = "b3:0f11e860c80c48d5" }
@@ -831,28 +837,28 @@ stamp = { hash = "b3:0f11e860c80c48d5" }
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/ws.rs"]
-stamp = { hash = "b3:f37b52c47e4cc8a1" }
+stamp = { hash = "b3:1fb6803a7c4f8625", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/ws_config.rs"]
 stamp = { hash = "b3:d7db1d06b04d10fc" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/ws_web.rs"]
-stamp = { hash = "b3:edefe86e076ea4e3" }
+stamp = { hash = "b3:9ea40675fcea7ce1", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#purpose"."body"]
-stamp = { hash = "b3:e353197aa1bfa71e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; mock keeps buses and sends beside main's virtual camera; holds" }
+stamp = { hash = "b3:5cd87328c291660b", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-control"]
 stamp = { hash = "b3:107caa6f41f5bf25" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/control.rs"]
-stamp = { hash = "b3:e55527bc3d425ace" }
+stamp = { hash = "b3:a421c4283dce201f", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/error.rs"]
 stamp = { hash = "b3:50448c966c4de2f0" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/lib.rs"]
-stamp = { hash = "b3:4f5eb7fab55f6c55" }
+stamp = { hash = "b3:348f342795dc88ae", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
 stamp = { hash = "b3:0f11e860c80c48d5" }
@@ -861,25 +867,25 @@ stamp = { hash = "b3:0f11e860c80c48d5" }
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/ws.rs"]
-stamp = { hash = "b3:f37b52c47e4cc8a1" }
+stamp = { hash = "b3:1fb6803a7c4f8625", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/ws_config.rs"]
 stamp = { hash = "b3:d7db1d06b04d10fc" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/ws_web.rs"]
-stamp = { hash = "b3:edefe86e076ea4e3" }
+stamp = { hash = "b3:9ea40675fcea7ce1", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:f8d3caba075c6078", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
+stamp = { hash = "b3:282fef27f8cde08d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4b7f99a329a36029" }
+stamp = { hash = "b3:b28ed6be99b7ece8", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:ebcd6a8ffeb177da" }
+stamp = { hash = "b3:033ed95faeaff01b", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -888,7 +894,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
-stamp = { hash = "b3:82b99f798fcea13a" }
+stamp = { hash = "b3:4d8c37e4ce3c7461", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:5e06b48ac662790f" }
@@ -909,7 +915,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:6b18d551fed7d8b0" }
+stamp = { hash = "b3:6e053bbe7c54f7ea", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -921,13 +927,19 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:29301fe6ecd05436" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:06fe384b67b62cfe" }
+stamp = { hash = "b3:1a27acabedc0e342", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:9ceafdfcc04ac858" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
+
+["CRATE-jstream-core#design"."file:crates/jstream-core/src/preview/jpeg.rs"]
+stamp = { hash = "b3:7416a336d0373eaf", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
+
+["CRATE-jstream-core#design"."file:crates/jstream-core/src/preview/mod.rs"]
+stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/mod.rs"]
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
@@ -948,7 +960,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/session.rs"]
-stamp = { hash = "b3:809f3084121b94be" }
+stamp = { hash = "b3:592c3b9f41754a4c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
 stamp = { hash = "b3:918fe91ec11037de" }
@@ -957,7 +969,7 @@ stamp = { hash = "b3:918fe91ec11037de" }
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:4fa634e0a92724f8" }
+stamp = { hash = "b3:0be1f26dc57ca55d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -971,11 +983,14 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/history.rs"]
 stamp = { hash = "b3:c9688aabcb558c82" }
 
+["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/preview.rs"]
+stamp = { hash = "b3:4d9a8a091c6dcdcc", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
+
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/sources.rs"]
 stamp = { hash = "b3:cc39789a9b4f72e9" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:5609012e8331a22f", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
+stamp = { hash = "b3:fa428dd893d94602", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -999,7 +1014,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:6b18d551fed7d8b0" }
+stamp = { hash = "b3:6e053bbe7c54f7ea", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1011,13 +1026,19 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:29301fe6ecd05436" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:06fe384b67b62cfe" }
+stamp = { hash = "b3:1a27acabedc0e342", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:9ceafdfcc04ac858" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
+
+["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/preview/jpeg.rs"]
+stamp = { hash = "b3:7416a336d0373eaf", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
+
+["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/preview/mod.rs"]
+stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/mod.rs"]
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
@@ -1038,7 +1059,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/session.rs"]
-stamp = { hash = "b3:809f3084121b94be" }
+stamp = { hash = "b3:592c3b9f41754a4c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/snapshot.rs"]
 stamp = { hash = "b3:918fe91ec11037de" }
@@ -1047,7 +1068,7 @@ stamp = { hash = "b3:918fe91ec11037de" }
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:4fa634e0a92724f8" }
+stamp = { hash = "b3:0be1f26dc57ca55d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -1060,6 +1081,9 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/history.rs"]
 stamp = { hash = "b3:c9688aabcb558c82" }
+
+["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/preview.rs"]
+stamp = { hash = "b3:4d9a8a091c6dcdcc", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/sources.rs"]
 stamp = { hash = "b3:cc39789a9b4f72e9" }
@@ -1074,7 +1098,7 @@ stamp = { hash = "b3:993e780364d6f4d3" }
 stamp = { hash = "b3:50a6bc0982573317", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:27f72f3f6ef95752" }
+stamp = { hash = "b3:332461263fa49830", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via ARCH#threading only; holds" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/RULES.md#R-RT-006"]
 stamp = { hash = "b3:f2c3ac9292e67cf2" }
@@ -1101,10 +1125,10 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:861da27967b6506b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#360, #299 D6, #381) into #328: took main's stamp; re-read; main changes no daemon code, only core#design's activity-gain text, which the daemon text doesn't name; this PR's /DELAYLOAD, LNK4199 and delay_load.rs text still matches build.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:f8d3caba075c6078" }
+stamp = { hash = "b3:282fef27f8cde08d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via core/server design; daemon text unchanged; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:2c41053918072ae6" }
+stamp = { hash = "b3:46aa4fd32600a552", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via core/server design; daemon text unchanged; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:7ab4accbf98f6662" }
@@ -1335,7 +1359,7 @@ stamp = { hash = "b3:984f333744172f87" }
 stamp = { hash = "b3:d72def29f6861e6d" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:27f72f3f6ef95752" }
+stamp = { hash = "b3:332461263fa49830", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via ARCH#threading's Preview row only; section text is main's; holds" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/audio.rs"]
 stamp = { hash = "b3:79b9830d47ed6557" }
@@ -1365,7 +1389,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:0dc62dd9aff85fab", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B6, sends is written whenever a channel source or send exists and a file without it keeps default master sends; the file format, loading and tests paragraphs now say so; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:ebcd6a8ffeb177da" }
+stamp = { hash = "b3:033ed95faeaff01b", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via protocol design (binary frames section); graph text doesn't touch preview; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1416,10 +1440,10 @@ stamp = { hash = "b3:534ac6c88886c8f2" }
 stamp = { hash = "b3:943bb9518712a4b5" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:96d5c6a94b8d6eef", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tool list unchanged (18 tools); tools.snap regenerated for 0.19; holds" }
+stamp = { hash = "b3:6dbc62b32bde1046", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool table lists preview and says it only fails over MCP; matches tests.rs" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:9ca86438d4d9c457" }
+stamp = { hash = "b3:df852e7f05dbe37d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool table lists preview and says it only fails over MCP; matches tests.rs" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1452,7 +1476,7 @@ stamp = { hash = "b3:38834e7ab012f7ec" }
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:a9ee7e6a5b49c7c0" }
+stamp = { hash = "b3:5818453cbe01d991", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool table lists preview and says it only fails over MCP; matches tests.rs" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1482,7 +1506,7 @@ stamp = { hash = "b3:38834e7ab012f7ec" }
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:a9ee7e6a5b49c7c0" }
+stamp = { hash = "b3:5818453cbe01d991", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): only tests.rs changed (preview tool, 19 tools); purpose text holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1578,7 +1602,7 @@ stamp = { hash = "b3:7c902ba9d37e539b", by = "agent:claude", note = "re-read the
 stamp = { hash = "b3:2ef270bb1b4e0cc6" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:27f72f3f6ef95752" }
+stamp = { hash = "b3:332461263fa49830", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via ARCH#threading's Preview row only; section text is main's; holds" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
@@ -1662,7 +1686,7 @@ stamp = { hash = "b3:e204cadb57ccceae" }
 stamp = { hash = "b3:4179d522e3055d3d" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:27f72f3f6ef95752" }
+stamp = { hash = "b3:332461263fa49830", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via ARCH#threading's Preview row only; section text is main's; holds" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -1734,7 +1758,7 @@ stamp = { hash = "b3:ac6493f8088539b9" }
 stamp = { hash = "b3:dfa8602587609b6c" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:27f72f3f6ef95752" }
+stamp = { hash = "b3:332461263fa49830", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via ARCH#threading's Preview row only; section text is main's; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/RULES.md#real-time"]
 stamp = { hash = "b3:c60cba487fc0a5e5" }
@@ -1884,7 +1908,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:ebcd6a8ffeb177da", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio, bus.list, meters.tick and the envelope example say 0.19; virtual_cam stays 0.18; holds" }
+stamp = { hash = "b3:033ed95faeaff01b", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -1902,16 +1926,16 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:e08032e34676ac01" }
+stamp = { hash = "b3:3cc940ee388748ab", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e099f7b8aaaaa173" }
+stamp = { hash = "b3:e0cb44e8efdae762", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:da4b9ef5e429cca2" }
+stamp = { hash = "b3:00b08a8a958896ed", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -1929,7 +1953,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:c012a3b785dfd6b5" }
+stamp = { hash = "b3:21417cbdaf52afc4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -1944,13 +1968,16 @@ stamp = { hash = "b3:353359feae2606b3" }
 stamp = { hash = "b3:9d53e1d6be49311f" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:9199a0226a0eda2b" }
+stamp = { hash = "b3:faf6f5fe57bbaef7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:489f2e86af7bf320" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:68a1255a9a5f2f73" }
+
+["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/preview.rs"]
+stamp = { hash = "b3:bef95243a1b983f0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/query.rs"]
 stamp = { hash = "b3:13f2fa2d982a7e24" }
@@ -1962,10 +1989,10 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:e9b7b4a0b8273b20" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:c594f42e1b065295" }
+stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:75e84529f81bc5f7", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; version line 0.19 audio, 0.18 virtual_cam, 0.17 role; holds" }
+stamp = { hash = "b3:3a3ab69b05ee9912", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -1974,7 +2001,7 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:da4b9ef5e429cca2" }
+stamp = { hash = "b3:00b08a8a958896ed", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -1992,7 +2019,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:c012a3b785dfd6b5" }
+stamp = { hash = "b3:21417cbdaf52afc4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2007,13 +2034,16 @@ stamp = { hash = "b3:353359feae2606b3" }
 stamp = { hash = "b3:9d53e1d6be49311f" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:9199a0226a0eda2b" }
+stamp = { hash = "b3:faf6f5fe57bbaef7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:489f2e86af7bf320" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:68a1255a9a5f2f73" }
+
+["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/preview.rs"]
+stamp = { hash = "b3:bef95243a1b983f0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
 stamp = { hash = "b3:13f2fa2d982a7e24" }
@@ -2025,7 +2055,7 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:e9b7b4a0b8273b20" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:c594f42e1b065295" }
+stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-render#design"."body"]
 stamp = { hash = "b3:7f2a94f0736d9611", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
@@ -2145,13 +2175,13 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:2c41053918072ae6", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): stale through cascade; text unchanged and names no persistence detail; holds" }
+stamp = { hash = "b3:46aa4fd32600a552", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4b7f99a329a36029" }
+stamp = { hash = "b3:b28ed6be99b7ece8", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:9bcfb0336f6adad9" }
@@ -2172,7 +2202,7 @@ stamp = { hash = "b3:78515d947c87dfd0" }
 stamp = { hash = "b3:aa923cddbd9a536f" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:ae3b3e60a2f4de54" }
+stamp = { hash = "b3:e823fe89e73f45b7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -2180,17 +2210,20 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:05057d7979293830" }
 
+["CRATE-jstream-server#design"."file:crates/jstream-server/src/preview.rs"]
+stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
+
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:1ab10d4f98ace68a" }
+stamp = { hash = "b3:9439ff1cadedf9ac", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:933d0c4ef1b02ecc" }
+stamp = { hash = "b3:2985cf3530dcb662", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
 
 ["CRATE-jstream-server#purpose"."body"]
-stamp = { hash = "b3:2f40600f2090e7bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
+stamp = { hash = "b3:4c45e4e1103422b9", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
 
 ["CRATE-jstream-server#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-server"]
 stamp = { hash = "b3:91b837e64ac2fb2b" }
@@ -2205,7 +2238,7 @@ stamp = { hash = "b3:78515d947c87dfd0" }
 stamp = { hash = "b3:aa923cddbd9a536f" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:ae3b3e60a2f4de54" }
+stamp = { hash = "b3:e823fe89e73f45b7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -2213,11 +2246,14 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:05057d7979293830" }
 
+["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/preview.rs"]
+stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
+
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:1ab10d4f98ace68a" }
+stamp = { hash = "b3:9439ff1cadedf9ac", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:933d0c4ef1b02ecc" }
+stamp = { hash = "b3:2985cf3530dcb662", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2343,7 +2379,7 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:de38d89391222d92", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at Q3 (#309): the design text is main's (Playwright against a mock daemon); D5's mock additions (buses, sends, audio) are additive to the state the mock daemon serves; holds" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4b7f99a329a36029" }
+stamp = { hash = "b3:b28ed6be99b7ece8", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via control design; UI preview not hooked up yet; holds" }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -2835,7 +2871,7 @@ stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:7ab4accbf98f6662" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via ARCH#protocol; preview is an additive minor bump (0.20), consistent with R-API-001; holds" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
@@ -2859,7 +2895,7 @@ stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 stamp = { hash = "b3:c60cba487fc0a5e5", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
 
 ["RULES#real-time"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:27f72f3f6ef95752" }
+stamp = { hash = "b3:332461263fa49830", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via ARCH#threading's Preview row (not real-time); holds" }
 
 ["RUNBOOK-GO-LIVE#before"."body"]
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
@@ -2889,7 +2925,7 @@ stamp = { hash = "b3:6dc625770a5edc67" }
 stamp = { hash = "b3:b2396ad80b13c8a8" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:2c41053918072ae6" }
+stamp = { hash = "b3:46aa4fd32600a552", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via server design's preview bullet; go-live steps use no preview; holds" }
 
 ["SECURITY#scope"."body"]
 stamp = { hash = "b3:06282b84a1425ad4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: control API bullet now names the TLS-only pairing page and the device-only cookie, per R-SEC-002's amended text; other bullets unchanged" }
