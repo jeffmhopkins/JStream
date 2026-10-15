@@ -57,6 +57,9 @@ jobs:
       # Platform tests (`hw-tests`) only run on real hardware, but they must still compile:
       # type-check them on the platform they target.
       - run: cargo clippy -p jstream-platform-windows --all-targets --features hw-tests --locked -- -D warnings
+      # The CEF backend of the browser source (ADR-0046) must compile too. `dox` type-checks
+      # it against cef-dll-sys's bundled bindings without downloading or building CEF.
+      - run: cargo clippy -p jstream-browser -p jstream-browser-helper --all-targets --features jstream-browser/dox,jstream-browser-helper/dox --locked -- -D warnings
       - name: Report the result to the PR
         if: always() && github.event_name == 'workflow_dispatch'
         shell: bash
