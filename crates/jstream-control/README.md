@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:2b1340a28a5718f5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; check list has master/output filter rules then D5's audio bullet; kinds sentence holds; reads list bus.list; holds against mock.rs and mock/filter.rs" }
+verified = { hash = "b3:c0efe4a394531f89", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:9e3fe2e4b10a8fb5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; parity sentence names filter chains on a source, the master and an output, and audio rejections; output.delete restores filters beside D5's inverses; holds" }
+verified = { hash = "b3:7439b4a314c7f9e7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
 -->
 
 ### The trait

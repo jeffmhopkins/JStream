@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:1b0bba0a53626170", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 core half: re-read; Audio filters, Runtime and Audio bullets now say Chain serves master and output taps, and audio sessions are shared per master bus or own per chained output; holds" }
+verified = { hash = "b3:ed2ad5c00e9f8c68", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -195,7 +195,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:39acec4a590f83e7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 core half: Audio routing now covers the master chain on MixerControl::master and output taps (add on start, release on stop, live chain edits, chain added while running waits for restart); checked against audio.rs, engine.rs, pipeline.rs; Encoder profiles unchanged; holds" }
+verified = { hash = "b3:1636721150235197", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
 -->
 
 ### Engine and sessions
