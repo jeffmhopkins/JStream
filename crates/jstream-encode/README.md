@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:b8a2a28322ae41e4", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "Merge of main (94fb25d, D5 audio) and #325's head (de1dfb7) into F6: re-read against both sides; D5's audio text and E3b/E3c/F6's GPU capture, encode target and HEVC/AV1 text sit side by side without contradiction; holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -82,7 +81,6 @@ wgpu adapter skips them, except on CI.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:715a9af9ef56dd90", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: GPU frames subsection sits beside main's F3 profile-keyed sharing text; Not yet keeps only 'GPU frames in the engine' (main dropped encoder profiles); holds" }
 -->
 
 ### Threads and pacing
@@ -238,7 +236,13 @@ it writes a target again only when it holds the frame's only clone.
   dependency now, but this crate doesn't use it yet; it reports through its counters
   and `StreamEnd`. Spans would go on the control side (session start and end), not in
   the encode thread's per-frame loop ([R-RT-002](../../docs/RULES.md#R-RT-002)).
-- Performance: not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
+- Performance ([R-RT-005](../../docs/RULES.md#R-RT-005)): `benches/session.rs`
+  (criterion) times the session's own cost around the fake encoder, from `push` until
+  every subscriber has the packet: about 40 µs for a 1080p NV12 frame to 1 or 4
+  subscribers and 29 µs for a 1024-frame audio block, measured on a cloud container
+  (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux 6.18), release build. The `bench`
+  workflow records them on every push to `main`
+  ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A real encoder's cost is not measured.
 
 <a id="open-questions"></a>
 ## Open questions

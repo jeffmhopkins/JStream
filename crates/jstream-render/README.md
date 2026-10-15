@@ -16,7 +16,6 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:d364263ac771d2f4", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c: stale via platform gpu-frames and ARCH; render untouched, still does no NV12 conversion or encode-target export (Not in this cut holds); holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -114,7 +113,6 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:3e7d3a4b902d09e9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: Passes end-of-submit text matches record_release and staged.clear() after submit in render and render_into; ResourceCache::import paragraph matches cache.rs (per-texture kept imports, KEPT_IMPORTS 8, size change retires, end_frame drops holds); scratch row updated" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -294,7 +292,6 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:be79e08662bd7d22", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b: added the_cache_imports_gpu_frames_without_keeping_their_holds to the list; it ran and passed on lavapipe, including the PRESENT transition" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -377,7 +374,15 @@ so the missing adapter panics and the job fails. The `macos` job is
 Editing the workflow is a governance change because `.github/**` is protected; it
 adds a package so tests can render, and it does not weaken a check.
 
-**Not measured** ([R-RT-005](../../docs/RULES.md#R-RT-005)). No frame-time numbers.
+**Benchmarks** (`benches/composite.rs`, criterion, [R-RT-005](../../docs/RULES.md#R-RT-005)).
+A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with readback
+(`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
+and refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
+`cargo bench -p jstream-render --bench composite`; the `bench` workflow records them on
+lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
+software adapter's numbers are CPU rasterisation: they track regressions in what the
+compositor submits, and say nothing about GPU frame time. **Not measured:** frame time on
+a hardware GPU.
 
 <a id="open-questions"></a>
 ## Open questions

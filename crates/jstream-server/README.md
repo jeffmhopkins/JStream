@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:a1f50d3313163f2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +56,6 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6ca06bd935527ed9", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): stale through cascade; text unchanged and names no persistence detail; holds" }
 -->
 
 ### Listening and admission
@@ -244,11 +242,18 @@ task speaks the envelope
 
 `serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
 open connection (close code 1001), so their clients' pending and later calls fail with
-`Disconnected` and their event streams end. Whenever the server closes a connection,
-it first ends the session's event subscription, then sends what the outbox still holds
-before the close frame. A client that doesn't take them within a short timeout
-(`CLOSE_TIMEOUT`) is dropped without one, so a client that stopped reading can't keep
-its connection or session open.
+`Disconnected` and their event streams end. A connection handles nothing it reads once
+the server is shutting down, so a call sent after the shutdown is never answered. It
+returns once every WebSocket connection has finished closing (as below), so a host that
+exits right after it doesn't cut a close short. Whenever the server closes a
+connection, it first ends the session's event subscription, then sends what the outbox
+still holds before the close frame, then reads and drops what the client still sends
+until the client's own close frame or the end of the stream, and only then closes the
+socket. Closing it with client data unread would make the kernel reset the connection,
+and on macOS and Windows a reset discards what the client hasn't read yet, the close
+frame and last replies included. A client that doesn't finish this within a short
+timeout (`CLOSE_TIMEOUT`) is dropped, so a client that stopped reading can't keep its
+connection or session open, nor hold up the shutdown.
 
 ### MCP over streamable HTTP
 
