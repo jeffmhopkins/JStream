@@ -3,7 +3,8 @@
 //! `InProcessControl` session per connection, so `jstream-cli --url …` and
 //! `jstream-cli mcp` can drive it, and MCP over streamable HTTP on the same port, one
 //! session per MCP session (ADR-0001: the app only wires the engine to its
-//! interfaces). It creates or reuses the user-only control token file (ADR-0006), logs
+//! interfaces). It creates or reuses the user-only control token file (ADR-0006), keeps
+//! the paired devices' token digests in a user-only file beside it (ADR-0044), logs
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
 //! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
 //! pipeline on the Windows backends and publishes over RTMP(S), after checking that
@@ -234,7 +235,7 @@ fn run(options: Options) -> Result<(), Failure> {
     runtime.block_on(async {
         let stop = serve::shutdown_signal().context("could not install the Ctrl-C handler")?;
         let engine = serve::engine(&options, Arc::new(audit))?;
-        let server = serve::bind(engine, options.port, token)
+        let server = serve::bind(engine, options.port, token, Some(token::device_file(&path)))
             .await
             .map_err(anyhow::Error::from)?;
         let shown = path.display();

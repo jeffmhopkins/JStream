@@ -1,5 +1,5 @@
-//! The checks every upgrade request passes before a session starts (R-SEC-002,
-//! ADR-0006): `Host`, then `Origin`, then the control token.
+//! The checks every request passes before a session starts (R-SEC-002, ADR-0006,
+//! ADR-0044): `Host`, then `Origin`, then the control token or a device token.
 //!
 //! - **`Host`** must name the server: a loopback name or the bound address with the bound
 //!   port, or a configured extra. This defeats DNS rebinding, where a page on an
@@ -21,6 +21,15 @@
 //!   only the token's BLAKE3 digest; the presented value is hashed too and the two
 //!   digests are compared in constant time, so the compare reveals nothing about the
 //!   token (see `Token::matches`).
+//! - **Device tokens** (ADR-0044) are presented the same three ways, and checked against
+//!   the paired devices' digests the same way (`Devices::admit`). The request is then
+//!   admitted as that device ([`Credential::Device`]). A device token travels only over
+//!   loopback or TLS, and the server has no TLS yet, so one is accepted only while the
+//!   server listens on a loopback address; bound anywhere else, only the control token
+//!   gets in.
+//! - **`POST /api/v1/pair`** is the one request answered without a token: it passes the
+//!   `Host` and `Origin` checks alone ([`Gate::admit_unauthenticated`]), and the open
+//!   pairing code is its gate (`pair.rs`).
 //!
 //! Configured extra hosts must be `name:port`, with an IPv6 address in brackets
 //! (`[::1]:port`) and exactly one port: `check_extra_hosts` refuses any other form
@@ -35,10 +44,14 @@
 //! the same way.
 
 use crate::config::{ServerConfig, Token};
+use crate::devices::Devices;
 use crate::error::ServerError;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use jstream_protocol::DeviceId;
 use std::net::{Ipv6Addr, SocketAddr};
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// The default port of the `http` and `ws` schemes: a `Host` or `Origin` without a port
 /// names it (RFC 9110 §7.2, RFC 6455 §3).
@@ -57,6 +70,35 @@ pub(crate) enum Refusal {
     Full,
     /// The server already has as many MCP sessions open as it allows.
     McpSessions,
+    /// `POST /api/v1/pair` while no pairing code is open.
+    NoPairingCode,
+    /// `POST /api/v1/pair` with a code that isn't the open one.
+    WrongPairingCode,
+}
+
+/// What admitted a request: the control token, or a paired device's token.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Credential {
+    /// The control token (ADR-0006).
+    Control,
+    /// A device token (ADR-0044).
+    Device {
+        /// The device.
+        id: DeviceId,
+        /// Its name, which its sessions are known by in the audit log
+        /// (`device:<name>`).
+        name: String,
+    },
+}
+
+impl Credential {
+    /// The device, for a device token.
+    pub(crate) fn device(&self) -> Option<&DeviceId> {
+        match self {
+            Credential::Control => None,
+            Credential::Device { id, .. } => Some(id),
+        }
+    }
 }
 
 impl Refusal {
@@ -68,6 +110,8 @@ impl Refusal {
             Refusal::Token => "missing or wrong control token",
             Refusal::Full => "too many connections",
             Refusal::McpSessions => "too many MCP sessions",
+            Refusal::NoPairingCode => "pairing attempted while no pairing code is open",
+            Refusal::WrongPairingCode => "wrong pairing code",
         }
     }
 
@@ -95,14 +139,26 @@ impl IntoResponse for Refusal {
             Refusal::McpSessions => {
                 (StatusCode::SERVICE_UNAVAILABLE, "too many MCP sessions\n").into_response()
             }
+            Refusal::NoPairingCode => (
+                StatusCode::UNAUTHORIZED,
+                [(header::WWW_AUTHENTICATE, "Bearer")],
+                "no pairing code is open: start pairing on the host first\n",
+            )
+                .into_response(),
+            Refusal::WrongPairingCode => {
+                (StatusCode::FORBIDDEN, "wrong pairing code\n").into_response()
+            }
         }
     }
 }
 
-/// The accepted hosts and origins and the token, fixed when the server binds.
-#[derive(Debug)]
+/// The accepted hosts and origins and the token, fixed when the server binds, and the
+/// paired devices.
 pub(crate) struct Gate {
     token: Token,
+    devices: Arc<Devices>,
+    /// Whether device tokens are accepted: only while the server listens on loopback.
+    devices_allowed: bool,
     /// The port the server listens on.
     port: u16,
     /// Lowercase `name:port` values.
@@ -112,8 +168,9 @@ pub(crate) struct Gate {
 }
 
 impl Gate {
-    /// The gate for a server configured by `config` and listening on `local`.
-    pub(crate) fn new(config: &ServerConfig, local: SocketAddr) -> Gate {
+    /// The gate for a server configured by `config`, listening on `local`, with these
+    /// paired devices.
+    pub(crate) fn new(config: &ServerConfig, local: SocketAddr, devices: Arc<Devices>) -> Gate {
         let port = local.port();
         let mut hosts = vec![
             format!("127.0.0.1:{port}"),
@@ -135,6 +192,8 @@ impl Gate {
             .collect();
         Gate {
             token: config.token.clone(),
+            devices,
+            devices_allowed: local.ip().is_loopback(),
             port,
             hosts,
             extra_origins,
@@ -144,16 +203,59 @@ impl Gate {
     /// Checks an upgrade request's headers, as [`check`](Gate::check) does, and logs a
     /// refusal with its reason and `peer`, the address it came from. Nothing from the
     /// headers is logged: not the token, nor the `Host` or `Origin` values.
-    pub(crate) fn admit(&self, headers: &HeaderMap, peer: SocketAddr) -> Result<(), Refusal> {
+    pub(crate) fn admit(
+        &self,
+        headers: &HeaderMap,
+        peer: SocketAddr,
+    ) -> Result<Credential, Refusal> {
         let result = self.check(headers);
+        if let Err(refusal) = &result {
+            refusal.log(peer);
+        }
+        result
+    }
+
+    /// Checks only `Host` and `Origin`, as for `POST /api/v1/pair`, the one request
+    /// answered without a token, and logs a refusal as [`admit`](Gate::admit) does.
+    pub(crate) fn admit_unauthenticated(
+        &self,
+        headers: &HeaderMap,
+        peer: SocketAddr,
+    ) -> Result<(), Refusal> {
+        let result = self.check_host_and_origin(headers);
         if let Err(refusal) = result {
             refusal.log(peer);
         }
         result
     }
 
-    /// Checks an upgrade request's headers.
-    pub(crate) fn check(&self, headers: &HeaderMap) -> Result<(), Refusal> {
+    /// Checks a request's headers: `Host`, `Origin`, then the token, and says which
+    /// credential the token is.
+    pub(crate) fn check(&self, headers: &HeaderMap) -> Result<Credential, Refusal> {
+        self.check_host_and_origin(headers)?;
+        let token = if headers.contains_key(header::AUTHORIZATION) {
+            single(headers, &header::AUTHORIZATION).and_then(credentials)
+        } else {
+            subprotocol_token(headers)
+        }
+        .ok_or(Refusal::Token)?;
+        if self.token.matches(&token) {
+            return Ok(Credential::Control);
+        }
+        if !self.devices_allowed {
+            return Err(Refusal::Token);
+        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| since.as_secs());
+        match self.devices.admit(&token, now) {
+            Some((id, name)) => Ok(Credential::Device { id, name }),
+            None => Err(Refusal::Token),
+        }
+    }
+
+    /// Checks `Host`, then `Origin`.
+    fn check_host_and_origin(&self, headers: &HeaderMap) -> Result<(), Refusal> {
         let host = single(headers, &header::HOST)
             .map(|value| value.to_ascii_lowercase())
             .ok_or(Refusal::Host)?;
@@ -185,17 +287,7 @@ impl Gate {
                 return Err(Refusal::Origin);
             }
         }
-        let token = if headers.contains_key(header::AUTHORIZATION) {
-            single(headers, &header::AUTHORIZATION).and_then(credentials)
-        } else {
-            subprotocol_token(headers)
-        }
-        .ok_or(Refusal::Token)?;
-        if self.token.matches(&token) {
-            Ok(())
-        } else {
-            Err(Refusal::Token)
-        }
+        Ok(())
     }
 }
 
@@ -356,9 +448,10 @@ fn base64_decode(text: &str) -> Option<Vec<u8>> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{Gate, Refusal, check_extra_hosts};
+pub(crate) mod tests {
+    use super::{Credential, Gate, Refusal, check_extra_hosts};
     use crate::config::{ServerConfig, Token};
+    use crate::devices::{Devices, Now};
     use crate::error::ServerError;
     use axum::http::{HeaderMap, HeaderName, HeaderValue, header};
     use std::fmt;
@@ -379,7 +472,83 @@ mod tests {
         let mut config = ServerConfig::new(token);
         config.extra_hosts = extra_hosts.iter().map(|h| (*h).to_owned()).collect();
         config.extra_origins = extra_origins.iter().map(|o| (*o).to_owned()).collect();
-        Gate::new(&config, SocketAddr::from(([127, 0, 0, 1], port)))
+        Gate::new(&config, SocketAddr::from(([127, 0, 0, 1], port)), devices())
+    }
+
+    fn devices() -> Arc<Devices> {
+        match Devices::load(None) {
+            Ok(devices) => Arc::new(devices),
+            Err(error) => panic!("devices: {error}"),
+        }
+    }
+
+    /// A device paired on `devices`, and its token.
+    fn paired(devices: &Devices, name: &str) -> String {
+        let now = Now::current();
+        let code = devices.start_pairing(now).expect("random");
+        devices.pair(&code, name, now).expect("paired").1
+    }
+
+    /// ADR-0044: a device token gets in the same three ways as the control token, as
+    /// that device, and only while the server listens on loopback.
+    #[test]
+    fn device_tokens_admit_their_device_on_loopback_only() {
+        let Ok(token) = Token::new("t0ken") else {
+            panic!("a valid token");
+        };
+        let config = ServerConfig::new(token);
+        let devices = devices();
+        let device = paired(&devices, "Tablet");
+        let loopback = Gate::new(
+            &config,
+            SocketAddr::from(([127, 0, 0, 1], 4455)),
+            Arc::clone(&devices),
+        );
+        let bearer = format!("Bearer {device}");
+        let admitted = loopback.check(&with(header::AUTHORIZATION, Some(bearer.leak())));
+        let Ok(Credential::Device { name, .. }) = admitted else {
+            panic!("admitted as a device: {admitted:?}");
+        };
+        assert_eq!(name, "Tablet");
+        let protocols = format!("jstream, jstream.token.{device}");
+        let mut offered = with(header::AUTHORIZATION, None);
+        offered.append(
+            header::SEC_WEBSOCKET_PROTOCOL,
+            HeaderValue::from_str(&protocols).expect("a header value"),
+        );
+        assert!(matches!(
+            loopback.check(&offered),
+            Ok(Credential::Device { .. })
+        ));
+        // Bound beyond loopback, with no TLS, a device token is refused.
+        let mut wide = config.clone();
+        wide.extra_hosts = vec!["127.0.0.1:4455".into()];
+        let open = Gate::new(&wide, SocketAddr::from(([0, 0, 0, 0], 4455)), devices);
+        let bearer = format!("Bearer {device}");
+        assert_eq!(
+            open.check(&with(header::AUTHORIZATION, Some(bearer.leak()))),
+            Err(Refusal::Token)
+        );
+        assert_eq!(open.check(&headers(&good())), Ok(Credential::Control));
+    }
+
+    /// `POST /api/v1/pair` passes `Host` and `Origin` alone, and still needs both.
+    #[test]
+    fn the_pairing_request_needs_host_and_origin_but_no_token() {
+        let gate = gate(&[], &[]);
+        let peer = SocketAddr::from(([127, 0, 0, 1], 50_000));
+        assert_eq!(
+            gate.admit_unauthenticated(&with(header::AUTHORIZATION, None), peer),
+            Ok(())
+        );
+        assert_eq!(
+            gate.admit_unauthenticated(&with(header::ORIGIN, Some("http://evil.example")), peer),
+            Err(Refusal::Origin)
+        );
+        assert_eq!(
+            gate.admit_unauthenticated(&with(header::HOST, Some("evil.example:4455")), peer),
+            Err(Refusal::Host)
+        );
     }
 
     fn request(host: &str, origin: &str) -> HeaderMap {
@@ -421,7 +590,7 @@ mod tests {
     #[test]
     fn accepts_its_own_names_and_origins() {
         let gate = gate(&[], &[]);
-        assert_eq!(gate.check(&headers(&good())), Ok(()));
+        assert_eq!(gate.check(&headers(&good())), Ok(Credential::Control));
         for (host, origin) in [
             ("localhost:4455", "http://localhost:4455"),
             ("LOCALHOST:4455", "http://localhost:4455"),
@@ -432,7 +601,7 @@ mod tests {
                 (header::ORIGIN, origin),
                 (header::AUTHORIZATION, "bearer t0ken"),
             ]);
-            assert_eq!(gate.check(&map), Ok(()), "{host} {origin}");
+            assert_eq!(gate.check(&map), Ok(Credential::Control), "{host} {origin}");
         }
     }
 
@@ -479,7 +648,7 @@ mod tests {
     fn a_missing_origin_is_left_to_the_token() {
         let gate = gate(&[], &[]);
         let mut map = with(header::ORIGIN, None);
-        assert_eq!(gate.check(&map), Ok(()));
+        assert_eq!(gate.check(&map), Ok(Credential::Control));
         map.remove(header::AUTHORIZATION);
         assert_eq!(gate.check(&map), Err(Refusal::Token));
         let mut twice = headers(&good());
@@ -525,7 +694,7 @@ mod tests {
         ] {
             assert_eq!(
                 gate.check(&request(host, origin)),
-                Ok(()),
+                Ok(Credential::Control),
                 "{host} {origin}"
             );
         }
@@ -634,14 +803,14 @@ mod tests {
     /// A minimal subscriber that keeps every span's and event's fields as text, so a
     /// test can check what would be logged.
     #[derive(Clone, Default)]
-    struct Capture(Arc<Mutex<Vec<String>>>);
+    pub(crate) struct Capture(Arc<Mutex<Vec<String>>>);
 
     impl Capture {
         fn push(&self, text: String) {
             self.0.lock().expect("not poisoned").push(text);
         }
 
-        fn text(&self) -> String {
+        pub(crate) fn text(&self) -> String {
             self.0.lock().expect("not poisoned").join("\n")
         }
     }
@@ -706,7 +875,7 @@ mod tests {
                 gate.admit(&with(header::ORIGIN, Some("http://evil.example")), peer),
                 Err(Refusal::Origin)
             );
-            assert_eq!(gate.admit(&headers(&good()), peer), Ok(()));
+            assert_eq!(gate.admit(&headers(&good()), peer), Ok(Credential::Control));
             Refusal::Full.log(peer);
         });
         let logged = capture.text();
@@ -736,10 +905,10 @@ mod tests {
             (header::ORIGIN, "http://studio.lan:4455"),
             (header::AUTHORIZATION, "Bearer t0ken"),
         ]);
-        assert_eq!(gate.check(&map), Ok(()));
+        assert_eq!(gate.check(&map), Ok(Credential::Control));
         assert_eq!(
             gate.check(&with(header::ORIGIN, Some("https://UI.example"))),
-            Ok(())
+            Ok(Credential::Control)
         );
     }
 
@@ -761,7 +930,11 @@ mod tests {
             "basic OnQwa2Vu",
             "BASIC YW55IG9uZTp0MGtlbg==",
         ] {
-            assert_eq!(gate.check(&basic(accepted)), Ok(()), "{accepted}");
+            assert_eq!(
+                gate.check(&basic(accepted)),
+                Ok(Credential::Control),
+                "{accepted}"
+            );
         }
         // "t0ken" (no colon), "t0ken:x" (the token as the user name), "jstream:t0ke",
         // malformed base64, padding in the middle, empty.
@@ -820,8 +993,14 @@ mod tests {
             }
             gate.check(&headers(&pairs))
         };
-        assert_eq!(offer(&["jstream, jstream.token.t0ken"], None), Ok(()));
-        assert_eq!(offer(&["jstream", "jstream.token.t0ken"], None), Ok(()));
+        assert_eq!(
+            offer(&["jstream, jstream.token.t0ken"], None),
+            Ok(Credential::Control)
+        );
+        assert_eq!(
+            offer(&["jstream", "jstream.token.t0ken"], None),
+            Ok(Credential::Control)
+        );
         assert_eq!(
             offer(&["jstream.token.wr0ng, jstream"], None),
             Err(Refusal::Token)
@@ -839,7 +1018,7 @@ mod tests {
         );
         assert_eq!(
             offer(&["jstream, jstream.token.wr0ng"], Some("Bearer t0ken")),
-            Ok(())
+            Ok(Credential::Control)
         );
     }
 }

@@ -72,6 +72,11 @@ opaque_id!(
     EncoderProfileId
 );
 opaque_id!(
+    /// A paired device: one browser or other client admitted with its own device token
+    /// (ADR-0044). Assigned by the server when the device pairs.
+    DeviceId
+);
+opaque_id!(
     /// A connected client, assigned by the server in `welcome`. Undo history and the
     /// audit log are keyed by it.
     ClientId

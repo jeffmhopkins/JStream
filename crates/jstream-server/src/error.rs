@@ -30,6 +30,14 @@ pub enum ServerError {
         /// What is wrong with it.
         source: io::Error,
     },
+    /// The device file (`ServerConfig::device_file`) can't be read or is broken.
+    #[error("unusable device file `{}`: {reason}", path.display())]
+    DeviceFile {
+        /// The file as configured.
+        path: PathBuf,
+        /// What is wrong with it.
+        reason: String,
+    },
     /// The listening socket could not be opened.
     #[error("could not listen on {addr}: {source}")]
     Bind {

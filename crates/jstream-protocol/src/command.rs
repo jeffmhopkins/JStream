@@ -12,7 +12,9 @@
 use crate::encoder::EncoderProfile;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
-use crate::id::{EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{
+    DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId,
+};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
 use schemars::JsonSchema;
@@ -463,6 +465,27 @@ pub enum Action {
         /// The scene to put on program.
         scene_id: SceneId,
     },
+    /// Opens pairing for one more device (ADR-0044): the server draws a one-time
+    /// pairing code and answers with it, to this client only (a `result` of type
+    /// `pairing.start`). A device that posts the code with a name to `POST
+    /// /api/v1/pair` within 2 minutes gets its own device token. One code is open at a
+    /// time: a new `pairing.start` replaces the one open. A code is single-use and void
+    /// after 5 wrong attempts. The code never appears in a log, an event or any other
+    /// answer (R-SEC-001). Answered by the server that admits clients, not the engine:
+    /// a `Control` with no server in front fails with `unsupported`. Fails with
+    /// `action_failed` when the server listens beyond loopback, since a device token
+    /// travels only over loopback or TLS and the server has no TLS yet.
+    #[serde(rename = "pairing.start")]
+    PairingStart,
+    /// Revokes a paired device: its token stops working at once, and its open
+    /// connections are closed. Fails with `not_found` for a device that isn't paired
+    /// (or whose token lapsed after 30 days unused). Answered by the server, like
+    /// `pairing.start`.
+    #[serde(rename = "device.revoke")]
+    DeviceRevoke {
+        /// The device to revoke, as `device.list` reports it.
+        device_id: DeviceId,
+    },
 }
 
 impl Action {
@@ -474,6 +497,8 @@ impl Action {
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
             Action::SceneSwitch { .. } => "scene.switch",
+            Action::PairingStart => "pairing.start",
+            Action::DeviceRevoke { .. } => "device.revoke",
         }
     }
 }

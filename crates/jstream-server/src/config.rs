@@ -1,6 +1,6 @@
 //! The server's configuration: where it listens, the control token, which `Host` and
-//! `Origin` values it accepts beyond its own, the connection limits, the MCP transport, and
-//! the web UI's directory.
+//! `Origin` values it accepts beyond its own, the connection limits, the MCP transport,
+//! the web UI's directory, and the file that keeps the paired devices.
 
 use crate::error::ServerError;
 use std::fmt;
@@ -116,6 +116,12 @@ pub struct ServerConfig {
     /// that isn't a directory ([`ServerError::UiDir`]). [`ServerConfig::new`] leaves it
     /// unset: no UI, and those paths are 404.
     pub ui_dir: Option<PathBuf>,
+    /// The file that keeps the paired devices (ADR-0044): their IDs, names and token
+    /// digests, never their tokens. Read when the server binds (a missing file means no
+    /// devices; one other users can access is refused on Unix, like the token file),
+    /// and rewritten user-only on every change. [`ServerConfig::new`] leaves it unset:
+    /// devices then live in memory and are gone when the server stops.
+    pub device_file: Option<PathBuf>,
 }
 
 impl ServerConfig {
@@ -134,6 +140,7 @@ impl ServerConfig {
             max_mcp_sessions: MAX_MCP_SESSIONS,
             mcp_idle_timeout: MCP_IDLE_TIMEOUT,
             ui_dir: None,
+            device_file: None,
         }
     }
 }

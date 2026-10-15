@@ -614,7 +614,7 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not store the key: {err}"),
                     })?;
-                Ok(CallResult::Action {})
+                Ok(CallResult::action())
             }
             Action::OutputClearKey { output_id } => {
                 let store = self.key_store().ok_or_else(no_key_store)?;
@@ -623,7 +623,7 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not remove the key: {err}"),
                     })?;
-                Ok(CallResult::Action {})
+                Ok(CallResult::action())
             }
             other => Err(not_implemented(other.name())),
         }
@@ -960,7 +960,7 @@ impl Engine {
         };
         wake_all(std::mem::take(&mut wake));
         match outcome {
-            StartOutcome::Active => Ok(CallResult::Action {}),
+            StartOutcome::Active => Ok(CallResult::action()),
             StartOutcome::Cancelled(running) => {
                 drop(running);
                 drop(inflight);
@@ -1046,7 +1046,7 @@ impl Engine {
         settle.state = OutputState::Stopped;
         drop(settle);
         drop(clear_drain);
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     fn settle(&self, output_id: &OutputId, state: OutputState) {
@@ -1701,7 +1701,10 @@ impl State {
                     self.publish_render();
                     self.emit_studio(client_id, request_id, wake);
                 }
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
+            }
+            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+                return Err(served_by_the_server(other.name()));
             }
             other => return Err(not_implemented(other.name())),
         };
@@ -1714,7 +1717,7 @@ impl State {
                 wake,
             );
         }
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     /// Collection reads go to `Graph::query`; `output.status` reads the outputs and
@@ -1736,6 +1739,7 @@ impl State {
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                 },
+                Query::DeviceList => return Err(served_by_the_server(query.name())),
                 other => return Err(not_implemented(other.name())),
             },
         };
@@ -1835,6 +1839,13 @@ fn no_key_store() -> ProtocolError {
 }
 
 /// A protocol variant added after this engine was written.
+/// `unsupported`, for the calls that concern the listener's credentials (`pairing.start`,
+/// `device.list`, `device.revoke`): the server in front of the engine answers them
+/// (ADR-0044), so one that reaches the engine came from a client with no server between.
+fn served_by_the_server(call: &str) -> ProtocolError {
+    ProtocolError::Unsupported { call: call.into() }
+}
+
 fn not_implemented(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the engine does not implement {what} yet"),

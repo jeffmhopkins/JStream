@@ -633,7 +633,7 @@ impl State {
                     self.program = Some(scene_id);
                     self.emit_program(client_id, request_id);
                 }
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -644,12 +644,18 @@ impl State {
                 }
                 check_key(&key)?;
                 self.keys.insert(output_id, key);
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::OutputClearKey { output_id } => {
                 // Succeeds with no key, and for an output no longer in the collection.
                 self.keys.remove(&output_id);
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
+            }
+            // As the engine: the server in front answers these (ADR-0044).
+            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: other.name().into(),
+                });
             }
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -678,7 +684,7 @@ impl State {
                 state,
             });
         }
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     fn query(&self, query: Query) -> Result<CallResult, ProtocolError> {
@@ -752,6 +758,11 @@ impl State {
                 rev: self.collection.rev,
                 encoders: self.collection.encoder_infos(),
             },
+            Query::DeviceList => {
+                return Err(ProtocolError::Unsupported {
+                    call: "device.list".into(),
+                });
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(CallResult::Query { result })
@@ -3153,7 +3164,7 @@ mod tests {
             },
         };
         let started = block_on(agent.call(start)).expect("start");
-        assert_eq!(started.result, CallResult::Action {});
+        assert_eq!(started.result, CallResult::action());
 
         let changed = |state| Event::OutputStateChanged {
             output_id: OutputId::new("yt"),
@@ -3258,7 +3269,7 @@ mod tests {
         let start = Action::OutputStart {
             output_id: OutputId::new("yt"),
         };
-        assert_eq!(action(&*control, start), Ok(CallResult::Action {}));
+        assert_eq!(action(&*control, start), Ok(CallResult::action()));
         let delete = || {
             Batch::single(Edit::OutputDelete {
                 output_id: OutputId::new("yt"),
@@ -3283,7 +3294,7 @@ mod tests {
         let stop = Action::OutputStop {
             output_id: OutputId::new("yt"),
         };
-        assert_eq!(action(&*control, stop), Ok(CallResult::Action {}));
+        assert_eq!(action(&*control, stop), Ok(CallResult::action()));
         assert_eq!(batch(&*control, delete()), Ok(Rev(3)));
         let gone = status(&*control, "yt").expect_err("forgotten");
         assert_eq!(code(&gone), Some("not_found"));
@@ -3361,7 +3372,7 @@ mod tests {
         }
         assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, false)));
 
-        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::Action {}));
+        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::action()));
         assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, true)));
         assert_eq!(
             engine
@@ -3385,7 +3396,7 @@ mod tests {
             let clear = Action::OutputClearKey {
                 output_id: OutputId::new("yt"),
             };
-            assert_eq!(action(&*control, clear), Ok(CallResult::Action {}));
+            assert_eq!(action(&*control, clear), Ok(CallResult::action()));
         }
         assert!(engine.stream_key(&OutputId::new("yt")).is_none());
         let events = drain(&mut events);

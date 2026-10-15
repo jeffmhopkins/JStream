@@ -10,6 +10,7 @@ use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::future::Future;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::Arc;
 #[cfg(any(windows, test))]
 use {
@@ -161,18 +162,21 @@ fn opener(
     })
 }
 
-/// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token`, with MCP's
-/// streamable-HTTP transport on. Each connection and each MCP session gets its own
-/// session (its own `client_id`); all of them share the engine.
+/// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token` and the
+/// devices paired in `device_file` (ADR-0044; in memory without one), with MCP's streamable-HTTP transport on.
+/// Each connection and each MCP session gets its own session (its own `client_id`); all
+/// of them share the engine.
 pub async fn bind(
     engine: Arc<Engine>,
     port: u16,
     token: Token,
+    device_file: Option<PathBuf>,
 ) -> Result<Server, jstream_server::ServerError> {
     let connector: Connector = Arc::new(move || Box::new(engine.connect()));
     let mut config = ServerConfig::new(token);
     config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     config.mcp = true;
+    config.device_file = device_file;
     Server::bind(config, connector).await
 }
 
@@ -257,6 +261,7 @@ mod tests {
             engine(&options, Arc::new(AuditMemory::new())).expect("an engine"),
             0,
             token,
+            None,
         )
         .await
         .expect("binds");
@@ -343,6 +348,7 @@ mod tests {
             engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
             0,
             token.clone(),
+            None,
         )
         .await
         .expect("binds");
@@ -351,6 +357,7 @@ mod tests {
             engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
             port,
             token,
+            None,
         )
         .await
         .err()

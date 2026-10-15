@@ -33,8 +33,8 @@ pub use encoder::{
     HardwarePreference, RateControl, VideoCodec, VideoEncoding,
 };
 pub use envelope::{
-    Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request, Response,
-    ServerMessage, Welcome,
+    ActionResult, Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request,
+    Response, ServerMessage, Welcome,
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{DropCounts, Event, OutputState};
@@ -45,14 +45,17 @@ pub use geometry::{
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{
-    ClientId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId,
+    ClientId, DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev,
+    SceneId, SourceId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
 };
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
-pub use query::{DeleteTarget, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
+pub use query::{
+    DeleteTarget, DeviceInfo, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo,
+};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};

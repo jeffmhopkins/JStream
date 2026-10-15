@@ -1467,6 +1467,61 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "describe_api"
     },
     {
+      "description": "Runs one `device` operation: set `op.type` to one of `device.revoke` (action), `device.list` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "DeviceId": {
+            "description": "A paired device: one browser or other client admitted with its own device token\n(ADR-0044). Assigned by the server when the device pairs.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `device` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Revokes a paired device: its token stops working at once, and its open\nconnections are closed. Fails with `not_found` for a device that isn't paired\n(or whose token lapsed after 30 days unused). Answered by the server, like\n`pairing.start`.",
+                "properties": {
+                  "device_id": {
+                    "$ref": "#/$defs/DeviceId",
+                    "description": "The device to revoke, as `device.list` reports it."
+                  },
+                  "type": {
+                    "const": "device.revoke",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "device_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it\npaired and was last used, never its token. Answered by the server that admits\nclients, not the engine: a `Control` with no server in front fails with\n`unsupported`.",
+                "properties": {
+                  "type": {
+                    "const": "device.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "device"
+    },
+    {
       "description": "Runs one `encoder` operation: set `op.type` to one of `encoder.create` (edit), `encoder.update` (edit), `encoder.delete` (edit), `encoder.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
@@ -2793,6 +2848,37 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "output"
+    },
+    {
+      "description": "Runs one `pairing` operation: set `op.type` to one of `pairing.start` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `pairing` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
+                "properties": {
+                  "type": {
+                    "const": "pairing.start",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "pairing"
     },
     {
       "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.switch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",

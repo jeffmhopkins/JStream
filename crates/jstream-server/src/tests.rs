@@ -5,9 +5,9 @@
 use crate::{Connector, Server, ServerConfig, Token};
 use futures_util::{SinkExt, StreamExt};
 use jstream_control::protocol::{
-    Action, Batch, Call, CallResult, ClientId, Edit, Event, Hello, OutputId, OutputState,
-    PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Response, Rev,
-    SceneId, ServerMessage, Welcome,
+    Action, ActionResult, Batch, Call, CallResult, ClientId, DeviceId, DeviceInfo, Edit, Event,
+    Hello, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query,
+    QueryResult, RequestId, Response, Rev, SceneId, ServerMessage, Welcome,
 };
 use jstream_control::{
     BoxFuture, Control, ControlError, EventStream, MockEngine, WsConfig, WsControl,
@@ -47,11 +47,28 @@ fn start(engine: &MockEngine) -> Harness {
 
 /// A server serving `engine`, with its configuration changed by `configure`.
 fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) -> Harness {
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
+    let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
-        .build()
-    {
+        .build();
+    start_on(runtime, engine, configure)
+}
+
+/// [`start_with`] on a runtime that runs every task on the thread that calls
+/// [`Harness::run`], so a subscriber set there sees every log line.
+fn start_on_this_thread(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) -> Harness {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build();
+    start_on(runtime, engine, configure)
+}
+
+fn start_on(
+    runtime: std::io::Result<Runtime>,
+    engine: &MockEngine,
+    configure: impl FnOnce(&mut ServerConfig),
+) -> Harness {
+    let runtime = match runtime {
         Ok(runtime) => runtime,
         Err(error) => panic!("runtime: {error}"),
     };
@@ -400,7 +417,7 @@ fn a_batch_a_query_and_events_round_trip() {
         },
     };
     let response = ok(harness.run(control.call(start)));
-    assert_eq!(response.result, CallResult::Action {});
+    assert_eq!(response.result, CallResult::action());
     for state in [OutputState::Starting, OutputState::Active] {
         assert_eq!(
             next_event(&harness, &mut events),
@@ -1879,5 +1896,286 @@ fn a_websocket_upgrade_accepts_the_token_as_a_subprotocol() {
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED)
         }
         other => panic!("expected 401, got {:?}", other.map(|(_, r)| r.status())),
+    }
+}
+
+// Pairing (ADR-0044).
+
+impl Harness {
+    /// POSTs `body` as JSON to the pairing path on a new connection, with `headers`
+    /// (`Host` is added unless given).
+    fn post_pair(&self, headers: &[(&str, &str)], body: &str) -> HttpReply {
+        let addr = self.authority.clone();
+        let mut all: Vec<(&str, &str)> = vec![("Content-Type", "application/json")];
+        if !headers.iter().any(|(n, _)| n.eq_ignore_ascii_case("host")) {
+            all.push(("Host", &addr));
+        }
+        all.extend_from_slice(headers);
+        self.run(async {
+            let mut stream = match tokio::net::TcpStream::connect(&addr).await {
+                Ok(stream) => stream,
+                Err(error) => panic!("connect: {error}"),
+            };
+            http_to(&mut stream, "POST", crate::PAIR_PATH, &all, body).await
+        })
+    }
+
+    /// Starts pairing over `control` and returns the code.
+    fn start_pairing(&self, control: &WsControl) -> String {
+        let response = ok(self.run(control.call(Call::Action {
+            action: Action::PairingStart,
+        })));
+        match response.result {
+            CallResult::Action {
+                result:
+                    Some(ActionResult::PairingStart {
+                        code,
+                        expires_in_secs,
+                    }),
+            } => {
+                assert_eq!(expires_in_secs, 120);
+                code.expose().to_owned()
+            }
+            other => panic!("expected a pairing code, got {other:?}"),
+        }
+    }
+
+    /// Pairs a device named `name` with `code`, returning its ID and token.
+    fn pair(&self, code: &str, name: &str) -> (String, String) {
+        let body = serde_json::json!({"code": code, "name": name}).to_string();
+        let origin = self.own_origin();
+        let reply = self.post_pair(&[("Origin", &origin)], &body);
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        assert_eq!(reply.header("cache-control"), Some("no-store"));
+        let answer = reply.json();
+        match (answer["device_id"].as_str(), answer["token"].as_str()) {
+            (Some(id), Some(token)) => (id.to_owned(), token.to_owned()),
+            _ => panic!("no device in {answer}"),
+        }
+    }
+
+    fn device_list(&self, control: &WsControl) -> Vec<DeviceInfo> {
+        let call = Call::Query {
+            query: Query::DeviceList,
+        };
+        match ok(self.run(control.call(call))).result {
+            CallResult::Query {
+                result: QueryResult::DeviceList { devices },
+            } => devices,
+            other => panic!("expected device.list, got {other:?}"),
+        }
+    }
+}
+
+/// A code that differs from `code` in its last symbol.
+fn wrong_code(code: &str) -> String {
+    if code.ends_with('0') {
+        format!("{}1", &code[..8])
+    } else {
+        format!("{}0", &code[..8])
+    }
+}
+
+/// ADR-0044 end to end: an authenticated client starts pairing, a device trades the code
+/// for its own token, connects with it as itself, and a revoke closes it and locks it out.
+#[test]
+fn a_paired_device_connects_with_its_own_token_until_revoked() {
+    let harness = start(&MockEngine::new());
+    let (host, _) = harness.session();
+    // No code open: the one unauthenticated request is refused like a missing token.
+    let body = r#"{"code":"0000-0000","name":"Tablet"}"#;
+    assert_eq!(harness.post_pair(&[], body).status, 401);
+
+    let code = harness.start_pairing(&host);
+    // A foreign page can't pair, even with the code.
+    let foreign = serde_json::json!({"code": code, "name": "Evil"}).to_string();
+    let reply = harness.post_pair(&[("Origin", "http://evil.example")], &foreign);
+    assert_eq!(reply.status, 403);
+    // A bad name uses up no attempt; then the code pairs, once.
+    let unnamed = serde_json::json!({"code": code, "name": " "}).to_string();
+    assert_eq!(harness.post_pair(&[], &unnamed).status, 400);
+    let (device_id, token) = harness.pair(&code, "Tablet");
+    assert_eq!(token.len(), 64);
+    let again = serde_json::json!({"code": code, "name": "Again"}).to_string();
+    assert_eq!(harness.post_pair(&[], &again).status, 401);
+
+    // The device token gets in, and the device acts like any client.
+    let device = ok(harness.run(WsControl::connect(WsConfig::new(
+        harness.url.clone(),
+        token.clone(),
+    ))));
+    ok(harness.run(device.hello(hello())));
+    ok(harness.run(device.call(create_scene("scn_tablet"))));
+    let devices = harness.device_list(&device);
+    assert_eq!(devices.len(), 1);
+    assert_eq!(devices[0].device_id.as_str(), device_id);
+    assert_eq!(devices[0].name, "Tablet");
+    let origin = harness.own_origin();
+    let bearer = format!("Bearer {token}");
+    assert!(
+        harness
+            .raw(Some(&origin), Some(&harness.authority), Some(&bearer))
+            .is_ok()
+    );
+
+    // Revoking it closes its connection and locks its token out.
+    let mut events = device.events();
+    let revoke = Call::Action {
+        action: Action::DeviceRevoke {
+            device_id: DeviceId::new(device_id.as_str()),
+        },
+    };
+    ok(harness.run(host.call(revoke.clone())));
+    while next_event(&harness, &mut events).is_some() {}
+    let refused = harness.run(WsControl::connect(WsConfig::new(
+        harness.url.clone(),
+        token,
+    )));
+    assert!(expect_disconnected(refused).contains("401"));
+    assert!(harness.device_list(&host).is_empty());
+    assert_eq!(protocol_code(harness.run(host.call(revoke))), "not_found");
+}
+
+/// The server answers the pairing calls itself, after the handshake like any call, and
+/// the newest code replaces the one open.
+#[test]
+fn pairing_needs_the_handshake_and_the_newest_code_wins() {
+    let harness = start(&MockEngine::new());
+    let control = ok(harness.connect());
+    let early = harness.run(control.call(Call::Action {
+        action: Action::PairingStart,
+    }));
+    assert_eq!(protocol_code(early), "handshake_required");
+    ok(harness.run(control.hello(hello())));
+    let code = harness.start_pairing(&control);
+    let newer = harness.start_pairing(&control);
+    if newer != code {
+        let stale = serde_json::json!({"code": code, "name": "Old"}).to_string();
+        assert_eq!(harness.post_pair(&[], &stale).status, 403);
+    }
+    harness.pair(&newer, "Kitchen tablet");
+}
+
+/// Five wrong codes void the open one, so a guesser gets five tries per code.
+#[test]
+fn five_wrong_codes_void_the_open_one() {
+    let harness = start(&MockEngine::new());
+    let (control, _) = harness.session();
+    let code = harness.start_pairing(&control);
+    let guess = serde_json::json!({"code": wrong_code(&code), "name": "Guess"}).to_string();
+    for _ in 0..5 {
+        assert_eq!(harness.post_pair(&[], &guess).status, 403);
+    }
+    let right = serde_json::json!({"code": code, "name": "Late"}).to_string();
+    assert_eq!(harness.post_pair(&[], &right).status, 401);
+}
+
+/// MCP agents reach the pairing calls as the `pairing` and `device` tools, and a device
+/// token opens MCP sessions of its own, which the control token can't use.
+#[test]
+fn mcp_agents_can_pair_and_list_devices() {
+    let harness = start_with(&MockEngine::new(), mcp_on());
+    let session = harness.mcp_session("agent");
+    let call = |tool: &str, op: serde_json::Value| {
+        serde_json::json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                           "params": {"name": tool, "arguments": {"op": op}}})
+    };
+    let reply = harness.mcp(
+        Some(&session),
+        &call("pairing", serde_json::json!({"type": "pairing.start"})),
+    );
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let answer = reply.json();
+    let Some(code) = answer
+        .pointer("/result/structuredContent/result/result/code")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+    else {
+        panic!("no code in {answer}");
+    };
+    let (device_id, token) = harness.pair(&code, "Agent box");
+    let reply = harness.mcp(
+        Some(&session),
+        &call("device", serde_json::json!({"type": "device.list"})),
+    );
+    let listed = reply.json();
+    assert_eq!(
+        listed.pointer("/result/structuredContent/result/result/devices/0/device_id"),
+        Some(&serde_json::Value::from(device_id.as_str())),
+        "{listed}"
+    );
+    assert!(
+        !reply.body.contains(&token),
+        "device tokens are never reported"
+    );
+    // The device's own session; the control token can't use it.
+    let bearer = format!("Bearer {token}");
+    let headers = [
+        ("Authorization", bearer.as_str()),
+        ("Content-Type", "application/json"),
+        ("Accept", "application/json, text/event-stream"),
+    ];
+    let reply = harness.http("POST", &headers, &mcp_initialize("device").to_string());
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let Some(device_session) = reply.header("mcp-session-id").map(str::to_owned) else {
+        panic!("no session");
+    };
+    let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
+    assert_eq!(harness.mcp(Some(&device_session), &note).status, 404);
+}
+
+/// R-SEC-001: neither a pairing code nor a device token appears in what the server
+/// logs, from starting pairing, through wrong and right attempts and the device's
+/// connection, to its revocation.
+#[test]
+fn pairing_codes_and_device_tokens_are_never_logged() {
+    let capture = crate::gate::tests::Capture::default();
+    let mut secrets = Vec::new();
+    tracing::subscriber::with_default(capture.clone(), || {
+        let harness = start_on_this_thread(&MockEngine::new(), |_| {});
+        let (host, _) = harness.session();
+        let first = harness.start_pairing(&host);
+        let wrong = wrong_code(&first);
+        let guess = serde_json::json!({"code": wrong, "name": "Guess"}).to_string();
+        for _ in 0..5 {
+            assert_eq!(harness.post_pair(&[], &guess).status, 403);
+        }
+        let code = harness.start_pairing(&host);
+        let (device_id, token) = harness.pair(&code, "Tablet");
+        let device = ok(harness.run(WsControl::connect(WsConfig::new(
+            harness.url.clone(),
+            token.clone(),
+        ))));
+        ok(harness.run(device.hello(hello())));
+        let revoke = Call::Action {
+            action: Action::DeviceRevoke {
+                device_id: DeviceId::new(device_id.as_str()),
+            },
+        };
+        ok(harness.run(host.call(revoke)));
+        let refused = harness.run(WsControl::connect(WsConfig::new(
+            harness.url.clone(),
+            token.clone(),
+        )));
+        assert!(refused.is_err());
+        secrets.extend([first, wrong, code, token]);
+    });
+    let logged = capture.text();
+    for expected in [
+        "pairing started",
+        "pairing code voided after 5 wrong attempts",
+        "wrong pairing code",
+        "device paired",
+        "Tablet",
+        "device revoked",
+    ] {
+        assert!(logged.contains(expected), "{expected} not logged: {logged}");
+    }
+    for secret in &secrets {
+        let bare = secret.replace('-', "");
+        assert!(
+            !logged.contains(secret.as_str()) && !logged.contains(&bare),
+            "{secret} logged: {logged}"
+        );
     }
 }
