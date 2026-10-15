@@ -510,8 +510,6 @@ impl Engine {
         state.route_audio();
     }
 
-    /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
-    /// Holds the collection and the ledger, not the [`MediaHost`], like the ticker.
     /// Lets live sources that paint on the GPU (`browser`) paint on `context`, the
     /// program stage's platform GPU context, and re-plans the program mix. The returned
     /// call takes the context away again; the stage makes it before it stops.
@@ -521,6 +519,8 @@ impl Engine {
         Box::new(move || set_gpu(&shared, None))
     }
 
+    /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
+    /// Holds the collection and the ledger, not the [`MediaHost`], like the ticker.
     pub(crate) fn stats_emitter(&self) -> Box<dyn FnOnce() + Send> {
         let shared = Arc::clone(&self.shared);
         let ledger = Arc::clone(&self.drops);

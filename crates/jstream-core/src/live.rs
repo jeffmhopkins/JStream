@@ -430,7 +430,7 @@ impl LiveSources {
                 };
                 return Some((frame, next));
             }
-            if entry.kind == "browser" {
+            if jstream_sources::opens_browser(&entry.kind) {
                 // Not painted yet: the stand-in, until a re-plan finds the first paint.
                 let (frame, _) = Self::cpu_frame(source_id, running, at, now, versions)?;
                 return Some((frame, next));
