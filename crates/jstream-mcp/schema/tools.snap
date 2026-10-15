@@ -738,6 +738,84 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "events"
     },
     {
+      "description": "Runs one `history` operation: set `op.type` to one of `history.undo` (history call), `history.redo` (history call). Undo and redo apply to this session's own edits only, never another client's: each raises the state `rev` by one, and is refused with `undo_conflict` when another client has since changed what the step touched (the step is then dropped), or `history_empty` when there is nothing to undo or redo. They accept `expected_rev` and `idempotency_key`. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `history` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Undoes the client's most recent step that is not undone yet: applies its inverse\nand moves it to the redo stack. Fails with `history_empty` when there is none, and\nwith `undo_conflict` when another client has since changed what the step touched.",
+                "properties": {
+                  "type": {
+                    "const": "history.undo",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Applies the client's most recently undone step again and moves it back to the\nundo stack. The client's next batch clears what can be redone.",
+                "properties": {
+                  "type": {
+                    "const": "history.redo",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "history"
+    },
+    {
       "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.set_transform` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_crop` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
