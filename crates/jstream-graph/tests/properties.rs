@@ -387,6 +387,7 @@ fn output_kind() -> BoxedStrategy<OutputKind> {
                 container: RecordContainer::Mp4,
             }
         }),
+        1 => Just(OutputKind::VirtualCam),
     ]
     .boxed()
 }
