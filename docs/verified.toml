@@ -1098,7 +1098,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:9199dc0f5b8e802e", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: depends on core#design, which only gained the activity-gain text; daemon text names no audio routing; holds" }
+stamp = { hash = "b3:861da27967b6506b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#360, #299 D6, #381) into #328: took main's stamp; re-read; main changes no daemon code, only core#design's activity-gain text, which the daemon text doesn't name; this PR's /DELAYLOAD, LNK4199 and delay_load.rs text still matches build.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:f8d3caba075c6078" }
