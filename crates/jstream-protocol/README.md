@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:7e3c1f99020fac25", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#217 asset paths): #217 adds ':' to the rejected asset-path forms and changes no text F3 wrote here; F3's encoder profile, protocol 0.13 and program-stage text hold beside it" }
+verified = { hash = "b3:1e8df0fbc198149d", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Commands list is F3's with item.set_source; version line says 0.14 for references and clones, 0.13 encoder profiles; parity bullet merges encoder profiles with clone and dangling duplicated_from" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -35,11 +35,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
   `scene.reorder`, `scene.set_role`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
-  `item.set_visible`, `canvas.set_size`, `source.create`, `source.rename`,
-  `source.set_settings`, `source.duplicate`, `source.delete`, `output.create`,
-  `output.set_target`, `output.set_encoder`, `output.delete`, `encoder.create`,
-  `encoder.update`, `encoder.delete`), with `ItemTransform` (deprecated), `Crop`,
-  `SourceKind` and `SceneRole`;
+  `item.set_visible`, `item.set_source`, `canvas.set_size`, `source.create`,
+  `source.rename`, `source.set_settings`, `source.duplicate`, `source.delete`,
+  `output.create`, `output.set_target`, `output.set_encoder`, `output.delete`,
+  `encoder.create`, `encoder.update`, `encoder.delete`), with `ItemTransform`
+  (deprecated), `Crop`, `SourceKind` and `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
@@ -83,8 +83,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.13 because of
-  encoder profiles and session sharing; 0.12 added groups (`scene.set_role`,
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.14 because of
+  references and clones (`item.set_source`, `duplicated_from`); 0.13 added encoder
+  profiles and session sharing, 0.12 groups (`scene.set_role`,
   `item.move`, a scene's `role` and the placement edits' `scene_id`), 0.11 the canvas
   and the geometry wire surface ([Item geometry](#design)), 0.10 the `history` calls,
   0.9 the `record` output kind, 0.8 the kind queries and settings, 0.7 the output
@@ -98,7 +99,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   canvas, legacy items, one geometry item, two RTMP outputs, a recording output and two
   encoder profiles), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path and encoder profile checks included).
+  URL, recording path and encoder profile checks, and `item.set_source` and
+  `duplicated_from`, included). The collection also holds a clone made with
+  `source.duplicate` and `item.set_source`, and a `duplicated_from` naming a missing
+  source.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -111,7 +115,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:9f10c1a8d6bfc58c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#217 asset paths): #217 adds ':' to the rejected asset-path forms and changes no text F3 wrote here; F3's encoder profile, protocol 0.13 and program-stage text hold beside it" }
+verified = { hash = "b3:1b5b1d4bc6777520", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; references paragraph marks item.set_source 0.14; F3's encoder sections hold beside it" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -202,8 +206,17 @@ and an undo can re-create a deleted object under its old ID. IDs are opaque stri
 Sources are shared instances, independent of scenes. `source.create` adds one, and
 `item.add` places an existing source by reference, so one source can appear in many
 scenes, or several times in one, as the same capture. `source.duplicate` makes a
-separate copy under a new ID, with the same kind and settings, and `source.rename`
-renames one. A `SourceKind` is `builtin` (a kind the engine describes) or `scene`, which
+separate copy under a new ID, with the same kind and settings, and records the source it
+copied in the copy's `duplicated_from`; `source.rename` renames one. An item placing a
+shared source is a **reference**, and one placing a copy is a **clone**
+([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)). `item.set_source`
+(0.14) changes which source an item places and keeps the item's ID, placement and stacking
+position, so a client converts between the two in one batch: `source.duplicate` then
+`item.set_source` to the copy, or `item.set_source` back to `duplicated_from` then
+`source.delete` of the unplaced copy. `duplicated_from` is a plain link, not a
+dependency: deleting the original is allowed, `SourceInfo` then omits the link, and
+`source.create` takes it (never naming the new source itself) so that undoing a
+`source.delete` restores it. A `SourceKind` is `builtin` (a kind the engine describes) or `scene`, which
 nests another scene. Positions are indexes: scenes in display order, items in stacking
 order with 0 at the bottom.
 
@@ -270,7 +283,7 @@ never a type per kind.
   asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
-  edit that would close a cycle (`item.add`, `item.move`, `source.create`,
+  edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
   `source.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
   scene `a`). `scene.delete` and `source.delete` are rejected while a setting refers to the
@@ -418,7 +431,8 @@ item's form) plus whichever of `item.reorder`, `item.set_crop` and
 `scene.reorder` unless it was last, `scene.set_role` for a group, and each item's
 restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
-`source.delete` is `source.create` with the complete stored settings, and undoing
+`source.delete` is `source.create` with the complete stored settings and its
+`duplicated_from`, undoing `item.set_source` is `item.set_source` back, and undoing
 `source.set_settings` is a patch of the old values. Deleting a source that items still
 place or a setting refers to, or a scene that a `scene` source shows or a setting refers
 to, is rejected, so no edit removes more than the object it names. `jstream-graph`'s property
@@ -453,7 +467,7 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
   step sets, created or deleted an object the step touches, touched an object the step
   creates or deletes, also reordered the scenes or also set the canvas size, or made its edits
   no longer apply. An item's transform and its geometry are one property, its
-  placement. An
+  placement, and which source it places (`item.set_source`) is another. An
   edit touches the objects it creates, deletes or edits and the ones it places or
   names, such as an item's source. What the step touches is taken both from when it was recorded and from
   the edits it would apply now. Nothing is applied and the step is dropped, so the next

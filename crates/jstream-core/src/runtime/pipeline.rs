@@ -20,13 +20,16 @@
 //! A stop gives the output thread [`STOP_DRAIN`] to send what the encoders have
 //! queued. Past that deadline it abandons the rest, counts it as dropped and closes
 //! the publish target, so a peer that has stopped reading cannot hold `output.stop`.
+//! The stop waits for a publishing output thread only until that deadline plus
+//! [`OUTPUT_GRACE`]: a publish target that blocks in a send without honouring the
+//! deadline is left to its thread, which ends once the send returns (#138).
 
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -78,6 +81,10 @@ const MAX_DRAW_ERRORS: u32 = 30;
 /// the publish target is told the same deadline ([`LivePublish::stop_by`]), so a stalled
 /// peer cannot hold `output.stop` much longer than this.
 pub(crate) const STOP_DRAIN: Duration = Duration::from_secs(2);
+/// How long past the [`STOP_DRAIN`] deadline a stop still waits for a publishing output
+/// thread: time to drop what is queued and close the target. A thread that has not
+/// ended by then is blocked in the target, and the stop returns without it.
+const OUTPUT_GRACE: Duration = Duration::from_millis(500);
 
 /// Composites one frame on the render thread: the program mix of the render snapshot's
 /// [`Shot`] at `size`, with `display` sources showing the capture (or, with no program
@@ -523,9 +530,20 @@ pub(crate) struct Running {
     output_id: OutputId,
     generation: u64,
     stop: Arc<AtomicBool>,
+    /// When the stop's drain gives up. Set by the drop, just before `stop`, and read by
+    /// the output thread once it sees `stop`.
+    drain_by: Arc<OnceLock<Instant>>,
     /// Set once the output may leave as soon as nothing is queued for it.
     cut: Arc<AtomicBool>,
     output: Option<JoinHandle<()>>,
+    /// Disconnects when the output thread ends. Set for a live publish target only: the
+    /// drop then waits for the thread until the drain deadline plus [`OUTPUT_GRACE`],
+    /// and no longer. A recording is always joined, so its file is in place when the
+    /// stop returns.
+    output_done: Option<Receiver<()>>,
+    /// The output thread's end of the failure channel, closed by the drop so a thread
+    /// it stopped waiting for does not keep the publish watcher waiting too.
+    output_fail: FailLine,
     encoders: Option<Arc<Encoders>>,
     stats: Arc<PipelineStats>,
     /// Packets the output thread dropped itself: the muxer rejected them, or the stop's
@@ -591,8 +609,39 @@ impl Running {
     }
 }
 
+impl Running {
+    /// Joins the output thread. A publishing one is waited for only until `by`: past
+    /// that it is blocked in a publish target that ignores the stop deadline, so it is
+    /// detached and ends on its own once that call returns. What it drops after this
+    /// is not in the run's final counts.
+    fn join_output(&mut self, by: Instant) {
+        let Some(handle) = self.output.take() else {
+            return;
+        };
+        let ended = self.output_done.take().is_none_or(|done| {
+            !matches!(
+                done.recv_timeout(by.saturating_duration_since(Instant::now())),
+                Err(RecvTimeoutError::Timeout)
+            )
+        });
+        if ended {
+            join("output", Some(handle));
+        } else {
+            tracing::warn!(
+                "the publish target did not return by the stop deadline; \
+                 leaving the output thread to end on its own"
+            );
+            drop(handle);
+        }
+    }
+}
+
 impl Drop for Running {
     fn drop(&mut self) {
+        // The deadline is fixed here, before the joins below, so they count against
+        // it and `output.stop` returns by it plus `OUTPUT_GRACE` (#138).
+        let deadline = Instant::now() + STOP_DRAIN;
+        let _ = self.drain_by.set(deadline);
         self.stop.store(true, Ordering::Release);
         // The last output on a session drains it, so the output thread can send the
         // remaining packets and then see the streams end. An output leaving a session
@@ -603,7 +652,8 @@ impl Drop for Running {
             encoders.finish();
         }
         self.cut.store(true, Ordering::Release);
-        join("output", self.output.take());
+        self.join_output(deadline + OUTPUT_GRACE);
+        self.output_fail.close();
         // After the thread stops, so the latch sees its final counters.
         self.drop_guard.take();
         self.registration.take();
@@ -692,6 +742,38 @@ fn report(fail: &Sender<PipelineEvent>, reason: String) {
     tracing::error!(error = %reason, "pipeline failed");
     // The receiver is gone once the pipeline is being torn down; nothing to tell.
     let _ = fail.send(PipelineEvent::Failed(reason));
+}
+
+/// The output thread's sender to the publish watcher, which the stop can close. The
+/// watcher ends when every sender is gone, and `output.stop` joins it, so an output
+/// thread the stop has left behind must not hold one (#138). The lock is taken only
+/// to send or close, never across a call into the publish target.
+#[derive(Clone)]
+struct FailLine(Arc<Mutex<Option<Sender<PipelineEvent>>>>);
+
+impl FailLine {
+    fn new(fail: Sender<PipelineEvent>) -> Self {
+        Self(Arc::new(Mutex::new(Some(fail))))
+    }
+
+    /// Sends `event`, unless the line is closed.
+    fn send(&self, event: PipelineEvent) {
+        if let Some(fail) = lock(&self.0).as_ref() {
+            // The receiver is gone once the pipeline is being torn down.
+            let _ = fail.send(event);
+        }
+    }
+
+    /// [`report`] on this line.
+    fn report(&self, reason: String) {
+        tracing::error!(error = %reason, "pipeline failed");
+        self.send(PipelineEvent::Failed(reason));
+    }
+
+    /// Drops the sender. Later sends do nothing.
+    fn close(&self) {
+        drop(lock(&self.0).take());
+    }
 }
 
 fn panic_message(panic: &(dyn Any + Send)) -> &str {
@@ -860,8 +942,10 @@ pub(crate) fn launch(
     // Set once the start has succeeded; until then a recording is provisional.
     let keep = Arc::new(AtomicBool::new(false));
     let info = stream_info(program.size, origin, &encoders.key.1);
+    let publishing = matches!(destination, Destination::Publish(_));
     let sink = Sink::open(destination, &info, Arc::clone(&keep))?;
     let stop = Arc::new(AtomicBool::new(false));
+    let drain_by = Arc::new(OnceLock::new());
     let cut = Arc::new(AtomicBool::new(false));
     let stats = PipelineStats::new();
     let output_drops = Arc::new(AtomicU64::new(0));
@@ -874,13 +958,19 @@ pub(crate) fn launch(
     let audio_sub = encoders.audio.subscribe();
     program.attach(&encoders);
     let (started_tx, started_rx) = mpsc::channel();
+    let output_fail = FailLine::new(fail_tx);
+    let (done_tx, done_rx) = mpsc::channel::<()>();
     let output = spawn("jstream-output", {
         let stats = Arc::clone(&stats);
         let own = Arc::clone(&output_drops);
         let link = Arc::clone(&link_drops);
         let stop = Arc::clone(&stop);
+        let drain_by = Arc::clone(&drain_by);
         let cut = Arc::clone(&cut);
+        let fail = output_fail.clone();
         move || {
+            // Dropped when this thread ends, even by a panic: `join_output` waits on it.
+            let _done = done_tx;
             output_loop(OutputJob {
                 sink,
                 video: video_sub,
@@ -889,8 +979,9 @@ pub(crate) fn launch(
                 output_drops: own,
                 link_drops: link,
                 stop,
+                drain_by,
                 cut,
-                fail: fail_tx,
+                fail,
                 started: started_tx,
             });
         }
@@ -902,8 +993,11 @@ pub(crate) fn launch(
         output_id,
         generation,
         stop,
+        drain_by,
         cut,
         output: Some(output),
+        output_done: publishing.then_some(done_rx),
+        output_fail,
         encoders: Some(encoders),
         stats,
         output_drops,
@@ -1500,8 +1594,9 @@ struct OutputJob {
     output_drops: Arc<AtomicU64>,
     link_drops: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
+    drain_by: Arc<OnceLock<Instant>>,
     cut: Arc<AtomicBool>,
-    fail: Sender<PipelineEvent>,
+    fail: FailLine,
     /// Told once the sink has started, or has failed to and reported why.
     started: Sender<()>,
 }
@@ -1513,8 +1608,9 @@ struct OutputJob {
 /// error: the publish target drops and counts tags while it reconnects, and this
 /// loop reports each change of its [`LinkState`] on the same channel.
 ///
-/// Once it sees the stop flag, the loop keeps sending what the encoders queued for at
-/// most [`STOP_DRAIN`], and tells the publish target that deadline. When the deadline
+/// Once it sees the stop flag, the loop keeps sending what the encoders queued until
+/// the stop's deadline (`drain_by`, [`STOP_DRAIN`] after the stop began), and tells the
+/// publish target that deadline. When the deadline
 /// passes, or a send fails while stopping, it drops the packets still queued, counts
 /// them in `output_drops`, and finishes the target, which past the deadline closes
 /// without its goodbye. A failure while stopping is logged, not reported: the output
@@ -1530,12 +1626,13 @@ fn output_loop(job: OutputJob) {
         output_drops,
         link_drops,
         stop,
+        drain_by,
         cut,
         fail: fail_tx,
         started,
     } = job;
     if let Err(err) = sink.start() {
-        report(&fail_tx, err);
+        fail_tx.report(err);
         let _ = started.send(());
         sink.finish();
         return;
@@ -1559,7 +1656,11 @@ fn output_loop(job: OutputJob) {
     };
     while failed.is_none() && (!video_done || !audio_done) {
         if drain.is_none() && stop.load(Ordering::Acquire) {
-            let deadline = Instant::now() + STOP_DRAIN;
+            // `drain_by` is set before `stop`; the fallback is for a stop that did not.
+            let deadline = drain_by
+                .get()
+                .copied()
+                .unwrap_or_else(|| Instant::now() + STOP_DRAIN);
             sink.stop_by(deadline);
             drain = Some(deadline);
         }
@@ -1621,7 +1722,7 @@ fn output_loop(job: OutputJob) {
             tracing::warn!(error = %err, "publishing failed while stopping");
             abandoned = true;
         } else {
-            report(&fail_tx, err);
+            fail_tx.report(err);
         }
     }
     if abandoned {
@@ -1654,7 +1755,7 @@ fn discard(sub: &Subscription, done: bool) -> u64 {
 /// Tells the watcher when the publish link has changed from `last`, and returns
 /// the link's state now. Giving up (`Failed`) is not reported here: the next send
 /// or poll fails with it, and that error settles the output `failed`.
-fn report_link(sink: &Sink, last: LinkState, fail: &Sender<PipelineEvent>) -> LinkState {
+fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
     let now = sink.link_state();
     let event = match (last, now) {
         (LinkState::Active, LinkState::Reconnecting) => PipelineEvent::LinkDown,
@@ -1662,8 +1763,7 @@ fn report_link(sink: &Sink, last: LinkState, fail: &Sender<PipelineEvent>) -> Li
         _ => return now,
     };
     tracing::info!(link = ?now, "publish link changed");
-    // The receiver is gone once the pipeline is being torn down; nothing to tell.
-    let _ = fail.send(event);
+    fail.send(event);
     now
 }
 
