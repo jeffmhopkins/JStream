@@ -8,6 +8,7 @@
 //! after the lock is released.
 
 use crate::audit::{self, Audit, AuditSink};
+use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::history::{History, Touched};
@@ -72,6 +73,9 @@ struct Shared {
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
     /// Where each executed batch, undo, redo and action is recorded, if the host gave a sink.
     audit: Audit,
+    /// Where the collection is saved, if the host named a file. Taken before the
+    /// collection lock, never while holding it, so the disk write happens outside it.
+    collection_file: Mutex<Option<CollectionFile>>,
 }
 
 impl Default for Engine {
@@ -86,6 +90,7 @@ impl Default for Engine {
                 snapshots: SnapshotWorker::default(),
                 keys: Mutex::new(None),
                 audit: Audit::default(),
+                collection_file: Mutex::new(None),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -154,6 +159,70 @@ impl Engine {
     pub fn with_audit(self, sink: Arc<dyn AuditSink>) -> Self {
         self.shared.audit.set(sink);
         self
+    }
+
+    /// Loads the collection from the file at `path` and saves it there after every
+    /// change. Configure this before [`connect`](Self::connect): it replaces the
+    /// collection and its `rev` with the file's.
+    ///
+    /// The file is a versioned JSON collection (`jstream-graph`), upgraded on load if it
+    /// is older, and checked as edits are, against this engine's kinds. When there is
+    /// no file at `path`, it is created with the current, empty, collection, so a path
+    /// that can't be written fails here rather than at the first change.
+    ///
+    /// Every applied batch, undo and redo then replaces the file atomically before its
+    /// call returns, so a client that has its `rev` knows the file holds it. A failed
+    /// save is logged at `error` and leaves the call's result as it is: the change is
+    /// applied, and the next change saves again. The `rev` is saved too, so revisions
+    /// keep increasing across restarts and an `expected_rev` from before one can't
+    /// match a different state. Undo history and idempotency keys are not saved.
+    ///
+    /// # Errors
+    /// [`CollectionFileError`] when the file can't be read, holds no loadable
+    /// collection (it is then left as it is), or can't be created.
+    pub fn with_collection_file(
+        self,
+        path: impl Into<PathBuf>,
+    ) -> Result<Self, CollectionFileError> {
+        {
+            let mut file = lock(&self.shared.collection_file);
+            // The file is read (or created) with only the file's lock held, from a copy
+            // of the graph taken under the collection lock.
+            let current = lock(&self.shared.state).graph.clone();
+            let (opened, graph) = CollectionFile::open(path.into(), &current)?;
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state.graph = graph;
+            state.outputs.sync(state.graph.state());
+            *file = Some(opened);
+        }
+        Ok(self)
+    }
+
+    /// Saves the collection to its file, if the host named one and the file doesn't
+    /// already hold this `rev` or a later one. Takes the file's lock, then the
+    /// collection lock only to serialize, and writes with only the file's lock held, so
+    /// saves happen one at a time and a late one never overwrites a newer collection.
+    fn save_collection(&self) {
+        let mut file = lock(&self.shared.collection_file);
+        let Some(file) = file.as_mut() else {
+            return;
+        };
+        let (rev, json) = {
+            let state = lock(&self.shared.state);
+            if state.graph.rev() <= file.saved() {
+                return;
+            }
+            (state.graph.rev(), state.graph.to_collection_json())
+        };
+        if let Err(err) = file.save(rev, &json) {
+            tracing::error!(
+                path = %file.path().display(),
+                rev = %rev,
+                error = %err,
+                "collection not saved"
+            );
+        }
     }
 
     /// What an output in the collection is and where it sends, or `None` if the
@@ -453,6 +522,12 @@ impl Engine {
             }
             self.with_key_set(result)
         };
+        if matches!(
+            result,
+            Ok(CallResult::Batch { .. } | CallResult::History { .. })
+        ) {
+            self.save_collection();
+        }
         match (&result, output) {
             (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
             (Ok(CallResult::History { rev, step_rev, .. }), _) => {
