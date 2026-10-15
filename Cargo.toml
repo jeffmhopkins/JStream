@@ -33,7 +33,7 @@ futures-channel = { version = "0.3", default-features = false, features = ["std"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 # OS randomness (the daemon's control token). Already in the tree through tungstenite's
 # `rand`, so the version matches it.
-getrandom = { version = "0.3", default-features = false }
+getrandom = { version = "0.4", default-features = false }
 # GIF decoding for the image source (ADR-0031: pure-Rust image crates). No default
 # features: `color_quant` only matters for encoding RGBA frames.
 gif = { version = "0.14", default-features = false, features = ["std"] }
@@ -109,7 +109,7 @@ tauri-build = { version = "2.7", default-features = false, features = ["config-j
 thiserror = { version = "2", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false }
 # No TLS feature: plain `ws://` only, so no `rustls`/`ring` in the tree yet.
-tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect"] }
 toml = "1"
 # Logging (R-RS-005). Libraries depend on `tracing` only, and only apps install a
 # subscriber. `std` without the default `attributes`, so no proc-macro crates.
@@ -131,7 +131,7 @@ wgpu = { version = "=30.0.1", default-features = false, features = ["std"] }
 windows = { version = "=0.62.2", default-features = false }
 # `#[implement]` (COM callbacks) expands to `windows_core::` paths, so it is a direct
 # dependency at the version `windows` uses.
-windows-core = { version = "=0.62.2", default-features = false }
+windows-core = { version = "=0.100.0", default-features = false }
 # JPEG decoding for the image source (ADR-0031), and `zune-core` for its options. No
 # `log`; the `x86` and `neon` features keep the SIMD paths, chosen at run time.
 zune-core = { version = "0.5", default-features = false, features = ["std"] }
