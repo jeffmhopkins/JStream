@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:f6c8c4929c171800", by = "agent:claude@session_017dgMHhk9KuuwXxpbutfCzi", note = "Merge of main (#142 Stream keys bullet, MemoryKeyStore in Fakes) into C4a: re-read both; main's keys bullet and fake are unchanged; C4a's Video capture devices bullet (VideoDevices, paired audio, VideoDeviceFormat, CaptureEncoding Raw/Yuy2/Mjpeg, CaptureDecoder hook, rejected frames dropped), FakeVideoDevices/FakeCaptureDecoder and the Not yet line (C4b, Backends wiring, MJPEG Codec variant) match video_device.rs and fake.rs" }
+verified = { hash = "b3:63e8acac9657f4fe", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Stale through ARCH#crate-map (jstream-platform row now lists VideoDevices, Codecs, StreamKeyStore, as this section's bullets do). Not yet line updated for C4b: Windows implements VideoDevices (MfVideoDevices, MfMjpegDecoder); Backends field and a CaptureStats decode-failure count remain" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -113,15 +113,15 @@ Contents:
 
 **Not yet:** a platform that delivers or consumes GPU frames (the Windows
 `GpuInterop` opens the device and encode targets; its capture and encoders don't use them
-yet), a platform implementation of `VideoDevices` (Media Foundation's source reader is
-C4b) and its place in `Backends`, an MJPEG `Codec` variant with a `CaptureDecoder` built
-from the platform's decoder, and encoder selection by GPU adapter.
+yet), `VideoDevices` in `Backends` (Windows implements it as `MfVideoDevices`, with
+`MfMjpegDecoder` as its `CaptureDecoder`), a decode-failure count in `CaptureStats`, an
+MJPEG `Codec` variant, and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:6d45418b89299049", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Stale through ARCH#crate-map only (main's #141 platform-windows row plus G1's vcam-proto row); the jstream-platform row it relies on (GpuInterop with wgpu types) is unchanged, so the section holds" }
+verified = { hash = "b3:7fb6c7369787b8d7", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Stale through ARCH#crate-map only (platform and platform-windows rows reworded for C4b and #161); the row it relies on still names GpuInterop with wgpu types, so the section holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
