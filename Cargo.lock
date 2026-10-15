@@ -2517,7 +2517,6 @@ dependencies = [
 name = "jstream-ui-e2e"
 version = "0.0.0"
 dependencies = [
- "anyhow",
  "jstream-control",
  "jstream-server",
  "tokio",

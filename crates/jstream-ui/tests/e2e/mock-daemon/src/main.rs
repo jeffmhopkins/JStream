@@ -12,7 +12,6 @@
 
 #![forbid(unsafe_code)]
 
-use anyhow::{Context as _, Result, bail};
 use jstream_control::protocol::{
     Action, Batch, Call, Edit, EncoderProfile, EncoderProfileId, Hello, ItemGeometry,
     PROTOCOL_VERSION, Settings, Size, SourceId, SourceKind, Vec2,
@@ -22,6 +21,10 @@ use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::io::{Read as _, Write as _};
 use std::path::PathBuf;
 use std::sync::Arc;
+
+/// Every failure ends the process with its message; a test harness needs no error type
+/// of its own (`anyhow` is for the shipped apps only, R-RS-003).
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 /// What the command line asks for.
 struct Args {
@@ -36,19 +39,16 @@ fn parse_args() -> Result<Args> {
     let mut token = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
-        let mut value = || {
-            args.next()
-                .with_context(|| format!("`{arg}` needs a value"))
-        };
+        let mut value = || args.next().ok_or(format!("`{arg}` needs a value"));
         match arg.as_str() {
             "--ui-dir" => ui_dir = Some(PathBuf::from(value()?)),
             "--token" => token = Some(value()?),
-            other => bail!("unknown argument `{other}`"),
+            other => return Err(format!("unknown argument `{other}`").into()),
         }
     }
     Ok(Args {
-        ui_dir: ui_dir.context("`--ui-dir <dist>` is required")?,
-        token: token.context("`--token <token>` is required")?,
+        ui_dir: ui_dir.ok_or("`--ui-dir <dist>` is required")?,
+        token: token.ok_or("`--token <token>` is required")?,
     })
 }
 
@@ -63,9 +63,9 @@ async fn seed(engine: &MockEngine) -> Result<()> {
             client_name: "jstream-ui-e2e".into(),
         })
         .await?;
-    let center = Vec2::new(960.0, 540.0).context("finite centre")?;
-    let size = Size::try_new(640.0, 360.0).context("positive size")?;
-    let geometry = ItemGeometry::try_new(center, size).context("valid geometry")?;
+    let center = Vec2::new(960.0, 540.0).ok_or("a finite centre")?;
+    let size = Size::try_new(640.0, 360.0)?;
+    let geometry = ItemGeometry::try_new(center, size)?;
     let edits = vec![
         Edit::SceneCreate {
             scene_id: "intro".into(),
@@ -120,7 +120,9 @@ async fn seed(engine: &MockEngine) -> Result<()> {
 async fn main() -> Result<()> {
     let args = parse_args()?;
     let engine = MockEngine::new();
-    seed(&engine).await.context("seeding the mock engine")?;
+    seed(&engine)
+        .await
+        .map_err(|error| format!("seeding the mock engine: {error}"))?;
 
     let mut config = ServerConfig::new(Token::new(args.token)?);
     config.ui_dir = Some(args.ui_dir);
@@ -129,7 +131,7 @@ async fn main() -> Result<()> {
     let server = Server::bind(config, connector).await?;
     let url = server
         .ui_url()
-        .context("the server serves no UI despite `ui_dir`")?;
+        .ok_or("the server serves no UI despite `ui_dir`")?;
 
     // The test runner reads this line to learn the port.
     let mut stdout = std::io::stdout().lock();
