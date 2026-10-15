@@ -462,7 +462,7 @@ pub enum Action {
     /// `signed_out` when the user declines or the sign-in times out after 5 minutes).
     /// Sent again while a sign-in waits, it returns the same URL. Sent while signed in,
     /// it starts a new sign-in, which replaces the account once it finishes. Fails with
-    /// `action_failed` when the engine has no YouTube client.
+    /// `action_failed` when no YouTube OAuth client is configured.
     #[serde(rename = "youtube.sign_in")]
     YoutubeSignIn,
     /// Signs out of YouTube: removes the account's token from the credential store,
@@ -470,7 +470,7 @@ pub enum Action {
     /// effort).
     /// Emits `youtube.status_changed` `signed_out`. Succeeds when already signed out.
     /// A running `youtube` output keeps its connection. Fails with `action_failed` when
-    /// the engine has no YouTube client or the credential store refuses.
+    /// no YouTube OAuth client is configured or the credential store refuses.
     #[serde(rename = "youtube.sign_out")]
     YoutubeSignOut,
     /// Creates a YouTube broadcast (`liveBroadcasts.insert`) and returns it. JStream

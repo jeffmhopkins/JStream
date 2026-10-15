@@ -84,7 +84,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Starts signing in to YouTube with the full `youtube` scope (ADR-0041 §4) and\nreturns Google's consent URL (`ActionResult` `youtube.sign_in`). The client opens\nit in a browser; Google then redirects to a listener the engine opened on\n`127.0.0.1`, and the engine finishes the sign-in, keeps the refresh token in the\nOS credential store and emits `youtube.status_changed` (`signed_in`, or\n`signed_out` when the user declines or the sign-in times out after 5 minutes).\nSent again while a sign-in waits, it returns the same URL. Sent while signed in,\nit starts a new sign-in, which replaces the account once it finishes. Fails with\n`action_failed` when the engine has no YouTube client.",
+          "description": "Starts signing in to YouTube with the full `youtube` scope (ADR-0041 §4) and\nreturns Google's consent URL (`ActionResult` `youtube.sign_in`). The client opens\nit in a browser; Google then redirects to a listener the engine opened on\n`127.0.0.1`, and the engine finishes the sign-in, keeps the refresh token in the\nOS credential store and emits `youtube.status_changed` (`signed_in`, or\n`signed_out` when the user declines or the sign-in times out after 5 minutes).\nSent again while a sign-in waits, it returns the same URL. Sent while signed in,\nit starts a new sign-in, which replaces the account once it finishes. Fails with\n`action_failed` when no YouTube OAuth client is configured.",
           "properties": {
             "type": {
               "const": "youtube.sign_in",
@@ -97,7 +97,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Signs out of YouTube: removes the account's token from the credential store,\nabandons a sign-in that is waiting, then revokes the token at Google (best\neffort).\nEmits `youtube.status_changed` `signed_out`. Succeeds when already signed out.\nA running `youtube` output keeps its connection. Fails with `action_failed` when\nthe engine has no YouTube client or the credential store refuses.",
+          "description": "Signs out of YouTube: removes the account's token from the credential store,\nabandons a sign-in that is waiting, then revokes the token at Google (best\neffort).\nEmits `youtube.status_changed` `signed_out`. Succeeds when already signed out.\nA running `youtube` output keeps its connection. Fails with `action_failed` when\nno YouTube OAuth client is configured or the credential store refuses.",
           "properties": {
             "type": {
               "const": "youtube.sign_out",
@@ -4479,7 +4479,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "oneOf": [
         {
           "const": "unavailable",
-          "description": "The engine has no YouTube client configured: the YouTube actions and queries\nfail with `action_failed`.",
+          "description": "No Google OAuth client is configured, so YouTube's API features are off (JStream\nships none; the user brings their own). Clients hide YouTube's sign-in and\nbroadcast controls; the YouTube actions and queries fail with `action_failed`.",
           "type": "string"
         },
         {

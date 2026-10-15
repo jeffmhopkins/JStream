@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4882addaa1ca5d5e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:b24d613368147b33", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 change to Y3 (no required OAuth client): re-read; nothing here names the client or the tool list, so the text holds (the daemon still calls no with_youtube; the server's MCP endpoint gets Server::new, so it lists no youtube tool until A6b adds one)" }
 -->
 
 ### Listening and admission

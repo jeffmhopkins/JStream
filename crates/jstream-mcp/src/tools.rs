@@ -142,6 +142,14 @@ impl Tools {
         Tools { tools, owners }
     }
 
+    /// These tools without the one named `name`, so `tools/list` leaves it out and a
+    /// call of it is an unknown tool. Its ops stay owned by it, so a misrouted op still
+    /// names it.
+    pub(crate) fn without(mut self, name: &str) -> Tools {
+        self.tools.retain(|t| t.name != name);
+        self
+    }
+
     /// The MCP `Tool` objects, for `tools/list`.
     pub(crate) fn definitions(&self) -> Vec<Value> {
         self.tools.iter().map(|t| t.definition.clone()).collect()

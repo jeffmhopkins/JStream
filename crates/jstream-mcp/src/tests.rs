@@ -72,6 +72,11 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
+    fixture_with(|server| server)
+}
+
+/// A fixture whose server `configure` adjusts, such as with the `youtube` tool.
+fn fixture_with(configure: impl FnOnce(Server) -> Server) -> Fixture {
     let engine = MockEngine::new().with_output(OutputId::new("out_rec"));
     let control = Arc::new(Recording {
         inner: engine.connect(),
@@ -81,7 +86,7 @@ fn fixture() -> Fixture {
         closed: AtomicBool::new(false),
         events_ended: AtomicBool::new(false),
     });
-    let server = Server::new(Arc::clone(&control) as Arc<dyn Control>);
+    let server = configure(Server::new(Arc::clone(&control) as Arc<dyn Control>));
     Fixture {
         engine,
         control,
@@ -223,8 +228,7 @@ fn handshake_list_and_call_round_trip() {
             "source",
             "state",
             "studio",
-            "video",
-            "youtube"
+            "video"
         ]
     );
     assert!(list.get("ttlMs").is_none() && list.get("resultType").is_none());
@@ -331,7 +335,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(16));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(15));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -390,7 +394,7 @@ fn stateless_requests_are_validated() {
 /// with `INSTA_UPDATE=always cargo test -p jstream-mcp` and review the diff.
 #[test]
 fn tool_list_snapshot() {
-    let f = fixture();
+    let f = fixture_with(Server::with_youtube);
     f.initialize();
     let list = f.legacy(1, "tools/list", json!({}));
     let text = serde_json::to_string_pretty(&list).expect("serializes");
@@ -401,6 +405,37 @@ fn tool_list_snapshot() {
     }, {
         insta::assert_snapshot!("tools", text);
     });
+}
+
+/// YouTube's API features are off unless the user configured an OAuth client, so the
+/// `youtube` tool is listed only when the host adds it.
+#[test]
+fn the_youtube_tool_is_listed_only_when_the_host_adds_it() {
+    let names = |f: &Fixture| -> Vec<String> {
+        f.legacy(1, "tools/list", json!({}))["tools"]
+            .as_array()
+            .expect("tools")
+            .iter()
+            .filter_map(|t| t["name"].as_str().map(str::to_owned))
+            .collect()
+    };
+    let hidden = fixture();
+    hidden.initialize();
+    assert!(!names(&hidden).iter().any(|n| n == "youtube"));
+    let call = hidden
+        .send(
+            &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params":
+            {"name": "youtube", "arguments": {"op": {"type": "youtube.status"}}}}),
+        )
+        .expect("answered");
+    assert_eq!(
+        rpc_error(&call),
+        (-32602, "Unknown tool: youtube".to_owned())
+    );
+
+    let shown = fixture_with(Server::with_youtube);
+    shown.initialize();
+    assert!(names(&shown).iter().any(|n| n == "youtube"));
 }
 
 #[test]

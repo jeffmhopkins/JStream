@@ -527,7 +527,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:4c5f86faf8db5da9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:8c3ff303ff9d5090", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 (ADR-0051 proposed, Jeff: avoid requiring an OAuth client): re-read; YouTube is off unless the host passes a user-supplied client: unavailable wording and NO_YOUTUBE_CLIENT errors match engine.rs, youtube.rs and protocol youtube.rs" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -612,7 +612,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   and `youtube.list_streams` (never a stream key); the events `youtube.status_changed`
   and `youtube.health_changed` (a running YouTube output's stream health); and the RTMP
   target `youtube { broadcast_id }`, which `output.start` resolves to the bound stream's
-  `rtmps://` ingest and key through the Live API. Planned for M3:
+  `rtmps://` ingest and key through the Live API. All of these need a Google OAuth
+  client the user configured themselves (JStream embeds none); without one
+  `youtube.status` reports `unavailable`, the rest fail with `action_failed`, and
+  clients hide them. Streaming to YouTube with a stream key needs none of this. Planned
+  for M3:
   the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
   the channel and goes to the audit log, and `youtube.chat.feature { message_id }`, which
   sets or clears the featured message (runtime state, reported by an event) that the chat
@@ -661,11 +665,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:801a5ca4daece7b9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: nouns add delete, studio and youtube; tools.snap measured 164260 bytes, text says about 165 KB" }
+verified = { hash = "b3:8a9a9a55ca3eac37", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 (ADR-0051 proposed, Jeff: avoid requiring an OAuth client): re-read; YouTube is off unless the host passes a user-supplied client: Server::new hides the youtube tool, Server::with_youtube lists it; snapshot taken with it (16 tools), default list 15, checked against server.rs, tools.rs and tests.rs" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio`, `video` and `youtube` so far; `audio`
+  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio`, `video` and, when the user configured a Google OAuth client, `youtube` so far; `audio`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events

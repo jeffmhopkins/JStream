@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:986ebec63ce87b0a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:74d9e40e8aac9194", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 change to Y3 (no required OAuth client): re-read; nothing here names the client or the tool list, so the text holds (the daemon still calls no with_youtube; the server's MCP endpoint gets Server::new, so it lists no youtube tool until A6b adds one)" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

@@ -54,8 +54,13 @@ pub(crate) type ConnectRtmp =
 /// Emits an event to every subscriber, if the engine is still there.
 pub(crate) type Emit = Arc<dyn Fn(Event) + Send + Sync>;
 
-/// What the host gives the engine for YouTube: the app's OAuth client, the HTTPS
-/// transport, and where the refresh token is kept.
+/// Why a YouTube call fails when the engine has no YouTube setup.
+pub const NO_YOUTUBE_CLIENT: &str =
+    "YouTube's API features are off: no Google OAuth client is configured";
+
+/// What the host gives the engine for YouTube: the user's own Google OAuth client, the
+/// HTTPS transport, and where the refresh token is kept. JStream ships no client, so a
+/// host builds this only from a client the user configured.
 pub struct YoutubeSetup {
     client_id: String,
     client_secret: Option<Secret>,
@@ -77,7 +82,7 @@ impl fmt::Debug for YoutubeSetup {
 }
 
 impl YoutubeSetup {
-    /// The app's Google OAuth client (`client_id`, and its secret if it has one; an
+    /// The user's Google OAuth client (`client_id`, and its secret if it has one; an
     /// installed app's can't really be kept secret, but it never prints), the transport
     /// every Google call goes through (`jstream_youtube::HttpsTransport` in the app),
     /// and the store that keeps the refresh token.

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:db904d2fac1a5537", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:5ac6cd1098e75c8c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 (ADR-0051 proposed, Jeff: avoid requiring an OAuth client): re-read; YouTube is off unless the host passes a user-supplied client: unavailable wording and NO_YOUTUBE_CLIENT errors match engine.rs, youtube.rs and protocol youtube.rs" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -42,7 +42,8 @@ state machine. Contents:
   history and the subscribers behind one lock, and the drop ledger behind another, and executes
   batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
 - **YouTube** (`youtube.rs`, [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)):
-  `with_youtube(YoutubeSetup)` gives the engine the app's OAuth client, the HTTPS
+  `with_youtube(YoutubeSetup)` gives the engine the user's own Google OAuth client
+  (JStream ships none, so a host calls it only when the user configured one), the HTTPS
   transport and the `OAuthTokenStore`. It holds one `jstream-youtube` `LiveClient`
   (one account, its refresh token stored under the fixed opaque ID `TOKEN_ACCOUNT`, so
   no email or other personal detail names the credential) and runs the `youtube.*`
@@ -172,7 +173,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:7f6fae90777c53a8", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:4aa74c093a3cc3af", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 (ADR-0051 proposed, Jeff: avoid requiring an OAuth client): re-read; YouTube is off unless the host passes a user-supplied client: unavailable wording and NO_YOUTUBE_CLIENT errors match engine.rs, youtube.rs and protocol youtube.rs" }
 -->
 
 ### Engine and sessions
@@ -273,7 +274,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **`studio.get`** reads the program scene under the collection lock.
 - **YouTube** actions and queries (`youtube.*`) run with no engine lock held, since
   most call the Live API (see *YouTube* under *Outputs*). Without `with_youtube`,
-  `youtube.status` answers `unavailable` and the others `action_failed`.
+  YouTube's API features are off: `youtube.status` answers `unavailable` and the others
+  `action_failed` saying no OAuth client is configured, and clients hide them.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -602,8 +604,9 @@ plus the video sessions and hardware sessions open
 guess a hardware cap. A hardware session limit fails the start with the encoder's own
 error for now, not a session-limit code.
 
-**YouTube.** `with_youtube(YoutubeSetup)` gives the engine the app's OAuth client, the
-HTTPS transport and an `OAuthTokenStore` (`youtube.rs`,
+**YouTube.** `with_youtube(YoutubeSetup)` gives the engine the user's own Google OAuth
+client (JStream embeds none; without one YouTube's API features are off), the HTTPS
+transport and an `OAuthTokenStore` (`youtube.rs`,
 [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)). JStream holds one
 account: its refresh token sits under the fixed account ID `TOKEN_ACCOUNT`
 (`youtube`), which names no person, so no email ends up in a credential's name. A
