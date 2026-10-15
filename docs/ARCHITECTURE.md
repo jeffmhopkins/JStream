@@ -497,7 +497,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:4f36fff0eb27c853", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: only jstream-protocol geometry.rs tests changed since the last verify; Edits and Queries bullets hold" }
+verified = { hash = "b3:4f36fff0eb27c853", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3 0.9: re-read against the protocol diff (canvas.set_size, item.set_geometry deprecating item.set_transform, state.get canvas, placement forms, version bump, regenerated snaps) and the jstream-control mock changes; the Edits and Queries bullets edited in this PR hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

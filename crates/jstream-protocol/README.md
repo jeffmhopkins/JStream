@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:230ee996a830c490", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3 (0.9): only geometry.rs tests changed since the last verify (transform_view and Canvas/PlacementForm default tests); Commands, Queries, Geometry and parity bullets re-read and hold" }
+verified = { hash = "b3:230ee996a830c490", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3 0.9 wire surface re-read against the whole PR diff (command.rs: item.set_geometry, canvas.set_size, item.add geometry, deprecations; query.rs: StateGet.canvas, ItemInfo placement/geometry; geometry.rs: Canvas, PlacementForm, transform_view and tests; version.rs 0.8->0.9; parity and fixtures; regenerated protocol/examples snaps). Commands, Queries, Geometry, versions and parity bullets hold" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -95,7 +95,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:902ac77fc685c5d6", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3 (0.9): only geometry.rs tests changed since the last verify; Item geometry's transform_view and pre-0.9 default statements are what the new tests check" }
+verified = { hash = "b3:902ac77fc685c5d6", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3 0.9 wire surface re-read against the whole PR diff (new edits item.set_geometry and canvas.set_size, item.add geometry, both-fields and 3D/size/perspective/canvas validation, placement forms and transform_view reads, deprecations, version 0.9 handshake example, regenerated snaps). Item geometry and its On the wire (0.9) list hold" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
