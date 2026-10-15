@@ -156,7 +156,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3b88243c6680fbac", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: stale through ARCH#protocol's transport bullet; core still answers the pairing calls unsupported and is untouched by the cookie or the page; holds" }
+verified = { hash = "b3:d1980d0e46bc8afc", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through ARCH#protocol's added clause that the desktop app's server pairs nothing; nothing in this section concerns the desktop app's pairing; holds" }
 -->
 
 ### Engine and sessions

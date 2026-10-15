@@ -38,6 +38,9 @@ pub(crate) struct Admitted {
     /// Whether pairing is offered: the server listens on a loopback address or on a TLS
     /// listener.
     pairing_offered: bool,
+    /// Whether the server answers the pairing and device calls (`ServerConfig::pairing`).
+    /// Off, they reach `inner` like any other call.
+    serves_devices: bool,
     /// Whether `hello` succeeded, which the calls answered here need too.
     greeted: AtomicBool,
     /// Numbers the requests answered here (`server_1`, ...).
@@ -50,12 +53,14 @@ impl Admitted {
         credential: Credential,
         devices: Arc<Devices>,
         pairing_offered: bool,
+        serves_devices: bool,
     ) -> Admitted {
         Admitted {
             inner,
             credential,
             devices,
             pairing_offered,
+            serves_devices,
             greeted: AtomicBool::new(false),
             answered: AtomicU64::new(0),
         }
@@ -147,7 +152,7 @@ impl Control for Admitted {
     }
 
     fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
-        if !served_here(&call) {
+        if !self.serves_devices || !served_here(&call) {
             return self.inner.call(call);
         }
         Box::pin(async move {
@@ -209,6 +214,14 @@ mod tests {
     }
 
     fn admitted(credential: Credential, pairing_offered: bool) -> (Admitted, Arc<Mutex<String>>) {
+        admitted_with(credential, pairing_offered, true)
+    }
+
+    fn admitted_with(
+        credential: Credential,
+        pairing_offered: bool,
+        serves_devices: bool,
+    ) -> (Admitted, Arc<Mutex<String>>) {
         let name = Arc::new(Mutex::new(String::new()));
         let inner = Named {
             inner: MockEngine::new().connect(),
@@ -219,7 +232,13 @@ mod tests {
             Err(error) => panic!("devices: {error}"),
         };
         (
-            Admitted::new(Box::new(inner), credential, devices, pairing_offered),
+            Admitted::new(
+                Box::new(inner),
+                credential,
+                devices,
+                pairing_offered,
+                serves_devices,
+            ),
             name,
         )
     }
@@ -263,5 +282,25 @@ mod tests {
         }));
         let code = refused.err().and_then(|e| e.protocol().map(|p| p.code()));
         assert_eq!(code, Some("action_failed"));
+    }
+
+    /// With pairing off, the pairing and device calls reach the session, which answers
+    /// `unsupported`, so a host's UI hides its pairing panel.
+    #[test]
+    fn with_pairing_off_the_device_calls_are_unsupported() {
+        let (session, _) = admitted_with(Credential::Control, true, false);
+        assert!(block(session.hello(hello())).is_ok());
+        for call in [
+            Call::Action {
+                action: Action::PairingStart,
+            },
+            Call::Query {
+                query: jstream_protocol::Query::DeviceList,
+            },
+        ] {
+            let refused = block(session.call(call));
+            let code = refused.err().and_then(|e| e.protocol().map(|p| p.code()));
+            assert_eq!(code, Some("unsupported"));
+        }
     }
 }

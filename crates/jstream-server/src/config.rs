@@ -131,6 +131,13 @@ pub struct ServerConfig {
     /// turn it on. Turning it on for a listener reached over plain HTTP would send
     /// device tokens in the clear.
     pub tls: bool,
+    /// Whether the server pairs devices at all (ADR-0044, ADR-0047). Off, it answers no
+    /// `pairing.start`, `device.list` or `device.revoke` itself: they reach the session,
+    /// which answers `unsupported`, so a host's UI hides its pairing panel. No code is
+    /// then ever drawn, so no device token exists and none is accepted.
+    /// [`ServerConfig::new`] leaves it on; a host whose engine serves only itself, like
+    /// the desktop app's webview, turns it off.
+    pub pairing: bool,
 }
 
 impl ServerConfig {
@@ -151,6 +158,7 @@ impl ServerConfig {
             ui_dir: None,
             device_file: None,
             tls: false,
+            pairing: true,
         }
     }
 }

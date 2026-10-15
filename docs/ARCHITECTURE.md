@@ -524,7 +524,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:812d8c9a7e41dc6b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: transport bullet now says device tokens on loopback or a TLS listener and names the TLS-only /pair page and the device-only __Host-jstream_device cookie; pairing bullet and the rest hold" }
+verified = { hash = "b3:0ded4f0d871225b6", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing bullet: a session whose server pairs nothing (the desktop app's) also answers unsupported, matching ServerConfig::pairing; rest unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -565,7 +565,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   sent), which a device trades at `POST /api/v1/pair` for a device token of its own;
   `device.list` and the action `device.revoke` manage the paired devices. They concern
   whom a listener admits, so `jstream-server` answers them, and a session with no server
-  in front answers `unsupported`
+  in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0046](adr/0046-server-answers-credential-calls.md)).
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,

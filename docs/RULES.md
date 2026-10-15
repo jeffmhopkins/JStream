@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:cb116bf56ac58f2d", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: stale through ARCH#protocol's transport bullet; no protocol type or name changed (the browser flag is in the HTTP exchange body, not the protocol), so R-API-001/002 hold" }
+verified = { hash = "b3:64f596eed1dffc6f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through ARCH#protocol's added clause that the desktop app's server pairs nothing; nothing in this section concerns the desktop app's pairing; holds" }
 -->
 
 <a id="R-API-001"></a>

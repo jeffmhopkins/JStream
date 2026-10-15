@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:7fcc53525fea7170", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: stale through ARCH#protocol's transport bullet (TLS-only /pair page, device cookie); jstream-control is unchanged and its browser client sends no token subprotocol for an empty token, so the cookie reaches the gate; transport and TLS bullets hold" }
+verified = { hash = "b3:bce32ceb9d2a44d1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through ARCH#protocol's added clause that the desktop app's server pairs nothing; nothing in this section concerns the desktop app's pairing; holds" }
 -->
 
 ### The trait

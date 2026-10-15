@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:163a2c06099e47bf", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: contents gain pair_page.rs/pair.html (GET /pair, TLS only), the tls flag in ServerConfig, the browser exchange in pair.rs and the cookie in gate.rs; Not-here-yet now says a TLS listener, with tls set only by tests" }
+verified = { hash = "b3:f4f710d5d9a4f14c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Configuration bullet names the pairing switch; Admitted bullet says it answers the three calls unless pairing is off; checked against config.rs and admitted.rs" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -35,7 +35,7 @@ Contents (a first cut; [Design](#design) explains the choices):
   types and a Content Security Policy.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
   origins, connection limits, the MCP switch and its limits, the UI directory, the
-  device file, the `tls` flag) and `Token`, the control token.
+  device file, the `tls` flag, the `pairing` switch) and `Token`, the control token.
 - **Devices** (`devices.rs`): the paired devices, the open pairing code, and the device
   file that keeps the devices' token digests
   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
@@ -46,6 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)).
 - **Admitted session** (`admitted.rs`): the `Control` wrapper every connection and MCP
   session gets, which answers `pairing.start`, `device.list` and `device.revoke` itself
+  unless `ServerConfig::pairing` is off
   ([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)).
 - **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
   an accepted upgrade request in time.
@@ -70,7 +71,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e6b8eb25309bb396", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: admission table (https origin, 443 default, cookie row), web UI (reserved /pair, 401 page with link on TLS, wss in CSP), pairing (start on loopback or TLS, browser rows in the exchange table), new pairing-page-and-cookie subsection matching gate.rs/pair.rs/pair_page.rs/devices.rs, logging reasons, open questions 1-2 updated" }
+verified = { hash = "b3:b77a481147f8e3da", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "New Pairing off bullet (calls reach the session and answer unsupported, no code, /pair 404, desktop turns it off); pairing-page subsection now needs tls and pairing on; checked against admitted.rs, pair_page.rs, ui.rs challenge" }
 -->
 
 ### Listening and admission
@@ -226,6 +227,10 @@ its own from a short code instead of the control token.
   (`action_failed`) unless the server is bound to loopback or `ServerConfig::tls` is on:
   a device token is accepted only over loopback or TLS
   ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
+- **Pairing off.** With `ServerConfig::pairing` off (on in `ServerConfig::new`), the
+  server answers none of the three calls: they reach the session, which answers
+  `unsupported`, so a host's UI hides its pairing panel. No code is ever drawn, and
+  `GET /pair` is 404. `jstream-desktop` turns it off.
 - **The exchange.** `POST /api/v1/pair` (`PAIR_PATH`) with
   `{"code": "...", "name": "..."}`, and `"browser": true` from the pairing page, is
   answered without a token; it still passes the `Host` and `Origin` checks. The name is
@@ -270,7 +275,7 @@ These three calls are answered by the server, not the engine
 
 [ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md) lets a
 browser pair by itself and stay signed in. All of it exists only with
-`ServerConfig::tls` on; without it `GET /pair` is 404 and the UI's `401` links nowhere.
+`ServerConfig::tls` and `ServerConfig::pairing` on; otherwise `GET /pair` is 404 and the UI's `401` links nowhere.
 
 - **The page.** `GET /pair` (`PAIR_PAGE_PATH`; `HEAD` too, any other method 405) is
   answered without a token, after the `Host` and `Origin` checks. It is a fixed page

@@ -53,6 +53,8 @@ impl Host {
         let token = new_token()?;
         let mut config = ServerConfig::new(Token::new(token.clone())?);
         config.extra_origins = vec![origin.to_owned()];
+        // The engine serves only this webview, so it pairs no device (ADR-0047).
+        config.pairing = false;
         let connector: Connector = Arc::new(move || Box::new(engine.connect()));
         let server: Server = runtime
             .block_on(Server::bind(config, connector))

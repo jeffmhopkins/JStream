@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f0925d97c67e7dbc", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
+verified = { hash = "b3:6aa0f9e06d1d5b20", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "host.rs gains config.pairing = false; purpose (Tauri window, in-process engine over the loopback WebSocket API) unchanged; holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -92,18 +92,17 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:e462737eb15720ff", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 build: host.rs binds loopback with ServerConfig::new (tls off), so no /pair page and no cookie; the server answers pairing calls, so the UI's new pairing panel shows in the app; added those sentences; rest unchanged" }
+verified = { hash = "b3:c7f578a5c5e747b1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Engine bullet now says the server pairs nothing (ServerConfig::pairing off): pairing calls answer unsupported, the UI's panel stays hidden, no /pair page or cookie; matches host.rs and admitted.rs" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
   picks, behind a 32-byte random token made at each start and kept only in memory: no
   token file, and no other client can connect. MCP is off. The server accepts the
   webview's origin besides its own (R-SEC-002); every connection still presents the
-  token. No device file is set, so a device paired from the app
-  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) lasts only until it exits,
-  and, like the token, is accepted only on loopback. The server answers the pairing
-  calls here too, so `jstream-ui`'s pairing panel shows in the app. The listener has no
-  TLS, so it serves no pairing page and reads no device cookie
+  token. The engine serves only the webview, so the server pairs no device
+  (`ServerConfig::pairing` off): `pairing.start`, `device.list` and `device.revoke`
+  answer `unsupported`, `jstream-ui`'s pairing panel stays hidden, and there is no
+  pairing page or device cookie
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
   When the app exits, the server closes its connections and the engine stops.

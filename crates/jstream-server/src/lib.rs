@@ -104,6 +104,8 @@ struct App {
     /// Whether the listener is reached over TLS (`ServerConfig::tls`): only then are the
     /// pairing page and the device cookie (ADR-0047) served.
     tls: bool,
+    /// Whether the server pairs devices at all (`ServerConfig::pairing`).
+    pairing: bool,
 }
 
 impl App {
@@ -114,6 +116,7 @@ impl App {
             credential,
             Arc::clone(&self.devices),
             self.pairing_offered,
+            self.pairing,
         ))
     }
 }
@@ -149,6 +152,7 @@ impl Server {
             devices,
             pairing_offered: local_addr.ip().is_loopback() || config.tls,
             tls: config.tls,
+            pairing: config.pairing,
         });
         Ok(Server {
             listener,
