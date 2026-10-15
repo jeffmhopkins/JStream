@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:9c432d87e60e878a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: rule text unchanged; ARCH#threading's shared stage hands encoder inputs over std mpsc, not locks" }
+verified = { hash = "b3:06f448f54a6ebbd3", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main into ADR-0042 edit of ARCH#threading: the output-pipeline paragraph moved to core README#runtime and the audio 'In the engine' paragraph became a short link; the thread roster, clock, snapshot and parameter-channel text this section relies on is unchanged, so it holds" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2cce962f1cde743b", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: rule text unchanged; 0.13 is additive" }
+verified = { hash = "b3:32b59aca0d1ca78c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main: R-API-001..003 text unchanged; encoders and encoder_profile are optional, so v1 files without them still load (a_file_without_encoder_profiles_loads) and no bump is needed" }
 -->
 
 <a id="R-API-001"></a>

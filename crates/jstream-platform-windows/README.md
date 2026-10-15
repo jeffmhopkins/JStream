@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:24dfdc40fd611c6e", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: took main's depends_on (ADR-0020) and prose; F3 changes no Windows code" }
+verified = { hash = "b3:9859c63cd8ebddb0", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (G3a vcam sink, E3a) into ADR-0042: text and depends_on are main's (adds ADR-0020); this PR's ARCH#threading edit leaves the MMCSS / capture-thread roster it relies on unchanged; holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

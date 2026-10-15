@@ -11,9 +11,9 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-mux/src/**"]
+covers = ["crates/jstream-mux/src/**", "crates/jstream-mux/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mux", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0034-youtube-interaction-scope-v2.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:2b18d14a9468e213", by = "agent:claude@session_01M7dd6pdhEEieUbct9m5TkJ", note = "F5 round 2: re-read Purpose after merging main and the review fixes: the av1 bullet now says to_sample rejects a temporal unit left empty (matches av1.rs); the Enhanced RTMP bullet still matches flv.rs (an HEVC/AV1 keyframe without parameter sets now reports MissingHevcParameterSets/MissingAv1SequenceHeader, which the bullet doesn't name); rest unchanged from round 1" }
+verified = { hash = "b3:fa6d0c92798835b3", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042: covers gains Cargo.toml; 'depends only on jstream-media and thiserror' matches the manifest's dependencies exactly" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:cc28b7fac2ac7fa2", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: Tests bullet keeps main's history list and F3's sharing tests; drop counts say until the last output stops" }
+verified = { hash = "b3:e3996fc1230c1832", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#205, #182): Collection file and Runtime bullets hold; the saved collection now includes encoder profiles via jstream-graph, no core prose names its fields" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -31,7 +31,8 @@ The control plane is the scene graph, the sessions and `video.snapshot`.
 state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
-  `with_publish_opener`, `with_key_store`, `with_audit` and `with_history_limit`;
+  `with_publish_opener`, `with_key_store`, `with_audit`, `with_history_limit` and
+  `with_collection_file`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -44,6 +45,9 @@ state machine. Contents:
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
   `audit.jsonl` from its own writer thread (see *Audit log* in [Design](#design)).
+- **Collection file** (`collection.rs`): loads the collection from the file the host
+  names with `with_collection_file` (or creates it), and saves it atomically after every
+  change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   They are stubs: `color`, `image`, `media` and `text` take a first set of parameters,
@@ -102,10 +106,15 @@ state machine. Contents:
   actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
-  rotation (`audit.rs`), and of undo and redo (`undo_and_redo_are_audited`), and an MCP agent (`jstream-mcp`, a
+  rotation (`audit.rs`), and of undo and redo (`undo_and_redo_are_audited`), the
+  collection file (`src/tests/collection.rs`: created when missing, batches, an undo
+  and a redo each saved, a saved collection loaded by a new engine with its `rev` and
+  outputs, refused files left
+  as they were, a failed save that the next change recovers, and concurrent sessions
+  leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
-Not here yet: live values, persistence, real source kinds, arc-swap
+Not here yet: live values, real source kinds, arc-swap
 snapshots, a GPU encode target, and the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -118,7 +127,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:d441e5464a0ac7a3", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: Locking keeps the start lock and adds main's audit sink handle; history now classifies encoder edits (Encoder object, EncoderChoice/Encoding props) instead of treating them as unknown" }
+verified = { hash = "b3:29525cc1a6699579", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#205): Collection file subsection re-read against collection.rs; Encoder profiles and output.start sharing paragraphs hold" }
 -->
 
 ### Engine and sessions
@@ -663,15 +672,85 @@ are UTC, RFC 3339 to the millisecond, formatted without a date crate.
 No host injects a sink yet: the daemon's wiring, in its data directory, is a later
 item.
 
+### Collection file
+
+`Engine::with_collection_file(path)` loads the collection from `path`
+(`jstream-graph`'s `Graph::with_collection_json`, checked against the engine's kinds)
+and replaces the engine's collection and `rev` with it; the outputs' runtime state
+follows, so a loaded output is `stopped`. With no file at `path` it saves the current,
+empty, collection there at once, so an unwritable path fails at startup rather than at
+the first change. A file that doesn't read or load is refused with
+`CollectionFileError` (`Read`, `Load` or `Create`, each naming the path but never the
+contents) and left as it is. It is configured before `connect`, like the other
+builders.
+
+After each applied batch, undo or redo, `Engine::execute` saves the collection before
+the call returns, so a client that has its `rev` knows the file holds it. The save
+takes the collection file's mutex, then the collection lock only long enough to
+serialize the graph, and writes with only the file's mutex held: saves happen one at a
+time, never under the collection lock, and one whose `rev` the file already has (or
+passed, because a later change saved first) writes nothing. The write is atomic: a
+temporary `.<name>.<pid>.tmp` beside the file, flushed to disk, renamed over it, and on
+Unix the directory flushed too; on Unix it is mode `0600`. A failed save is logged at
+`error` with the path and `rev`, removes the temporary file, and leaves the call's
+result as it is: the change stays applied and the next change saves again. Undo
+history and idempotency keys are not saved.
+
+The daemon's `--collection` option, which turns this on, is a later item.
+
 ### Not yet
 
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- Persistence (the collection file), the daemon's audit file, and real source kinds with
+- The daemon's `--collection` option and audit file, and real source kinds with
   settings that change what renders (`jstream-sources`).
 - Arc-swap snapshots, the collector thread, live-value handover, and a GPU encode
   target. `output.start` is the first cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): one scene, a CPU readback
   into the encoder, and the platform fakes in the test. `video.snapshot` still
   composites from frames the host injects with `set_source_frame`.
+
+<a id="runtime"></a>
+## Runtime
+<!-- @section
+covers = ["crates/jstream-core/src/runtime/**"]
+depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
+verified = { hash = "b3:25e0f1c812a9e2a6", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#182 H7b): shared program stage, serialized starts, per-profile sessions over channels, last-output drain and stats, program failure to every output re-read against runtime/pipeline.rs and engine.rs" }
+-->
+
+The output pipeline (`src/runtime/`) is the part of
+[ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading) that is built.
+`output.start`, once the host has injected platform backends and a publish target
+(a recording output needs none), starts it and emits `output.state_changed` from the control thread. The render
+thread calls the platform capture mailbox, composites one scene on each 1/30 s
+tick, repeats the last frame when capture is empty, and reads that frame back.
+This cut encodes that CPU readback, and the readback is counted. The mixer thread
+polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
+desktop loopback. Every running output shares that one program stage (capture,
+render, mixer); the first `output.start` builds it and the last `output.stop` tears it
+down, and starts are serialized. Encode threads are the ones inside the encoder
+sessions: outputs with the same encoder profile share one session, and the render and
+mixer threads take a new session's inputs from a channel, never a lock, and drop a
+session that has finished. Each output has its own output thread. An output leaving a
+session others still use takes what is queued for it and goes; the last one drains the
+encoders. The output thread muxes FLV and sends tags to the
+publish target, or, for a recording output, muxes fragmented MP4 and writes it to the
+file, syncing each fragment (writes may block on the disk; the encoder queues absorb
+that and drop when full). The `output.start` that opens the program stage also starts
+`jstream-stats`, which is not a real-time thread: it emits `stats.tick` about once a
+second from the stage counters, and once more when the last output stops. The render loop publishes capture
+mailbox skips, and a tick that falls a whole period behind the clock skips to the
+current tick and counts the skipped ones in `render_ticks`. None of those threads
+lock the collection. `output.stop` during
+`starting` cancels that start and emits `stopped` only after the start has dropped
+its threads. The render and mixer threads catch a panic at their boundary
+([R-RT-006](../../docs/RULES.md#R-RT-006)); a capture error or a missing frame repeats the last
+one, and a render panic repeats the last frame until teardown. A fatal error on the
+render, mixer or output thread (a publish or recording write failure, an encoder stream that ends
+before stop, a render or mixer panic) is a channel message to a watcher the control
+thread started; the watcher emits `failed` and stops the pipeline. A program-stage
+failure reaches every running output. Frame hand-off is the
+encoder session queues. Arc-swap snapshots and a GPU encode target are still rows
+of the ARCH thread table, not this cut. The collector so far is the mixer's own, and
+frees only input rings and their counters.

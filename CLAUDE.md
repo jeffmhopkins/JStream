@@ -26,7 +26,7 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "b3:5ee4dd8447bd0ddc", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Edited: the hash bullet now names docs merge-main as an exception (it keeps main's committed stamp), and a new bullet says to merge main with it and re-verify what it lists; matches merge.rs and DOCS#verification" }
+verified = { hash = "b3:e6712e9fc2cedc38", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main into ADR-0042: DOCS#verification gained the #jstream-meta rule; main's merge-main bullets and the check/verify, no-dates and hash bullets don't depend on it and hold" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one
