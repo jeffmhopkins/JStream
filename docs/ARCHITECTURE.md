@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:e39a8376b6d18fa3", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4 adds only a dev-dependency (assert_no_alloc) to jstream-audio's Cargo.toml; its row (layer 2, summary, unsafe no) is unchanged" }
+verified = { hash = "b3:a2a01689f7f2037d", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#191 assert_no_alloc) into C1a: re-read; main's audio row taken as is; jstream-sources row and its deps (gif, image-webp, zune-jpeg) unchanged and match Cargo.toml; only C1a prose diff vs main is the data-model kinds sentence" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
