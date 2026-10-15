@@ -1,0 +1,27 @@
+[package]
+name = "jstream-ui-e2e"
+version = "0.0.0"
+description = "Test harness for the web UI's end-to-end tests: jstream-control's MockEngine behind jstream-server, serving a trunk build of the UI."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 6
+summary = "Test-only harness: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "jstream-ui-e2e"
+path = "src/main.rs"
+# Nothing to unit-test: the Playwright tests in `crates/jstream-ui/tests/e2e` drive it.
+test = false
+
+[dependencies]
+jstream-control = { workspace = true, features = ["mock"] }
+jstream-server.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }

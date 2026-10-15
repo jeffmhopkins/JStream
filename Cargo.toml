@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/*", "crates/*", "xtask"]
+members = ["apps/*", "crates/*", "crates/jstream-ui/tests/e2e/mock-daemon", "xtask"]
 
 [workspace.package]
 edition = "2024"
@@ -54,6 +54,7 @@ jstream-mux = { path = "crates/jstream-mux" }
 jstream-outputs = { path = "crates/jstream-outputs" }
 jstream-platform = { path = "crates/jstream-platform" }
 jstream-platform-windows = { path = "crates/jstream-platform-windows" }
+jstream-plugin-proto = { path = "crates/jstream-plugin-proto" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }
@@ -67,6 +68,11 @@ png = { version = "0.18", default-features = false }
 # The web UI framework (ADR-0045): client-side rendering only, no server functions or
 # hydration. Its `csr` feature also turns on `getrandom`'s browser backend.
 leptos = { version = "0.8", default-features = false, features = ["csr"] }
+# Property tests with shrinking (`jstream-graph`'s `tests/`), test-only. Held at 1.11:
+# 1.12 moves to `rand` 0.10, a second `rand` beside the 0.9 already in the tree
+# (R-DEP-005). No default features: no `fork`/`timeout` (`rusty-fork`, `tempfile`) and
+# no `bit-set`.
+proptest = { version = "~1.11", default-features = false, features = ["std"] }
 pulldown-cmark = { version = "0.13", default-features = false }
 # SHA-256 and the OS random source for OAuth PKCE (`jstream-youtube`). Already in the tree
 # as rustls' crypto provider (R-DEP-006), so this adds no crate; no default features.
@@ -81,7 +87,11 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-native-certs = "0.8"
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 serde = { version = "1", default-features = false, features = ["derive", "std"] }
-serde_json = { version = "1", default-features = false, features = ["std"] }
+# `float_roundtrip`: numbers parse to the nearest `f64`, so a value serialized and parsed
+# again is unchanged (a settings float survives a collection save and reload). Without
+# it, a number with more digits than an `f64` holds can parse one ULP off, and then not
+# round-trip. Found by the `protocol_decode` fuzz target.
+serde_json = { version = "1", default-features = false, features = ["std", "float_roundtrip"] }
 # Font parsing and glyph outlines for the text source (ADR-0031: pure-Rust font crates),
 # from Google's fontations. Pulls in `read-fonts`, `font-types`, `bytemuck`, `yoke` and
 # `once_cell`, plus derive macros at build time. Chosen over `ab_glyph` and `fontdue`

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:688f98779b783a45", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: SecretString doc comment now names the pairing code; purpose text holds" }
+verified = { hash = "b3:0911af485ca155fb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -45,7 +45,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `scene.switch`, `pairing.start`, `device.revoke`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
@@ -87,11 +87,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
   pairing (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
   `unsupported` error and the `device` entity kind,
-  [ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)); 0.17 added
-  `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
+  [ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)); 0.18 added
+  the `virtual_cam` output kind, 0.17 `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
@@ -106,7 +106,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a recording output and two
+  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output and two
   encoder profiles), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
   URL, recording path and encoder profile checks, and `item.set_source` and
@@ -125,7 +125,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:c3d137b9a32cb658", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: protocol.snap regenerated for the SecretString description only (reviewed diff); design text holds" }
+verified = { hash = "b3:3185940baa7febfa", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -194,7 +194,7 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
   storing a stream key, OAuth, switching the program scene). Never undoable or
   batchable. The response says the action was accepted, and carries an
   `ActionResult` only for an action that answers with data (`pairing.start`'s code,
-  0.18; every other action omits `result`); progress arrives as events
+  0.19; every other action omits `result`); progress arrives as events
   (`output.state_changed`).
 
 The classification rule: **if the command's whole effect is a change to the collection
@@ -318,7 +318,9 @@ then serializes as `null` and no longer parses. So a
 non-finite or out-of-`f32`-range number fails deserialization, and
 `ClientMessage::parse` rejects the whole message as `malformed`. In-process clients
 can't build a non-finite value either: `Finite32::new` and `Vec2::new` return `None`
-for one.
+for one. Settings values keep non-integer JSON numbers as `f64`, parsed to the nearest
+one (serde_json's `float_roundtrip`), so a message with a long number still serializes
+and parses back to itself.
 
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next
@@ -333,7 +335,13 @@ no `..` segment and end in a file name, and
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
 so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
-record elsewhere. The
+record elsewhere. A `virtual_cam` output (0.18) has no fields: it offers the program
+video to other apps on the engine's machine as a webcam, with no audio, at the canvas
+size it has when it starts and 30 fps. `output.start` fails with `action_failed` when
+the engine has no virtual camera, the camera isn't registered on the machine, or it
+can't offer that size. It has no target either, so `output.set_target` refuses it too,
+and it encodes nothing, so its encoder profile is stored but unused. A 0.9 to 0.17
+client reads it as `Unknown`. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
@@ -413,7 +421,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   Added in 0.16.
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
-  collection state, so no `rev`. Added in 0.18 (see *Pairing* below).
+  collection state, so no `rev`. Added in 0.19 (see *Pairing* below).
 - `delete.plan {target}`: the batch that deletes a scene or source (`target` is
   `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
   everything that refers to it, as `edits` and the `rev` it was planned at, or
@@ -440,7 +448,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   accept an answer of that size: `jstream-control`'s WebSocket client keeps
   tungstenite's default limits, which are well above it.
 
-**Pairing** (0.18, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
+**Pairing** (0.19, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
 `pairing.start` opens a one-time code and answers it in `result`
 (`{"type":"pairing.start","code":"XXXX-XXXX","expires_in_secs":120}`), `device.list`
 lists the paired devices, and `device.revoke {device_id}` forgets one (`not_found` with
@@ -599,7 +607,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
 | `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
-| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front; 0.18) | `call` |
+| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front; 0.19) | `call` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to
@@ -634,7 +642,7 @@ after 1.0:
   exists (the whole response fails, and `WsControl` ends the session). Whether that
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
-  than 0.13, which sends none, never reads it. 0.18 adds `device` the same way: only an
+  than 0.13, which sends none, never reads it. 0.19 adds `device` the same way: only an
   error answering `device.revoke` names it. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.

@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:457ecf9221b0a5cb", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (#231 D7b): stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
+verified = { hash = "b3:e23ff09bf4f04289", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
 -->
 
 <a id="R-RT-001"></a>
@@ -423,7 +423,7 @@ tags (`@v4`) and branches are not allowed. Dependabot keeps the pins current
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/**"]
+applies_to = ["crates/**", "apps/**"]
 -->
 Every bug fix includes a test that fails without the fix.
 
@@ -451,7 +451,7 @@ The PR shows before and after.
 <!-- @rule
 status = "active"
 enforced_by = ["ci:test"]
-applies_to = ["crates/**", "tests/**"]
+applies_to = ["crates/**", "apps/**", "tests/**"]
 -->
 Tests need no network, real devices or physical GPU, unless they are platform tests
 behind `hw-tests`.
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:a6183ea3ed45da41", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through ARCH#protocol's new Pairing bullet; 0.18 is additive, R-API-001/002 hold (pairing.start, device.list, device.revoke are noun.verb)" }
+verified = { hash = "b3:c648e1b3e74a9eb0", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
 -->
 
 <a id="R-API-001"></a>
@@ -542,7 +542,10 @@ applies_to = ["crates/jstream-server/**", "crates/jstream-mcp/**"]
 -->
 Every HTTP, WebSocket and MCP listener requires the control token or a paired device's
 token (even on localhost), except `POST /api/v1/pair` while a pairing code is open
-([ADR-0044](adr/0044-pairing-remote-browsers.md)), and validates the `Host` header, and
+([ADR-0044](adr/0044-pairing-remote-browsers.md)) and `GET /pair` on a TLS listener
+([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
+device token, never the control token, as the `__Host-jstream_device` cookie. Every
+listener validates the `Host` header, and
 the `Origin` header when one is present. A device token is accepted only over loopback
 or TLS. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
@@ -617,6 +620,7 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `pr-title` | Conventional Commit title | yes | M0 |
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
+| `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
 

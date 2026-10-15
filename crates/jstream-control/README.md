@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:0fa0b670a63bf7dc", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: mock.rs gains unsupported arms only; contents list holds" }
+verified = { hash = "b3:0cee9228843ca676", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; shared-names bullet is main's; mock still accepts virtual_cam" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -35,9 +35,10 @@ Contents (a first cut; [Design](#design) explains the choices):
   implementation; its tests hold it to the mock's answers.
 - **WebSocket client** (feature `ws`): `WsControl`, the `Control` trait over the
   engine's WebSocket API, natively (`ws.rs`) and in the browser (`ws_web.rs`, `wasm32`);
-  `WsConfig` and the handshake pieces both share (`ws_config.rs`); `WS_PATH`, the API's
-  path, shared with `jstream-server`; and `WS_PROTOCOL` and `WS_TOKEN_PROTOCOL_PREFIX`,
-  the subprotocols a browser offers.
+  `WsConfig` and the handshake pieces both share (`ws_config.rs`).
+- **Shared names** (`lib.rs`, no feature): `WS_PATH`, the API's path, and
+  `WS_PROTOCOL` and `WS_TOKEN_PROTOCOL_PREFIX`, the subprotocols a browser offers;
+  `jstream-server` uses the same constants, so client and server can't drift.
 - `jstream_control::protocol` re-exports `jstream-protocol`.
 
 <a id="design"></a>
@@ -45,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:cd480f2a43276974", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through ARCH#protocol Pairing bullet; consistent with the mock's unsupported bullet here; holds" }
+verified = { hash = "b3:dbd065bb673c1ddb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; set_target refusal for a virtual camera unchanged" }
 -->
 
 ### The trait
@@ -123,7 +124,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
-    reasons), `output.set_target` on a recording output, and an `unknown` output kind,
+    reasons), `output.set_target` on a recording or virtual-camera output (the mock
+    accepts a `virtual_cam` output, as the engine does), and an `unknown` output kind,
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`

@@ -79,7 +79,7 @@ names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-ro
 diff agents will see. After an intended change, regenerate it with
 `INSTA_UPDATE=always cargo test -p jstream-mcp` and review the diff.
 
-The `pairing` and `device` tools (protocol 0.18) need no code here either: the session
+The `pairing` and `device` tools (protocol 0.19) need no code here either: the session
 `jstream-server` hands this crate answers them
 ([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)), so an agent can
 pair and revoke devices as any client can (ADR-0006), and gets `unsupported` from a

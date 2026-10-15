@@ -19,6 +19,7 @@ workspace = true
 crossbeam-channel.workspace = true
 jstream-media.workspace = true
 jstream-platform.workspace = true
+jstream-plugin-proto.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

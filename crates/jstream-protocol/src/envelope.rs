@@ -137,7 +137,7 @@ pub enum CallResult {
     Action {
         /// What the action answered, tagged by the action's name, for the actions that
         /// answer something. Absent for every other action, and from a server older
-        /// than 0.18.
+        /// than 0.19.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         result: Option<ActionResult>,
     },
@@ -278,6 +278,20 @@ mod tests {
         ));
         let ok = text.replace("1e39", "3.4028235e38");
         assert!(ClientMessage::parse(&ok).is_ok());
+    }
+
+    /// A settings value written with more digits than an `f64` holds parses to the
+    /// nearest `f64`, so the message serializes and parses back to itself: the collection
+    /// file saves and reloads it unchanged. Found by the `protocol_decode` fuzz target.
+    #[test]
+    fn long_floats_parse_back_to_the_same_value() {
+        let digits = "4".repeat(110);
+        let text = format!(
+            r#"{{"type":"request","id":"r1","call":{{"kind":"batch","edits":[{{"type":"source.set_settings","source_id":"s","patch":{{"width":{digits}80.0}}}}]}}}}"#
+        );
+        let parsed = ClientMessage::parse(&text).expect("parses");
+        let json = serde_json::to_string(&parsed).expect("serializes");
+        assert_eq!(ClientMessage::parse(&json).ok(), Some(parsed));
     }
 
     #[test]
