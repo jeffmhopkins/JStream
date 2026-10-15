@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:7ef650d094893271", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; trait, errors, mock and ws bullets hold for mock.rs with both settings and key_set changes" }
+verified = { hash = "b3:5f8024fc6a994e6d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: mock.rs emits state.changed with cause None and answers a history call with internal like any unknown call kind; contents hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:d8d8be3bd6a0c3ef", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Mock section merged: output.status key_set false, sources keep names, kinds and settings; settings checks, settings-reference delete rejection and 0.7 output fallthroughs (internal) all match mock.rs" }
+verified = { hash = "b3:259ce7a86e5198ab", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: call() now lists history calls; the mock's 'no undo, internal for what it doesn't know' paragraph holds" }
 -->
 
 ### The trait
@@ -56,9 +56,9 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
   keys its undo history and audit-log entries
   ([ADR-0013](../../docs/adr/0013-command-model.md)). A second `hello` returns the same
   identity.
-- `call(Call) -> Response`: one batch, action or query. The implementation chooses the
-  request ID and returns it in the `Response`, so the caller can match the
-  `state.changed` event its batch causes. Before `hello` it fails with
+- `call(Call) -> Response`: one batch, action, query or history call (undo, redo). The
+  implementation chooses the request ID and returns it in the `Response`, so the caller
+  can match the `state.changed` event its batch or history call causes. Before `hello` it fails with
   `handshake_required`.
 - `events() -> EventStream`: an independent subscription to every event emitted after
   the call, buffered until read, in emission order. It ends when the session or the

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:1cbced154f1f983b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#126 N4/N7/N8 follow-up: crash.rs doc line moved onto fn report, logs.rs prune comment says age order to the second and expects Windows deletes to succeed via FILE_SHARE_DELETE; the Log files and Crash reports bullets and Tests list still hold" }
+verified = { hash = "b3:33dbfaf26369a50a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: only tests/daemon.rs's state.changed pattern gained cause: None; the daemon itself is unchanged" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1c1b65a22e35d7cc", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; serve.rs still builds one Engine (now with the built-in kinds via Engine::default) with with_output only; session, listening, token, logging bullets hold" }
+verified = { hash = "b3:019bbb4c77045c7c", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: re-read; daemon code unchanged, only its integration test pattern names the new optional cause" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

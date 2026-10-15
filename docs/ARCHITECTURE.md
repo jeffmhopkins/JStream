@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:546b8a0e7430e457", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; apps changes are test goldens only (CLI reads PROTOCOL_VERSION); diagram and host table hold" }
+verified = { hash = "b3:834d53b2cb1989fd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: apps changes are the CLI's event line (cause) and a daemon test pattern; diagram and host table hold" }
 -->
 
 ```
@@ -496,7 +496,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1a7f8a46e389a409", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): output edits and stream-key bullets (#142) and kind queries marked protocol 0.8 (B4); queries bullet lists output.list and kind.list/describe; transport bullets unchanged" }
+verified = { hash = "b3:8aa004a7794af0d6", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: History bullet now says undo_conflict and protocol 0.9; edits and actions bullets unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -531,7 +531,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0032](adr/0032-live-edits-and-undo.md)).
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
-  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+  ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
+  rather than overwrite another client's later change (protocol 0.9).
 - **Privacy screen** (planned): the action `privacy.set { on }` on the master stage, never
   undoable or batchable and with no `rev` change; every change emits
   `privacy.changed { on }` to every client and goes to the audit log
@@ -596,11 +597,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:cc2b2df213a2b7f3", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): grouped tools list includes kind and output; tools.snap is about 79 KB, so the size line says about 80 KB" }
+verified = { hash = "b3:222e42dfb2824a4d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: grouped tools list includes history; tools.snap is about 82 KB, so about 80 KB holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events

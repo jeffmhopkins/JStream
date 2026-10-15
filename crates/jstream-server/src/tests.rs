@@ -365,6 +365,7 @@ fn a_batch_a_query_and_events_round_trip() {
             rev: Rev(1),
             client_id: client_id.clone(),
             request_id: Some(RequestId::new("req_1")),
+            cause: None,
         })
     );
 
@@ -433,6 +434,7 @@ fn concurrent_calls_each_get_their_own_answer_and_event() {
                 rev,
                 client_id: from,
                 request_id: Some(id),
+                cause: None,
             }) => {
                 assert_eq!(from, client_id);
                 seen.push((id, rev));

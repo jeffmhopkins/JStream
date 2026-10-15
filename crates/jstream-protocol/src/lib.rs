@@ -13,6 +13,7 @@ mod error;
 mod event;
 mod finite;
 mod geometry;
+mod history;
 mod id;
 mod kind;
 mod output;
@@ -37,6 +38,7 @@ pub use geometry::{
     CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, Placed,
     ProjectedQuad, Size, legacy_quad,
 };
+pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,

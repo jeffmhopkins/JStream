@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:77ddb8e8f9eb794c", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Engine, Kinds, Runtime and Tests bullets; #133 only reorders Running's fields and launch's bindings so input rings drop off the real-time thread, which no bullet describes" }
+verified = { hash = "b3:7ca33ea9739cb9dd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: History bullet (history.rs), with_history_limit, src/tests/history.rs listed, Not-here-yet drops per-client undo; lib.rs crate doc now says undo exists" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -31,14 +31,14 @@ The control plane is the scene graph, the sessions and `video.snapshot`.
 state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
-  `with_publish_opener` and `with_key_store`;
+  `with_publish_opener`, `with_key_store` and `with_history_limit`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads the running pipeline; `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
   injected `StreamKeyStore`, never under the collection lock. It holds the
-  `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys and the
-  subscribers behind one lock, and the drop ledger behind another, and executes
-  batches, actions and queries. The pipeline threads do not take the collection lock.
+  `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys, the undo
+  history and the subscribers behind one lock, and the drop ledger behind another, and executes
+  batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
 - **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   They are stubs: `color`, `image`, `media` and `text` take a first set of parameters,
@@ -51,7 +51,12 @@ state machine. Contents:
   thread polls the media clock. Encode threads live in the encoder sessions. The
   output thread muxes FLV and publishes it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
-- **Session** (`session.rs`): `InProcessControl`, one client session.
+- **History** (`history.rs`): per-client undo and redo
+  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
+  stacks, built from the inverse batches `Graph::apply` returns, and the log of what
+  each recent change touched, which `undo_conflict` is checked against.
+- **Session** (`session.rs`): `InProcessControl`, one client session. Its undo history
+  ends with it.
 - **Events** (`events.rs`): the per-subscription queues behind `Control::events`.
 - **Outputs** (`outputs.rs`): the outputs' runtime state, following the collection's
   outputs after each batch and keeping the ones the host declared. The placeholder path steps
@@ -66,8 +71,10 @@ state machine. Contents:
   bus, and the packets the output thread drops (muxer rejects and what a stop's
   drain abandons) and the publish link's, and a sampler thread
   emits a tick about once a second until the pipeline stops.
-- **Tests** (`tests.rs`, `tests/mcp.rs`, `tests/scenarios.rs`): the protocol rules through
-  `InProcessControl`, the shared parity fixture, a differential run against
+- **Tests** (`tests.rs`, `src/tests/history.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
+  the protocol rules through `InProcessControl`, undo and redo across two clients
+  (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
+  end), the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on the software adapter, the pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
@@ -84,7 +91,7 @@ state machine. Contents:
   which captures the engine's traces), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
-Not here yet: per-client undo, the audit log, persistence, real source kinds, arc-swap
+Not here yet: live values, the audit log, persistence, real source kinds, arc-swap
 snapshots, a GPU encode target, and the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -97,7 +104,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8e54430793e482ea", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Calls (kind queries), Outputs, Pipeline and Locking; #133's drop order changes no described state, error, lock or deadline" }
+verified = { hash = "b3:711f6927e140c20f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: new Undo and redo section matches engine.rs history()/batch() and history.rs (stacks, limit, check order, touched-set conflicts, running-output case, pruning); Calls bullets and Not yet updated" }
 -->
 
 ### Engine and sessions
@@ -178,6 +185,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   moved on (the key check comes first) and without an event. Only applied batches
   are remembered, so a retry of a failed batch is applied. Keys are kept for the
   engine's lifetime ([protocol open question 6](../jstream-protocol/README.md#open-questions)).
+  Each applied batch becomes one step of its client's undo history (see *Undo and
+  redo*).
+- **History calls** (`history.undo`, `history.redo`) apply a step's edits through the
+  same `Graph::apply_with_running` (see *Undo and redo*).
 - **Queries** that read the collection, and the kind queries, go to `Graph::query`,
   `output.list` and the `outputs` of `state.get` included; the graph holds the built-in
   kinds the engine gave it (`kinds.rs`). `output.status` reads the outputs' runtime state
@@ -195,6 +206,42 @@ That script does not call `video.snapshot`. The mock has no compositor and answe
 with `internal`, so the two are not compared. The mock stays the reference clients
 were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
+
+### Undo and redo
+
+Per client ([ADR-0013](../../docs/adr/0013-command-model.md),
+[ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), in `history.rs`, under the
+collection lock:
+- **Stacks.** Each `client_id` has an undo stack and a redo stack. An applied batch
+  pushes one step holding the inverse batch the graph returned, and clears the redo
+  stack. An undo applies that inverse as one batch (`rev` + 1, `state.changed` with
+  `cause: undo`) and moves the step to the redo stack, now holding the inverse the
+  graph returned for the undo, which is the step again; a redo does the reverse. A
+  step keeps the `rev` its batch first produced (`step_rev`). The undo stack keeps the
+  newest 100 steps by default (`with_history_limit`; 0 keeps none). A session's
+  history is dropped when it closes, since a reconnecting client gets a new
+  `client_id`.
+- **Order of checks.** A used idempotency key returns its first result (keys are
+  shared with batches and store the whole result); then `expected_rev`
+  (`rev_conflict`); then an empty stack (`history_empty`). None of these drops a step.
+- **Conflicts.** Each applied batch, undo and redo is logged with what it *touched*,
+  computed in core from its edits and the inverse's (so a delete also names what it
+  removed): objects created or deleted, objects used (an item's scene and source, a
+  `scene` source's scene, a duplicate's original), properties set (names, transform,
+  crop, visibility, an item's index, each settings parameter, an output's target), and
+  the scenes' order. A step conflicts with another client's later entry, logged after
+  the step was last applied or undone, when either creates or deletes an object the
+  other touches, when both set the same property, or when both reorder scenes. Two
+  items added to one scene do not conflict. A conflict fails with `undo_conflict`
+  naming the first such entry, nothing applied, and the step dropped. Edits that
+  pass the check but no longer apply also fail with `undo_conflict`, naming the latest
+  entry by another client, and drop the step. Edits that fail only because an output
+  is running (undoing `output.create` while it runs) answer the graph's own
+  `invalid_argument` and keep the step for a retry once it is stopped; with no other
+  client's entry to blame, any other failure does too. The log is pruned to the oldest
+  `since` of any kept step.
+- **Not steps:** actions (outputs, stream keys), queries and history calls. Live
+  values are not built.
 
 ### Snapshots
 
@@ -486,11 +533,6 @@ revisions and error codes are logged, never a call's arguments
 
 ### Not yet
 
-- **Per-client undo** ([ADR-0013](../../docs/adr/0013-command-model.md)). The protocol
-  has no undo or redo request yet, so the engine keeps no history and drops the inverse
-  batch `Graph::apply` returns. The history, `history.undo` and `history.redo`, and
-  `undo_conflict` come together, as
-  [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md) decides.
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.

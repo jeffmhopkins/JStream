@@ -238,6 +238,7 @@ async fn serves_the_engine_and_stops_on_a_signal() {
             rev,
             client_id,
             request_id,
+            cause: None,
         }) => {
             assert_eq!(rev, Rev(1));
             assert_eq!(client_id, welcome.client_id);

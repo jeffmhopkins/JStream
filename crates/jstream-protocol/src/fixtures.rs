@@ -17,6 +17,7 @@ use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
+use crate::{HistoryCall, HistoryDirection, HistoryOp};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -454,11 +455,25 @@ pub(crate) fn events() -> Vec<Event> {
             rev: Rev(13),
             client_id: ClientId::new("cli_7"),
             request_id: Some(RequestId::new("r1")),
+            cause: None,
         },
         Event::StateChanged {
             rev: Rev(14),
             client_id: ClientId::new("cli_8"),
             request_id: None,
+            cause: None,
+        },
+        Event::StateChanged {
+            rev: Rev(15),
+            client_id: ClientId::new("cli_7"),
+            request_id: Some(RequestId::new("r30")),
+            cause: Some(HistoryDirection::Undo),
+        },
+        Event::StateChanged {
+            rev: Rev(16),
+            client_id: ClientId::new("cli_7"),
+            request_id: Some(RequestId::new("r31")),
+            cause: Some(HistoryDirection::Redo),
         },
     ];
     for state in [
@@ -507,6 +522,17 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         ProtocolError::InvalidArgument {
             field: "edits.0.name".into(),
             reason: "must not be empty".into(),
+        },
+        ProtocolError::UndoConflict {
+            step_rev: Rev(9),
+            client_id: ClientId::new("cli_8"),
+            rev: Rev(11),
+        },
+        ProtocolError::HistoryEmpty {
+            direction: HistoryDirection::Undo,
+        },
+        ProtocolError::HistoryEmpty {
+            direction: HistoryDirection::Redo,
         },
         ProtocolError::ActionFailed {
             reason: "connection refused".into(),
@@ -568,6 +594,18 @@ pub(crate) fn client_messages() -> Vec<ClientMessage> {
     for (n, query) in queries().into_iter().enumerate() {
         msgs.push(request(20 + n, Call::Query { query }));
     }
+    msgs.push(request(
+        30,
+        Call::History(HistoryCall::new(HistoryOp::Undo)),
+    ));
+    msgs.push(request(
+        31,
+        Call::History(
+            HistoryCall::new(HistoryOp::Redo)
+                .expecting(Rev(15))
+                .with_idempotency_key(IdempotencyKey::new("k-2")),
+        ),
+    ));
     msgs
 }
 
@@ -585,6 +623,15 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         ServerMessage::Response(Response {
             id: RequestId::new("r10"),
             result: CallResult::Action {},
+        }),
+        ServerMessage::Response(Response {
+            id: RequestId::new("r30"),
+            result: CallResult::History {
+                rev: Rev(15),
+                step_rev: Rev(13),
+                undo_depth: 4,
+                redo_depth: 1,
+            },
         }),
         ServerMessage::Error(ErrorResponse {
             id: None,
@@ -660,6 +707,7 @@ pub(crate) fn check_names_are_valid() {
         .into_iter()
         .chain(schema_tags(&schema, "Action", "type"))
         .chain(schema_tags(&schema, "Query", "type"))
+        .chain(schema_tags(&schema, "HistoryOp", "type"))
     {
         assert!(
             is_noun_verb(&name),
@@ -690,6 +738,11 @@ pub(crate) fn check_names_are_valid() {
                 .map(|q| (q.name(), serde_json::to_value(q))),
         )
         .chain(
+            [HistoryOp::Undo, HistoryOp::Redo]
+                .iter()
+                .map(|h| (h.name(), serde_json::to_value(h))),
+        )
+        .chain(
             query_results()
                 .iter()
                 .map(|r| (r.name(), serde_json::to_value(r))),
@@ -712,12 +765,19 @@ pub(crate) fn check_every_command_is_classified() {
         edit_names.is_disjoint(&action_names),
         "a name is both an edit and an action"
     );
-    // The only ways to send a command are a batch of edits or a single action.
+    // The only ways to send a command are a batch of edits or a single action. A
+    // query reads, and a history call (ADR-0032) carries no command.
     let call_kinds = schema_tags(&schema, "Call", "kind");
     assert_eq!(
         call_kinds,
-        BTreeSet::from(["action".into(), "batch".into(), "query".into()])
+        BTreeSet::from([
+            "action".into(),
+            "batch".into(),
+            "history".into(),
+            "query".into()
+        ])
     );
+    check_history_call_carries_no_command(&schema, &edit_names, &action_names);
 
     let mut seen = BTreeSet::new();
     for command in commands() {
@@ -741,6 +801,41 @@ pub(crate) fn check_every_command_is_classified() {
     assert_eq!(
         seen, all,
         "every command in the schema has a classified fixture"
+    );
+}
+
+/// A `history` call's fields are its op, `expected_rev` and `idempotency_key`: no
+/// `edits`, no `action`, and no op that names an edit or an action.
+fn check_history_call_carries_no_command(
+    schema: &Value,
+    edit_names: &BTreeSet<String>,
+    action_names: &BTreeSet<String>,
+) {
+    let history = schema["$defs"]["Call"]["oneOf"]
+        .as_array()
+        .expect("Call has oneOf")
+        .iter()
+        .find(|alt| alt["properties"]["kind"]["const"] == "history")
+        .expect("Call has a history alternative");
+    // The alternative tags `kind` and refers to `HistoryCall` for the rest.
+    let call = history["$ref"]
+        .as_str()
+        .and_then(|r| r.strip_prefix("#/$defs/"))
+        .expect("the history alternative refers to its struct");
+    let fields: BTreeSet<&str> = [&history["properties"], &schema["$defs"][call]["properties"]]
+        .into_iter()
+        .filter_map(Value::as_object)
+        .flat_map(|props| props.keys().map(String::as_str))
+        .collect();
+    assert_eq!(
+        fields,
+        BTreeSet::from(["kind", "op", "expected_rev", "idempotency_key"]),
+        "a history call carries no command"
+    );
+    let ops = schema_tags(schema, "HistoryOp", "type");
+    assert!(
+        ops.is_disjoint(edit_names) && ops.is_disjoint(action_names),
+        "a history op is not a command"
     );
 }
 

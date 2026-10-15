@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:15e8ec2e9262bce9", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; contents list holds for both (run.rs ignores key_set/outputs and settings alike)" }
+verified = { hash = "b3:91c4431891194d51", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: run.rs prints a state.changed cause (undo/redo); the contents list holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:46f8a234ede5d0ab", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Edits bullet merged to say settings and outputs are both unsupported (args.rs has source.rename, no settings or output edits); Reads bullet keeps #142's outputs/key_set note; version line reads PROTOCOL_VERSION" }
+verified = { hash = "b3:cf253bb2e91ff45e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: event line ends with undo or redo when a history call caused it; exit code 20 also covers undo_conflict/history_empty, which only a history call gets" }
 -->
 
 ```sh
@@ -102,7 +102,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
-  the `state.changed` event it causes. With `--json`, each result is one line of JSON
+  the `state.changed` event it causes; an event an undo or redo caused ends with
+  `undo` or `redo`. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
   protocol version doesn't know are skipped, as the protocol asks.
@@ -176,14 +177,14 @@ for example:
 | 17 | `invalid_argument` |
 | 18 | `action_failed` |
 | 19 | `internal` |
-| 20 | an error code this CLI doesn't know (from a newer engine) |
+| 20 | an error code this CLI doesn't know (from a newer engine), and `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send |
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1c04bb14bd2bf578", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; parsing, block_on, connector, mock, writers and MCP proxy bullets unaffected by either change" }
+verified = { hash = "b3:0defa4dfb6b1df68", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: re-read; only run.rs's event line gained the cause; blocking, connectors, MCP proxy and exit-code design unchanged" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
