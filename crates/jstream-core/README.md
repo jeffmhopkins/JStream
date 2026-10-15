@@ -32,7 +32,8 @@ state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
-  `with_history_limit` and `with_collection_file`;
+  `with_history_limit`, `with_browser` (the browser engine `browser` sources open pages
+  in) and `with_collection_file`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -75,9 +76,10 @@ state machine. Contents:
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
   on, added when the source is created or turned on and removed when it is deleted or
-  turned off, and listed for the audio routing,
-  which sets its fader, mute and sends; while there is none, the default microphone
-  and desktop audio, sent to master at unity (see *Audio sources* in
+  turned off, and one for each running source with audio of its own whose audio is on,
+  a `browser` page's; each is listed for the audio routing, which sets its fader, mute
+  and sends. While there is no audio-only source, the default microphone and desktop
+  audio are recorded too, sent to master at unity (see *Audio sources* in
   [Design](#design)).
 - **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
@@ -455,7 +457,12 @@ animation restarts with it. A build that fails is logged at `warn` with the sour
 and an error that never names a host path, and the source draws nothing; a kind that
 is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 (`audio_input`, `desktop_audio`, `app_audio`, whose descriptors have no video) get no
-`Source`: the program stage records them (*Audio sources*).
+`Source`: the program stage records them (*Audio sources*). A `browser` source opens
+its page in the backend the host gave `with_browser` (none by default, so it draws
+nothing and logs `NoBackend`); giving one rebuilds the `browser` sources already there.
+Its page's picture is a GPU frame the program mix doesn't draw yet, so it shows as
+transparent. `LiveSources::audio` lists every running source's own audio
+(`Source::audio`) for *Audio sources*.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source, or none while the source's
@@ -490,7 +497,18 @@ pass). Each recording input registers an `AudioInputDrops` source while it recor
 so its drops are latched when it closes. Opening a device never runs under the
 collection lock; the thread takes only its own lock, the wanted set's and the drop
 ledger's. When the program stage stops it joins the thread and closes every input
-after the mixer thread has stopped. While the collection has no audio source, the
+after the mixer thread has stopped.
+
+A running source with audio of its own (a `browser` page's, from
+`LiveSources::audio`) is wanted too, as `Recorded::Own`: `sync` takes those beside the
+graph, and also runs whenever a build installs, so a page's audio is recorded once its
+source is built. Its input is added in the format the source reports and fed by
+`SourceAudio::open`, and is replaced when the source is built again (compared by
+identity) and closed when it is deleted or its audio is turned off. Like an audio
+source's, it opens muted and is listed for the routing. A failed stream is reopened
+like a device's. Such audio doesn't count as an audio source for the defaults below.
+
+While the collection has no audio source, the
 program records the default microphone and desktop audio, as it did before audio
 sources existed, so an earlier collection is not silent; the first audio source
 replaces them, and keeps them away while its audio is off. Whether a source is recording or unavailable is not reported to
