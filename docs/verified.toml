@@ -1572,7 +1572,7 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:20caa632a5d049a6" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:7c902ba9d37e539b", by = "agent:claude", note = "re-read the Tests paragraph against the shutdown_over_tls test now waiting for the server's read timeout before the client shuts down (a test-only ordering fix for macOS EINVAL); the test list and every Transport claim still hold" }
+stamp = { hash = "b3:3306b471ebbed22a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main (ADR-0053 stamp ledger): recorder bullet matches move_no_replace (hard link then unlink .part, create_new placeholder fallback on FAT/exFAT, Exists on any destination); test list matches the Unix dangling-symlink test in recorder/tests.rs; no rename-before-check wording remains" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:2ef270bb1b4e0cc6" }
@@ -1596,10 +1596,10 @@ stamp = { hash = "b3:5576f34b8fef4acc" }
 stamp = { hash = "b3:cc85a1122375004d" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/record/recorder.rs"]
-stamp = { hash = "b3:7ddb6a365fd67a71" }
+stamp = { hash = "b3:30cf6293f8c41cc9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main (ADR-0053 stamp ledger): recorder bullet matches move_no_replace (hard link then unlink .part, create_new placeholder fallback on FAT/exFAT, Exists on any destination); test list matches the Unix dangling-symlink test in recorder/tests.rs; no rename-before-check wording remains" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/record/recorder/tests.rs"]
-stamp = { hash = "b3:6cfb2eb8e06393ab" }
+stamp = { hash = "b3:f6a1d5e8e0aafddc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main (ADR-0053 stamp ledger): recorder bullet matches move_no_replace (hard link then unlink .part, create_new placeholder fallback on FAT/exFAT, Exists on any destination); test list matches the Unix dangling-symlink test in recorder/tests.rs; no rename-before-check wording remains" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/chunk.rs"]
 stamp = { hash = "b3:15260271e7418d26" }
