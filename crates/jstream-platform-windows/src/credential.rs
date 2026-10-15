@@ -3,8 +3,10 @@
 //!
 //! `WindowsCredentials` stores, reads and deletes generic credentials of the current
 //! user. Each one is named by a [`CredentialTarget`], `JStream/stream-key/<output id>`,
-//! and a value read back is a [`Secret`], which zeroes its bytes when dropped and never
-//! prints them. Nothing here logs, and no error carries a secret.
+//! and a value read back is a [`jstream_platform::Secret`], which zeroes its bytes when
+//! dropped and never prints them. It implements [`jstream_platform::StreamKeyStore`], the
+//! seam the engine reads stream keys through. Nothing here logs, and no error carries a
+//! secret.
 //!
 //! The target names and size checks are platform-independent and tested everywhere; the
 //! store exists only on Windows.
@@ -12,6 +14,7 @@
 //! Docs: docs/ARCHITECTURE.md#persistence
 
 use std::fmt;
+#[cfg(any(windows, test))]
 use std::sync::atomic::{Ordering, compiler_fence};
 
 use jstream_platform::PlatformError;
@@ -88,33 +91,9 @@ impl fmt::Display for CredentialTarget {
     }
 }
 
-/// A secret read from the store. Its bytes are zeroed when it is dropped, and neither
-/// `Debug` nor anything else prints them; [`Secret::expose`] is the one way to read them.
-///
-/// Not `Clone`, so the only copies are the ones a caller makes from `expose`.
-pub struct Secret(Vec<u8>);
-
-impl Secret {
-    /// The secret's bytes. Don't log, format or persist them (R-SEC-001).
-    pub fn expose(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl fmt::Debug for Secret {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Secret(***)")
-    }
-}
-
-impl Drop for Secret {
-    fn drop(&mut self) {
-        wipe(&mut self.0);
-    }
-}
-
 /// Overwrites `bytes` with zeros in a way the compiler can't remove as a dead store,
 /// since the memory is about to be freed.
+#[cfg(any(windows, test))]
 fn wipe(bytes: &mut [u8]) {
     for b in bytes.iter_mut() {
         // SAFETY: `b` is a live, aligned, exclusive reference to one `u8`, so writing
@@ -148,7 +127,7 @@ pub use store::WindowsCredentials;
 
 #[cfg(windows)]
 mod store {
-    use jstream_platform::PlatformError;
+    use jstream_platform::{PlatformError, Secret, StreamKeyStore};
     use windows::Win32::Foundation::ERROR_NOT_FOUND;
     use windows::Win32::Security::Credentials::{
         CRED_FLAGS, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredDeleteW,
@@ -156,7 +135,7 @@ mod store {
     };
     use windows::core::{PCWSTR, PWSTR};
 
-    use super::{CredentialTarget, Secret, blob_size, wipe};
+    use super::{CredentialTarget, blob_size, wipe};
     use crate::com::os_error;
 
     /// The current user's generic credentials in Windows Credential Manager.
@@ -195,6 +174,8 @@ mod store {
         }
 
         /// The secret stored under `target`, or `None` when there is none.
+        ///
+        /// `Unsupported` when the stored bytes aren't UTF-8 (not one JStream wrote).
         pub fn get(&self, target: &CredentialTarget) -> Result<Option<Secret>, PlatformError> {
             let Some(read) = Read::new(target)? else {
                 return Ok(None);
@@ -204,7 +185,7 @@ mod store {
             // unzeroed copy behind.
             let mut bytes = Vec::with_capacity(blob.len());
             bytes.extend_from_slice(blob);
-            Ok(Some(Secret(bytes)))
+            Secret::from_utf8(bytes).map(Some)
         }
 
         /// Whether a credential is stored under `target`. Reads it to find out; the copy
@@ -223,6 +204,30 @@ mod store {
                 Err(e) if e.code() == ERROR_NOT_FOUND.to_hresult() => Ok(false),
                 Err(e) => Err(os_error("CredDeleteW", &e)),
             }
+        }
+    }
+
+    /// Stream keys, one credential per output: `JStream/stream-key/<output id>`. An
+    /// output ID the target name can't hold, or an empty key, is `Unsupported`.
+    impl StreamKeyStore for WindowsCredentials {
+        fn set(&self, output_id: &str, key: &Secret) -> Result<(), PlatformError> {
+            Self::set(
+                self,
+                &CredentialTarget::stream_key(output_id)?,
+                key.expose().as_bytes(),
+            )
+        }
+
+        fn get(&self, output_id: &str) -> Result<Option<Secret>, PlatformError> {
+            Self::get(self, &CredentialTarget::stream_key(output_id)?)
+        }
+
+        fn clear(&self, output_id: &str) -> Result<(), PlatformError> {
+            Self::delete(self, &CredentialTarget::stream_key(output_id)?).map(drop)
+        }
+
+        fn is_set(&self, output_id: &str) -> Result<bool, PlatformError> {
+            self.exists(&CredentialTarget::stream_key(output_id)?)
         }
     }
 
@@ -289,7 +294,7 @@ mod store {
 
 #[cfg(test)]
 mod tests {
-    use super::{CredentialTarget, MAX_SECRET_BYTES, MAX_TARGET_UNITS, Secret, blob_size, wipe};
+    use super::{CredentialTarget, MAX_SECRET_BYTES, MAX_TARGET_UNITS, blob_size, wipe};
     use jstream_platform::PlatformError;
 
     #[test]
@@ -352,13 +357,6 @@ mod tests {
     }
 
     #[test]
-    fn secrets_never_print() {
-        let s = Secret(b"live_abc123".to_vec());
-        assert_eq!(format!("{s:?}"), "Secret(***)");
-        assert_eq!(s.expose(), b"live_abc123");
-    }
-
-    #[test]
     fn wipe_zeroes_every_byte() {
         let mut bytes = *b"live_abc123";
         wipe(&mut bytes);
@@ -408,20 +406,58 @@ mod tests {
         store.set(&target, b"first").expect("set");
         assert!(store.exists(&target).expect("exists"));
         let s = store.get(&target).expect("get").expect("stored");
-        assert_eq!(s.expose(), b"first");
+        assert_eq!(s.expose(), "first");
 
-        let long = [0xA5; MAX_SECRET_BYTES];
+        let long = "a".repeat(MAX_SECRET_BYTES);
         store
-            .set(&target, &long)
+            .set(&target, long.as_bytes())
             .expect("replace with the largest blob");
         let s = store.get(&target).expect("get").expect("stored");
-        assert_eq!(s.expose(), &long[..]);
+        assert_eq!(s.expose(), long);
         assert!(store.set(&target, &[0; MAX_SECRET_BYTES + 1]).is_err());
         assert!(store.set(&target, &[]).is_err());
 
         assert!(store.delete(&target).expect("delete"));
         assert!(!store.exists(&target).expect("exists"));
         assert!(store.get(&target).expect("get").is_none());
+
+        // Not UTF-8, so not a key JStream wrote: refused without naming it.
+        store.set(&target, &[0xFF, 0xFE]).expect("set raw bytes");
+        assert!(matches!(
+            store.get(&target),
+            Err(PlatformError::Unsupported { .. })
+        ));
         drop(guard);
+    }
+
+    /// The same credential through the engine's `StreamKeyStore` seam.
+    #[cfg(windows)]
+    #[test]
+    fn serves_as_the_stream_key_store() {
+        use super::WindowsCredentials;
+        use jstream_platform::{Secret, StreamKeyStore};
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let id = format!("test-store-{}-{nanos}", std::process::id());
+        let store: &dyn StreamKeyStore = &WindowsCredentials;
+        struct Cleanup<'a>(&'a dyn StreamKeyStore, &'a str);
+        impl Drop for Cleanup<'_> {
+            fn drop(&mut self) {
+                let _ = self.0.clear(self.1);
+            }
+        }
+        let _guard = Cleanup(store, &id);
+
+        assert!(!store.is_set(&id).expect("is_set"));
+        store.set(&id, &Secret::new("live_abc")).expect("set");
+        assert!(store.is_set(&id).expect("is_set"));
+        let key = store.get(&id).expect("get").expect("stored");
+        assert_eq!(key.expose(), "live_abc");
+        store.clear(&id).expect("clear");
+        store.clear(&id).expect("clearing nothing succeeds");
+        assert!(!store.is_set(&id).expect("is_set"));
+        assert!(store.set("", &Secret::new("k")).is_err());
     }
 }

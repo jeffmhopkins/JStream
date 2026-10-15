@@ -21,8 +21,9 @@ use crate::{
     AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget, AudioPacket,
     AudioPacketFlags, AudioRenderBuffer, AudioStream, Backends, Capture, CaptureStats,
     CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo, CodecRole, Codecs, DeviceId,
-    GpuContext, GpuFrame, GpuInterop, HardwarePreference, MediaClock, PlatformError, VcamFormat,
-    VcamSink, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    GpuContext, GpuFrame, GpuInterop, HardwarePreference, MediaClock, PlatformError, Secret,
+    StreamKeyStore, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoEncoder,
+    VideoEncoderConfig, VideoSurface,
 };
 
 /// A full set of fake backends on `clock`: a 320x180 display, a stereo 48 kHz
@@ -883,5 +884,83 @@ impl VcamSink for FakeVcamSink {
 
     fn format(&self) -> Option<VcamFormat> {
         lock(&self.state).format
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// Stream keys
+
+/// An in-memory [`StreamKeyStore`]: what the OS credential store is to the engine, for
+/// tests. Clones share the same keys, so a test can keep one and check what the engine
+/// stored. [`set_failing`](Self::set_failing) makes every call fail, to test the error
+/// paths; the error names the call, never a key.
+#[derive(Clone, Debug, Default)]
+pub struct MemoryKeyStore {
+    state: Arc<Mutex<KeyState>>,
+}
+
+#[derive(Debug, Default)]
+struct KeyState {
+    keys: BTreeMap<String, Secret>,
+    failing: bool,
+}
+
+impl MemoryKeyStore {
+    /// An empty store.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Makes every later call fail (`true`) or work again (`false`).
+    pub fn set_failing(&self, failing: bool) {
+        lock(&self.state).failing = failing;
+    }
+
+    /// How many keys are stored.
+    pub fn len(&self) -> usize {
+        lock(&self.state).keys.len()
+    }
+
+    /// Whether no key is stored.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn check(state: &KeyState, call: &'static str) -> Result<(), PlatformError> {
+        if state.failing {
+            return Err(PlatformError::Os {
+                call,
+                code: None,
+                message: "the fake credential store is set to fail".into(),
+            });
+        }
+        Ok(())
+    }
+}
+
+impl StreamKeyStore for MemoryKeyStore {
+    fn set(&self, output_id: &str, key: &Secret) -> Result<(), PlatformError> {
+        let mut state = lock(&self.state);
+        Self::check(&state, "MemoryKeyStore::set")?;
+        state
+            .keys
+            .insert(output_id.to_owned(), Secret::new(key.expose()));
+        Ok(())
+    }
+
+    fn get(&self, output_id: &str) -> Result<Option<Secret>, PlatformError> {
+        let state = lock(&self.state);
+        Self::check(&state, "MemoryKeyStore::get")?;
+        Ok(state
+            .keys
+            .get(output_id)
+            .map(|key| Secret::new(key.expose())))
+    }
+
+    fn clear(&self, output_id: &str) -> Result<(), PlatformError> {
+        let mut state = lock(&self.state);
+        Self::check(&state, "MemoryKeyStore::clear")?;
+        state.keys.remove(output_id);
+        Ok(())
     }
 }

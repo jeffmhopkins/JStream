@@ -5,10 +5,11 @@
 //! inverse of a batch is the inverses of its edits in reverse order. Only when every
 //! edit succeeds does the working copy replace the state.
 
-use crate::model::{Graph, Item, Scene, Source, State};
+use crate::model::{Graph, Item, Output, Scene, Source, State};
+use crate::target::rtmp_url_problem;
 use jstream_protocol::{
-    Batch, Crop, Edit, EntityKind, ItemId, ItemTransform, ProtocolError, Rev, SceneId, SourceId,
-    SourceKind,
+    Batch, Crop, Edit, EntityKind, ItemId, ItemTransform, OutputId, OutputKind, ProtocolError, Rev,
+    RtmpTarget, SceneId, SourceId, SourceKind,
 };
 use std::collections::BTreeSet;
 
@@ -43,6 +44,19 @@ impl Graph {
         edits: &[Edit],
         expected_rev: Option<Rev>,
     ) -> Result<Applied, ProtocolError> {
+        self.apply_with_running(edits, expected_rev, &BTreeSet::new())
+    }
+
+    /// [`apply`](Self::apply), for an engine whose outputs in `running` are running: an
+    /// `output.delete` of one of them fails with `invalid_argument` (field
+    /// `edits.<n>.output_id`), in edit order like any other failure. Whether an output
+    /// runs is runtime state, which the graph doesn't hold, so the engine passes it.
+    pub fn apply_with_running(
+        &mut self,
+        edits: &[Edit],
+        expected_rev: Option<Rev>,
+        running: &BTreeSet<OutputId>,
+    ) -> Result<Applied, ProtocolError> {
         if let Some(expected) = expected_rev
             && expected != self.rev
         {
@@ -60,7 +74,7 @@ impl Graph {
         let mut work = self.state.clone();
         let mut undo: Vec<Vec<Edit>> = Vec::with_capacity(edits.len());
         for (at, edit) in edits.iter().enumerate() {
-            undo.push(apply_edit(&mut work, edit, at)?);
+            undo.push(apply_edit(&mut work, edit, at, running)?);
         }
         self.state = work;
         self.rev = rev;
@@ -163,7 +177,12 @@ fn item_mut(state: &mut State, (si, ii): (usize, usize)) -> Result<&mut Item, Pr
 }
 
 /// Applies one edit to `state` and returns the edits that undo it.
-fn apply_edit(state: &mut State, edit: &Edit, at: usize) -> Result<Vec<Edit>, ProtocolError> {
+fn apply_edit(
+    state: &mut State,
+    edit: &Edit,
+    at: usize,
+    running: &BTreeSet<OutputId>,
+) -> Result<Vec<Edit>, ProtocolError> {
     match edit {
         Edit::SceneCreate { scene_id, name } => {
             check_id(scene_id.as_str(), at, "scene_id")?;
@@ -377,7 +396,71 @@ fn apply_edit(state: &mut State, edit: &Edit, at: usize) -> Result<Vec<Edit>, Pr
                 kind: source.kind,
             }])
         }
+        Edit::OutputCreate { output_id, kind } => {
+            check_id(output_id.as_str(), at, "output_id")?;
+            if state.outputs.contains_key(output_id) {
+                return Err(already_exists(EntityKind::Output, output_id.as_str()));
+            }
+            match kind {
+                OutputKind::Rtmp { target } => check_target(target, at, "kind.target")?,
+                _ => return Err(unsupported(at, "kind", "this output kind")),
+            }
+            state.outputs.insert(
+                output_id.clone(),
+                Output {
+                    id: output_id.clone(),
+                    kind: kind.clone(),
+                },
+            );
+            Ok(vec![Edit::OutputDelete {
+                output_id: output_id.clone(),
+            }])
+        }
+        Edit::OutputSetTarget { output_id, target } => {
+            let output = state
+                .outputs
+                .get_mut(output_id)
+                .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
+            check_target(target, at, "target")?;
+            let OutputKind::Rtmp { target: current } = &mut output.kind else {
+                return Err(invalid(at, "output_id", "the output is not an RTMP output"));
+            };
+            let old = std::mem::replace(current, target.clone());
+            Ok(vec![Edit::OutputSetTarget {
+                output_id: output_id.clone(),
+                target: old,
+            }])
+        }
+        Edit::OutputDelete { output_id } => {
+            if running.contains(output_id) {
+                return Err(invalid(
+                    at,
+                    "output_id",
+                    format!("output `{output_id}` is running; stop it first"),
+                ));
+            }
+            let output = state
+                .outputs
+                .remove(output_id)
+                .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
+            Ok(vec![Edit::OutputCreate {
+                output_id: output.id,
+                kind: output.kind,
+            }])
+        }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
+    }
+}
+
+/// Checks an RTMP target; `name` is its field path within the edit (`kind.target`).
+/// The reason never repeats the URL, which might hold a key.
+fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), ProtocolError> {
+    match target {
+        RtmpTarget::Generic { url } => match rtmp_url_problem(url) {
+            Some(problem) => Err(invalid(at, &format!("{name}.url"), problem)),
+            None => Ok(()),
+        },
+        _ => Err(unsupported(at, name, "this RTMP target")),
     }
 }
 

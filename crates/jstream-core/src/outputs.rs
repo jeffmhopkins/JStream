@@ -7,21 +7,57 @@
 //! [`Outputs::settle`] so `active` or `failed` is reported only once the pipeline is up,
 //! and `reconnecting` while its publish link is being re-established.
 //!
-//! Outputs are runtime state, not collection state: nothing here changes `rev`.
+//! The states here are runtime state, not collection state: nothing here changes `rev`.
+//! The engine knows an output either because the collection has it (`output.create`)
+//! or because the host declared it (`Engine::with_output`). After each applied batch,
+//! [`Outputs::sync`] gives a created output a `stopped` state and forgets a deleted one;
+//! the graph refuses to delete one that is running.
 
+use jstream_graph::State;
 use jstream_protocol::{EntityKind, OutputId, OutputState, ProtocolError};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Every output the engine knows, by ID, with its current state.
 #[derive(Default)]
 pub(crate) struct Outputs {
     states: BTreeMap<OutputId, OutputState>,
+    /// The outputs the host declared with `Engine::with_output`. They stay known
+    /// whatever the collection holds.
+    declared: BTreeSet<OutputId>,
 }
 
 impl Outputs {
-    /// Adds `output_id` in the `stopped` state, or leaves an existing one as it is.
+    /// Declares `output_id` in the `stopped` state, or leaves an existing one as it is.
     pub(crate) fn add(&mut self, output_id: OutputId) {
+        self.declared.insert(output_id.clone());
         self.states.entry(output_id).or_insert(OutputState::Stopped);
+    }
+
+    /// Follows the collection after a batch: an output it has gained starts `stopped`,
+    /// and one it has lost is forgotten unless the host declared it. The graph refused
+    /// to delete a running output, so only idle ones are forgotten.
+    pub(crate) fn sync(&mut self, collection: &State) {
+        for output in collection.outputs() {
+            self.states
+                .entry(output.id().clone())
+                .or_insert(OutputState::Stopped);
+        }
+        let declared = &self.declared;
+        self.states.retain(|id, state| {
+            declared.contains(id)
+                || collection.output(id).is_some()
+                || !matches!(state, OutputState::Stopped | OutputState::Failed)
+        });
+    }
+
+    /// The outputs that are running: every state but `stopped` and `failed`. The graph
+    /// refuses to delete these.
+    pub(crate) fn running(&self) -> BTreeSet<OutputId> {
+        self.states
+            .iter()
+            .filter(|(_, state)| !matches!(state, OutputState::Stopped | OutputState::Failed))
+            .map(|(id, _)| id.clone())
+            .collect()
     }
 
     /// The current state of `output_id`, or `not_found`.
