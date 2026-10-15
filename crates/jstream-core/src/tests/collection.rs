@@ -80,6 +80,16 @@ fn changes_are_saved_and_load_in_a_new_engine() {
     }
     let engine = open(&path);
     assert_eq!(engine.rev(), Rev(2));
+    // The render thread draws the loaded collection's program scene.
+    assert_eq!(
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .program()
+            .map(|id| id.as_str().to_owned()),
+        Some("a".to_owned())
+    );
     let control = connected(&engine);
     assert_eq!(
         scene_ids(&control),

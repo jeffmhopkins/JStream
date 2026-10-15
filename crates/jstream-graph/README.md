@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:7b7f244530c21e94", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#205): collection file paragraph now saves encoders and each output's encoder_profile (both omitted when absent) and rebuild replays encoder.create then output.set_encoder; tests list the profile round trip and pre-profile file" }
+verified = { hash = "b3:af0daa7f4537dc33", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: B1's collection JSON text is main's; E1 doesn't touch the graph" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
