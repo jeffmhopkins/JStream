@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e33b2a7a9766038f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-RT-001..006 against the handover text: a SeqCst store, load or fence allocates, locks and waits on nothing, so the rules hold unchanged" }
+verified = { hash = "b3:a2bfa580c2df4c9a", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Rule text unchanged. Dependency ARCH#threading only reworded where the collector exists (the mixer's, for input rings), which R-RT-003's collector clause already describes" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:b7eb001719f9e4f4", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): both minors are additive (0.7 outputs, 0.8 kind queries, settings and two edits, optional settings fields); no rule text changed" }
+verified = { hash = "b3:d1aae25b710240dd", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read R-API-001..004 against 0.8 (main, additive) and I1 (transport only, no protocol change)" }
 -->
 
 <a id="R-API-001"></a>

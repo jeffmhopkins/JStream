@@ -29,6 +29,12 @@
 //! Neither side allocates, locks or blocks after [`FrameRing::new`] (R-RT-001).
 
 use std::sync::atomic::{AtomicI64, AtomicU32, Ordering, fence};
+#[cfg(test)]
+use std::sync::mpsc::Sender;
+#[cfg(test)]
+use std::sync::{Mutex, PoisonError};
+#[cfg(test)]
+use std::thread::ThreadId;
 
 /// Marks a position that has not been set.
 const UNSET: i64 = i64::MIN;
@@ -51,6 +57,16 @@ pub(crate) struct FrameRing {
     written: AtomicI64,
     /// The consumer's next read position, for the producer's late and overrun counts.
     read_pos: AtomicI64,
+    /// Receives the thread id that frees the ring. Tests only.
+    #[cfg(test)]
+    drop_notify: Mutex<Option<Sender<ThreadId>>>,
+}
+
+#[cfg(test)]
+fn lock_notify(
+    mutex: &Mutex<Option<Sender<ThreadId>>>,
+) -> std::sync::MutexGuard<'_, Option<Sender<ThreadId>>> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// What a write did, for the producer's counters.
@@ -92,7 +108,15 @@ impl FrameRing {
             claim: AtomicI64::new(UNSET),
             written: AtomicI64::new(UNSET),
             read_pos: AtomicI64::new(UNSET),
+            #[cfg(test)]
+            drop_notify: Mutex::new(None),
         }
+    }
+
+    /// Sends the freeing thread's id to `tx` when this ring is dropped.
+    #[cfg(test)]
+    pub(crate) fn on_drop(&self, tx: Sender<ThreadId>) {
+        *lock_notify(&self.drop_notify) = Some(tx);
     }
 
     fn slot(&self, pos: i64) -> usize {
@@ -153,6 +177,15 @@ impl FrameRing {
     }
 }
 
+#[cfg(test)]
+impl Drop for FrameRing {
+    fn drop(&mut self) {
+        if let Some(tx) = lock_notify(&self.drop_notify).take() {
+            let _ = tx.send(std::thread::current().id());
+        }
+    }
+}
+
 /// The producer's end of a [`FrameRing`]. Exactly one exists per ring.
 #[derive(Debug)]
 pub(crate) struct RingWriter {
@@ -164,6 +197,16 @@ pub(crate) struct RingWriter {
 impl RingWriter {
     pub(crate) fn new(ring: std::sync::Arc<FrameRing>) -> Self {
         Self { ring, pos: None }
+    }
+
+    /// Releases the ring to its caller, which retires it onto the collector thread.
+    pub(crate) fn into_ring(self) -> std::sync::Arc<FrameRing> {
+        self.ring
+    }
+
+    #[cfg(test)]
+    pub(crate) fn ring(&self) -> &FrameRing {
+        &self.ring
     }
 
     /// The next frame this writer writes, once it has started.

@@ -61,6 +61,14 @@ status = "unverified"
 checked_note = "github.com unreachable from the authoring sandbox"
 
 [[external]]
+id = "enhanced-rtmp-v2"
+url = "https://github.com/veovera/enhanced-rtmp/blob/main/docs/enhanced/enhanced-rtmp-v2.md"
+relied_on = "ExVideoTagHeader: IsExHeader bit 0x80, VideoFrameType in bits 4-6 (1 key, 2 inter), VideoPacketType in the low 4 bits (0 SequenceStart, 1 CodedFrames, 2 SequenceEnd, 3 CodedFramesX), then a 4-byte FourCC (hvc1, av01); HEVC CodedFrames carry an SI24 composition time and CodedFramesX imply zero; AV1 CodedFrames carry OBUs of one temporal unit with no composition time; SequenceStart carries the HEVCDecoderConfigurationRecord or AV1CodecConfigurationRecord; onMetaData videocodecid is the FourCC as a big-endian number (jstream-mux flv)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the same file through raw.githubusercontent.com (github.com itself was blocked from the sandbox): the ExVideoTagHeader and ExVideoTagBody tables and the onMetaData videocodecid row match relied_on"
+
+[[external]]
 id = "wgpu"
 url = "https://github.com/gfx-rs/wgpu"
 relied_on = "wgpu backends (D3D12/Metal/Vulkan); wgpu-hal texture_from_raw / create_texture_from_hal interop"

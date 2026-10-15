@@ -62,6 +62,10 @@ fn main() -> ExitCode {
                 ("docs log", "history from git: <DOC[#anchor]> [--rev <rev>]"),
                 ("docs for", "what governs a file: <repo-relative path>"),
                 (
+                    "docs merge-main",
+                    "merge origin/main; stamp-only conflicts take main's, then list stale sections",
+                ),
+                (
                     "governance",
                     "governance changes since a base (R-GOV-001): --base <rev> [--event <json>]",
                 ),
@@ -70,7 +74,7 @@ fn main() -> ExitCode {
                     "crate layering, unsafe declarations, links= allowlist, workspace deps",
                 ),
             ] {
-                eprintln!("  {name:<14} {what}");
+                eprintln!("  {name:<15} {what}");
             }
             ExitCode::from(2)
         }
