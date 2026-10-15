@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-plugin-proto/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-plugin-proto", "docs/adr/0035-clap-plugins-out-of-process.md#decision"]
-verified = { hash = "b3:f6958bb28f08c947", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: new crate; re-read every bullet against lib.rs, status.rs, ring.rs, params.rs and shared.rs: field list and writers, init/config/publish_ready/ready_latency, slot seqlock, SLOTS 8, MAX_BLOCK_FRAMES 2048, MAX_DEPTH 6, DEFAULT_DEPTH 2, first_useful, 256-event param rings with corrupt counts, trust checks, tests list" }
+verified = { hash = "b3:a128cf22c4b387f4", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 part 2 (#272 review N1): re-read; new 'One filter per block' paragraph states the contract HostFilter relies on (blocks numbered from 0, latency fixed at build, restart re-inits the block and rebuilds the filter); rest unchanged" }
 -->
 
 Layer-0 contract between the engine's mixer and the out-of-process CLAP plugin host
@@ -51,6 +51,11 @@ Contents:
   filter's settings) and from the plugin (its own editor). Counts further apart than
   the ring's size read as empty and full, since the other process wrote them.
 - `LIVENESS_MS`: how long a heartbeat may stand still before the host counts as hung.
+
+**One filter per block.** The mixer's side numbers blocks from 0 and fixes its
+latency from the host's ready latency when it is built, so a block serves exactly one
+filter, freshly initialised. A restarted host gets a re-initialised block and the
+filter is built again, since its plugin latency may differ.
 
 **Trust.** Each side treats what the other wrote as untrusted: a slot's frame count
 must match the reader's buffer exactly, a corrupt parameter ring is empty, the

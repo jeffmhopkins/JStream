@@ -591,7 +591,7 @@ disables the check, only review and the weekly audit stand behind it.
 <!-- @section
 covers = ["xtask/src/lint_deps.rs"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003", "docs/RULES.md#R-ARCH-005", "docs/RULES.md#R-UNSAFE-001", "docs/RULES.md#R-DEP-002", "docs/RULES.md#R-DEP-003"]
-verified = { hash = "b3:19669f768d36d841", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: lint_deps.rs gains native-code allowlist entries for Tauri's tree (tauri links guard, vswhom-sys build-time C++, Linux gtk-rs and WebKitGTK sys crates, objc2-exception-helper, iana-time-zone-haiku, defmt), all covered by the native-code bullet; no rule logic changed" }
+verified = { hash = "b3:d8b2d33589c46f71", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 part 2: re-read against lint_deps.rs after rustfmt: unsafe bullet names the CLAP wrapper on the allowlist and the plugin_clap_users check (only jstream-plugin-host reaches jstream-plugin-clap, path in the finding, tested); clients check moved onto the shared path_to helper, behaviour unchanged" }
 -->
 
 `cargo xtask lint-deps` (CI check `lint-deps`) checks the rules whose `enforced_by` names
@@ -609,8 +609,11 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
 - **Clients** ([R-ARCH-003](RULES.md#R-ARCH-003)): `jstream-ui`, `jstream-mcp`,
   `jstream-server` and `jstream-cli` never reach `jstream-core`, directly or through other
   members. The finding shows the path.
-- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform and vcam crates
-  on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
+- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam and CLAP
+  wrapper crates on the `unsafe` allowlist and `*-sys` crates may declare
+  `unsafe_allowed = true`. No member but `jstream-plugin-host` reaches
+  `jstream-plugin-clap`, directly or through other members
+  ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); the finding shows the path. For a
   member that declares `false`, every library and binary crate root must carry
   `#![forbid(unsafe_code)]` (alone or among other lints, possibly wrapped over several
   lines) among its leading inner attributes: only whitespace, comments and other inner

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:bbe89bb1d659bca9", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; ARCH#threading's render-snapshot change doesn't touch this crate; this PR's insert_host_filter API, host.rs tests and no_alloc CLAP bullets checked against handle.rs, cmd.rs and the tests" }
+verified = { hash = "b3:4930ce26f7f6d3a4", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 part 2 (#272 review N1): re-read; insert_host_filter docs in handle.rs gain the one-filter-per-fresh-block contract, which the API bullet's 'block must be initialised ... host ready' still matches; rest unchanged" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends

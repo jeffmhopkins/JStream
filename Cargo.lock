@@ -564,6 +564,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a76abbdb2907f6fd97fb6bc0b7be96b77d328f2dd9669d1075cc03369ed22154"
+
+[[package]]
 name = "codee"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2434,6 +2440,17 @@ dependencies = [
  "wgpu",
  "windows",
  "windows-core",
+]
+
+[[package]]
+name = "jstream-plugin-clap"
+version = "0.0.0"
+dependencies = [
+ "assert_no_alloc",
+ "clap-sys",
+ "jstream-plugin-proto",
+ "libloading 0.8.9",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
