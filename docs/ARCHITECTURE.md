@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:58dc68035cf33f4d", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; crate shape unchanged" }
+verified = { hash = "b3:01f33cee5b2f042c", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (G3a, B6): apps prose unchanged by this PR beyond the --collection refusal wording; shape holds" }
 -->
 
 ```
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:e426654a0827d75f", by = "agent:claude@session_01HGK7agjEsYDqGN4QkkiUjA", note = "Merge of main (E3a and others) into G3a: took main's rows; re-read the map; G3a only adds jstream-platform-windows -> jstream-vcam-proto (L2 -> L0), and the platform-windows row already lists the vcam sink side" }
+verified = { hash = "b3:1636064ca5343fb9", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (G3a): re-read rows; this PR's only Cargo change is graph's serde and thiserror (external)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -810,7 +810,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:27d91a0349ed88d1", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 N1: Asset files bullet now says a kind-version mismatch is refused until kinds ship settings migrations; Collections bullet still holds" }
+verified = { hash = "b3:333fc86c8cb74fff", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6): persist/ now also stores scene roles; Collections and Asset files bullets hold" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

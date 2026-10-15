@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:ee1670969f47fe74", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: rule text unchanged; re-read, holds for B6 as its own additive minor 0.12" }
+verified = { hash = "b3:a575b34bf9377fe7", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main: R-API-001..003 text unchanged; collection file still versioned with its v1 fixture" }
 -->
 
 <a id="R-API-001"></a>

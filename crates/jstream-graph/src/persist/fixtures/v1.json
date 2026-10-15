@@ -9,6 +9,7 @@
     {
       "id": "b",
       "name": "B",
+      "role": "group",
       "items": [
         {
           "id": "i4",

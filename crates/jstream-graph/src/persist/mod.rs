@@ -16,7 +16,7 @@
 use crate::{Graph, Placement};
 use jstream_protocol::{
     Canvas, Crop, Edit, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, ProtocolError,
-    Rev, SceneId, Settings, SourceId, SourceKind,
+    Rev, SceneId, SceneRole, Settings, SourceId, SourceKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -111,6 +111,9 @@ struct File {
 struct FileScene {
     id: SceneId,
     name: String,
+    /// `group` for a group (ADR-0024); omitted for the default, `scene`.
+    #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
+    role: SceneRole,
     /// Bottom first.
     items: Vec<FileItem>,
 }
@@ -168,6 +171,7 @@ impl Graph {
                 .map(|scene| FileScene {
                     id: scene.id.clone(),
                     name: scene.name.clone(),
+                    role: scene.role,
                     items: scene
                         .items
                         .iter()
@@ -297,8 +301,8 @@ fn migrate_with(value: &mut Value, migrations: &[Migration]) -> Result<(), LoadE
 
 /// The edits that build `file`'s collection from an empty one, each with the object it
 /// creates for the error message. The canvas comes first (when not the default), then
-/// scenes, empty and in display order; then sources, each after the sources its
-/// settings refer to; then items, and outputs.
+/// scenes, empty, in display order and with their roles; then sources, each after the
+/// sources its settings refer to; then items, and outputs.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -311,13 +315,23 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         ));
     }
     for scene in &file.scenes {
+        let object = format!("scene `{}`", scene.id);
         edits.push((
-            format!("scene `{}`", scene.id),
+            object.clone(),
             Edit::SceneCreate {
                 scene_id: scene.id.clone(),
                 name: scene.name.clone(),
             },
         ));
+        if !scene.role.is_scene() {
+            edits.push((
+                object,
+                Edit::SceneSetRole {
+                    scene_id: scene.id.clone(),
+                    role: scene.role,
+                },
+            ));
+        }
     }
     let sources: BTreeMap<&SourceId, &FileSource> =
         file.sources.iter().map(|s| (&s.id, s)).collect();
@@ -348,6 +362,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                     object.clone(),
                     Edit::ItemSetCrop {
                         item_id: item.id.clone(),
+                        scene_id: None,
                         crop: item.crop,
                     },
                 ));
@@ -357,6 +372,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                     object,
                     Edit::ItemSetVisible {
                         item_id: item.id.clone(),
+                        scene_id: None,
                         visible: false,
                     },
                 ));

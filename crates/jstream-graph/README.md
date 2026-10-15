@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:69708ec0315d4fe2", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Round 6 B5 follow-up: Groups and moves bullet's placement-edit list now names item.set_geometry, which takes scene_id after the B3 merge (apply.rs placement_mut)" }
+verified = { hash = "b3:d52976b0565808d9", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6 #184): collection file paragraph now saves scene role (group) and rebuild sets it with scene.set_role; item crop/visible replays pass scene_id None; B6's model and move prose from main kept" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -127,11 +127,11 @@ stored transform and no geometry. `Source::to_info`,
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 1), `rev`, the `canvas`, scenes in display order with their
-items bottom first (each with its placement in its own form, a legacy `transform` or a
-`geometry`, exactly one of them, then its crop and `visible`), sources ordered by ID (with
-`kind_version`, the descriptor version a `builtin` source's settings follow, ADR-0025),
-and outputs ordered by ID. Kinds, undo history and runtime state are not in it, and
+(`SCHEMA_VERSION`, now 1), `rev`, the `canvas`, scenes in display order (a group with
+`role: "group"`, ADR-0024) with their items bottom first (each with its placement in
+its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
+and `visible`), sources ordered by ID (with `kind_version`, the descriptor version a
+`builtin` source's settings follow, ADR-0025), and outputs ordered by ID. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -142,7 +142,7 @@ the engine's; this crate does no I/O.
   own objects, so a newer field is never silently dropped by the next save.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
-  graph with the caller's kinds: the canvas size, scenes, then sources (each after the
+  graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
   sources its settings refer to), then items in their placement form with their crop
   and visibility, then outputs. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
@@ -169,8 +169,9 @@ property test: a seeded generator applies 6000 random
 batches of every edit, including moves, role changes and addressed placement edits. After each successful one, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged.
-The collection file's tests (`persist/tests.rs`): saving the parity collection (a 1280×720
-canvas, legacy and geometry items) plus a source whose settings refer to a later one must produce exactly the checked-in
+The collection file's tests (`persist/tests.rs`): saving the parity collection (a
+1280×720 canvas, legacy and geometry items, scene `b` made a group) plus a source whose
+settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); the migration runner over stand-in

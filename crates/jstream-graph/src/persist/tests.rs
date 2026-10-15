@@ -3,8 +3,8 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Edit, KindCategory, KindDescriptor, ParamDescriptor, ParamType, ProtocolError, Rev, SourceId,
-    SourceKind, parity,
+    Edit, KindCategory, KindDescriptor, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId,
+    SceneRole, SourceId, SourceKind, parity,
 };
 use serde_json::{Value, json};
 
@@ -65,13 +65,20 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 }
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
-/// after it, then one more batch: rev 2.
+/// after it, and scene `b` made a group, in one more batch: rev 2.
 fn fixture_graph() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds());
     let applied = graph.apply_batch(&parity::collection());
     assert!(applied.is_ok(), "{applied:?}");
     let applied = graph.apply(
-        &[color("z_base", None), color("a_tint", Some("z_base"))],
+        &[
+            color("z_base", None),
+            color("a_tint", Some("z_base")),
+            Edit::SceneSetRole {
+                scene_id: SceneId::new("b"),
+                role: SceneRole::Group,
+            },
+        ],
         None,
     );
     assert!(applied.is_ok(), "{applied:?}");
