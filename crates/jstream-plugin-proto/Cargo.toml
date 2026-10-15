@@ -1,0 +1,16 @@
+[package]
+name = "jstream-plugin-proto"
+version = "0.0.0"
+description = "The versioned shared-memory contract between the JStream mixer and its out-of-process CLAP plugin host."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 0
+summary = "Shared-memory contract between the mixer and the out-of-process CLAP plugin host (ADR-0035): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls"
+unsafe_allowed = false
+
+[lints]
+workspace = true
