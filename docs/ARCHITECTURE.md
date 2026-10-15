@@ -473,7 +473,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:a8fecc8b48db2141", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only via protocol source: the render_ticks doc comment changed, no wire shape; this section names no drop counter semantics, so it holds" }
+verified = { hash = "b3:b88822ce56b7949f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via jstream-server source: Transport still holds (127.0.0.1 by default, token, Origin/Host); the new connection limits are server-local and detailed in jstream-server Design, no wire shape changed" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

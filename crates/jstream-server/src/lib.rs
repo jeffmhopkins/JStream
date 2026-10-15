@@ -2,7 +2,9 @@
 //! `Control` session. It never links the engine (R-ARCH-003): the host app hands it a
 //! [`Connector`] that opens one session per connection, in-process or otherwise. Every
 //! upgrade request must carry the control token and pass the `Origin` and `Host` checks,
-//! and it listens on `127.0.0.1` unless told otherwise (R-SEC-002, ADR-0006). Layer 4.
+//! and it listens on `127.0.0.1` unless told otherwise (R-SEC-002, ADR-0006). It bounds
+//! how many connections are open at once and how long a connection has to send its
+//! upgrade request and complete its handshake. Layer 4.
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-server/README.md#purpose, crates/jstream-server/README.md#design, docs/adr/0006-mcp-full-access.md
 
@@ -11,6 +13,7 @@
 mod config;
 mod error;
 mod gate;
+mod listener;
 mod session;
 #[cfg(test)]
 mod tests;
@@ -26,13 +29,16 @@ use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use gate::Gate;
+use gate::Refusal;
 use jstream_control::Control;
+use listener::{Accepted, Limited};
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::watch;
+use tokio::sync::{Semaphore, watch};
 use tracing::Instrument;
 
 /// Opens one `Control` session for each accepted connection. A connection's session is
@@ -46,6 +52,7 @@ const MAX_MESSAGE_BYTES: usize = 4 << 20;
 pub struct Server {
     listener: TcpListener,
     local_addr: SocketAddr,
+    header_read_timeout: Duration,
     app: Arc<App>,
     shutdown: watch::Sender<bool>,
 }
@@ -57,6 +64,10 @@ struct App {
     shutdown: watch::Receiver<bool>,
     /// Numbers the accepted connections, for their `connection` spans.
     connections: AtomicU64,
+    /// One permit per open connection, up to `ServerConfig::max_connections`.
+    slots: Arc<Semaphore>,
+    /// `ServerConfig::handshake_timeout`.
+    handshake_timeout: Duration,
 }
 
 impl Server {
@@ -78,10 +89,15 @@ impl Server {
             gate: Gate::new(&config, local_addr),
             shutdown: stopping,
             connections: AtomicU64::new(0),
+            slots: Arc::new(Semaphore::new(
+                config.max_connections.min(Semaphore::MAX_PERMITS),
+            )),
+            handshake_timeout: config.handshake_timeout,
         });
         Ok(Server {
             listener,
             local_addr,
+            header_read_timeout: config.header_read_timeout,
             app,
             shutdown,
         })
@@ -111,6 +127,7 @@ impl Server {
     {
         let Server {
             listener,
+            header_read_timeout,
             app,
             shutdown,
             ..
@@ -121,26 +138,28 @@ impl Server {
             shutdown.send_replace(true);
         };
         // The peer address is only logged, never trusted: the gate decides on the headers.
-        let service = router.into_make_service_with_connect_info::<SocketAddr>();
-        axum::serve(listener, service)
+        let service = router.into_make_service_with_connect_info::<Accepted>();
+        axum::serve(Limited::new(listener, header_read_timeout), service)
             .with_graceful_shutdown(signal)
             .await
             .map_err(ServerError::Serve)
     }
 }
 
-/// `GET /api/v1/ws`: checks the request (R-SEC-002), then upgrades it and runs a session.
+/// `GET /api/v1/ws`: checks the request (R-SEC-002) and that a connection slot is free,
+/// then upgrades it and runs a session.
 ///
-/// A refusal is logged with its reason and the peer address by [`Gate::admit`]. An
-/// accepted connection runs in a `connection` span carrying its number and peer address,
-/// which every log line of the session nests under. Request headers are never logged,
-/// so the token can't be (R-SEC-001).
+/// A refusal is logged with its reason and the peer address ([`Gate::admit`],
+/// [`Refusal::log`]). An accepted connection runs in a `connection` span carrying its
+/// number and peer address, which every log line of the session nests under. Request
+/// headers are never logged, so the token can't be (R-SEC-001).
 async fn upgrade(
     State(app): State<Arc<App>>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    ConnectInfo(accepted): ConnectInfo<Accepted>,
     headers: HeaderMap,
     upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
 ) -> Response {
+    let peer = accepted.peer;
     if let Err(refusal) = app.gate.admit(&headers, peer) {
         return refusal.into_response();
     }
@@ -151,6 +170,15 @@ async fn upgrade(
             return rejection.into_response();
         }
     };
+    // Held until the session ends; released at once if the upgrade fails.
+    let Ok(slot) = Arc::clone(&app.slots).try_acquire_owned() else {
+        Refusal::Full.log(peer);
+        return Refusal::Full.into_response();
+    };
+    // The request is accepted: the header-read deadline no longer applies, the
+    // handshake deadline does.
+    accepted.request_read();
+    let hello_by = accepted.at + app.handshake_timeout;
     let number = app.connections.fetch_add(1, Ordering::Relaxed) + 1;
     let span = tracing::info_span!("connection", id = number, peer = %peer);
     // Opened inside the span, so a session span the connector creates nests under it.
@@ -161,7 +189,13 @@ async fn upgrade(
     let shutdown = app.shutdown.clone();
     upgrade
         .max_message_size(MAX_MESSAGE_BYTES)
-        .on_upgrade(move |socket| session::run(socket, control, shutdown).instrument(span))
+        .on_upgrade(move |socket| {
+            async move {
+                session::run(socket, control, shutdown, hello_by).await;
+                drop(slot);
+            }
+            .instrument(span)
+        })
 }
 
 // The two tests below sit at the crate root because RULES.md names them by path
