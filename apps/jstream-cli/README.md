@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:50bc892eab491877", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (B6-f CLI groups): args.rs keeps B6-f's scene.set_role/item.move/set_geometry and adds scene.create's optional trailing role:; purpose holds" }
+verified = { hash = "b3:f2f2278743d2e4c4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed: the item.move cycle golden now expects the mock's cycle path; error format (error: <message> (<code>)) and exit code 17 unchanged" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -235,7 +235,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a34fd13265bd97a8", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server/control design; WsControl and MCP test text unchanged; holds" }
+verified = { hash = "b3:fbd4a9d27c04d5d8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed (cycle reason golden names the path); design bullets don't quote engine reasons" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

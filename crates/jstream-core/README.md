@@ -909,7 +909,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:28d3b97f34c68522", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale only through ARCH#threading after merging main (#215) into #143: ARCH changed in wording (render-snapshot lock-free reader, cleared marker value, R-RT links, grammar, rewrap); nothing this section states depends on those sentences" }
+verified = { hash = "b3:037387eaec0b2653", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

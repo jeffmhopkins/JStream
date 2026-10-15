@@ -494,8 +494,8 @@ pub fn Canvas() -> impl IntoView {
     };
 
     view! {
-        <div style="display:flex;flex-direction:column;gap:0.5rem;width:100%;height:100%;align-items:center">
-            <div style="display:flex;gap:0.75rem;align-items:center;width:min(100%, 960px);flex-wrap:wrap">
+        <div class="canvas-view">
+            <div class="canvas-toolbar">
                 <strong>{scene_name}</strong>
                 <button
                     title="Undo (Ctrl+Z)"
@@ -514,7 +514,7 @@ pub fn Canvas() -> impl IntoView {
                 <label title="Hold Alt while dragging to skip snapping">
                     <input
                         type="checkbox"
-                        style="width:auto"
+                        class="inline-check"
                         prop:checked=move || snapping.get()
                         on:change=move |_| snapping.update(|on| *on = !*on)
                     />
@@ -524,10 +524,9 @@ pub fn Canvas() -> impl IntoView {
                 {move || problem.get().map(|reason| view! { <span class="problem" role="alert">{reason}</span> })}
             </div>
             <div
-                class="preview"
+                class="preview stage"
                 node_ref=stage
                 tabindex="0"
-                style="position:relative;touch-action:none;outline-offset:2px"
                 on:pointerdown=on_down
                 on:pointermove=on_move
                 on:pointerup=move |_| end(true)
@@ -538,7 +537,7 @@ pub fn Canvas() -> impl IntoView {
                 <svg
                     viewBox=view_box
                     preserveAspectRatio="xMidYMid meet"
-                    style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"
+                    class="stage-overlay"
                 >
                     <rect
                         x="0"
