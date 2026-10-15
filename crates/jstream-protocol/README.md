@@ -328,8 +328,8 @@ never a type per kind.
   edits.N.settings.<id>` (or `edits.N.patch.<id>`). Values are never clamped. A
   reference to a missing scene or source is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
-  `collection` and `app` are relative, with `/` separators and no `..` segment, drive
-  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
+  `collection` and `app` are relative, with `/` separators and no empty or `..` segment,
+  drive letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
   Under `absolute` the path is `/…`, `\…`, `C:\…` or `C:/…`, with no `..` segment, no
   second leading separator (`\\host\share`, `//host/share`, `\\.\…` and `\\?\…` name
   a UNC share or a device, and opening one on Windows hands the engine's credentials to
@@ -341,9 +341,9 @@ never a type per kind.
   `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`,
   `CONIN$` or `CONOUT$`. So `C:\x\nul`, `\CON .png` and `/x/aux.txt` are refused under
   `absolute`, and `CON.png` and `media/nul` under `collection` or `app` (joined to the
-  root folder, they still open the device), while `CONSOLE.png` or `COM10.png` is not. Earlier components may use these names: Win32
-  fails to open such a path, and elsewhere they are ordinary folders. An asset that
-  doesn't exist yet is accepted.
+  root folder, they still open the device), while `CONSOLE.png` or `COM10.png` is not.
+  Earlier components may use these names: Win32 fails to open such a path, and elsewhere
+  they are ordinary folders. An asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,

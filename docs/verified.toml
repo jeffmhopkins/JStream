@@ -327,7 +327,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:11383ebdefba1cd2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Summary of envelope/edits/actions holds; asset-path rule detail lives in protocol README Design, unchanged here by #403" }
+stamp = { hash = "b3:319be3918e7685d3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol README and kind.rs changes are asset-path doc wording and a comment rewrap; the control-protocol summary makes no asset-path claim and still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
@@ -369,7 +369,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:191691f27a6abd62", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Summary of envelope/edits/actions holds; asset-path rule detail lives in protocol README Design, unchanged here by #403" }
+stamp = { hash = "b3:81d3874a4e5f7ef3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol README and kind.rs changes are asset-path doc wording and a comment rewrap; the control-protocol summary makes no asset-path claim and still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -963,7 +963,7 @@ stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:e7ba7a11964cf62d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Engine/session design does not state asset-path rules; #403's protocol Design change does not affect it" }
+stamp = { hash = "b3:461bf05e22a4b2f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol Design change only adds the empty-segment rule to the asset-path Rejections text and rewraps; core design's asset statements (collection/app resolution) are unaffected" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d638c6ca8019b15d" }
@@ -1392,7 +1392,7 @@ stamp = { hash = "b3:99e633ebddadb039" }
 stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
 ["CRATE-jstream-effects#purpose"."body"]
-stamp = { hash = "b3:43dd619147c37ef5", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "Round 1 (B1, N1-N3): re-read; hot reload now stamps the manifest plus named shaders and retries duplicate-refused folders when an ID is freed; contract adds overrides; prelude validated alone" }
+stamp = { hash = "b3:dfe4bf2f20a9f63e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: shader-path bullet now names every rule check_shader_path enforces (.wgsl, then check_asset_path under collection: no empty or .. segment, drive letter, leading /, backslash, :, or DOS device last component) and links the protocol Rejections bullet; rest of purpose unchanged and still holds" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
 stamp = { hash = "b3:43d3c8a43e07d1d8" }
@@ -1509,7 +1509,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:e7ba7a11964cf62d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Graph purpose does not state asset-path rules; #403's protocol Design change does not affect it" }
+stamp = { hash = "b3:461bf05e22a4b2f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol Design change only adds the empty-segment rule to the asset-path Rejections text and rewraps; graph purpose says only that asset references are not edges, which still holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2028,7 +2028,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:e7ba7a11964cf62d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Rejections bullet updated for #403: DOS device names refused as the last component under every root (relative CON.png, media/nul); rest of Design unaffected" }
+stamp = { hash = "b3:461bf05e22a4b2f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: Rejections bullet now lists the empty-segment rule check_asset_path already enforces for collection/app, and the DOS-device sentence is rewrapped; checked against check_asset_path" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2085,7 +2085,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:191691f27a6abd62", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Rejections bullet updated for #403: DOS device names refused as the last component under every root (relative CON.png, media/nul); rest of Design unaffected" }
+stamp = { hash = "b3:81d3874a4e5f7ef3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: Rejections bullet now lists the empty-segment rule check_asset_path already enforces for collection/app, and the DOS-device sentence is rewrapped; checked against check_asset_path" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -2148,7 +2148,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:191691f27a6abd62", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Contents list unchanged by #403 (check_asset_path rule only); no asset-path rule stated here" }
+stamp = { hash = "b3:81d3874a4e5f7ef3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: kind.rs change is a rewrap of check_asset_path's doc comment only; Kinds and settings contents bullet still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
