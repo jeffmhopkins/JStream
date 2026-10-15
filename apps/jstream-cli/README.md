@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:3a4b8099d73ead87", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): Edits bullet merged: outputs now supported (A5), settings and 0.9's set_role/item.move/scene_id still not; output and stream-key bullets from A5 kept" }
+verified = { hash = "b3:277ce3dbb5735bae", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: Edits bullet says 0.10's set_role/item.move/scene_id aren't in the CLI; F2b's text kept" }
 -->
 
 ```sh
@@ -103,14 +103,15 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
   protocol is supported except settings. `source.set_settings`, and `source.create`
   with settings, need a JSON argument form the CLI doesn't have yet, so a source it
-  creates gets its kind's defaults. Protocol 0.9's `scene.set_role`, `item.move` and
+  creates gets its kind's defaults. Protocol 0.10's `scene.set_role`, `item.move` and
   the placement edits' optional `scene_id` are not in the CLI yet. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
-  which is the whole target of the only output kind so far (generic RTMP). An argument
-  without an `rtmp` or `rtmps` scheme is a usage error, which leaves other spellings
-  free for later output kinds; the engine checks the rest. Neither message repeats
+  which is the whole target of a generic RTMP output. The CLI has no form for a
+  recording output yet. An argument without an `rtmp` or `rtmps` scheme is a usage
+  error, which leaves other spellings free for later output kinds; the engine checks
+  the rest. Neither message repeats
   the URL.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
@@ -206,7 +207,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:84ebcba5584e75d8", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): A5's set-key reader and B6's scene_id: None constructors; parsing/writers bullets hold" }
+verified = { hash = "b3:61491ca1cbc3ad94", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: parsing and writers hold for args.rs with both sides" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

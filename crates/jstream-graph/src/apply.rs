@@ -7,11 +7,11 @@
 
 use crate::deps::{self, Node};
 use crate::model::{Graph, Item, Output, Scene, Source, State};
-use crate::target::rtmp_url_problem;
+use crate::target::{record_path_problem, rtmp_url_problem};
 use jstream_protocol::{
     Batch, Crop, Edit, EntityKind, ItemId, ItemTransform, KindDescriptor, Media, OutputId,
-    OutputKind, ParamDescriptor, ParamType, ProtocolError, Reference, Rev, RtmpTarget, SceneId,
-    SceneRole, Settings, SourceId, SourceKind,
+    OutputKind, ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference, Rev,
+    RtmpTarget, SceneId, SceneRole, Settings, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -569,6 +569,16 @@ fn apply_edit(
             }
             match kind {
                 OutputKind::Rtmp { target } => check_target(target, at, "kind.target")?,
+                OutputKind::Record { path, container } => {
+                    check_record(path, *container, at)?;
+                }
+                OutputKind::Unknown => {
+                    return Err(invalid(
+                        at,
+                        "kind.type",
+                        "is not an output kind this engine knows",
+                    ));
+                }
                 _ => return Err(unsupported(at, "kind", "this output kind")),
             }
             state.outputs.insert(
@@ -626,7 +636,31 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
             Some(problem) => Err(invalid(at, &format!("{name}.url"), problem)),
             None => Ok(()),
         },
+        RtmpTarget::Unknown => Err(invalid(
+            at,
+            &format!("{name}.type"),
+            "is not an RTMP target this engine knows",
+        )),
         _ => Err(unsupported(at, name, "this RTMP target")),
+    }
+}
+
+/// Checks a recording output's path and container.
+fn check_record(path: &str, container: RecordContainer, at: usize) -> Result<(), ProtocolError> {
+    match container {
+        RecordContainer::Mp4 => {}
+        RecordContainer::Unknown => {
+            return Err(invalid(
+                at,
+                "kind.container",
+                "is not a container this engine knows",
+            ));
+        }
+        _ => return Err(unsupported(at, "kind.container", "this container")),
+    }
+    match record_path_problem(path) {
+        Some(problem) => Err(invalid(at, "kind.path", problem)),
+        None => Ok(()),
     }
 }
 

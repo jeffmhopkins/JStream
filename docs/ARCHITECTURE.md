@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b96e5cfacc990a83", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): apps changes are A5's CLI output commands and B6's scene_id: None; diagram and host table hold" }
+verified = { hash = "b3:1da1b9cacc1ab2dd", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: apps diagram/table unaffected by either side" }
 -->
 
 ```
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:9fa26e6c7642ad0d", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main (#155, #165, #153, #169, #163) into D1: rows are main's; jstream-audio row still layer 2, no unsafe, crossbeam-channel external" }
+verified = { hash = "b3:1a30b706dc6e3620", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (#181, #166, #149) into G2 #174: re-read the whole map; main changed no rows since da4d83a, only the stamp; G2's jstream-vcam-windows row (own log sink, L0 + windows) still matches its Cargo.toml" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -146,7 +146,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
-| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
+| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:c4f1be129797162f", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6 (protocol 0.9): Built so far now lists scene role/scene.set_role, item.move with the cycle check, and scene_id addressing limited to the item's own scene; Not yet keeps scene.create's role and variants/overrides; ADR-0040 hotkey text from #134 unchanged; checked against graph model/mod.rs and apply.rs" }
+verified = { hash = "b3:8b8e0a3fd4c6e378", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: Built so far keeps B6's role/item.move/scene_id and F2b's Record output; Not yet drops Record (F2b) and keeps scene.create role and variants" }
 -->
 
 ```
@@ -352,14 +352,15 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
   built-in kinds are stubs in `jstream-core` until `jstream-sources` exists.
   Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
-  the URL checked to carry no credential. A stream key is never collection state: it
+  the URL checked to carry no credential, or `Record { path, container: mp4 }`, the path
+  checked to be absolute and to end in a file name. A stream key is never collection state: it
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
   `geometry`, `scene.create`'s optional `role`, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
-  `YouTube`, `Record` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
+  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
   and `outputs`. Nothing is persisted yet.
 
 <a id="threading"></a>
@@ -367,7 +368,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:8be44cb5d6358bec", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main (#133, #136, #146) into D1: prose is main's except D1's two collector sentences (mixer's own collector for input rings; queue add/remove with rings freed on the collector), which still hold beside #133's InputControl reference; Collector row unchanged" }
+verified = { hash = "b3:92eb867695f2637b", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; prose is main's collector sentences plus F2b's recording output-thread sentence; both hold for runtime/sink.rs and audio rt cmd/retire" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -388,15 +389,17 @@ every mix runs at the base rate divided by an integer.
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003) |
 
 **Output pipeline** (`jstream-core` `src/runtime/`), the part that is built.
-`output.start`, once the host has injected platform backends and a publish target,
-starts it and emits `output.state_changed` from the control thread. The render
+`output.start`, once the host has injected platform backends and a publish target
+(a recording output needs none), starts it and emits `output.state_changed` from the control thread. The render
 thread calls the platform capture mailbox, composites one scene on each 1/30 s
 tick, repeats the last frame when capture is empty, and reads that frame back.
 This cut encodes that CPU readback, and the readback is counted. The mixer thread
 polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
 desktop loopback. Encode threads are the
 ones inside the encoder sessions. The output thread muxes FLV and sends tags to the
-publish target. `output.start` also starts `jstream-stats`, which is not a
+publish target, or, for a recording output, muxes fragmented MP4 and writes it to the
+file, syncing each fragment (writes may block on the disk; the encoder queues absorb
+that and drop when full). `output.start` also starts `jstream-stats`, which is not a
 real-time thread: it emits `stats.tick` about once a second from the stage
 counters, and once more when the pipeline stops. The render loop publishes capture
 mailbox skips, and a tick that falls a whole period behind the clock skips to the
@@ -406,7 +409,7 @@ lock the collection. `output.stop` during
 its threads. The render and mixer threads catch a panic at their boundary
 ([R-RT-006](RULES.md#R-RT-006)); a capture error or a missing frame repeats the last
 one, and a render panic repeats the last frame until teardown. A fatal error on the
-render, mixer or output thread (a publish failure, an encoder stream that ends
+render, mixer or output thread (a publish or recording write failure, an encoder stream that ends
 before stop, a render or mixer panic) is a channel message to a watcher the control
 thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
 encoder session queues. Arc-swap snapshots and a GPU encode target are still the
@@ -504,7 +507,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:8409f8e0ed559a64", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): edits bullet keeps B6's item.move/set_role/scene_id (0.9) text; outputs/key bullets hold with A5's CLI and mock support" }
+verified = { hash = "b3:b03f9ccde4182975", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: edits bullet says groups are 0.10, record kind 0.9" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -519,10 +522,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
   id, `scene.set_role` marks a scene as a group, and placement edits take an optional
   `scene_id` so they can write a keyframe scene's override
-  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.9). Until keyframe scenes are
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.10). Until keyframe scenes are
   built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
-  outputs (protocol 0.7).
+  outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
+  0.9.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -606,7 +610,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:b66df5fafe3cb359", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: tools.snap grows to ~88 KB with scene.set_role/item.move ops in the existing scene and item tools (no new noun); 'about 90 KB' updated" }
+verified = { hash = "b3:d62cf7553f98e02b", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: tools.snap regenerated at ~92 KB; 'about 90 KB' still holds; ops in existing tools" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

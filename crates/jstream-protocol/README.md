@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:196d0f78f0cf223e", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): no main changes to protocol sources; B6's 0.9 commands list holds" }
+verified = { hash = "b3:95c34f9076b560e1", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: version sentence now 0.10 for groups, 0.9 record, 0.8 kinds (version.rs minor 10)" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -38,8 +38,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Outputs** (`output.rs`): `OutputKind` (only `rtmp` so far), `RtmpTarget` (only a
-  generic `url`), `OutputInfo`, and `SecretString`, the write-only stream key, which
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+  (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
@@ -70,19 +70,20 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
   transform. A negative scale is not refused: `from_legacy` returns the drawn outline
   and flags the reflection, which geometry cannot store. These types are not
-  messages. `PROTOCOL_VERSION` is 0.9 because of groups (`scene.set_role`,
-  `item.move`, a scene's `role` and the placement edits' `scene_id`); 0.8 added the kind
-  queries and settings, 0.7 added the output edits, `output.list`, the key actions and `key_set`,
-  `stats.tick` is the 0.6 addition and `video.snapshot` the 0.5 one, and the geometry
-  wire surface ships as a later minor. `ItemTransform`'s schema description names
+  messages. `PROTOCOL_VERSION` is 0.10 because of groups (`scene.set_role`,
+  `item.move`, a scene's `role` and the placement edits' `scene_id`); 0.9 added the
+  `record` output kind, 0.8 the kind queries and settings, 0.7 the output edits,
+  `output.list`, the key actions and `key_set`, `stats.tick` is the 0.6 addition and
+  `video.snapshot` the 0.5 one, and the geometry wire surface ships as a later minor. `ItemTransform`'s schema description names
   `ItemGeometry` as the replacement (`protocol.snap` and the MCP `tools.snap`).
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection with two RTMP
-  outputs, the exact answer to every collection read of it (`output.list` included),
-  and the exact error for batches rejected against it (RTMP URL checks included).
+  outputs and a recording output, the exact answer to every collection read of it
+  (`output.list` included), and the exact error for batches rejected against it (RTMP
+  URL and recording path checks included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -95,7 +96,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:d111cef0a02261eb", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): no main changes to protocol design text; B6's groups/addressing subsection still matches command.rs/query.rs" }
+verified = { hash = "b3:1d74a328a8312764", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: groups subsection says 0.10 and that a 0.9 reader sees no change; geometry paragraph lists 0.10/0.9/0.8/0.7; F2b's record and Unknown-kind text kept" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -115,8 +116,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":8},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":8},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":9},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":9},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -189,9 +190,9 @@ order with 0 at the bottom.
 ### Groups and placement addressing
 
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
-`role: group` (protocol 0.9). `SceneRole` is `scene` or `group`, and
+`role: group` (protocol 0.10). `SceneRole` is `scene` or `group`, and
 `scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
-`scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.8 reader sees
+`scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.9 reader sees
 no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
 to a position in another scene, keeping its ID and every placement property, under the
 same cycle check as `item.add` (field `scene_id`). `index` is the item's position after
@@ -271,7 +272,14 @@ Outputs are collection state too: `output.create` adds one, stopped, with its
 while it runs. A target URL must be an `rtmp://` or `rtmps://` server URL with a host and an
 application name, and is refused if it could carry a credential (`user:password@`, a
 query or a fragment). A key pasted into the path can't be told from a nested
-application name, so it is stored as given. The
+application name, so it is stored as given. A `record` output (0.9) records to a file
+on the engine's machine: `path` must be absolute (`/…`, `\…`, `C:\…` or `C:/…`), have
+no `..` segment and end in a file name, and
+`container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
+`action_failed` when `path` or `<path>.part` already exists, so a recording never
+overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
+so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
+record elsewhere. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
@@ -453,9 +461,15 @@ after 1.0:
   optional field. Old clients keep working, and a newer server still serves them
   (`can_serve`), because unknown fields are ignored (no type denies them), and because
   unknown server messages, events and error codes parse as an `Unknown` variant that
-  clients skip. An unknown error code still has its `message`. Not yet covered: a new
+  clients skip. An unknown error code still has its `message`. From 0.9, an output's
+  `OutputKind`, `RtmpTarget` and `RecordContainer` parse an unknown `type` or value as
+  `Unknown` too, so later output kinds won't break a 0.9 client. Not yet covered: a new
   value of a string enum (`OutputState`, `EntityKind`) inside a known message breaks an
-  older client's parse, so adding one needs open question 8 settled first.
+  older client's parse, so adding one needs open question 8 settled first. The same
+  break happened once, in 0.9 itself: `OutputKind` had no fallback in 0.7 and 0.8, so a
+  0.7 or 0.8 client can't parse `output.list` or `state.get` once a `record` output
+  exists (the whole response fails, and `WsControl` ends the session). Whether that
+  counts as a minor bump is part of open question 8.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
@@ -492,9 +506,9 @@ function in this crate so the compositor and the UI share one implementation.
   reflected quad.
 
 These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.9 because of groups;
-the kind queries and settings are 0.8, the outputs 0.7, `stats.tick` the 0.6 addition and
-`video.snapshot` the 0.5 one. ADR-0022
+`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.10 because of groups;
+the `record` output kind is 0.9, the kind queries and settings 0.8, the outputs 0.7,
+`stats.tick` the 0.6 addition and `video.snapshot` the 0.5 one. ADR-0022
 names the geometry additions as 0.4, which already shipped with `events.dropped`;
 the geometry wire surface ships as a later minor, under
 [R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited
@@ -556,7 +570,9 @@ described above.
    the pipeline runs.
 8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
    fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
-   a new value as a major change?
+   a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
+   fallbacks from 0.9, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
+   outputs (see Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an

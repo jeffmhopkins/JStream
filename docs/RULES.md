@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:a2bfa580c2df4c9a", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Rule text unchanged. Dependency ARCH#threading only reworded where the collector exists (the mixer's, for input rings), which R-RT-003's collector clause already describes" }
+verified = { hash = "b3:080fea9002e1d852", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: rule text unchanged; ARCH#threading only combines main's collector text and F2b's recording write path, both within R-RT-003/R-RT-004" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1a80b2d57a6b5de2", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: cascade from ARCH#protocol; 0.9 is additive (new edits, optional scene_id, role omitted for scene) under R-API-001; rules text holds" }
+verified = { hash = "b3:ac804aec394185a0", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: cascade; 0.10 is additive under R-API-001" }
 -->
 
 <a id="R-API-001"></a>

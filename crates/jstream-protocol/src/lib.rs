@@ -42,7 +42,7 @@ pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
 };
-pub use output::{OutputInfo, OutputKind, RtmpTarget, SecretString};
+pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
 pub use query::{ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};

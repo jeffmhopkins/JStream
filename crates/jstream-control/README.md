@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:d05f44e74996e502", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): mock gains outputs and key stand-in (A5) plus B6's placement() and role; contents bullets hold" }
+verified = { hash = "b3:519a5f4492aa9a41", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: mock gains Record outputs (F2b) and B6's placement()/role; contents hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:e9e6399e4d28c391", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): mock bullet merged: every edit but 0.9's scene.set_role/item.move, with A5's RTMP URL and running-delete checks and B6's scene_id own-scene check; matches mock.rs" }
+verified = { hash = "b3:7a08ebb87ba72d07", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: mock bullet: every edit but 0.10's set_role/item.move, record checks from F2b kept, scene_id own-scene check" }
 -->
 
 ### The trait
@@ -101,7 +101,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   retry with a known key answers first; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but protocol 0.9's `scene.set_role` and `item.move` (which answer
+- every protocol edit but protocol 0.10's `scene.set_role` and `item.move` (which answer
   `internal`), with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
@@ -115,7 +115,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - nesting cycles;
   - RTMP server URLs in `output.create` and `output.set_target` (`jstream-graph`'s
     checks and reasons, which never repeat the URL), and deleting an output while it
-    runs, which the engine refuses through `Graph::apply_with_running`.
+    runs, which the engine refuses through `Graph::apply_with_running`;
+  - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
+    reasons), `output.set_target` on a recording output, and an `unknown` output kind,
+    RTMP target or container.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind, stores settings as sent without
@@ -160,7 +163,7 @@ for dev-dependencies, so the dependency would need a layering change. The duplic
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
 its outputs, the exact answer to every read of it, and the exact error for batches
-rejected against it, RTMP URL rejections included.
+rejected against it, RTMP URL and recording path rejections included.
 If the mock and the graph drift apart on any of those, one of the two tests fails. The
 mock's own tests pin the remaining shared error paths.
 

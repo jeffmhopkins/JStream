@@ -16,9 +16,9 @@ use futures_core::Stream;
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, Crop, Edit, EntityKind, Event, Hello,
     IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
-    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, Reference, RequestId, Response, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceId,
-    SourceInfo, SourceKind, Welcome,
+    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
+    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings,
+    SourceId, SourceInfo, SourceKind, Welcome,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -699,6 +699,14 @@ impl Collection {
                 }
                 match &kind {
                     OutputKind::Rtmp { target } => check_target(target, at, "kind.target")?,
+                    OutputKind::Record { path, container } => check_record(path, *container, at)?,
+                    OutputKind::Unknown => {
+                        return Err(invalid(
+                            at,
+                            "kind.type",
+                            "is not an output kind this engine knows",
+                        ));
+                    }
                     _ => return Err(unimplemented_by_mock("this output kind")),
                 }
                 self.outputs.insert(output_id, kind);
@@ -932,7 +940,66 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
             Some(problem) => Err(invalid(at, &format!("{name}.url"), problem)),
             None => Ok(()),
         },
+        RtmpTarget::Unknown => Err(invalid(
+            at,
+            &format!("{name}.type"),
+            "is not an RTMP target this engine knows",
+        )),
         _ => Err(unimplemented_by_mock("this RTMP target")),
+    }
+}
+
+/// Checks a recording output's container and path, as `jstream-graph` does.
+fn check_record(path: &str, container: RecordContainer, at: usize) -> Result<(), ProtocolError> {
+    match container {
+        RecordContainer::Mp4 => {}
+        RecordContainer::Unknown => {
+            return Err(invalid(
+                at,
+                "kind.container",
+                "is not a container this engine knows",
+            ));
+        }
+        _ => return Err(unimplemented_by_mock("this container")),
+    }
+    match record_path_problem(path) {
+        Some(problem) => Err(invalid(at, "kind.path", problem)),
+        None => Ok(()),
+    }
+}
+
+/// The longest recording path accepted, in bytes, as in `jstream-graph`.
+const MAX_PATH_LEN: usize = 4096;
+
+/// Why `path` is not an acceptable recording path, or `None` when it is: the checks and
+/// fixed reasons of `jstream-graph`'s path validation, in the same order. The rule is
+/// the same on every platform: `/…`, `\…`, `C:\…` or `C:/…`, no `..` segment, and a
+/// file name last.
+fn record_path_problem(path: &str) -> Option<&'static str> {
+    if path.is_empty() {
+        return Some("must not be empty");
+    }
+    if path.len() > MAX_PATH_LEN {
+        return Some("must be at most 4096 bytes");
+    }
+    if path.chars().any(char::is_control) {
+        return Some("must not contain control characters");
+    }
+    let bytes = path.as_bytes();
+    let drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\');
+    if !(path.starts_with(['/', '\\']) || drive) {
+        return Some("must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`");
+    }
+    let mut segments = path.split(['/', '\\']);
+    if segments.clone().any(|segment| segment == "..") {
+        return Some("must not contain a `..` segment");
+    }
+    match segments.next_back() {
+        Some("" | ".") | None => Some("must end in a file name"),
+        Some(_) => None,
     }
 }
 
