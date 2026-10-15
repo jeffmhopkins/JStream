@@ -576,6 +576,7 @@ mod tests {
         let batch = Batch::single(Edit::SceneCreate {
             scene_id: SceneId::new("s"),
             name: "Main".into(),
+            role: None,
         })
         .expecting(Rev(3))
         .with_idempotency_key(IdempotencyKey::new("k"));

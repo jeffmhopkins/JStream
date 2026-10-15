@@ -280,6 +280,7 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     let applied = timely(control.call(Call::Batch(Batch::single(Edit::SceneCreate {
         scene_id: SceneId::new("main"),
         name: "Main".to_owned(),
+        role: None,
     }))))
     .await
     .expect("applied");

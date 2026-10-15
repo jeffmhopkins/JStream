@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:69708ec0315d4fe2", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Round 6 B5 follow-up: Groups and moves bullet's placement-edit list now names item.set_geometry, which takes scene_id after the B3 merge (apply.rs placement_mut)" }
+verified = { hash = "b3:95ad1adda43fd8c7", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: scene.create sets the role it names; scene.delete's inverse carries the role on scene.create, not a scene.set_role; dropped the 'role comes later' Not-yet note" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -56,8 +56,8 @@ goes up by exactly one, and the result carries the **inverse batch**.
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
   Undo design requires: removing an item is undone by `item.add`, then `item.reorder`,
   `item.set_crop` and `item.set_visible` only where the item differed from what
-  `item.add` produces, and deleting a scene by `scene.create`, `scene.reorder` and each
-  item's restore (with `scene.set_role` for a group). The inverse carries no `expected_rev`: the engine's per-client undo
+  `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
+  group), `scene.reorder` and each item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
   history (in `jstream-core`) chooses it.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   `source.create` of a `builtin` source needs a kind the graph describes, checks each
@@ -96,6 +96,7 @@ goes up by exactly one, and the result carries the **inverse batch**.
   with `invalid_argument`, in edit order.
 - **Groups and moves** ([ADR-0024](../../docs/adr/0024-scene-structure.md) §1):
   `scene.set_role` changes a scene's role and is undone by the previous role.
+  `scene.create` sets the `role` it names, or `scene` when it names none.
   `item.move` moves an item to an index in another scene (up to one past its top) or
   within its own (a reorder), keeping the whole item, and is undone by `item.move`
   back. The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
@@ -162,7 +163,5 @@ Planned, and kept possible by the private fields of the model types:
 - Keyframe scenes (`variant_of`, per-item `overrides`, `item.clear_override`) and the
   rest of ADR-0024: placement edits addressed to a variant will write its override, and
   the edits ADR-0040 lists will drop orphaned overrides and restore them in their
-  inverses. `scene.create`'s optional `role` comes with a change to the daemon, which
-  builds that edit; until then a batch of `scene.create` and `scene.set_role` makes a
-  group.
+  inverses.
 - Item lookup is a linear scan over scenes. An ID index can come once collections grow.

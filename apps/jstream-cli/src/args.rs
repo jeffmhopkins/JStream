@@ -8,7 +8,7 @@
 use crate::exit::CliError;
 use jstream_control::protocol::{
     Action, Batch, Crop, Edit, Finite32, IdempotencyKey, ItemId, ItemTransform, OutputId,
-    OutputKind, Query, Rev, RtmpTarget, SceneId, SourceId, SourceKind, Vec2,
+    OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole, SourceId, SourceKind, Vec2,
 };
 
 /// The help text, printed by `help`, `--help` and `-h`.
@@ -57,7 +57,7 @@ Commands:
   help                             print this help
 
 Edits (each is its protocol command name followed by its arguments):
-  scene.create <scene-id> <name>
+  scene.create <scene-id> <name> [role:scene|role:group]
   scene.rename <scene-id> <name>
   scene.delete <scene-id>
   scene.reorder <scene-id> <index>
@@ -385,12 +385,23 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
             if n == 1 { "" } else { "s" }
         )));
     }
-    let (a, rest) = rest.split_at(n);
+    let (a, mut rest) = rest.split_at(n);
     let edit = match (name, a) {
-        ("scene.create", [id, name]) => Edit::SceneCreate {
-            scene_id: SceneId::new(*id),
-            name: (*name).to_owned(),
-        },
+        ("scene.create", [id, name]) => {
+            // An optional trailing `role:<role>`; no edit name has that prefix.
+            let role = match rest.split_first() {
+                Some((arg, after)) if arg.starts_with("role:") => {
+                    rest = after;
+                    Some(scene_role(arg)?)
+                }
+                _ => None,
+            };
+            Edit::SceneCreate {
+                scene_id: SceneId::new(*id),
+                name: (*name).to_owned(),
+                role,
+            }
+        }
         ("scene.rename", [id, name]) => Edit::SceneRename {
             scene_id: SceneId::new(*id),
             name: (*name).to_owned(),
@@ -484,6 +495,16 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
     Ok((edit, rest))
 }
 
+fn scene_role(text: &str) -> Result<SceneRole, CliError> {
+    match text.strip_prefix("role:") {
+        Some("scene") => Ok(SceneRole::Scene),
+        Some("group") => Ok(SceneRole::Group),
+        _ => Err(usage(format!(
+            "scene role `{text}` must be `role:scene` or `role:group`"
+        ))),
+    }
+}
+
 fn source_kind(text: &str) -> Result<SourceKind, CliError> {
     if let Some(kind) = text.strip_prefix("builtin:") {
         Ok(SourceKind::Builtin {
@@ -544,7 +565,7 @@ mod tests {
     use crate::exit::CliError;
     use jstream_control::protocol::{
         Action, Batch, Crop, Edit, IdempotencyKey, ItemId, OutputId, OutputKind, Query, Rev,
-        RtmpTarget, SceneId, SourceId, SourceKind,
+        RtmpTarget, SceneId, SceneRole, SourceId, SourceKind,
     };
 
     fn args(line: &[&str]) -> Vec<String> {
@@ -728,6 +749,48 @@ mod tests {
     }
 
     #[test]
+    fn scene_create_takes_an_optional_role() {
+        let Command::Edit(batch) = ok(&[
+            "edit",
+            "scene.create",
+            "g",
+            "Lower third",
+            "role:group",
+            "scene.create",
+            "s",
+            "Main",
+            "scene.delete",
+            "x",
+        ])
+        .command
+        else {
+            panic!("not an edit");
+        };
+        assert_eq!(
+            batch.edits,
+            vec![
+                Edit::SceneCreate {
+                    scene_id: SceneId::new("g"),
+                    name: "Lower third".into(),
+                    role: Some(SceneRole::Group),
+                },
+                Edit::SceneCreate {
+                    scene_id: SceneId::new("s"),
+                    name: "Main".into(),
+                    role: None,
+                },
+                Edit::SceneDelete {
+                    scene_id: SceneId::new("x"),
+                },
+            ]
+        );
+        assert_eq!(
+            err(&["edit", "scene.create", "s", "Main", "role:folder"]),
+            "scene role `role:folder` must be `role:scene` or `role:group`"
+        );
+    }
+
+    #[test]
     fn edits_parse_in_sequence_into_one_batch() {
         let line = [
             "edit",
@@ -773,6 +836,7 @@ mod tests {
                     Edit::SceneCreate {
                         scene_id: SceneId::new("s1"),
                         name: "Main scene".into(),
+                        role: None,
                     },
                     Edit::SourceCreate {
                         source_id: SourceId::new("cam"),

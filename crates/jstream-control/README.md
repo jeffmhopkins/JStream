@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:b340c8ccb1e16eef", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; mock contents hold; set_role/item.move unimplemented in the mock as stated" }
+verified = { hash = "b3:8fe608ad9cc11933", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: only test constructors gained role: None; section text doesn't describe scene.create's fields and still holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:3503e916c128a77f", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: mock bullet: every edit but 0.12's set_role/item.move; check list has both B3's geometry/canvas checks and B6's scene_id own-scene check, which set_geometry now also takes" }
+verified = { hash = "b3:29b2dd4fafa1e1c2", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: mock stores the role scene.create names and reports it in scene.list/state.get; set_role and item.move still answer internal" }
 -->
 
 ### The trait
@@ -102,7 +102,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
 - every protocol edit but protocol 0.12's `scene.set_role` and `item.move` (which answer
-  `internal`), with the checks `jstream-graph` makes, in the same order per
+  `internal`; a scene keeps the `role` its `scene.create` names), with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,

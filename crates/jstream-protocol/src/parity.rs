@@ -67,10 +67,13 @@ pub fn collection() -> Batch {
             Edit::SceneCreate {
                 scene_id: SceneId::new("a"),
                 name: "A".into(),
+                role: None,
             },
+            // `b` is placed in `a` through `b_src`, so it is created as a group.
             Edit::SceneCreate {
                 scene_id: SceneId::new("b"),
                 name: "B".into(),
+                role: Some(SceneRole::Group),
             },
             source(nested_b()),
             source(cam()),
@@ -145,7 +148,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     SceneSummary {
                         scene_id: scene("b"),
                         name: "B".into(),
-                        role: SceneRole::Scene,
+                        role: SceneRole::Group,
                         item_count: 1,
                     },
                     SceneSummary {
@@ -204,7 +207,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     SceneInfo {
                         scene_id: scene("b"),
                         name: "B".into(),
-                        role: SceneRole::Scene,
+                        role: SceneRole::Group,
                         items: items_of_b(),
                     },
                     SceneInfo {
@@ -262,6 +265,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             Batch::single(Edit::SceneCreate {
                 scene_id: SceneId::new(""),
                 name: String::new(),
+                role: None,
             }),
             invalid("edits.0.scene_id", "must not be empty"),
         ),
@@ -269,6 +273,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             Batch::single(Edit::SceneCreate {
                 scene_id: SceneId::new("a"),
                 name: "Again".into(),
+                role: None,
             }),
             ProtocolError::AlreadyExists {
                 entity: EntityKind::Scene,

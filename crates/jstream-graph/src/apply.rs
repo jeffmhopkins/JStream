@@ -11,8 +11,7 @@ use crate::target::{record_path_problem, rtmp_url_problem};
 use jstream_protocol::{
     Batch, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId, ItemTransform,
     KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
-    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneRole, Settings, SourceId,
-    SourceKind,
+    RecordContainer, Reference, Rev, RtmpTarget, SceneId, Settings, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -261,7 +260,11 @@ fn apply_edit(
     running: &BTreeSet<OutputId>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     match edit {
-        Edit::SceneCreate { scene_id, name } => {
+        Edit::SceneCreate {
+            scene_id,
+            name,
+            role,
+        } => {
             check_id(scene_id.as_str(), at, "scene_id")?;
             check_name(name, at)?;
             if state.scene_index(scene_id).is_some() {
@@ -270,7 +273,7 @@ fn apply_edit(
             state.scenes.push(Scene {
                 id: scene_id.clone(),
                 name: name.clone(),
-                role: SceneRole::Scene,
+                role: role.unwrap_or_default(),
                 items: Vec::new(),
             });
             Ok(vec![Edit::SceneDelete {
@@ -329,18 +332,13 @@ fn apply_edit(
             let mut inverse = vec![Edit::SceneCreate {
                 scene_id: scene.id.clone(),
                 name: scene.name.clone(),
+                role: (!scene.role.is_scene()).then_some(scene.role),
             }];
             // Re-created scenes are appended, so only a scene that wasn't last moves back.
             if si != state.scenes.len() {
                 inverse.push(Edit::SceneReorder {
                     scene_id: scene.id.clone(),
                     index: wire_index(si)?,
-                });
-            }
-            if scene.role != SceneRole::Scene {
-                inverse.push(Edit::SceneSetRole {
-                    scene_id: scene.id.clone(),
-                    role: scene.role,
                 });
             }
             // Re-adding bottom to top puts each item back at its own index.

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:c9f8fa7e31b98afb", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Commands list merges B3's set_geometry/canvas.set_size and B6's set_role/item.move; Geometry bullet: 0.12 groups, 0.11 canvas and geometry, 0.10 history" }
+verified = { hash = "b3:4dd104de3edfb538", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: re-read after adding the wire test for scene.create's optional role (omitted when absent); text holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -104,7 +104,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:c31fe2b045ea1f33", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Round 6 B5 follow-up: Groups subsection's placement-edit list now names item.set_geometry, matching command.rs's scene_id field on it" }
+verified = { hash = "b3:3e13ebd5da91e3c7", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: re-read after adding the wire test for scene.create's optional role (omitted when absent); text holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -204,6 +204,7 @@ order with 0 at the bottom.
 
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
 `role: group` (protocol 0.12). `SceneRole` is `scene` or `group`, and
+`scene.create` takes an optional `role` (omitted means `scene`), and
 `scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
 `scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.11 reader sees
 no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
@@ -211,10 +212,9 @@ to a position in another scene, keeping its ID and every placement property, und
 same cycle check as `item.add` (field `scene_id`). `index` is the item's position after
 the move: up to the number of items already there for another scene, and below it for
 the item's own scene, where the move is a reorder. Grouping is a client-built batch:
-`scene.create`, `scene.set_role` to `group`, `source.create` of a `scene` source,
+`scene.create` with `role: group`, `source.create` of a `scene` source,
 `item.add` of it with `item.move` to the lowest selected index, then an `item.move` of
-each selected item into the group, bottom first. `scene.create` doesn't take a `role`
-yet.
+each selected item into the group, bottom first.
 
 The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
 `item.set_visible`) take an
@@ -384,9 +384,9 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop` and
-`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
-`scene.reorder` unless it was last, `scene.set_role` for a group, and each item's
-restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`
+with the scene's `role` (omitted for `scene`), `scene.reorder` unless it was last, and
+each item's restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings, and undoing
 `source.set_settings` is a patch of the old values. Deleting a source that items still

@@ -226,6 +226,8 @@ struct Source {
 struct Scene {
     id: SceneId,
     name: String,
+    /// Set by `scene.create`; the mock doesn't implement `scene.set_role` yet.
+    role: SceneRole,
     /// Bottom to top.
     items: Vec<ItemId>,
 }
@@ -386,7 +388,7 @@ impl State {
                     .map(|scene| SceneSummary {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
-                        role: SceneRole::Scene,
+                        role: scene.role,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                     })
                     .collect(),
@@ -424,7 +426,7 @@ impl State {
                     .map(|scene| SceneInfo {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
-                        role: SceneRole::Scene,
+                        role: scene.role,
                         items: self.collection.item_infos(scene),
                     })
                     .collect(),
@@ -500,7 +502,11 @@ impl Collection {
         running: &BTreeSet<OutputId>,
     ) -> Result<(), ProtocolError> {
         match edit {
-            Edit::SceneCreate { scene_id, name } => {
+            Edit::SceneCreate {
+                scene_id,
+                name,
+                role,
+            } => {
                 check_id(scene_id.as_str(), at, "scene_id")?;
                 check_name(&name, at)?;
                 if self.scene_index(&scene_id).is_some() {
@@ -509,6 +515,7 @@ impl Collection {
                 self.scenes.push(Scene {
                     id: scene_id,
                     name,
+                    role: role.unwrap_or_default(),
                     items: Vec::new(),
                 });
             }
@@ -1267,6 +1274,7 @@ mod tests {
         Edit::SceneCreate {
             scene_id: SceneId::new(scene),
             name: scene.to_uppercase(),
+            role: None,
         }
     }
 
@@ -1614,6 +1622,7 @@ mod tests {
             rejected(Edit::SceneCreate {
                 scene_id: SceneId::new(""),
                 name: "x".into(),
+                role: None,
             }),
             Some(ProtocolError::InvalidArgument {
                 field: "edits.0.scene_id".into(),

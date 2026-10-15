@@ -132,6 +132,7 @@ mod tests {
         let batch = Batch::single(Edit::SceneCreate {
             scene_id: SceneId::new("main"),
             name: "Main".to_owned(),
+            role: None,
         });
         let applied = timely(first.call(Call::Batch(batch)))
             .await

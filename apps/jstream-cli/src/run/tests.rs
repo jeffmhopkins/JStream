@@ -93,10 +93,12 @@ fn populated() -> MockEngine {
             Edit::SceneCreate {
                 scene_id: SceneId::new("main"),
                 name: "Main".into(),
+                role: None,
             },
             Edit::SceneCreate {
                 scene_id: SceneId::new("brb"),
                 name: "Be right back".into(),
+                role: None,
             },
             Edit::SourceCreate {
                 source_id: SourceId::new("cam"),

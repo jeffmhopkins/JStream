@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:ee1670969f47fe74", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: rule text unchanged; re-read, holds for B6 as its own additive minor 0.12" }
+verified = { hash = "b3:43d7d8d32da08e92", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: cascade from ARCH#protocol; re-read R-API-001..: scene.create's optional role is additive, a minor bump" }
 -->
 
 <a id="R-API-001"></a>
