@@ -2,14 +2,15 @@
 id = "ADR-0034"
 title = "YouTube interaction scope v2"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0041-youtube-interaction-scope-v3.md"
 tier = "maintainer"
 -->
 
 # ADR-0034: YouTube interaction scope v2
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0041: YouTube interaction scope v3: one sign-in](0041-youtube-interaction-scope-v3.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0009](0009-youtube-rtmps-and-api.md). It restates all of ADR-0009's

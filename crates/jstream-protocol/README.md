@@ -111,7 +111,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:9177733c3e1bb297", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: state.get lists canvas (0.11) and encoders (0.13); encoder paragraph, encoder.list, output.status fields and the EntityKind note say 0.13; geometry 0.11 text is main's" }
+verified = { hash = "b3:71e8c69072383172", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#214 ADR-0041): #214 only repoints ADR-0034 links to ADR-0041 here; re-read against F3's merged text (encoder profiles, protocol 0.13, shared program stage), both hold" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -507,7 +507,7 @@ After `welcome`, the server pushes every event to every client.
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
   built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
   those meters exist, as later optional fields. Audience figures are `youtube.stats`
-  ([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)).
+  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)).
 
 ### Errors
 

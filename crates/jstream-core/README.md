@@ -136,7 +136,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bc8dbba0480cc28e", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B4: render-thread paragraph now says a finished encoder session's input goes to the program stage's collector (render and mixer), which ends once both threads drop their senders and Program joins after them; matches push_each, launch_program and Program::drop; C1a's Not yet and Dependencies text is main's" }
+verified = { hash = "b3:c64c39e7769e2bb4", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#214 ADR-0041): #214 only repoints ADR-0034 links to ADR-0041 here; re-read against F3's merged text (encoder profiles, protocol 0.13, shared program stage), both hold" }
 -->
 
 ### Engine and sessions
