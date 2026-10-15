@@ -540,9 +540,10 @@ status = "active"
 enforced_by = ["test:jstream_server::rejects_missing_token", "test:jstream_server::rejects_foreign_origin"]
 applies_to = ["crates/jstream-server/**", "crates/jstream-mcp/**"]
 -->
-Every HTTP, WebSocket and MCP listener requires the control token (even on localhost) and
-validates the `Host` header, and the `Origin` header when one is present. Listeners bind
-to `127.0.0.1` by default
+Every HTTP, WebSocket and MCP listener requires the control token or a paired device's
+token (even on localhost), except `POST /api/v1/pair` while a pairing code is open
+([ADR-0044](adr/0044-pairing-remote-browsers.md)), and validates the `Host` header, and
+the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>
