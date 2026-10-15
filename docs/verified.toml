@@ -210,7 +210,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:8c0c258dab2abccb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:3556c783961d4f89", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: MCP section names no timeout constants; still accurate after the hello bound" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
 stamp = { hash = "b3:0bc178fa258b5061" }
@@ -228,13 +228,13 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: MCP section names no timeout constants; still accurate after the hello bound" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:e57559ad7b2a4fbc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: MCP section names no timeout constants; still accurate after the hello bound" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -390,7 +390,7 @@ stamp = { hash = "b3:c594f42e1b065295" }
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:6d997bdefee6d70b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301) into #268: server shutdown and zero-limit details are server Design detail; envelope and versioning text unchanged; holds" }
+stamp = { hash = "b3:cd49bc260e000934", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: hello/welcome envelope text unaffected by the server-side deadline race" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
 stamp = { hash = "b3:c93c7afdc52f6566", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-server config/error/lib changes (zero-limit refusal): section summarises the wire protocol and doesn't state server limits; holds" }
@@ -411,10 +411,10 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 stamp = { hash = "b3:05057d7979293830" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Control protocol summary against the server shutdown change: envelope, request/response and versioning claims unaffected; a call after shutdown fails Disconnected as the connection closes, detailed in jstream-server README design." }
+stamp = { hash = "b3:e7d6a868ffe2691c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: hello/welcome envelope text unaffected by the server-side deadline race" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Control protocol summary against the server shutdown change: envelope, request/response and versioning claims unaffected; a call after shutdown fails Disconnected as the connection closes, detailed in jstream-server README design." }
+stamp = { hash = "b3:57ef1003003326da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: hello/welcome envelope text unaffected by the server-side deadline race" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -1110,7 +1110,7 @@ stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:f8d3caba075c6078" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
+stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: daemon design does not describe handshake timing; dep change in server Design doesn't affect it" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:7ab4accbf98f6662" }
@@ -1461,7 +1461,7 @@ stamp = { hash = "b3:534ac6c88886c8f2" }
 stamp = { hash = "b3:943bb9518712a4b5" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:c252221e9c760096", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:314c5701cc782d41", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: 3 s hello bound for initialize and tool-call hello matches HELLO_TIMEOUT in server.rs; error-table row matches the disconnected retry message" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
 stamp = { hash = "b3:9ca86438d4d9c457" }
@@ -1491,13 +1491,13 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: 3 s hello bound for initialize and tool-call hello matches HELLO_TIMEOUT in server.rs; error-table row matches the disconnected retry message" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:e57559ad7b2a4fbc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: 3 s hello bound for initialize and tool-call hello matches HELLO_TIMEOUT in server.rs; error-table row matches the disconnected retry message" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1521,13 +1521,13 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against server.rs (with_timeout/Timer bounding open_early's hello at 3 s) and tests.rs: contents list and 'needs no async runtime' still hold (timer is its own thread)" }
+stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: contents list still matches server.rs/tests.rs; HELLO_TIMEOUT rename adds no item" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against server.rs (with_timeout/Timer bounding open_early's hello at 3 s) and tests.rs: contents list and 'needs no async runtime' still hold (timer is its own thread)" }
+stamp = { hash = "b3:e57559ad7b2a4fbc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: contents list still matches server.rs/tests.rs; HELLO_TIMEOUT rename adds no item" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -2190,7 +2190,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
+stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: Sessions bullet matches session.rs handshake() racing the engine's hello answer against handshake_timeout, closing 1008 no handshake in time" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client error-event handling, CSP wording, open question 3 edit): server-side checks, subprotocol token and CSP description unaffected, holds." }
@@ -2226,10 +2226,10 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 stamp = { hash = "b3:05057d7979293830" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
+stamp = { hash = "b3:e7d6a868ffe2691c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: Sessions bullet matches session.rs handshake() racing the engine's hello answer against handshake_timeout, closing 1008 no handshake in time" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
+stamp = { hash = "b3:57ef1003003326da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: Sessions bullet matches session.rs handshake() racing the engine's hello answer against handshake_timeout, closing 1008 no handshake in time" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2259,10 +2259,10 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 stamp = { hash = "b3:05057d7979293830" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
+stamp = { hash = "b3:e7d6a868ffe2691c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: purpose unchanged by the handshake() race in session.rs" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
+stamp = { hash = "b3:57ef1003003326da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: purpose unchanged by the handshake() race in session.rs" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2934,7 +2934,7 @@ stamp = { hash = "b3:6dc625770a5edc67" }
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; step 7 (Ctrl-C prints stopped, exits 0) holds with #301's bounded close wait; default limits are non-zero; holds" }
+stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: go-live steps don't depend on the hello deadline wording" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:c40bfcab7de124d7", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }
