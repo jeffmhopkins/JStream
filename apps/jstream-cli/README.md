@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:16b874071b55a63f", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; contents hold; CLI adds only item.set_source" }
+verified = { hash = "b3:a7f8991885cafd45", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 protocol 0.14, #185) into A3: CLI text is main's (adds item.set_source); A3 only changed ARCH's apps crate-map row, and the CLI still links only control and mcp; holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client

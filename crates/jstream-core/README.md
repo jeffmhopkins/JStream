@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:b8cccaddd6689fd5", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B5 #196, D2 #192, #227) into C2: main's text and stamps kept; the only C2 difference is text among the built kinds in ARCH Built so far (and in core, a live text-source test); re-read, holds" }
+verified = { hash = "b3:c67561b93957b007", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14) into A3: purpose text is main's plus nothing from A3 beyond PublishError::new being public, which the runtime bullet doesn't name; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:baa5e2b54f15b131", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B5 #196, D2 #192, #227) into C2: main's text and stamps kept; the only C2 difference is text among the built kinds in ARCH Built so far (and in core, a live text-source test); re-read, holds" }
+verified = { hash = "b3:5248ce9c9c185f8d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14, item.set_source history) into A3: Outputs paragraph keeps A3's daemon opener line and main's Record sentence; Pipeline keeps the PublishError::new line; history paragraph is main's" }
 -->
 
 ### Engine and sessions
@@ -474,7 +474,8 @@ delete a running output (`invalid_argument`), so the batch passes it the running
 A host can also declare an output with `Engine::with_output(id)`, outside the
 collection: it starts `stopped`, has no target and stays known whatever the collection
 holds. A live host reads a collection output's target with `output_kind` when its
-publish opener runs; wiring that into the daemon is not done yet. A recording output
+publish opener runs, as `jstream-daemon` does on Windows
+([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)). A recording output
 (`OutputKind::Record`) never calls the opener or takes a one-shot target.
 
 **Stream keys.** `with_key_store` injects the OS credential store
@@ -525,6 +526,7 @@ stop or a failure, and no session sits idle before the start. The opener runs af
 `starting`, outside the collection lock and the pipeline gate, before any device
 opens; its error fails the start like a launch failure (`failed`, then
 `action_failed` with `opening the publish target: <reason>`), and the opener is kept.
+An opener builds its own errors with `PublishError::new`.
 Its error text must not carry a stream key
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)); `connect_rtmp`'s does not. Starts run one at a time (a second waits for the first to settle; a stop never
 waits for a start). The call checks the output is idle,
@@ -809,7 +811,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:65493ddbfc38461c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5/N7: last sentence now says the mixer also has its own collector for input rings, beside the program stage's collector the render and mixer threads feed; push_each now takes a retire closure, behaviour unchanged" }
+verified = { hash = "b3:a7e45af16f8c9a7d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3 made PublishError::new public in runtime/publish.rs; the section's description of the publish target and opener flow is unchanged and holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
