@@ -36,7 +36,7 @@ verified = { hash = "b3:02c4c09d0297240c", by = "agent:claude@session_01YKRrREb5
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:1bf9c2976890b524", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (A4 #234) into A6: step 8 now says the output is gone on stop unless the daemon ran with --collection, which saves it; other steps re-read against daemon Usage and hold" }
+verified = { hash = "b3:48c2a10ffe3f2922", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#232 A6 --collection and audit) into B6-f: kept main's --collection clean-up note; steps use only output commands, unchanged here" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:4963bce2e6a3d6bf", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (A4 #234) into A6: re-read; the script starts the daemon without --collection and its run folder's logs now also hold audit.jsonl (no token or key in it); steps and exit codes hold" }
+verified = { hash = "b3:5cd5539fa43114c5", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#232 A6 --collection and audit) into B6-f: re-read; smoke.ps1 uses output/status/events commands, unchanged here" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
