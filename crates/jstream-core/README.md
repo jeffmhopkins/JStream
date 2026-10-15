@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:07769a38a8b6a334", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2 and #212: re-read; History bullet (log of what each change touched) and Tests list hold; the Touched unit tests moved to jstream-graph" }
+verified = { hash = "b3:21dbcc75af769e50", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B2-f2 #239 touched sets in jstream-graph) into B9 at 0.15: took main's stamp, re-read; contents and Tests bullets hold; B9 only swaps error constructors in core" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -141,7 +141,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c7f7481cca172259", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2 merge of main (#232 A6, #234 A4): re-read; A6's audit sink wording from main kept; Conflicts (graph's Touched set, encoder objects/props) and #212's collection-file wording hold" }
+verified = { hash = "b3:781f1a2d612a4e01", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B2-f2 #239 touched sets in jstream-graph) into B9 at 0.15: took main's stamp, re-read; history now takes Touched from jstream-graph; collection-file and stop-drain text hold; B9 changes no core behavior" }
 -->
 
 ### Engine and sessions
