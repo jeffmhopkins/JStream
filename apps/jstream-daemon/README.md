@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:3faeecfc67fca609", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#295 clock swap, #237, #309) into #143: re-read whole section; core#design's new clock-swap sentence fits (daemon supplies QpcClock via with_backends); server#design's zero-limit refusal is unreachable here since serve.rs sets only bind and mcp over ServerConfig::new defaults; holds" }
+verified = { hash = "b3:d58c526a3b64649c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#240 D5 audio, protocol 0.19) into #143: took main's stamp; re-read; daemon text is main's, names no audio routing; server#design's zero-limit refusal unreachable (serve.rs sets only bind and mcp over ServerConfig::new defaults); holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
