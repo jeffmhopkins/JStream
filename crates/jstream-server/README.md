@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:bbd03a04f132dd7c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; adds the Web UI (ui.rs) bullet, config lists the UI directory, gate covers every request; not-yet now TLS and pairing" }
+verified = { hash = "b3:499d62ea784f470c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 round 2: re-read; purpose bullets unchanged by the subprotocol token, hold" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:95c518740af22ef4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read against ui.rs and gate.rs: Basic credentials row and paragraph, new Web UI section (paths, table, headers, CSP and trunk nonce), logging lines, open questions 2 and 3 settled" }
+verified = { hash = "b3:3d7ab59a04c69059", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 round 2: re-read against gate.rs subprotocol_token and lib.rs protocols(): admission row, new 'token as a subprotocol' paragraph, open question 2 rewritten" }
 -->
 
 ### Listening and admission
@@ -74,7 +74,7 @@ served
 |---|---|---|
 | `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra; without a port only on port 80 (below) | 403 |
 | `Origin` | absent, or `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
-| `Authorization` | `Bearer <token>`, or `Basic` credentials whose password is the token (any user name), matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` (`Basic` on the UI's paths) |
+| `Authorization` | `Bearer <token>`, or `Basic` credentials whose password is the token (any user name); without `Authorization`, the offered subprotocol `jstream.token.<token>` (below). Matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` (`Basic` on the UI's paths) |
 
 `Host` and `Authorization` must appear exactly once and `Origin` at most once, and
 comparisons ignore ASCII case (except the token). The `Host` check defeats DNS
@@ -97,6 +97,15 @@ also accepts `Authorization: Basic base64(user:token)`: the password is the toke
 the user name is ignored. Credentials without a `:`, or that aren't base64 with
 padding, are refused like a wrong token. This is the same token presented differently,
 not a new kind of client (ADR-0006).
+
+**The token as a subprotocol.** `jstream-control`'s browser client can't rely on
+cached credentials (a UI served from elsewhere, or a browser that doesn't resend them),
+so it offers two subprotocols in `Sec-WebSocket-Protocol`: `jstream` and
+`jstream.token.<token>`. A request without `Authorization` may carry its token that
+way, on any `Sec-WebSocket-Protocol` line, in exactly one offered subprotocol; with
+`Authorization` present, only that counts. The upgrade selects `jstream` (browsers
+fail a connection whose offered subprotocols none were selected), never the token's,
+so the answer doesn't echo it, and like every header it is never logged.
 
 **Extra hosts.** Each configured extra host must be `name:port` with one port from 1
 to 65535, and an IPv6 address must be in brackets (`[::1]:4455`), as it is in a
@@ -331,13 +340,11 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    with rustls and the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)): a TLS
    feature and its wiring. `ring` is already on the lint-deps native-code allowlist, for
    `jstream-outputs`' RTMPS, so that needs no further governance change.
-2. **Browser token.** Settled and built for the UI this server serves (see *The web
-   UI*): the browser presents the token as `Basic` credentials, which it sends on the
-   UI's WebSocket upgrade too, so the UI needs no `Sec-WebSocket-Protocol` token.
-   Checked in Chromium; whether every browser sends cached `Basic` credentials on a
-   WebSocket upgrade (Safari in particular) is open, and a `Sec-WebSocket-Protocol`
-   fallback would be the answer if one doesn't. Pairing a remote browser with a short
-   code instead of pasting the token is a maintainer-tier decision of its own.
+2. **Browser token.** Settled and built (see *`Basic` credentials* and *The token as
+   a subprotocol*): a page load presents the token as `Basic` credentials, and the
+   UI's upgrade either carries the same credentials (checked in Chromium) or offers
+   `jstream.token.<token>`. Pairing a remote browser with a short code instead of
+   pasting the token is a maintainer-tier decision of its own (ADR-0044, proposed).
 3. **UI assets.** Settled and built (see *The web UI*). Open: caching with `ETag`s
    instead of `no-cache`, and compressed variants, if the bundle grows enough to
    matter. MCP over streamable HTTP is settled and built (see *MCP over streamable

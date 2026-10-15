@@ -232,7 +232,10 @@ async fn upgrade(
         (app.connector)()
     });
     let shutdown = app.shutdown.clone();
+    // A browser client offers `jstream` beside the token's subprotocol and fails the
+    // connection unless one is selected; the token's is never echoed.
     upgrade
+        .protocols([gate::WS_PROTOCOL])
         .max_message_size(MAX_MESSAGE_BYTES)
         .on_upgrade(move |socket| {
             async move {

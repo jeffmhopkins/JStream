@@ -151,7 +151,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:46d5c76b1b658091", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: stale only through ARCH#protocol and control design; re-read core's server mentions (subscriptions drained per connection); holds" }
+verified = { hash = "b3:0da4c3ab8acb187b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 round 2: stale only through ARCH#protocol and control design; core's server mentions unchanged; holds" }
 -->
 
 ### Engine and sessions

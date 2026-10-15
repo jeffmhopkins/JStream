@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:6bb13f520547fa4e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: stale only through ARCH#protocol (UI serving sentence); R-API-001 and the protocol are unchanged; holds" }
+verified = { hash = "b3:967df45b59e444dd", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 round 2: stale only through ARCH#protocol; R-API-001 and the protocol are unchanged; holds" }
 -->
 
 <a id="R-API-001"></a>

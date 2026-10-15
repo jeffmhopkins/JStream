@@ -519,7 +519,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e3339de6471cb011", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; transport bullet now says the server serves the UI files behind the same checks with Basic credentials; rest unchanged" }
+verified = { hash = "b3:40072f54bf4b455e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 round 2: re-read; transport bullet adds the jstream.token subprotocol beside Basic" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -623,7 +623,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   checks, when the host turns it on ([MCP](#mcp)), and the web UI's files at every other
   path, behind the same checks too, when the host names a UI directory. A browser
   presents the token as the password of HTTP `Basic` credentials, which it then sends
-  on the UI's WebSocket upgrade as well.
+  on the UI's WebSocket upgrade as well; a browser client can instead offer it as the
+  subprotocol `jstream.token.<token>`.
 - **Slow clients:** each connection gets a bounded event buffer, and the server keeps
   draining the engine's events while a client is slow to read. When the buffer
   overflows, the server drops the queued events and sends one `events.dropped {count}`

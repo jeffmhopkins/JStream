@@ -1808,3 +1808,46 @@ fn a_websocket_upgrade_accepts_basic_credentials() {
             .is_ok()
     );
 }
+
+/// `jstream-control`'s browser client offers `jstream` and `jstream.token.<token>`
+/// without `Authorization`: the server admits it and selects `jstream`, never echoing
+/// the token's subprotocol.
+#[test]
+fn a_websocket_upgrade_accepts_the_token_as_a_subprotocol() {
+    let harness = start(&MockEngine::new());
+    let origin = harness.own_origin();
+    let offer = |token: &str| {
+        let mut request = match harness.url.as_str().into_client_request() {
+            Ok(request) => request,
+            Err(error) => panic!("request: {error}"),
+        };
+        let headers = request.headers_mut();
+        let protocols = format!("jstream, jstream.token.{token}");
+        for (name, value) in [
+            (header::ORIGIN, origin.as_str()),
+            (header::SEC_WEBSOCKET_PROTOCOL, protocols.as_str()),
+        ] {
+            match HeaderValue::from_str(value) {
+                Ok(value) => headers.insert(name, value),
+                Err(error) => panic!("header: {error}"),
+            };
+        }
+        harness.run(tokio_tungstenite::connect_async(request))
+    };
+    match offer(TOKEN) {
+        Ok((_, response)) => assert_eq!(
+            response
+                .headers()
+                .get(header::SEC_WEBSOCKET_PROTOCOL)
+                .and_then(|v| v.to_str().ok()),
+            Some("jstream")
+        ),
+        Err(error) => panic!("refused: {error}"),
+    }
+    match offer("wrong-token") {
+        Err(tungstenite::Error::Http(response)) => {
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED)
+        }
+        other => panic!("expected 401, got {:?}", other.map(|(_, r)| r.status())),
+    }
+}
