@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:68e32a9d77022b3e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; version line 0.19 audio, 0.18 virtual_cam, 0.17 role; holds" }
+verified = { hash = "b3:a8fa89a319ad4584", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge of main at 94fb25d (D5 audio #240, which took protocol 0.19): command and action lists merged; PROTOCOL_VERSION 0.20 for hotkeys, 0.19 audio; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -140,7 +140,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:f61c4f32f259b1d6", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio, bus.list, meters.tick and the envelope example say 0.19; virtual_cam stays 0.18; holds" }
+verified = { hash = "b3:289b3339504b23e7", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge of main at 94fb25d (D5 audio #240, which took protocol 0.19): Hotkey bindings block now 0.20; removed_hotkeys, state.get and delete.plan hotkeys say 0.20, audio stays 0.19; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

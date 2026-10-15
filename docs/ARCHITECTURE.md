@@ -167,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:cafb607d97bfd5ec", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio paragraph says protocol 0.19; not-yet list drops VirtualCam as main did; holds" }
+verified = { hash = "b3:d38c13be6997d13a", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge of main at 94fb25d (D5 audio #240, which took protocol 0.19): hotkeys bullet beside main's audio text; holds" }
 -->
 
 ```
@@ -538,7 +538,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:84f1c8ab5494756e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B5, filters join the audio edits once they are in the protocol, the mixer has chains since D7b; rest holds at 0.19" }
+verified = { hash = "b3:1a24151f28552567", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge of main at 94fb25d (D5 audio #240, which took protocol 0.19): edit bullets for audio (0.19) and hotkeys (0.20); queries list delete.plan hotkeys and bus.list; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -678,7 +678,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:6ae5b6bb90cc519e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
+verified = { hash = "b3:00bccec0b5a22c36", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge of main at 94fb25d (D5 audio #240, which took protocol 0.19): noun list adds hotkey to main's; tools.snap is 198,925 bytes, about 199 KB; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -880,7 +880,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:e9fce11408a54542", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): collections bullet (schema_version, forward migrations, checks as edits) holds; the sends fix needs no migration since schema 1 files load as before" }
+verified = { hash = "b3:f3d7cd491c10efb7", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge of main at 94fb25d (D5 audio #240, which took protocol 0.19): optional hotkeys field, no schema bump, beside main's sends/buses; holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

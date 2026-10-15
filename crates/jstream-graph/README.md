@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:38433d0bcbf22574", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B6, sends is written whenever a channel source or send exists and a file without it keeps default master sends; the file format, loading and tests paragraphs now say so; holds" }
+verified = { hash = "b3:d0c7c0cd10480cfe", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge of main at 94fb25d (D5 audio #240, which took protocol 0.19): merged both sides: State has buses, sends and hotkeys; reads, plan, file format (buses, sends, then hotkeys omitted when empty), rebuild order (audio then hotkeys) and tests list both; matches code" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
