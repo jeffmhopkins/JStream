@@ -11,7 +11,7 @@ use std::future::Future;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
-#[cfg(any(all(windows, feature = "browser"), test))]
+#[cfg(any(all(windows, feature = "cef"), test))]
 use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
 #[cfg(any(windows, test))]
 use {
@@ -56,14 +56,19 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
     #[cfg(windows)]
     let engine = {
         let backends = windows_backends()?;
-        #[cfg(feature = "browser")]
-        let engine = cef_browser(engine, &backends, options);
-        live(
+        #[cfg(feature = "cef")]
+        let (gpu, clock) = (Arc::clone(&backends.gpu), Arc::clone(&backends.clock));
+        let engine = live(
             engine,
             backends,
             Arc::new(jstream_platform_windows::WindowsCredentials),
             rtmp(),
-        )
+        );
+        // After `with_backends`, so pages start on the media clock. Clones share the
+        // engine's sources, so this gives the browser to `engine` too.
+        #[cfg(feature = "cef")]
+        let _ = cef_browser(Engine::clone(&engine), gpu.as_ref(), clock, options);
+        engine
     };
     #[cfg(not(windows))]
     let engine = Arc::new(engine);
@@ -88,8 +93,9 @@ fn windows_backends() -> anyhow::Result<Backends> {
     })
 }
 
-/// The CEF browser backend for `browser` sources (feature `browser`, ADR-0046), on a
-/// GPU device of the engine's media adapter, opened through `backends.gpu`.
+/// The CEF browser backend for `browser` sources (feature `cef`, ADR-0046), on a
+/// GPU device of the engine's media adapter, opened through the backends' `gpu`, with
+/// pages' audio stamped on their `clock`.
 ///
 /// CEF starts when the first page opens, with its subprocess exe
 /// (`jstream-browser-helper.exe`) next to the daemon's, its cache in the data
@@ -97,8 +103,13 @@ fn windows_backends() -> anyhow::Result<Backends> {
 /// missing data directory nor a device that won't open stops the daemon: without a
 /// device, pages still play their audio and only their frames are dropped, and when the
 /// daemon's own path is unknown, browser sources show nothing (both are logged).
-#[cfg(all(windows, feature = "browser"))]
-fn cef_browser(engine: Engine, backends: &Backends, options: &Options) -> Engine {
+#[cfg(all(windows, feature = "cef"))]
+fn cef_browser(
+    engine: Engine,
+    gpu: &dyn jstream_platform::GpuInterop,
+    clock: Arc<dyn jstream_platform::MediaClock>,
+    options: &Options,
+) -> Engine {
     use jstream_browser::{CefBackend, CefConfig};
     let logs = options
         .log_dir
@@ -117,8 +128,7 @@ fn cef_browser(engine: Engine, backends: &Backends, options: &Options) -> Engine
         }
     };
     config.log_file = logs.map(|dir| dir.join("cef.log"));
-    let gpu = backends
-        .gpu
+    let gpu = gpu
         .open_device()
         .inspect_err(|error| {
             tracing::warn!(%error, "no GPU device for browser pages: their frames are dropped");
@@ -126,7 +136,7 @@ fn cef_browser(engine: Engine, backends: &Backends, options: &Options) -> Engine
         .ok();
     browse(
         engine,
-        Arc::new(CefBackend::new(config, Arc::clone(&backends.clock))),
+        Arc::new(CefBackend::new(config, clock)),
         gpu.as_ref(),
     )
 }
@@ -134,7 +144,7 @@ fn cef_browser(engine: Engine, backends: &Backends, options: &Options) -> Engine
 /// Gives `engine` `browser` for its `browser` sources, delivering pages' frames on `gpu`
 /// (`BrowserBackend::use_device`): the device must come first, so the first page's first
 /// paint already has it.
-#[cfg(any(all(windows, feature = "browser"), test))]
+#[cfg(any(all(windows, feature = "cef"), test))]
 pub fn browse(
     engine: Engine,
     browser: Arc<dyn BrowserBackend>,

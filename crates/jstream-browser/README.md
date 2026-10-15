@@ -88,7 +88,7 @@ to, and the shutdown time. It runs on Windows with the `cef` feature only.
 ## Open items
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md"]
-verified = { hash = "b3:1b1e39796ef4a6fc", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4: Hosts item now says the desktop app doesn't create a backend yet and the daemon does with its browser feature, on a device it opens on the media adapter; the compositor's device is settled with the render import; other items unchanged" }
+verified = { hash = "b3:1c641ae2cdc8368a", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4: Hosts item names the daemon's cef feature; otherwise unchanged" }
 -->
 
 What ADR-0021 asks for that this crate doesn't do yet. The first three block any host
@@ -103,7 +103,7 @@ from turning on the `cef` feature.
 - **Packaging and updates.** The CEF runtime isn't in the portable zip yet, with its
   licence notices, and nothing checks the pinned CEF against CEF stable.
 - **Hosts.** The desktop app doesn't create a backend or call `Engine::with_browser`
-  yet. The daemon does when built with its `browser` feature, on a device it opens on
+  yet. The daemon does when built with its `cef` feature, on a device it opens on
   the media adapter ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design));
   which device the compositor samples pages on is settled with the render import below.
 - **Compositing.** The program mix doesn't draw a page's `GpuFrame` yet; a `browser`

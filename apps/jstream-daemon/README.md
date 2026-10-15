@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:0a2209e42961966b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4: cargo fmt of the browser test only; Serving bullet with the browser feature holds" }
+verified = { hash = "b3:470d683223804a36", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4 aligned with U5: the feature is named cef (as in jstream-browser-helper and the desktop); Serving bullet says so" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -35,7 +35,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, which with the `browser`
+  file and the placeholder outputs; on Windows a live one, which with the `cef`
   feature also opens browser sources, [Design](#design)), installs
   the signal handlers that stop it, then binds the server with MCP on.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
@@ -186,7 +186,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:7ccf4babaceee2b6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4: cargo fmt of the browser test only; Browser sources bullet re-read against cef_browser/browse and holds" }
+verified = { hash = "b3:39d01aa10bad11f2", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4 aligned with U5: feature cef (dox for CI); the browser is given after with_backends through a clone of the live engine so pages start on the media clock; cef_browser now takes the backends' gpu and clock; rest re-read and holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -250,10 +250,12 @@ verified = { hash = "b3:7ccf4babaceee2b6", by = "agent:claude@session_01YKRrREb5
   moves, rather than in a directory of its own. Its entries are written as they come;
   on a graceful stop the writer finishes the queue when the engine is dropped. Without `--collection` nothing is saved, as before
   ([Open questions](#open-questions), 6).
-- **Browser sources** (`serve.rs`, feature `browser`, Windows only). Built with
-  `--features browser`, the daemon gives the engine `jstream-browser`'s CEF backend
-  (`Engine::with_browser`) before it goes live, so `browser` sources open their pages
-  ([jstream-browser › Purpose](../../crates/jstream-browser/README.md#purpose)). First
+- **Browser sources** (`serve.rs`, feature `cef`, Windows only). Built with
+  `--features cef`, the daemon gives the engine `jstream-browser`'s CEF backend
+  (`Engine::with_browser`), so `browser` sources open their pages
+  ([jstream-browser › Purpose](../../crates/jstream-browser/README.md#purpose)). It does
+  so after `with_backends`, through a clone of the live engine (clones share its
+  sources), so pages start on the media clock. First
   it opens a GPU device on the media adapter with the backends' `GpuInterop::open_device`
   and hands it over with `use_device`, so a page's first paint already lands on it. CEF
   starts with the first page: its subprocess exe, `jstream-browser-helper.exe`, and CEF's
@@ -346,7 +348,7 @@ verified = { hash = "b3:7ccf4babaceee2b6", by = "agent:claude@session_01YKRrREb5
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
   `jstream-platform` (`Backends`, the key store trait), `jstream-browser` (the
-  `BrowserBackend` seam, and its CEF backend with the `browser` feature; already in the
+  `BrowserBackend` seam, and its CEF backend with the `cef` feature; already in the
   tree through core), `jstream-platform-windows` on
   Windows only (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC

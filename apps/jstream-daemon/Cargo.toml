@@ -20,10 +20,10 @@ workspace = true
 # `jstream-browser`: building it downloads CEF and builds its C++ wrapper with CMake and
 # Ninja, and the daemon then needs `jstream-browser-helper.exe` and CEF's runtime files
 # next to it. Without it, `browser` sources show nothing.
-browser = ["jstream-browser/cef"]
+cef = ["jstream-browser/cef"]
 # Compile-checks the CEF wiring without CEF (`jstream-browser`'s `dox`), for CI's clippy.
 # A binary built with it doesn't link.
-dox = ["browser", "jstream-browser/dox"]
+dox = ["cef", "jstream-browser/dox"]
 
 [dependencies]
 anyhow.workspace = true
@@ -37,7 +37,7 @@ jstream-media.workspace = true
 # `Backends`, and the stream key store the publish opener reads.
 jstream-platform.workspace = true
 # The `BrowserBackend` the daemon gives the engine for `browser` sources, and, with the
-# `browser` feature on Windows, its CEF backend.
+# `cef` feature on Windows, its CEF backend.
 jstream-browser.workspace = true
 # `OutputId`, for `--output`; `OutputKind`, for the publish opener.
 jstream-protocol.workspace = true
