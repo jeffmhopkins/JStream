@@ -321,7 +321,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:69a83bcc7bc7abfe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:ed9f76ff08fab65c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main: stale via the protocol README, where main added absolute-path rules and this branch only an ADR-0051 link; the YouTube bullet cites ADR-0051; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
@@ -882,7 +882,7 @@ stamp = { hash = "b3:f8d3caba075c6078", by = "agent:claude@session_01PpGi5RaafND
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
+stamp = { hash = "b3:8435aa7720df2206", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main: stale via the protocol README design, where main added absolute-path rules and this branch only an ADR-0051 link; engine design names neither; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; stale only through a dependency where the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051; this section's text does not depend on that ADR's content; holds" }
@@ -1410,7 +1410,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:8435aa7720df2206", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main: stale via the protocol README design, where main added absolute-path rules and this branch only an ADR-0051 link; graph text names neither; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1617,7 +1617,7 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:6e5013d99f034114", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (README, depends_on, lib.rs Docs line); the RTMP(S) container text is unchanged; holds" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:71db17a5973fc33a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#370 RTMP rejection text, #324) into #371: re-read; main's URLs-and-keys bullet (key redacted, 512-char cap, control chars) beside this PR's recorder bullet (hard link then unlink, create_new placeholder fallback) and Tests paragraph (dangling-symlink test); both match code; holds" }
+stamp = { hash = "b3:e4faaf718eb106d5", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main after #371: re-read; main's hard-link move on finish kept as merged; this branch only re-points the generic RTMP/RTMPS output citation to ADR-0051; holds" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:2ef270bb1b4e0cc6" }
@@ -1929,7 +1929,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:8435aa7720df2206", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main: re-read; main's absolute-path rules kept as merged; this branch only re-points the YouTube commands' citation to ADR-0051; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
