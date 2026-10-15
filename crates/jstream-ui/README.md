@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:5948ab52c39e10a3", by = "agent:claude@session_01458UdCECYpNmex7sr1Hbtc", note = "U3b: Panels bullet names outputs.rs (Outputs under the inspector, its calls tested against MockEngine); app.rs adds it in the inspector region; re-read, holds" }
+verified = { hash = "b3:149c9b3ef5ab0696", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (U3b #254 outputs panel, B6-r #211) into U4: kept main's Panels bullet (outputs.rs) and U4's Canvas bullet; re-read both against the code, holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -49,7 +49,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c1bb0c382472d8c8", by = "agent:claude@session_01458UdCECYpNmex7sr1Hbtc", note = "U3b: new Outputs and write-only stream key bullets match outputs.rs (state.get + output.status loads, event handling, go-live/end-stream rules, 5-tick health window, key read from an unbound password field into SecretString and cleared); style.css panel block; shell bullet still holds" }
+verified = { hash = "b3:d644f249970d9016", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (U3b outputs panel) into U4 plus review N1/N2 fixes: took main's text; canvas still opens its own events() subscription keeping only the stream; nothing else in the section changed; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -104,7 +104,7 @@ verified = { hash = "b3:c1bb0c382472d8c8", by = "agent:claude@session_01458UdCEC
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:5168bee338266e3b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "U4: new section; checked against transform.rs, snap.rs, model.rs and mod.rs (handles, aspect, rotate snap 90/4 deg and 15 deg steps, 6 px snapping, one item.set_geometry batch per gesture without expected_rev, history calls, legacy items not drawn); behaviour exercised in Chromium against the daemon" }
+verified = { hash = "b3:50bd20b4a20be791", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Review N1/N2: resize follows pointer movement (no jump), aspect-locked corners scale by the axis that changed more so inward drags shrink, nudges and new drags build on the pending geometry; section's claims re-read, hold" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)

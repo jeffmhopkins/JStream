@@ -309,7 +309,15 @@ impl Gesture {
         // the canvas's axes.
         let upright = rotation.rem_euclid(360.0) == 0.0;
         let snap = snap.filter(|_| upright);
-        let mut pointer = pointer;
+        let (fx, fy) = (f32::from(sx), f32::from(sy));
+        let (hw, hh) = half(start);
+        // Follow the pointer's movement, not its position: a press anywhere within the
+        // handle's reach grabs it, and the edge must not jump to the pointer.
+        let grabbed = from_local(start, fx * hw, fy * hh);
+        let mut pointer = Point {
+            x: pointer.x - (self.origin.x - grabbed.x),
+            y: pointer.y - (self.origin.y - grabbed.y),
+        };
         if let Some(snap) = snap {
             if sx != 0
                 && let Some(x) = snap.snap_x(pointer.x, tolerance)
@@ -323,8 +331,6 @@ impl Gesture {
             }
         }
         let (lx, ly) = to_local(start, pointer);
-        let (hw, hh) = half(start);
-        let (fx, fy) = (f32::from(sx), f32::from(sy));
         let (anchor_x, anchor_y) = (-fx * hw, -fy * hh);
         let start_w = start.size.width.get();
         let start_h = start.size.height.get();
@@ -339,8 +345,14 @@ impl Gesture {
             (fy * (ly - anchor_y)).max(MIN_SIZE)
         };
         if sx != 0 && sy != 0 && !modifiers.shift {
-            // A corner keeps the aspect ratio: the axis the pointer moved further sets it.
-            let k = (width / start_w).max(height / start_h);
+            // A corner keeps the aspect ratio: the axis whose size changed more sets it,
+            // so a drag straight inward along one axis shrinks the box.
+            let (kx, ky) = (width / start_w, height / start_h);
+            let k = if (kx - 1.0).abs() >= (ky - 1.0).abs() {
+                kx
+            } else {
+                ky
+            };
             width = (start_w * k).max(MIN_SIZE);
             height = (start_h * k).max(MIN_SIZE);
         }
@@ -578,6 +590,30 @@ mod tests {
             )
             .expect("finite");
         assert_box(&free.geometry, 200.0, 100.0, 400.0, 100.0);
+        // Straight inward along x shrinks it: half as wide, so half as tall.
+        let shrunk = gesture
+            .update(Point { x: 100.0, y: 150.0 }, NONE, None, 0.0)
+            .expect("finite");
+        assert_box(&shrunk.geometry, 50.0, 75.0, 100.0, 50.0);
+    }
+
+    #[test]
+    fn a_resize_follows_the_pointers_movement_not_its_position() {
+        let start = geometry(100.0, 100.0, 200.0, 100.0, 0.0);
+        // Grabbed 5 px left of the right edge's handle (x = 200).
+        let gesture = Gesture {
+            kind: GestureKind::Resize { x: 1, y: 0 },
+            start,
+            origin: Point { x: 195.0, y: 100.0 },
+        };
+        let still = gesture
+            .update(Point { x: 195.0, y: 100.0 }, NONE, None, 0.0)
+            .expect("finite");
+        assert_box(&still.geometry, 100.0, 100.0, 200.0, 100.0);
+        let moved = gesture
+            .update(Point { x: 215.0, y: 100.0 }, NONE, None, 0.0)
+            .expect("finite");
+        assert_box(&moved.geometry, 110.0, 100.0, 220.0, 100.0);
     }
 
     #[test]

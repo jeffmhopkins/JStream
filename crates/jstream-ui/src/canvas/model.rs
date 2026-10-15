@@ -280,10 +280,12 @@ mod tests {
             Edit::SceneCreate {
                 scene_id: "s1".into(),
                 name: "Intro".into(),
+                role: None,
             },
             Edit::SceneCreate {
                 scene_id: "s2".into(),
                 name: "Main".into(),
+                role: None,
             },
             Edit::SourceCreate {
                 source_id: SourceId::new("cam"),

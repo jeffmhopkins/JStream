@@ -189,6 +189,15 @@ pub fn Canvas() -> impl IntoView {
         });
     };
 
+    // An item's geometry as the user last left it: the pending or dragged one if there
+    // is one, so a nudge or drag started before the engine answers builds on it.
+    let latest = move |current: &Layout, id: &ItemId| -> Option<ItemGeometry> {
+        match preview.get_untracked() {
+            Some((pending, geometry)) if pending == *id => Some(geometry),
+            _ => current.geometry_of(id),
+        }
+    };
+
     let pointer_at = move |event: &ev::PointerEvent| -> Option<(Viewport, Point)> {
         measure();
         let fit = viewport.get_untracked()?;
@@ -212,13 +221,13 @@ pub fn Canvas() -> impl IntoView {
             let _focused = element.focus();
         }
         let on_handle = selected.get_untracked().and_then(|id| {
-            let geometry = current.geometry_of(&id)?;
+            let geometry = latest(&current, &id)?;
             let handle = transform::handle_at(&geometry, point, fit)?;
             Some((id, geometry, GestureKind::from(handle)))
         });
         let target = on_handle.or_else(|| {
             let id = transform::topmost_at(current.boxes(), point)?.clone();
-            let geometry = current.geometry_of(&id)?;
+            let geometry = latest(&current, &id)?;
             Some((id, geometry, GestureKind::Move))
         });
         let Some((item_id, start, kind)) = target else {
@@ -298,7 +307,7 @@ pub fn Canvas() -> impl IntoView {
                 let Some(id) = selected.get_untracked() else {
                     return;
                 };
-                let Some(start) = layout.with_untracked(|l| l.as_ref()?.geometry_of(&id)) else {
+                let Some(start) = layout.with_untracked(|l| latest(l.as_ref()?, &id)) else {
                     return;
                 };
                 let distance = if event.shift_key() { 10.0 } else { 1.0 };
