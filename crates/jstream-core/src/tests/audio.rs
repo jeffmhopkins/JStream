@@ -1,7 +1,8 @@
 //! Audio sources (C5): while an output runs, each audio-only source in the collection is
 //! one mixer input, added when the source is created and removed when it is deleted. A
 //! source that can't be recorded is unavailable and doesn't fail the output; a failed
-//! stream is reopened, and an application is found again when it restarts.
+//! stream is reopened, and an application is found again when it restarts. A `browser`
+//! source's page audio is an input too, from when its page opens until it closes.
 
 use super::{batch, block_on, connected, drain, edits, output_call, output_state};
 use crate::audio_sources::AudioStatus;
@@ -262,6 +263,83 @@ fn a_settings_change_reopens_the_input_and_stopping_clears_the_status() {
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(eventually(|| audio.open_streams() == 0));
     assert_eq!(status(&engine, "mic"), None);
+}
+
+#[test]
+fn a_browser_page_is_recorded_alongside_the_defaults() {
+    use jstream_browser::fake::FakeBrowser;
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let browser = FakeBrowser::new();
+    let engine = engine(&audio, &clock).with_browser(browser.clone());
+    let control = connected(&engine);
+    let mut events = control.events();
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+
+    batch(
+        &control,
+        Batch::single(audio_source(
+            "page",
+            "browser",
+            Some(("url", "https://example.com/")),
+        )),
+    )
+    .expect("page");
+    assert!(eventually(
+        || status(&engine, "page") == Some(AudioStatus::Recording)
+    ));
+    let pages = browser.pages();
+    assert_eq!(pages.len(), 1);
+    // The routing finds the page's input, as it does an audio source's.
+    engine.emit_meters_tick();
+    let metered = drain(&mut events)
+        .into_iter()
+        .rev()
+        .find_map(|event| match event {
+            Event::MetersTick { sources, .. } => Some(sources),
+            _ => None,
+        });
+    assert!(
+        metered.is_some_and(|sources| sources.iter().any(|s| s.source_id.as_str() == "page")),
+        "the page is metered"
+    );
+    // A page's audio isn't an audio source: the defaults stay.
+    assert_eq!(
+        inputs(&audio),
+        names(&[
+            AudioInputTarget::DefaultInput,
+            AudioInputTarget::DefaultOutputLoopback
+        ])
+    );
+
+    // A new address opens a new page, whose audio replaces the old page's.
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("page"),
+            patch: Settings(
+                [("url".to_owned(), json!("https://example.org/"))]
+                    .into_iter()
+                    .collect(),
+            ),
+        }),
+    )
+    .expect("new address");
+    assert!(eventually(
+        || browser.pages().len() == 2 && pages[0].is_closed()
+    ));
+    assert!(eventually(
+        || status(&engine, "page") == Some(AudioStatus::Recording)
+    ));
+
+    // Deleting the source closes its page and its input.
+    batch(&control, Batch::single(delete("page"))).expect("delete page");
+    assert!(eventually(|| browser.pages().iter().all(|p| p.is_closed())));
+    assert!(eventually(|| status(&engine, "page").is_none()));
+
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(eventually(|| audio.open_streams() == 0));
 }
 
 /// The routing (D5) finds the inputs the program stage opens: an audio source that

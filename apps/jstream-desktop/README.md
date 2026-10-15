@@ -33,6 +33,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token.
+- **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
+  backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard and
   shutdown.
 - **Data folder and log file** (`data.rs`, `logs.rs`).
@@ -43,8 +45,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
 virtual camera's registration mode (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, crash
-reports, MCP and the token for outside clients, and the release build of the portable
-folder.
+reports, MCP and the token for outside clients, the release build of the portable
+folder, and browser sources in a default build (the `cef` feature is off).
 
 <a id="usage"></a>
 ## Usage
@@ -68,6 +70,14 @@ Closing the window stops the engine.
 | Option | Meaning |
 |---|---|
 | `--ui-dir <folder>` | The UI bundle (`trunk build`'s `dist`). Default: the `ui` folder beside the exe. |
+
+**Browser sources** need the `cef` feature (`cargo run -p jstream-desktop --features
+cef`), whose build downloads and builds CEF, and `jstream-browser-helper.exe` and the CEF
+runtime beside `jstream.exe` (a `cef` build doesn't start without `libcef.dll`). It is
+off by default until CEF's sandbox and file-access
+limits land ([the browser crate's open items](../../crates/jstream-browser/README.md#open-items)).
+Without it, a `browser` source draws nothing. CEF's cache is the data folder's `cef`
+folder, and its log `logs\cef.log`.
 
 - **Data folder.** `%APPDATA%\JStream`, the daemon's too. When a file named `portable`
   sits beside the exe, a `data` folder beside the exe instead, so the app can run from
@@ -132,5 +142,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-
   Windows where that holds. `tauri.conf.json` names the app and its icon; the bundler
   is off (the portable folder is ADR-0020's), and so are Tauri's CSP injection and
   global API. `tauri-build` writes ACL schemas to `gen/`, which is not committed.
+- **Browser sources, behind a feature.** With `cef`, the engine gets a CEF backend
+  (`jstream-browser`) on the backends' media clock, so pages' audio is stamped on the
+  clock the mixer runs on. Its pages paint onto a device of the media adapter the app
+  opens for them (`WindowsGpu::open_device`), since the engine doesn't hand out its own
+  device yet. The backend is added after the OS backends, so sources open on the media
+  clock. A `cef` build links `libcef.dll` at load time, so without it beside
+  `jstream.exe` the exe doesn't start at all: Windows refuses it before the app can show
+  a page. CEF itself starts on the first page, so a missing helper or missing resource
+  files fail that source, not the app. With no device, pages play audio but show no
+  frames.
 - **Logs and the token.** The token reaches only the bootstrap script. It is never
   logged, written to disk, or put in a URL (R-SEC-001).
