@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:5b7f921245fe4fde", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "#219 Windows clippy fix: windows_gpu.rs now fills main's Backends::video_devices with FakeVideoDevices; re-read, the section's text about the hardware test and the GPU capture path still holds" }
+verified = { hash = "b3:176869e3d1e875a7", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3 on #219's latest: re-read; purpose text (engine, control plane, GPU capture path, hw test) holds beside RenderCaptures" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -176,7 +176,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a644f46e353d0d76", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "#219 Windows clippy fix: windows_gpu.rs now fills main's Backends::video_devices with FakeVideoDevices; re-read, the section's text about the hardware test and the GPU capture path still holds" }
+verified = { hash = "b3:f1a5e0e91bf95a9a", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3 on #219's latest: Live sources bullet names display/window captures plus main's audio-only line; Runtime bullet keeps the shared program stage and adds runtime/captures.rs; Snapshots text on Shot::captures matches snapshot.rs" }
 -->
 
 ### Engine and sessions
@@ -981,7 +981,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:7695ee1c6ce0a4ae", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: Capture path paragraph now says opening the program stage asks GpuInterop; launch_program binds OpenedCapture context first and gpu_captures is a program-stage counter beside readbacks, as pipeline.rs does; main's shared-stage text kept; holds" }
+verified = { hash = "b3:17feac50e96f4d14", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3 on #219's latest: tick text says each capture's mailbox, primary-display output size; Captures paragraph now says opening the program stage starts no capture (captures::spawn in launch_program); drop order matches render_loop" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -1010,7 +1010,7 @@ CPU frames). The render loop drops the held frames, the compositor and the captu
 streams before the context, so the platform's state goes first as `GpuContext`
 requires.
 
-**Captures** (`runtime/captures.rs`). `output.start` starts no capture. Each tick the
+**Captures** (`runtime/captures.rs`). Opening the program stage starts no capture. Each tick the
 render thread compares what the snapshot captures (`Shot::captures`) with what it runs:
 it asks the pipeline's `jstream-capture` thread to start each new one, and hands it
 the stream of each one no longer shown, which that thread drops, so starting and
