@@ -916,7 +916,10 @@ fn base64(data: &[u8]) -> String {
 pub(crate) fn decode_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
     let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
     let mut reader = decoder.read_info().map_err(|err| err.to_string())?;
-    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let len = reader
+        .output_buffer_size()
+        .ok_or("frame size overflows usize")?;
+    let mut buf = vec![0u8; len];
     let info = reader.next_frame(&mut buf).map_err(|err| err.to_string())?;
     if info.color_type != png::ColorType::Rgba || info.bit_depth != png::BitDepth::Eight {
         return Err(format!(
