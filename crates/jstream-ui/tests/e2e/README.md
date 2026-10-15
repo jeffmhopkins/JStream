@@ -54,8 +54,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   connects with the browser's credentials; the status bar shows the URL, protocol and
   revision; disconnecting returns to the form with the token field empty; a refused
   upgrade shows its reason; the token never appears in the page, its storage or its
-  cookies. A URL the page's policy refuses leaves the form on "Connecting…" (#305): that
-  test is marked `test.fail` until the browser client is fixed.
+  cookies. A URL the page's policy refuses shows a reason and re-enables Connect,
+  although Chromium sends that socket an `error` event and no `close` (#305).
 - **Outputs** (`outputs.spec.js`): adding a stream and a recording; a stream can't start
   or go live until its key is set; the key field empties on save and the key never
   appears in the page; go live and end stream; clearing the key; deleting; editing the
