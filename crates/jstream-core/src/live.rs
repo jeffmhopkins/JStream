@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::MediaClock;
 use jstream_protocol::{Settings, SourceId, SourceKind};
-use jstream_sources::{Context, Registry, Source, SourceError};
+use jstream_sources::{AudioScope, Context, Registry, Source, SourceError};
 
 use crate::lock;
 use crate::snapshot::Frame;
@@ -124,6 +124,11 @@ impl LiveSources {
         for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
             running.start = now;
         }
+    }
+
+    /// The program mix's audio, for the `waveform` and `spectrum` sources.
+    pub(crate) fn set_audio_scope(&mut self, scope: Arc<AudioScope>) {
+        self.ctx.audio = Some(scope);
     }
 
     /// The folder behind `collection` asset references: the collection file's.

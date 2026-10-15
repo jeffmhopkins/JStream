@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:bbe355fa0a69d257", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; daemon backends still vcam: None" }
+verified = { hash = "b3:9ca45662cd29b1df", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Stale only via core#design's new audio-scope sentence (C10); re-read the engine, Windows backends, publish opener, delay-load, vcam and collection/audit bullets: none names live sources or the mixer's blocks; daemon code unchanged; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

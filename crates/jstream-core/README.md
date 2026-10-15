@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:31c122b1b6d18d9c", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+verified = { hash = "b3:b4e507e91817bb38", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10: Live sources bullet says waveform and spectrum draw the engine's AudioScope; Tests list adds the program mix reaching the audio scope; re-read the rest; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -59,7 +59,8 @@ state machine. Contents:
   with `set_source_frame` wins over the live one, and a kind that is only described
   draws nothing, except that a `display` source shows the output pipeline's capture
   on the render thread (see *Live sources* and *Snapshots* in [Design](#design)).
-  Audio-only kinds make no frames and have no live source.
+  Audio-only kinds make no frames and have no live source. The `waveform` and
+  `spectrum` sources draw the program mix's audio from the engine's `AudioScope`.
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input, sent to master at unity, for each `audio_input`, `desktop_audio` and
   `app_audio` source, added when the source is created and removed when it is deleted;
@@ -135,7 +136,8 @@ state machine. Contents:
   stand-in (`src/tests/audio.rs`: the defaults while there is none, sources added and
   deleted while an output runs, an unavailable device or application that leaves the
   output running, a failed stream reopened, an application found again under a new
-  process ID, and a settings change reopening its input), the output edits and the
+  process ID, a settings change reopening its input, and the program mix reaching the
+  engine's audio scope while an output runs), the output edits and the
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
@@ -162,7 +164,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:976f16cf7c1baa87", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:1bc38d4082e6c6fe", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10: Live sources paragraph says every source is built with the engine's one AudioScope in its Context, fed by the mixer thread, silent with no output running; checked Engine and sessions, Snapshots, render/mixer and Locking text: the mixer and render threads still take no lock (the scope is lock-free); holds" }
 -->
 
 ### Engine and sessions
@@ -411,7 +413,11 @@ animation restarts with it. A build that fails is logged at `warn` with the sour
 and an error that never names a host path, and the source draws nothing; a kind that
 is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 (`audio_input`, `desktop_audio`, `app_audio`, whose descriptors have no video) get no
-`Source`: the program stage records them (*Audio sources*).
+`Source`: the program stage records them (*Audio sources*). Every source is built with
+the engine's one `jstream_sources::AudioScope` in its `Context`: the mixer thread
+pushes each program block into it, and the `waveform` and `spectrum` sources draw its
+latest 2048 samples. The program mix runs only while the program stage does, so with
+no output running they draw silence.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source; `sync` runs beside the live
@@ -947,7 +953,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:3f20bc1b0c367a9b", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at e7e7433 (#272 CLAP filter contract and mixer side, #266 canvas styles); stamp-only conflicts; re-read main's text beside this PR's virtual-camera text; no jstream-core code changed by the merge; holds" }
+verified = { hash = "b3:914c1189f3f1e796", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10: the mixer thread paragraph says each block also goes into the engine's audio scope, lock- and allocation-free; mixer_loop now takes a MixOut (inputs, format, scope); re-read the threads, collector and failure text; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -962,7 +968,9 @@ it draws the capture filling the frame. It repeats the last capture when the mai
 is empty, and reads the frame back. This cut encodes that CPU readback, and the
 readback is counted. The mixer thread polls the media clock and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs (see *Audio sources* in Design; the
-microphone and the desktop loopback while the collection has none). Every running
+microphone and the desktop loopback while the collection has none), each one also into
+the engine's audio scope for the `waveform` and `spectrum` sources (a lock-free ring:
+no lock, no allocation). Every running
 output shares that one program stage (capture, render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same encoder profile share one

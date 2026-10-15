@@ -1,6 +1,6 @@
 //! The `Source` and `SourceKind` seams, and what a source is created with.
 
-use crate::SourceError;
+use crate::{AudioScope, SourceError};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
 use std::fs::File;
@@ -66,6 +66,9 @@ pub struct Context {
     pub assets: AssetRoots,
     /// Size limits for decoded assets.
     pub limits: Limits,
+    /// The program mix's audio, which the `waveform` and `spectrum` sources draw.
+    /// `None` draws silence.
+    pub audio: Option<Arc<AudioScope>>,
 }
 
 /// The folders behind the `collection` and `app` asset roots. `absolute` paths need

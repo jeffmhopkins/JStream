@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:ac15a26828d08135", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Assets paragraph now states hard links inside the root are part of the trusted-root assumption (issue 220); checked against AssetRoots::read's dev/ino check in source.rs, which can't distinguish a hard link from its target" }
+verified = { hash = "b3:0f10f768295e30bd", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10: Seams name Context's audio scope and AudioScope (16384-sample mono ring of atomics, one pusher, seqlock read of up to MAX_WINDOW 2048 samples, analysis in frame not on the mixer thread); Kinds adds waveform and spectrum with their params, frame pool, 1/30 s ticks, silence after 250 ms still, realfft details; Dependencies add realfft; Tests list the scope tests and scope_no_alloc; checked against src/scope" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -54,7 +54,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `zune-jpeg`'s internal planes, which for a progressive JPEG hold the whole image's
   coefficients (2 bytes per sample of each colour component, so 6 bytes a pixel for
   full-resolution YCbCr) while it decodes, bounded only by the side
-  limit.
+  limit. `Context` also carries the `AudioScope` the `waveform` and `spectrum`
+  sources draw; with none they draw silence.
+- `AudioScope`: the latest audio of one mix, as mono (the mean of left and right), in
+  a lock-free ring of 16384 samples (341 ms at 48 kHz) stored as atomics. One thread
+  pushes interleaved stereo blocks; any number read the latest window of up to 2048
+  samples. Neither locks nor allocates, so the engine's mixer thread pushes every
+  program block into it ([R-RT-003](../../docs/RULES.md#R-RT-003)). The read is a
+  seqlock: a push claims the slots it is about to overwrite before it writes them, and
+  a read retries when a claim reached a slot it copied, so it never returns a window
+  mixed from two passes of the ring. The analysis (the FFT included) runs in the
+  source's `frame`, on the thread that asks for frames, never on the mixer thread
+  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)'s audio → render
+  path).
 
 **Kinds.**
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
@@ -100,6 +112,26 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`.
+- `waveform` and `spectrum` (C10) draw the latest 2048 samples (43 ms at 48 kHz) of
+  the `Context`'s `AudioScope`, which in the engine is the program mix. Both draw a
+  new frame each 1/30 s tick of `at` (`next_change` is the next tick; with no scope,
+  `None`), drawing into a pool of up to four frames reused once no one holds them, so
+  a frame handed out never changes and drawing doesn't allocate. When the scope's
+  ring hasn't moved for 250 ms (no output runs, so the program mix doesn't), they
+  draw silence. `width` and `height` need a new source, and four frames of that size
+  must fit `max_decoded_bytes`; `color`, `background`, `smoothing` and `scale` are
+  live. `smoothing` (0 to 0.99) is how slowly a level falls: a rise shows at once,
+  and each tick keeps that share of the gap. The `waveform` (640x160 by default)
+  draws each pixel column from its lowest to its highest sample, on a `linear` scale
+  or a `db` one from -60 dBFS (quiet audio shows). The `spectrum` (640x240) is a
+  2048-point real FFT (`realfft`, planned on create, run with buffers made on create)
+  of the Hann-windowed samples, drawn as `bars` (1 to 1024, live, 64 by default) of
+  each bar's loudest bin, in dB from -90 dBFS to a full-scale sine's 0, up to
+  20 kHz (or half the sample rate). The `scale` spreads frequencies `log` from
+  20 Hz (each octave as wide, the default) or `linear` from 0 Hz, and a bar narrower
+  than a bin shows its nearest bin. Bars at least three pixels wide have a
+  one-pixel gap. Both read the program mix only: a bus or a single source needs the
+  protocol's bus entity and a per-source tap in the mixer first.
 - `display`, `media`, `webcam` and `window` are described only, with the settings B4
   gave them: sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.
@@ -147,10 +179,10 @@ undecodable file is an error from `create`, never from the edit that set it.
 
 **Dependencies.** `jstream-media` (frames and the media clock), `jstream-protocol`
 (descriptors, settings and references), `serde_json` (setting values), `thiserror`
-(`SourceError`), and the pure-Rust decoders `png`, `zune-jpeg` with `zune-core`,
-`image-webp` and `gif`, and for fonts `skrifa` (with `read-fonts`, `font-types`,
-`bytemuck`, `yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with default
-features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
+(`SourceError`), the pure-Rust decoders `png`, `zune-jpeg` with `zune-core`,
+`image-webp` and `gif`, `realfft` (with `rustfft`, scalar only) for the spectrum's
+FFT, and for fonts `skrifa` (with `read-fonts`, `font-types`, `bytemuck`, `yoke` and
+`once_cell`) and `ab_glyph_rasterizer`, each with default features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
 (RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
@@ -161,4 +193,10 @@ temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
 the test's header describes. `tests/text.rs` draws with the bundled font: wrapping,
 alignment, padding, outline, live updates, font assets and limits, plus golden PNGs in
-`tests/data/text` (`JSTREAM_BLESS=1` rewrites them).
+`tests/data/text` (`JSTREAM_BLESS=1` rewrites them). The scope's unit tests check the
+ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
+window), the frame ticks and easing, and draw both kinds from known audio: each
+waveform column's range, the dB scale, a tone lighting its own spectrum bar, every
+log bar showing, smoothing and a still ring falling to silence, and which settings are
+live. `tests/scope_no_alloc.rs`, its own binary under `assert_no_alloc`'s allocator,
+checks that a push, a read and both kinds' frames don't allocate once warm.
