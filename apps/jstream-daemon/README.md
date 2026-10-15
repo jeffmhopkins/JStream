@@ -128,7 +128,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1d20861e6d44aa98", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: stamp only, stale through core#design; daemon untouched (no with_youtube yet, flagged)" }
+verified = { hash = "b3:e3a2e422d647b5a0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (B5 #196 0.14, #225, #195, #192, #227), protocol 0.15: stamp only, stale through core#design; daemon untouched by Y3" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

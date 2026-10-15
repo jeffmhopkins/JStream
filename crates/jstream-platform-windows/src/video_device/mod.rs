@@ -13,20 +13,10 @@
 mod convert;
 #[cfg(any(windows, test))]
 mod format;
-#[cfg(any(windows, test))]
-mod pairing;
-// The capture mailbox, shared with display capture by path so this module needs no
-// change in `capture` (another work item's files). Its own tests run with it.
-#[cfg(windows)]
-#[allow(
-    clippy::duplicate_mod,
-    reason = "the capture mailbox, reused without editing `capture`; to become one shared \
-              module when that is next changed (#185)"
-)]
-#[path = "../capture/mailbox.rs"]
-mod mailbox;
 #[cfg(windows)]
 mod mjpeg;
+#[cfg(any(windows, test))]
+mod pairing;
 #[cfg(windows)]
 mod source;
 #[cfg(windows)]

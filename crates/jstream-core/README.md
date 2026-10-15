@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:636046d6b7266b91", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: re-read; with_youtube, the YouTube bullet and the youtube test list hold beside F3's runtime text" }
+verified = { hash = "b3:9290ebb4379e8d84", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main, protocol 0.15: the youtube tests' Backends gain #192's video_devices (FakeVideoDevices); re-read, nothing here describes that fixture" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -156,7 +156,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5644f2529227fdf4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: re-read; YouTube paragraph after Encoder profiles; youtube check moved after the start lock with the collection guard dropped first (review B3), lock note says start lock then sign-in then client; abandoned sign-in and signed-out health poll match youtube.rs" }
+verified = { hash = "b3:b62eb3e1e00eb66b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main, protocol 0.15: the youtube tests' Backends gain #192's video_devices (FakeVideoDevices); re-read, nothing here describes that fixture" }
 -->
 
 ### Engine and sessions
@@ -285,11 +285,12 @@ collection lock:
   (`rev_conflict`); then an empty stack (`history_empty`). None of these drops a step.
 - **Conflicts.** Each applied batch, undo and redo is logged with what it *touched*,
   computed in core from its edits and the inverse's (so a delete also names what it
-  removed): objects created or deleted, objects used (an item's scene and source, a
-  `scene` source's scene, a duplicate's original, the scenes an `item.move` and its
-  inverse name), properties set (names, a scene's role, an item's placement, whether
-  set as a transform or a geometry, crop, visibility, an item's index, which
-  `item.move` also sets, each settings parameter, an output's target), the scenes'
+  removed): objects created or deleted, objects used (an item's scene and source, both
+  sources of an `item.set_source`, a `scene` source's scene, a duplicate's original,
+  the scenes an `item.move` and its inverse name), properties set (names, a scene's
+  role, an item's placement, whether set as a transform or a geometry, crop,
+  visibility, an item's index, which `item.move` also sets, which source an item
+  places, each settings parameter, an output's target), the scenes'
   order, and the canvas size. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
   `scene.create` also deletes the items the scene holds now, even ones whose own step

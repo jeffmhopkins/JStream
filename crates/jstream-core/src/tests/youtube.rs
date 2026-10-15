@@ -8,7 +8,8 @@ use crate::{Engine, LivePublish, RecordingPublish, TOKEN_ACCOUNT, YoutubeSetup};
 use jstream_control::{Control, ControlError, EventStream};
 use jstream_media::{ChannelLayout, FrameSize, Timebase};
 use jstream_platform::fake::{
-    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, MemoryTokenStore,
+    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    MemoryTokenStore,
 };
 use jstream_platform::{Backends, OAuthTokenStore, Secret};
 use jstream_protocol::{
@@ -513,7 +514,8 @@ fn backends() -> Backends {
     let size = FrameSize::new(64, 36).expect("size");
     Backends {
         clock: Arc::new(clock.clone()),
-        capture: Arc::new(FakeCapture::new(clock, size)),
+        capture: Arc::new(FakeCapture::new(clock.clone(), size)),
+        video_devices: Arc::new(FakeVideoDevices::new(clock)),
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),

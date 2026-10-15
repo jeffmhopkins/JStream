@@ -43,7 +43,10 @@ pub fn kinds() -> Vec<KindDescriptor> {
 /// in `b` with a geometry, scene `b` nested in `a` through the scene source `b_src`, the
 /// RTMP outputs `yt` and `tw` (`tw`'s target changed after it was created), the
 /// recording output `rec`, and the encoder profiles `hq` (updated after it was created,
-/// used by `rec`) and `low` (used by `yt`, `tw` keeping the engine's default).
+/// used by `rec`) and `low` (used by `yt`, `tw` keeping the engine's default). Then the
+/// references and clones of ADR-0023: `cam` is duplicated as `cam_copy` and `i1` is
+/// switched to place the copy, keeping its ID and position; `aux` is created with a
+/// `duplicated_from` naming a source that doesn't exist, which reads as absent.
 ///
 /// Sources, outputs and encoder profiles are created in the opposite order of their IDs, so reads that
 /// order them by ID can't pass by echoing creation order.
@@ -53,6 +56,7 @@ pub fn collection() -> Batch {
         name: s.name,
         kind: s.kind,
         settings: s.settings,
+        duplicated_from: s.duplicated_from,
     };
     let add = |item: &str, source: &str| Edit::ItemAdd {
         scene_id: SceneId::new("a"),
@@ -159,6 +163,19 @@ pub fn collection() -> Batch {
                 output_id: OutputId::new("tw"),
                 profile_id: None,
             },
+            Edit::SourceDuplicate {
+                source_id: SourceId::new("cam"),
+                new_source_id: SourceId::new("cam_copy"),
+                name: "Camera copy".into(),
+            },
+            Edit::ItemSetSource {
+                item_id: ItemId::new("i1"),
+                source_id: SourceId::new("cam_copy"),
+            },
+            source(SourceInfo {
+                duplicated_from: Some(SourceId::new("gone")),
+                ..aux()
+            }),
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
@@ -196,7 +213,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
             Query::SourceList,
             Ok(QueryResult::SourceList {
                 rev: COLLECTION_REV,
-                sources: vec![nested_b(), cam()],
+                sources: sources(),
             }),
         ),
         (
@@ -233,7 +250,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
             Ok(QueryResult::StateGet {
                 rev: COLLECTION_REV,
                 canvas: CANVAS,
-                sources: vec![nested_b(), cam()],
+                sources: sources(),
                 scenes: vec![
                     SceneInfo {
                         scene_id: scene("b"),
@@ -330,6 +347,36 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 entity: EntityKind::Source,
                 id: "ghost".into(),
             },
+        ),
+        (
+            Batch::single(Edit::ItemSetSource {
+                item_id: ItemId::new("ghost"),
+                source_id: SourceId::new("cam"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::ItemSetSource {
+                item_id: ItemId::new("i1"),
+                source_id: SourceId::new("ghost"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Source,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::SourceCreate {
+                source_id: SourceId::new("loop"),
+                name: "Loop".into(),
+                kind: cam().kind,
+                settings: crate::Settings::new(),
+                duplicated_from: Some(SourceId::new("loop")),
+            }),
+            invalid("edits.0.duplicated_from", "must not name the source itself"),
         ),
         (
             Batch::single(Edit::ItemReorder {
@@ -809,6 +856,31 @@ fn outputs() -> Vec<OutputInfo> {
     ]
 }
 
+/// The collection's sources, ordered by ID.
+fn sources() -> Vec<SourceInfo> {
+    vec![
+        aux(),
+        nested_b(),
+        cam(),
+        SourceInfo {
+            source_id: SourceId::new("cam_copy"),
+            name: "Camera copy".into(),
+            duplicated_from: Some(SourceId::new("cam")),
+            ..cam()
+        },
+    ]
+}
+
+/// Created with a `duplicated_from` naming a source that doesn't exist, so it reads as
+/// absent.
+fn aux() -> SourceInfo {
+    SourceInfo {
+        source_id: SourceId::new("aux"),
+        name: "Aux".into(),
+        ..cam()
+    }
+}
+
 fn cam() -> SourceInfo {
     SourceInfo {
         source_id: SourceId::new("cam"),
@@ -817,6 +889,7 @@ fn cam() -> SourceInfo {
             kind: "webcam".into(),
         },
         settings: crate::Settings::new(),
+        duplicated_from: None,
     }
 }
 
@@ -828,6 +901,7 @@ fn nested_b() -> SourceInfo {
             scene_id: SceneId::new("b"),
         },
         settings: crate::Settings::new(),
+        duplicated_from: None,
     }
 }
 
@@ -910,7 +984,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             crop: CROP,
             visible: false,
         },
-        plain("i1", "cam"),
+        plain("i1", "cam_copy"),
         plain("i2", "b_src"),
     ]
 }

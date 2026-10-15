@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:3b924d6ac2a6b6d6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: re-read; core -> jstream-youtube goes down the layers, rows hold" }
+verified = { hash = "b3:d2855ea4c771b69e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (B5 #196 0.14, #225, #195, #192, #227), protocol 0.15: re-read; rows hold, core -> jstream-youtube goes down the layers" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:4d3192fe085b2bcd", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: kind YouTube { broadcast_id }; F3/C1b text beside it unchanged" }
+verified = { hash = "b3:cc41aa7c256f4640", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (B5 #196 0.14, #225, #195, #192, #227), protocol 0.15: kind YouTube { broadcast_id } beside B5's text" }
 -->
 
 ```
@@ -350,7 +350,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   a `role` (`scene` or `group`, set by `scene.set_role`), and `item.move` moves an item
   to another scene keeping its id, under the same cycle check. The placement edits take
   an optional `scene_id`, accepted only when it names the item's own scene until
-  variants exist (protocol 0.12). Items refer to sources; they never copy them. Scene and source
+  variants exist (protocol 0.12). Items refer to sources; they never copy them, and
+  `item.set_source` retargets one, keeping its id, placement and stacking position.
+  A source copied by `source.duplicate` records its original in `duplicated_from`, a
+  plain link that reads as absent once the original is deleted. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
@@ -366,14 +369,16 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. The mix is always
   `Program` until video mixes exist, so outputs share a session by profile alone.
-  Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
-  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, 3D
+  Not yet: settings migrations between kind versions (a source saved at another
+  version is refused on load), filters, source audio settings, `opacity`, `blend`, the reserved
+  `effects[]`, the transition fields, 3D
   geometry, `scene.create`'s optional `role`, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
   `outputs` and `encoders`. The collection file saves everything built so
-  far, encoder profiles and each output's profile included ([Persistence](#persistence)).
+  far, encoder profiles, each output's profile and `duplicated_from` included
+  ([Persistence](#persistence)).
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -512,7 +517,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:ec2704651699ba91", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: YouTube bullet says since protocol 0.14; chat and stats planned for M3" }
+verified = { hash = "b3:9230ac831aa03286", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (B5 #196 0.14, #225, #195, #192, #227), protocol 0.15: YouTube bullet says since protocol 0.15; chat and stats planned for M3" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -582,7 +587,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)); the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).
-- **YouTube** ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)): since protocol 0.14
+- **YouTube** ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)): since protocol 0.15
   the actions `youtube.sign_in` (returns Google's consent URL; the loopback redirect
   finishes the sign-in in the engine, and no token ever crosses the protocol),
   `youtube.sign_out`, `youtube.create_broadcast`, `youtube.bind_broadcast` and
@@ -630,7 +635,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:bfbd4e68816e7d6e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (F3 #208 encoder profiles, C1b #222, #148, #217, #218, #177), protocol 0.14: nouns canvas, encoder ... video and youtube; tools.snap measured 153464 bytes, text says about 155 KB" }
+verified = { hash = "b3:3b47f6b655a4ab27", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (B5 #196 0.14, #225, #195, #192, #227), protocol 0.15: nouns include encoder and youtube; tools.snap measured 157955 bytes, text says about 160 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -644,7 +649,7 @@ verified = { hash = "b3:bfbd4e68816e7d6e", by = "agent:claude@session_016BkTSqJ3
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 155 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 160 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -831,7 +836,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:d1beab0a225fcf85", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#205): Collections bullet holds with encoder profiles added to the file as optional fields at schema_version 1; rest unchanged" }
+verified = { hash = "b3:725834769c696156", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; Collections bullet holds with F3's optional encoder fields and B5's optional duplicated_from at schema 1" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
@@ -853,7 +858,7 @@ verified = { hash = "b3:d1beab0a225fcf85", by = "agent:claude@session_01Fuozqmqh
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:f7c98d9194d6528e", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review B1: folder list now names jstream-browser-helper.exe beside the CEF runtime, matching ARCH#browser-source, with the bootstrap-layout caveat; rest unchanged" }
+verified = { hash = "b3:435cdce080086191", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main: #190's browser-helper wording and this PR's hardware-run bullet both kept; no conflict in meaning" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -890,3 +895,11 @@ Direct3D 12).
   - **Shared-object names:** a non-elevated engine can't create `Global\` objects (access
     denied). So the hand-off uses the engine's session namespace, and the DLL opens it as
     `Session\<id>\…`.
+  - **`jstream-vcam-windows` on hardware** (Windows 11, AMD Radeon 780M, with the
+    `vcam_smoke` producer): registered with `regsvr32` from a folder outside any user
+    profile, the DLL was loaded by Frame Server (session 0, `svchost`, LOCAL SERVICE) and
+    served only the producer's frames, with **no** LOCAL SERVICE grant on the file. So the
+    grant matters only for a DLL inside a user profile, which is inferred from S2 rather
+    than isolated. Frame Server requested about four samples per producer frame, because
+    the stream doesn't pace `RequestSample` yet
+    (#193).
