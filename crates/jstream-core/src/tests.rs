@@ -1697,6 +1697,77 @@ mod cpu_pipeline {
             .with_publish(publish)
     }
 
+    /// The render thread draws the render snapshot the control side published, without
+    /// the collection lock: a batch that changes the program mix reaches the next ticks.
+    /// The thread stamps the generation it adopted, and a stopped output holds no
+    /// gesture up. A batch that changes nothing the mix draws publishes nothing new.
+    #[test]
+    fn the_render_thread_adopts_published_snapshots() {
+        use super::{batch, create};
+        use jstream_protocol::{Batch, SceneId};
+
+        let fakes = fakes();
+        let seen: Arc<Mutex<Vec<Option<SceneId>>>> = Arc::default();
+        let draw: OpenDraw = {
+            let seen = Arc::clone(&seen);
+            Arc::new(move || {
+                let seen = Arc::clone(&seen);
+                let mut inner = (cpu_draw())()?;
+                let draw: DrawFn = Box::new(move |shot, size, capture, out| {
+                    seen.lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push(shot.program().cloned());
+                    inner(shot, size, capture, out)
+                });
+                Ok(draw)
+            })
+        };
+        let engine = engine(
+            share(&fakes.backends),
+            draw,
+            Box::new(RecordingPublish::new()),
+        );
+        let hub = engine.render_hub();
+        let last = || {
+            seen.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .last()
+                .cloned()
+        };
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || last() == Some(None)),
+            "the empty collection was drawn"
+        );
+        assert!(hub.caught_up(1) && !hub.caught_up(2));
+
+        let one = |edit| Batch {
+            edits: vec![edit],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        batch(&control, one(create("main"))).expect("scene.create");
+        assert_eq!(hub.load().generation(), 2);
+        let main = Some(SceneId::new("main"));
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || last() == Some(main.clone())),
+            "the next ticks draw the new program scene"
+        );
+        assert!(hub.caught_up(2) && !hub.caught_up(3));
+
+        // A second scene is not on program and nothing nests it.
+        batch(&control, one(create("spare"))).expect("scene.create");
+        assert_eq!(hub.load().generation(), 2, "nothing the mix draws changed");
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        assert!(
+            hub.caught_up(u64::MAX - 1),
+            "a stopped render thread holds nothing up"
+        );
+    }
+
     /// Feeds both inputs and moves the clock on by 50 ms.
     fn pump(clock: &FakeClock, audio: &FakeAudioIo) {
         audio.deliver(2400, 0.2);
@@ -2087,9 +2158,9 @@ mod cpu_pipeline {
             Arc::new(move || {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())()?;
-                let draw: DrawFn = Box::new(move |size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(size, rgba, out)
+                    inner(shot, size, rgba, out)
                 });
                 Ok(draw)
             })

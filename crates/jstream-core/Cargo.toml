@@ -16,6 +16,8 @@ unsafe_allowed = false
 workspace = true
 
 [dependencies]
+# The render snapshot the control side publishes and the render thread loads lock-free.
+arc-swap.workspace = true
 futures-core.workspace = true
 jstream-audio.workspace = true
 jstream-control.workspace = true

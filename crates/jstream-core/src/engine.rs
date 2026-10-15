@@ -12,8 +12,8 @@ use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
-    Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent, Running,
-    launch, parts_from,
+    Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent, RenderHub,
+    Running, launch, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
@@ -58,9 +58,11 @@ pub struct Engine {
     drops: Arc<Mutex<DropLedger>>,
 }
 
-/// The collection lock, and the snapshot thread that owns the snapshot compositor. A
-/// snapshot copies its shot under the lock, drops it, then queues the shot for that
-/// thread. The pipeline threads never take the lock.
+/// The collection lock, the render snapshot, and the snapshot thread that owns the
+/// snapshot compositor. Every change to what the program mix draws publishes a new render
+/// snapshot under the lock. A `video.snapshot` reads `rev` and the published snapshot
+/// under the lock, drops it, then queues the snapshot for that thread. The pipeline
+/// threads never take the lock.
 struct Shared {
     state: Mutex<State>,
     snapshots: SnapshotWorker,
@@ -107,10 +109,13 @@ impl Engine {
         height: u32,
         rgba: &[u8],
     ) -> Result<(), SourceFrameError> {
-        let frame = Frame::new(width, height, rgba)?;
-        lock(&self.shared.state)
-            .frames
-            .insert(source_id.clone(), frame);
+        // Copied before the lock is taken; only the version is assigned under it.
+        let frame = Frame::new(width, height, rgba, 0)?;
+        let mut state = lock(&self.shared.state);
+        state.frame_versions = state.frame_versions.saturating_add(1);
+        let frame = frame.with_version(state.frame_versions);
+        state.frames.insert(source_id.clone(), frame);
+        state.publish_render();
         Ok(())
     }
 
@@ -555,6 +560,7 @@ impl Engine {
                     backends,
                     Arc::clone(&lock(&host.draw)),
                     *lock(&host.open_timeout),
+                    Arc::clone(&state.render),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -808,14 +814,21 @@ impl Engine {
         wake_all(wake);
     }
 
-    /// `video.snapshot`. The shot is copied under the collection lock; the snapshot
-    /// thread renders it after that lock is released.
+    /// `video.snapshot`. The `rev` and the render snapshot published for it are read
+    /// together under the collection lock; the snapshot thread renders it after that
+    /// lock is released.
     fn video_snapshot(&self) -> SnapshotReply {
-        let shot = {
+        let (snapshot, rev) = {
             let state = lock(&self.shared.state);
-            snapshot::plan(&state.graph, &state.frames)
+            (state.render.load(), state.graph.rev())
         };
-        self.shared.snapshots.request(shot)
+        self.shared.snapshots.request(snapshot, rev)
+    }
+
+    /// The render hub the pipeline's render thread reads, for tests.
+    #[cfg(test)]
+    pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
+        Arc::clone(&lock(&self.shared.state).render)
     }
 }
 
@@ -1132,6 +1145,12 @@ struct State {
     /// `rev`. A snapshot draws an item from this when the source is not itself a scene.
     /// An applied `source.delete` removes the deleted source's entry.
     frames: BTreeMap<SourceId, Frame>,
+    /// How many frames `set_source_frame` has stored: the next one's version.
+    frame_versions: u64,
+    /// The program mix the render thread and `video.snapshot` draw, republished after
+    /// every change to the graph or a stored frame (it only becomes a new generation when
+    /// what it draws changed).
+    render: Arc<RenderHub>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
 }
@@ -1193,6 +1212,7 @@ impl State {
                 self.frames.remove(source_id);
             }
         }
+        self.publish_render();
         self.subscribers.emit(
             &Event::StateChanged {
                 rev: applied.rev,
@@ -1241,6 +1261,12 @@ impl State {
             },
         };
         Ok(CallResult::Query { result })
+    }
+
+    /// Re-plans the program mix and publishes it if it draws something new.
+    fn publish_render(&self) {
+        self.render
+            .publish(snapshot::plan(&self.graph, &self.frames));
     }
 
     fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {

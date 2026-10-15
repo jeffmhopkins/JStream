@@ -11,6 +11,9 @@ publish = false
 [workspace.dependencies]
 # Shared dependency versions live here (R-DEP-003). Member crates use `dep.workspace = true`.
 anyhow = "1"
+# The render snapshot (ARCH › Threads, "State to RT threads"): the control side swaps an
+# immutable snapshot that the render thread loads without a lock. No dependencies.
+arc-swap = { version = "1.9", default-features = false }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 futures-core = { version = "0.3", default-features = false }

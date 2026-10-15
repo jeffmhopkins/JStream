@@ -9,6 +9,7 @@
 
 mod pipeline;
 mod publish;
+mod render;
 
 pub use pipeline::OutputStats;
 #[cfg(test)]
@@ -21,3 +22,4 @@ pub(crate) use publish::tests::serve as serve_rtmp;
 pub use publish::{
     LinkState, LivePublish, OpenPublish, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
 };
+pub(crate) use render::{Collector, RenderHub, RenderReader, RenderSnapshot};
