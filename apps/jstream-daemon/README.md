@@ -35,7 +35,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   creates the file with a new random token ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
   file and the placeholder outputs; on Windows a live one, [Design](#design)), installs
-  the signal handlers that stop it, then binds the server with MCP on.
+  the signal handlers that stop it, then binds the server with MCP on and, with
+  `--ui-dir`, the web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
@@ -51,7 +52,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Tests** (`serve.rs`, `token.rs`, `args.rs`, `logs.rs`, `crash.rs` unit tests, the
   crash hook in a child process; the publish opener and the live engine on the
   platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
-  `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
+  `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI
+  requests, and stopped with
   SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
   daemon makes it live, on the platform fakes with the CPU compositor, behind the
   server with MCP on, where MCP builds a scene and creates an RTMP output to a local
@@ -62,10 +64,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
-Not here yet: serving the web UI (`jstream-server` serves one from
-`ServerConfig::ui_dir`, [jstream-server › Design](../../crates/jstream-server/README.md#design),
-but the daemon has no flag for it yet),
-YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
+Not here yet: YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
@@ -92,6 +91,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--token-file <path>` | The control token file. Default: the `JSTREAM_TOKEN_FILE` environment variable, which `jstream-cli` reads too. One of them is required. |
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
 | `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding the empty collection, if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
+| `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
@@ -109,9 +109,15 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 - **Output.** On stdout: `token file: <path> (created, new token)` or
   `… (existing token)`, then `mcp endpoint: http://127.0.0.1:<port>/mcp` (point an MCP
   client there, with the token as `Authorization: Bearer <token>`), then
+  `ui: http://127.0.0.1:<port>/` with `--ui-dir`, then
   `listening on ws://127.0.0.1:<port>/api/v1/ws` once it
   serves (a script waits for this line), and `stopped` after a graceful stop. Errors go
   to stderr as `error: <message>`.
+- **Web UI.** With `--ui-dir`, open the `ui:` address in a browser on the same
+  machine. It asks for a user name and password: enter anything as the user name and
+  the token file's contents as the password. The browser keeps them for the session
+  and sends them on the UI's WebSocket connection too
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)).
 - **Logs.** The libraries' log lines go to stderr, never stdout, and to log files:
   connections accepted and refused (with the reason, never the token), handshakes,
   output actions, and how connections end. `--log-level`, else `RUST_LOG`, filters
@@ -181,7 +187,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -274,7 +280,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is
   no option to turn it off: it is behind the same token as the WebSocket API, which
   already gives full control ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)).
-- **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port and MCP changed):
+- **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port, MCP and the UI directory changed):
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
   option to listen on other addresses until remote browsers need it (with TLS and token

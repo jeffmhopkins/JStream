@@ -54,7 +54,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -916,10 +916,10 @@ Direct3D 12).
   the licenses and a `README.txt`, into `target/dist`. `.cargo/config.toml` links the C
   runtime statically for every MSVC build. A `RUSTFLAGS` variable replaces the config's
   flags, so `dist` adds `crt-static` back to it. The zip is written by `dist` itself,
-  deflated, with fixed timestamps, so the same files make the same zip. The `dist` CI job
-  builds it with the `wasm` job's UI, names it after the pushed commit (`--revision`,
-  since a pull request checks out GitHub's merge commit), and uploads it as an artifact,
-  as is, on every PR and push to `main`. The CEF runtime and the browser helper join it when they exist.
+  deflated, with fixed timestamps, so the same files make the same zip. The `dist` job in
+  `after-review.yml` builds it with the release UI its `dist-ui` job builds, names it
+  after the commit tested (`--revision`), and uploads it as an artifact, as is, on `main`
+  and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The CEF runtime and the browser helper join it when they exist.
 - **Virtual camera:** the app registers the COM media source from its own folder the first
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
   because Frame Server ignores per-user registration. The app can unregister the source and

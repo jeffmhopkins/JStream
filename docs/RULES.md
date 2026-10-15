@@ -603,6 +603,9 @@ applies_to = [".github/workflows/**"]
 This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`.
 `enforced_by = ["review"]` means the rule is judged by the reviewer agent ([REVIEW.md](../REVIEW.md)).
 On a draft PR every `ci` job is skipped; they run when the PR is marked ready for review.
+`ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist` and `macos` are in
+`after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
+([ADR-0054](adr/0054-platform-ci-after-review.md)).
 
 | Check | Runs | Required | From |
 |---|---|---|---|
@@ -617,7 +620,7 @@ On a draft PR every `ci` job is skipped; they run when the PR is marked ready fo
 | `pr-title` | Conventional Commit title | yes | M0 |
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
-| `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0020](adr/0020-portable-windows-distribution.md)), uploaded as an artifact | no | now |
+| `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0020](adr/0020-portable-windows-distribution.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
 | `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
