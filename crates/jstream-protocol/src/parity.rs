@@ -10,10 +10,10 @@
 //! Docs: crates/jstream-protocol/README.md#purpose
 
 use crate::{
-    Batch, Crop, Edit, EntityKind, Finite32, ItemId, ItemInfo, ItemTransform, KindCategory,
-    KindDescriptor, OutputId, OutputInfo, OutputKind, ProtocolError, Query, QueryResult,
-    RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SourceId,
-    SourceInfo, SourceKind, Vec2,
+    Batch, Canvas, Crop, Edit, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemInfo,
+    ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind, PlacementForm,
+    ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo,
+    SceneRole, SceneSummary, Size, SourceId, SourceInfo, SourceKind, Vec2,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -35,11 +35,12 @@ pub fn kinds() -> Vec<KindDescriptor> {
     }]
 }
 
-/// The batch that builds the fixture collection from an empty one: scenes `b` then `a`
-/// (created `a` first, then reordered), source `cam` placed twice in `a` (the second
-/// placement moved, cropped, hidden and reordered to the bottom), and scene `b` nested in
-/// `a` through the scene source `b_src`, the RTMP outputs `yt` and `tw` (`tw`'s
-/// target changed after it was created), and the recording output `rec`.
+/// The batch that builds the fixture collection from an empty one: a 1280×720 canvas,
+/// scenes `b` then `a` (created `a` first, then reordered), source `cam` placed twice in
+/// `a` (the second placement moved, cropped, hidden and reordered to the bottom) and once
+/// in `b` with a geometry, scene `b` nested in `a` through the scene source `b_src`, the
+/// RTMP outputs `yt` and `tw` (`tw`'s target changed after it was created), and the
+/// recording output `rec`.
 ///
 /// Sources and outputs are created in the opposite order of their IDs, so reads that
 /// order them by ID can't pass by echoing creation order.
@@ -55,9 +56,14 @@ pub fn collection() -> Batch {
         item_id: ItemId::new(item),
         source_id: SourceId::new(source),
         transform: None,
+        geometry: None,
     };
     Batch {
         edits: vec![
+            Edit::CanvasSetSize {
+                width: CANVAS.width,
+                height: CANVAS.height,
+            },
             Edit::SceneCreate {
                 scene_id: SceneId::new("a"),
                 name: "A".into(),
@@ -93,6 +99,13 @@ pub fn collection() -> Batch {
             Edit::SceneReorder {
                 scene_id: SceneId::new("b"),
                 index: 0,
+            },
+            Edit::ItemAdd {
+                scene_id: SceneId::new("b"),
+                item_id: ItemId::new("i4"),
+                source_id: SourceId::new("cam"),
+                transform: None,
+                geometry: Some(BOXED),
             },
             Edit::OutputCreate {
                 output_id: OutputId::new("yt"),
@@ -133,7 +146,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         scene_id: scene("b"),
                         name: "B".into(),
                         role: SceneRole::Scene,
-                        item_count: 0,
+                        item_count: 1,
                     },
                     SceneSummary {
                         scene_id: scene("a"),
@@ -169,7 +182,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
             Ok(QueryResult::ItemList {
                 rev: COLLECTION_REV,
                 scene_id: scene("b"),
-                items: vec![],
+                items: items_of_b(),
             }),
         ),
         (
@@ -185,13 +198,14 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
             Query::StateGet,
             Ok(QueryResult::StateGet {
                 rev: COLLECTION_REV,
+                canvas: CANVAS,
                 sources: vec![nested_b(), cam()],
                 scenes: vec![
                     SceneInfo {
                         scene_id: scene("b"),
                         name: "B".into(),
                         role: SceneRole::Scene,
-                        items: vec![],
+                        items: items_of_b(),
                     },
                     SceneInfo {
                         scene_id: scene("a"),
@@ -267,6 +281,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 item_id: ItemId::new("i9"),
                 source_id: SourceId::new("ghost"),
                 transform: None,
+                geometry: None,
             }),
             ProtocolError::NotFound {
                 entity: EntityKind::Source,
@@ -282,6 +297,57 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 "edits.0.index",
                 "must be less than the number of items in the scene (3)",
             ),
+        ),
+        (
+            Batch::single(Edit::ItemAdd {
+                scene_id: SceneId::new("a"),
+                item_id: ItemId::new("i9"),
+                source_id: SourceId::new("cam"),
+                transform: Some(ItemTransform::IDENTITY),
+                geometry: Some(BOXED),
+            }),
+            invalid(
+                "edits.0.geometry",
+                "send either `transform` or `geometry`, not both",
+            ),
+        ),
+        (
+            Batch::single(Edit::ItemSetGeometry {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+                geometry: ItemGeometry {
+                    tilt_deg: finite(10.0),
+                    ..BOXED
+                },
+            }),
+            invalid(
+                "edits.0.geometry.tilt_deg",
+                "tilt, turn, depth and perspective are not drawn yet, so they must be neutral",
+            ),
+        ),
+        (
+            Batch::single(Edit::ItemSetGeometry {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+                geometry: ItemGeometry {
+                    size: Size {
+                        width: finite(0.0),
+                        height: finite(10.0),
+                    },
+                    ..BOXED
+                },
+            }),
+            invalid(
+                "edits.0.geometry.size",
+                "item size must be greater than zero",
+            ),
+        ),
+        (
+            Batch::single(Edit::CanvasSetSize {
+                width: 0,
+                height: 720,
+            }),
+            invalid("edits.0.width", "must be from 1 to 8192"),
         ),
         // The first edit applies inside the batch, the second fails, and the whole batch
         // is rolled back.
@@ -528,6 +594,39 @@ const MOVED: ItemTransform = ItemTransform {
     ..ItemTransform::IDENTITY
 };
 
+/// The fixture's canvas, set by the first edit of [`collection`].
+pub const CANVAS: Canvas = Canvas {
+    width: 1280,
+    height: 720,
+};
+
+/// Item `i4`'s geometry: a 320×180 box centred at (640, 360), filled.
+const BOXED: ItemGeometry = ItemGeometry {
+    center: Vec2 {
+        x: finite(640.0),
+        y: finite(360.0),
+    },
+    size: Size {
+        width: finite(320.0),
+        height: finite(180.0),
+    },
+    fit_mode: FitMode::Fill,
+    rotation_deg: Finite32::ZERO,
+    tilt_deg: Finite32::ZERO,
+    turn_deg: Finite32::ZERO,
+    depth_px: Finite32::ZERO,
+    perspective_px: None,
+};
+
+/// `ItemInfo.transform` for [`BOXED`]: its unrotated top-left corner at scale (1, 1).
+const BOXED_VIEW: ItemTransform = ItemTransform {
+    position: Vec2 {
+        x: finite(480.0),
+        y: finite(270.0),
+    },
+    ..ItemTransform::IDENTITY
+};
+
 const CROP: Crop = Crop {
     left: 1,
     top: 2,
@@ -540,7 +639,9 @@ fn items_of_a() -> Vec<ItemInfo> {
     let plain = |item: &str, source: &str| ItemInfo {
         item_id: ItemId::new(item),
         source_id: SourceId::new(source),
+        placement: PlacementForm::Legacy,
         transform: ItemTransform::IDENTITY,
+        geometry: None,
         crop: Crop::NONE,
         visible: true,
     };
@@ -548,11 +649,26 @@ fn items_of_a() -> Vec<ItemInfo> {
         ItemInfo {
             item_id: ItemId::new("i3"),
             source_id: SourceId::new("cam"),
+            placement: PlacementForm::Legacy,
             transform: MOVED,
+            geometry: None,
             crop: CROP,
             visible: false,
         },
         plain("i1", "cam"),
         plain("i2", "b_src"),
     ]
+}
+
+/// Scene `b`'s one item, placed with a geometry.
+fn items_of_b() -> Vec<ItemInfo> {
+    vec![ItemInfo {
+        item_id: ItemId::new("i4"),
+        source_id: SourceId::new("cam"),
+        placement: PlacementForm::Geometry,
+        transform: BOXED_VIEW,
+        geometry: Some(BOXED),
+        crop: Crop::NONE,
+        visible: true,
+    }]
 }

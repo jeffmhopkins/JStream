@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:cda4a232b8931c5b", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B2 #176 history 0.10, B8 #171 audit) into B6, now protocol 0.11: mock contents hold; history and B6 edits unimplemented in the mock as stated" }
+verified = { hash = "b3:03b5a5e95e7b2c05", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; call() now covers history calls (B2) and the mock keeps canvas/geometry (B3); holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:c1cff271b5b82d9b", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B2 #176 history 0.10, B8 #171 audit) into B6, now protocol 0.11: mock bullet: every edit but 0.11's scene.set_role/item.move; scene_id own-scene check" }
+verified = { hash = "b3:21a987fc74e7a497", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; mock reads bullet (canvas, placement forms, outputs) and B2's history text hold against mock.rs" }
 -->
 
 ### The trait
@@ -101,7 +101,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   retry with a known key answers first; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but protocol 0.11's `scene.set_role` and `item.move` (which answer
+- every protocol edit but protocol 0.12's `scene.set_role` and `item.move` (which answer
   `internal`), with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
@@ -110,6 +110,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     names, and empty builtin kind names;
   - reorder indices out of range;
   - a placement edit's `scene_id` naming a scene other than the item's own;
+  - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
+    not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or
     either while a source's settings refer to it;
   - nesting cycles;
@@ -129,23 +131,13 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
   scene) and `output.list` (ordered by ID), each at the current `rev`. So it keeps
-  everything an edit sets: source names, kinds and settings, each item's transform,
-  crop and visibility, and each output's kind and target. `video.snapshot` is not one
-  of those reads: the mock has no compositor and answers it with `internal`, as it
-  does for any protocol variant it does not implement;
+  everything an edit sets: the canvas, source names, kinds and settings, each item's
+  placement (its transform, or its geometry and the transform view of it), crop and
+  visibility, and each output's kind and target. `video.snapshot` is not one of those
+  reads: the mock has no compositor and answers it with `internal`, as it does for any
+  protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
-  the way `Engine::with_output` does: it can be started, stopped and read with
-  `output.status`, but it is not in the collection, so `output.list` and `state.get`
-  don't report it and `output.set_key` answers `not_found` for it;
-- the stream-key actions with the engine's checks and errors. `output.set_key` answers
-  `not_found` for an output not in the collection, then `invalid_argument` (field
-  `key`) for an empty, over-long or whitespace key; `output.clear_key` always succeeds.
-  The keys live in memory, outside the collection: no `rev`, no event, kept when their
-  output is deleted. `output.status` reports `key_set` from them, and
-  `MockEngine::stream_key` lets a client test check what was stored. Unlike an
-  `Engine` built without `with_key_store`, which answers `action_failed`, the mock
-  always has a store, so clients can test the whole flow;
 - `state.changed` events carrying the request ID, and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
