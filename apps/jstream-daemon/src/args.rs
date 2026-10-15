@@ -99,8 +99,8 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             }
             "--collection" => {
                 return Err(
-                    "`--collection` is not supported yet: the engine has no persistence, \
-                     so it always starts with an empty collection"
+                    "`--collection` is not supported yet: the daemon doesn't load or save \
+                     a collection file, so it always starts with an empty collection"
                         .to_owned(),
                 );
             }
@@ -200,8 +200,8 @@ mod tests {
         assert_eq!(error("serve"), "unexpected argument `serve`");
     }
 
-    /// ARCH plans `--collection`; until the engine persists anything it is refused by
-    /// name rather than reported as unknown.
+    /// ARCH plans `--collection`; until the daemon wires the engine's collection file it
+    /// is refused by name rather than reported as unknown.
     #[test]
     fn collection_is_not_supported_yet() {
         assert!(

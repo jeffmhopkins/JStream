@@ -786,15 +786,17 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:fe28871dd73ab140", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-API-003 (schema_version and forward migrations in jstream-graph) and R-SEC-001 (secrets only in the OS credential store); both bullets hold" }
+verified = { hash = "b3:333fc86c8cb74fff", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6): persist/ now also stores scene roles; Collections and Asset files bullets hold" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
-  `jstream-graph`.
+  `jstream-graph`, which checks a loaded collection as it checks edits. `jstream-core`
+  loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source and filter records its kind's descriptor version, migrated on load
-  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
+  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until
+  kinds ship settings migrations, a source saved at another version is refused on load.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
 - **Control token:** a random token in a user-only file in the config directory

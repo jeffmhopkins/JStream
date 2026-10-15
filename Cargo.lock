@@ -869,7 +869,9 @@ name = "jstream-graph"
 version = "0.0.0"
 dependencies = [
  "jstream-protocol",
+ "serde",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]
