@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-media", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:e161d8c86d2b601e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-media row is unchanged and this Purpose still matches it" }
+verified = { hash = "b3:7e74e8dcb7e1b8c4", by = "agent:claude@session_01M7dd6pdhEEieUbct9m5TkJ", note = "F5: Packets bullet now names Codec::Hevc and Codec::Av1 and their framing (HEVC Annex B, AV1 one temporal unit of low-overhead OBUs), matching packet.rs; Codec::kind maps both to video; the ARCH crate-map row and ADR-0031/0014 still hold" }
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,
@@ -41,9 +41,11 @@ Contents:
   planar `SampleFormat`) and `AudioBuffer`, whose sample count is always whole frames.
 - **Packets:** `Packet` (codec, keyframe flag, pts, dts no later than pts, non-empty
   shared payload). `Codec` covers the [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)
-  baseline: H.264 and AAC. Payload framing is a convention this crate doesn't check:
-  H.264 payloads are Annex B (start codes, as OS encoders emit them) and AAC payloads are
-  raw access units without ADTS. Muxers convert to the container's framing
-  ([`jstream-mux`](../jstream-mux/README.md#purpose)).
+  baseline, H.264 and AAC, plus HEVC and AV1, the video codecs enhanced RTMP carries
+  ([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)). Payload framing is a
+  convention this crate doesn't check: H.264 and HEVC payloads are Annex B (start codes,
+  as OS encoders emit them), AV1 payloads are one temporal unit of low-overhead OBUs, and
+  AAC payloads are raw access units without ADTS. Muxers convert to the container's
+  framing ([`jstream-mux`](../jstream-mux/README.md#purpose)).
 - **Errors:** one `thiserror` enum, `MediaError`, whose variants carry the offending
   values ([R-RS-003](../../docs/RULES.md#R-RS-003)).
