@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:5535449a44b41d84", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; text as B7×D5 resolved it; D8 changes nothing this section describes (only master/output chains in protocol, graph and mock); holds" }
+verified = { hash = "b3:1b0bba0a53626170", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 core half: re-read; Audio filters, Runtime and Audio bullets now say Chain serves master and output taps, and audio sessions are shared per master bus or own per chained output; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -55,8 +55,8 @@ state machine. Contents:
 - **Audio filters** (`filters.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
-  `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's filters in
-  line with its source's audio chain.
+  `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's, the
+  master's or an output tap's filters in line with its owner's audio chain.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -83,8 +83,10 @@ state machine. Contents:
   one program stage: the render thread reads the platform capture mailbox, composites
   the program mix from the render snapshot the control side publishes
   (`runtime/render.rs`) and reads the frame back, and the mixer thread polls the media
-  clock. Encode threads live in the encoder sessions, one per encoder profile in use,
-  shared by the outputs on that profile. Each output's own thread muxes FLV and
+  clock. Encode threads live in the encoder sessions: one video session per encoder
+  profile in use, shared by the outputs on that profile, one audio session of the
+  master bus shared by the outputs with no audio chain, and one per output with an
+  audio chain. Each output's own thread muxes FLV and
   publishes it, or muxes MP4 and records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
@@ -92,7 +94,10 @@ state machine. Contents:
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
-  mixer input has its fader and its sends (silenced while it is `muted`);
+  mixer input has its fader and its sends (silenced while it is `muted`), the master
+  stage's audio chain runs on the mixer's master chain, and an output with an audio
+  chain has an output tap running it
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md));
   `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
   `audio.reset_loudness` restarts its integrated loudness.
@@ -188,7 +193,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c37b1e36107767b4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; text as B7×D5 resolved it; D8 changes nothing this section describes (only master/output chains in protocol, graph and mock); holds" }
+verified = { hash = "b3:39acec4a590f83e7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 core half: Audio routing now covers the master chain on MixerControl::master and output taps (add on start, release on stop, live chain edits, chain added while running waits for restart); checked against audio.rs, engine.rs, pipeline.rs; Encoder profiles unchanged; holds" }
 -->
 
 ### Engine and sessions
@@ -619,7 +624,21 @@ brings the mixer in line with the collection under the collection lock:
   latest, and stays muted until then. Every control is a few atomics, so a sync never
   waits on the mixer thread ([R-RT-003](../../docs/RULES.md#R-RT-003)), and the
   `Routed` lock is the last one taken. The program stage's microphone and desktop
-  inputs are not sources and keep sending to the master at unity.
+  inputs are not sources and keep sending to the master at unity;
+- the master stage's audio chain on the mixer's master chain (`MixerControl::master`),
+  which runs on every bus that feeds an output, and each running output tap's chain
+  (below), with `filters::Chain::apply`: a filter whose kind and position are
+  unchanged is updated in place, anything else rebuilds the chain. A filter the mixer
+  refuses is logged and bypassed.
+
+An output whose audio chain holds a filter, even a disabled one
+([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), gets an output
+tap on the master bus when it starts (`Engine::add_output_tap`), and its own audio
+encode fed from the tap's blocks, stamped earlier by its chain's latency. Its video
+still shares a session as *Encoder profiles* says, and the other outputs share one
+audio encode of the master bus, opened when the first of them starts. The tap is
+removed when the output stops; a chain added to a running output takes effect at its
+next start, while edits to an existing tap's chain apply live.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
 reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
@@ -1036,7 +1055,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:ee964bed8bad32e1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
+verified = { hash = "b3:5dedcf2bba42e4c1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 core half: encode threads paragraph now says shared master-bus audio session vs own session fed from the output tap by the mixer thread; checked against pipeline.rs launch/mixer_loop; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -1058,7 +1077,10 @@ routing* in Design). Every running output shares that one program stage (capture
 render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same encoder profile share one
-session, and the render and mixer threads take a new session's inputs from a channel,
+video session, outputs with no audio chain share one audio session of the master bus,
+and an output with an audio chain has an audio session of its own that the mixer thread
+feeds from the output's tap. The render and mixer threads take a new session's inputs
+from a channel,
 never a lock, and hand a finished session's input to the collector rather than drop
 it. While the stage has no session and no virtual camera it
 draws nothing but still adopts the latest render snapshot. Each output but a virtual

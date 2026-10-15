@@ -17,8 +17,8 @@ pub use pipeline::OutputStats;
 #[cfg(test)]
 pub(crate) use pipeline::{DrawFn, STOP_DRAIN};
 pub(crate) use pipeline::{
-    EncodeKey, Encoders, Gate, MediaHost, OpenDraw, Pending, PipelineEvent, Running, cpu_draw,
-    launch, launch_program, launch_vcam, parts_from,
+    EncodeKey, Encoders, Gate, MediaHost, OpenDraw, OutputEncode, Pending, PipelineEvent, Release,
+    Running, cpu_draw, launch, launch_program, launch_vcam, parts_from,
 };
 #[cfg(test)]
 pub(crate) use publish::tests::serve as serve_rtmp;

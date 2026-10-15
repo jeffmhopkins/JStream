@@ -126,7 +126,7 @@ impl AudioSources {
         let chains: BTreeMap<SourceId, Vec<Chained>> = state
             .sources()
             .filter(|source| targets.contains_key(source.id()))
-            .map(|source| (source.id().clone(), chain_of(source)))
+            .map(|source| (source.id().clone(), chain_of(source.filters())))
             .filter(|(_, chain)| !chain.is_empty())
             .collect();
         let mut wanted = lock(&self.wanted.state);

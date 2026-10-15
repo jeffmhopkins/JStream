@@ -10,15 +10,24 @@
 //! which the mixer thread measures on each block it mixes ([`MasterMeters`]).
 //!
 //! The audio sources' inputs are opened and closed by the program stage
-//! (`crate::audio_sources`, which opens none for a source whose audio is off); this
-//! module only sets them up. Not yet: `follow` (`when_shown`) is D6's activity gain,
-//! and filters: the mixer has filter chains (D7b), but the collection has no filters
-//! to route into them until they reach the protocol.
+//! (`crate::audio_sources`, which opens none for a source whose audio is off, and runs
+//! each source's filter chain); this module only sets them up.
+//!
+//! The master stage's audio chain runs on the mixer's master chain, so on every bus that
+//! feeds an output (ADR-0027, docs/adr/0027-program-master-and-output-chains.md). An
+//! output that starts with an audio chain of its own gets an output tap on the master
+//! bus, which runs that chain after the master's; the output encodes its audio from the
+//! tap instead of sharing the master bus's encode. Each sync brings both chains in line
+//! with the collection, so their filters change live. Not yet: `follow` (`when_shown`) is
+//! D6's activity gain.
 
+use crate::filters::{Chain, chain_of};
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
-use jstream_audio::{BusControl, InputControl, MeterReading, MixerControl};
+use jstream_audio::{
+    BusControl, InputControl, MeterReading, MixerControl, OutputTapControl, OutputTapId,
+};
 use jstream_graph::State;
-use jstream_protocol::{BusId, BusMeter, Finite32, Loudness, SourceId, SourceMeter};
+use jstream_protocol::{BusId, BusMeter, Finite32, Loudness, OutputId, SourceId, SourceMeter};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -41,6 +50,18 @@ struct Attached {
     /// sync tries again.
     removing: Vec<BusControl>,
     meters: Arc<MasterMeters>,
+    /// The master stage's audio chain, on the mixer's master chain.
+    master_chain: Chain,
+    /// The output tap of each running output with its own audio chain.
+    taps: BTreeMap<OutputId, Tap>,
+    /// Output taps whose removal the mixer refused: each sync tries again.
+    removing_taps: Vec<OutputTapControl>,
+}
+
+/// One output's tap and the chain it runs.
+struct Tap {
+    control: OutputTapControl,
+    chain: Chain,
 }
 
 /// What the program stage hands the engine when its mixer opens.
@@ -67,6 +88,9 @@ impl AudioRouting {
             buses: BTreeMap::new(),
             removing: Vec::new(),
             meters: mixer.meters,
+            master_chain: Chain::default(),
+            taps: BTreeMap::new(),
+            removing_taps: Vec::new(),
         });
         self.sync(state, inputs);
         self.attaches
@@ -83,15 +107,87 @@ impl AudioRouting {
         }
     }
 
-    /// Brings the mixer in line with `state`: adds and removes buses, and sets every
-    /// fader, mute and send, those of the audio sources' `inputs` (which the program
-    /// stage opens and closes, `crate::audio_sources`) included. Does nothing while no
-    /// mixer runs.
+    /// Adds an output tap on the master bus for `output_id`, running its audio chain as
+    /// `state` says, for an output that encodes its own audio (ADR-0027). The engine
+    /// keeps the tap's chain in line on every sync, until
+    /// [`remove_output_tap`](Self::remove_output_tap).
+    ///
+    /// # Errors
+    /// When no mixer runs, or the mixer refuses the tap.
+    pub(crate) fn add_output_tap(
+        &mut self,
+        output_id: &OutputId,
+        state: &State,
+    ) -> Result<OutputTapControl, String> {
+        let attached = self
+            .attached
+            .as_mut()
+            .ok_or("the program mixer is not running")?;
+        let control = attached
+            .control
+            .add_output_tap(attached.master.id())
+            .map_err(|err| format!("output tap: {err}"))?;
+        let mut chain = Chain::default();
+        if let Some(output) = state.output(output_id) {
+            for reason in chain.apply(&control, &chain_of(output.filters())) {
+                tracing::warn!(output_id = %output_id, reason, "output filter bypassed");
+            }
+        }
+        if let Some(old) = attached.taps.insert(
+            output_id.clone(),
+            Tap {
+                control: control.clone(),
+                chain,
+            },
+        ) && !old.control.remove()
+        {
+            attached.removing_taps.push(old.control);
+        }
+        Ok(control)
+    }
+
+    /// Removes `output_id`'s tap `tap`, once its output has stopped. A tap of an earlier
+    /// start, or of a mixer that has stopped, is left alone.
+    pub(crate) fn remove_output_tap(&mut self, output_id: &OutputId, tap: OutputTapId) {
+        let Some(attached) = &mut self.attached else {
+            return;
+        };
+        if attached
+            .taps
+            .get(output_id)
+            .is_some_and(|own| own.control.id() == tap)
+            && let Some(own) = attached.taps.remove(output_id)
+            && !own.control.remove()
+        {
+            attached.removing_taps.push(own.control);
+        }
+    }
+
+    /// Brings the mixer in line with `state`: adds and removes buses, sets every fader,
+    /// mute and send, those of the audio sources' `inputs` (which the program stage opens
+    /// and closes, `crate::audio_sources`) included, and the master's and the output
+    /// taps' filter chains. Does nothing while no mixer runs.
     pub(crate) fn sync(&mut self, state: &State, inputs: &BTreeMap<SourceId, InputControl>) {
         let Some(attached) = &mut self.attached else {
             return;
         };
         attached.removing.retain(|bus| !bus.remove());
+        attached.removing_taps.retain(|tap| !tap.remove());
+        for reason in attached
+            .master_chain
+            .apply(&attached.control.master(), &chain_of(state.master()))
+        {
+            tracing::warn!(reason, "master filter bypassed");
+        }
+        for (output_id, tap) in &mut attached.taps {
+            // A running output can't be deleted, so its chain is always there.
+            let Some(output) = state.output(output_id) else {
+                continue;
+            };
+            for reason in tap.chain.apply(&tap.control, &chain_of(output.filters())) {
+                tracing::warn!(output_id = %output_id, reason, "output filter bypassed");
+            }
+        }
         let gone: Vec<BusId> = attached
             .buses
             .keys()
