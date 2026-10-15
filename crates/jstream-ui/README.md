@@ -52,7 +52,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fff4ae2c1a30c953", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "merge-only round with main e1e2a94: re-read; G3d's host and virtual camera text unchanged and still matches host.rs and outputs.rs, main's Q3 e2e text sits beside it" }
+verified = { hash = "b3:d15654fb8b3ed64e", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "merge of main dab6b94 (D5, D6) and review N5: re-read; no-camera gloss now says not on Windows or --no-vcam, with Windows 10's own reason passed through, as engine.rs and sink.rs word them; main's text unchanged; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -102,8 +102,9 @@ verified = { hash = "b3:fff4ae2c1a30c953", by = "agent:claude@session_01BL6HM3DJ
   can't be started, and the card gives the `jstream-daemon --register-vcam` hint. In a
   browser the page can't tell, so it lets the engine decide and explains its refusal:
   an unregistered camera ("is not registered") gets the full registration command, and
-  an engine with no camera at all ("no virtual camera": not Windows 11, or the desktop
-  app's `--no-vcam`) gets that, with no registration advice. The health line sums `stats.tick`'s drop totals over the last five ticks; a
+  an engine with no camera at all ("no virtual camera": not running on Windows, or the
+  desktop app's `--no-vcam`) gets that, with no registration advice; on Windows 10 the
+  sink's own reason ("it needs Windows 11") is shown as it is. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
