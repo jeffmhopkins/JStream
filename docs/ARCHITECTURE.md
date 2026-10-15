@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:19704361cfc23bd4", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took main's Built-so-far (encoder profiles, sources), dropped scene.create's role from Not yet; role set by scene.create or scene.set_role" }
+verified = { hash = "b3:8069028070c00f3d", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; main's role text and T1's preview/transitions text both hold; Not yet list drops both the role and the transition fields" }
 -->
 
 ```
@@ -533,7 +533,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:ef16d40b03157f0b", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 merge of main: text is main's (#264 verified it); this PR adds only a protocol test, nothing on number parsing" }
+verified = { hash = "b3:de2fa87397bfc5b3", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): Studio mode and Transitions bullets now say protocol 0.18 (placeholder past main's 0.17); main's role text holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -667,7 +667,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:b7e9fc969c2bf475", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: re-read; Origin/preflight reasoning from round 1 intact, main unchanged here; holds" }
+verified = { hash = "b3:3cdb0e45e7413aa8", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; tool list holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -871,7 +871,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:042c342d215b5bc4", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: rebuild passes the role on scene.create; Collections bullet holds" }
+verified = { hash = "b3:e5648d2ea282eafe", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; presets' kind_version holds beside main's rebuild role" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

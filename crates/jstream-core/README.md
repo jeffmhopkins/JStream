@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:3a75e323ed3b2ea2", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: main's text; re-checked its render-snapshot mentions (program mix drawn from it, PNG on the snapshot thread) make no lock-free claim for the snapshot thread, holds" }
+verified = { hash = "b3:ab97b55843428c0c", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; Studio and Transitions bullets hold beside main's text" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -162,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5f83b0d81693f253", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 merge of main: stale via protocol design's number sentence only; engine text unaffected" }
+verified = { hash = "b3:1ff8f04e3716b253", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; main's render-snapshot lock wording and T1's preview/transitions paragraphs both hold" }
 -->
 
 ### Engine and sessions
@@ -948,7 +948,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:037387eaec0b2653", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
+verified = { hash = "b3:7a0d280f94107ea2", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; render thread samples a running transition at the tick time; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

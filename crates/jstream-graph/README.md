@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:66c255ea11558ac5", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 merge of main: text is main's (Q1 tests paragraph); stale via protocol design's number sentence only" }
+verified = { hash = "b3:ac538970e7828985", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): scene.delete inverse now names scene.set_transitions beside main's role-carrying scene.create; main's proptest paragraph holds (transition edits not in its generator)" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -73,7 +73,8 @@ the batch **touched**.
   Undo design requires: removing an item is undone by `item.add`, then `item.reorder`,
   `item.set_crop` and `item.set_visible` only where the item differed from what
   `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
-  group), `scene.reorder` and each item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
+  group), `scene.reorder`, `scene.set_transitions` when it had an override, and each
+  item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
   history (in `jstream-core`) chooses it.
 - **Touched sets** (`touched.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
   `Touched::of(edits, inverse)` names, from a batch's edits and its inverse's (so a

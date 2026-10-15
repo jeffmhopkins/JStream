@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b4650be831c06275", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: src change is one envelope test; contents list and layer description unchanged" }
+verified = { hash = "b3:3e2270ad31d82a56", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): version line: 0.18 placeholder for T1 above main's 0.17 (scene.create role); contents hold" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -132,7 +132,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:7aa5f3f591196354", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 (N2): sentence now says non-integer numbers are f64; rest is main's text" }
+verified = { hash = "b3:c0a2ce7939a360c6", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): Undo paragraph now names item.set_transition, scene.set_transitions and transition.delete's inverse beside main's role text; transitions subsection marked 0.18 placeholder" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -502,10 +502,12 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `canvas.set_size` restores the canvas, and `item.set_geometry` and
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
-item's form) plus whichever of `item.reorder`, `item.set_crop` and
-`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`
-with the scene's `role` (omitted for `scene`), `scene.reorder` unless it was last, and
-each item's restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`
+and `item.set_transition` the removed item needs, and undoing `scene.delete` is
+`scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
+was last, `scene.set_transitions` if it had an override, and each item's restore,
+bottom to top. Undoing `transition.delete` is `transition.create`, then a
+`scene.set_transitions` for each override it cleared. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings and its
 `duplicated_from`, undoing `item.set_source` is `item.set_source` back, and undoing

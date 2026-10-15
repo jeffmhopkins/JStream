@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f2f2278743d2e4c4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed: the item.move cycle golden now expects the mock's cycle path; error format (error: <message> (<code>)) and exit code 17 unchanged" }
+verified = { hash = "b3:66f5326faf6cd2c0", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; main's scene.create role and T1's switch/preview commands both hold" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:d87d877168335337", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took B6-f's Edits bullet and added scene.create's optional role:group/role:scene; grouping batch now creates the scene as a group" }
+verified = { hash = "b3:fb1f04b4db40cc0b", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; main's scene.create role:group text and T1's scene switch --preset / studio set-preview rows both hold" }
 -->
 
 ```sh
@@ -236,7 +236,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fbd4a9d27c04d5d8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed (cycle reason golden names the path); design bullets don't quote engine reasons" }
+verified = { hash = "b3:630e8f0e190b9ef7", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; main's one optional trailing role: text holds, T1 changes nothing here" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

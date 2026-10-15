@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:d062616cd6fdcbc4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: only lib.rs's test module and style.css's header comment changed; contents list holds" }
+verified = { hash = "b3:589f22ce4668b274", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; UI shows program via studio.get (preview not used yet); holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:d4503391660c5cb0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: only lib.rs's test module and style.css's header comment changed; no design bullet describes either; holds" }
+verified = { hash = "b3:cd268cea238292db", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -118,7 +118,7 @@ verified = { hash = "b3:d4503391660c5cb0", by = "agent:claude@session_01K4N6DrL8
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:8120b6e7a0057203", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: Styles bullet now says the test refuses any style attribute, static or set at run time (style=move, attr:style), outside test modules; matches sets_style_attribute in lib.rs" }
+verified = { hash = "b3:c635fd8acc8b2eba", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; canvas follows program and studio.changed; the new preview fields don't change it; holds" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
