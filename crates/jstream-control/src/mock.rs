@@ -21,11 +21,11 @@ use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
     Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EntityKind, Event,
-    GeometryError, Hello, HistoryCall, HistoryDirection, IdempotencyKey, ItemGeometry, ItemId,
-    ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION,
-    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
-    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, Settings, SourceId,
-    SourceInfo, SourceKind, Welcome,
+    GeometryError, Hello, HistoryCall, HistoryDirection, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId,
+    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
+    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
+    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind,
+    Welcome,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -645,6 +645,7 @@ impl State {
                     .map(|scene| SceneSummary {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
+                        role: SceneRole::Scene,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                     })
                     .collect(),
@@ -682,6 +683,7 @@ impl State {
                     .map(|scene| SceneInfo {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
+                        role: SceneRole::Scene,
                         items: self.collection.item_infos(scene),
                     })
                     .collect(),
@@ -907,18 +909,26 @@ impl Collection {
                     index: wire_index(from)?,
                 }]
             }
-            Edit::ItemSetTransform { item_id, transform } => {
-                let item = self.existing_item(&item_id)?;
-                let old = set_placement(&item_id, item);
+            Edit::ItemSetTransform {
+                item_id,
+                scene_id,
+                transform,
+            } => {
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
+                let old = set_placement(&item_id, &scene_id, item);
                 item.transform = transform;
                 item.geometry = None;
                 vec![old]
             }
-            Edit::ItemSetGeometry { item_id, geometry } => {
-                self.existing_item(&item_id)?;
+            Edit::ItemSetGeometry {
+                item_id,
+                scene_id,
+                geometry,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?;
                 let view = geometry_view(&geometry, at)?;
                 let item = self.existing_item(&item_id)?;
-                let old = set_placement(&item_id, item);
+                let old = set_placement(&item_id, &scene_id, item);
                 item.transform = view;
                 item.geometry = Some(geometry);
                 vec![old]
@@ -932,16 +942,29 @@ impl Collection {
                     height: old.height,
                 }]
             }
-            Edit::ItemSetCrop { item_id, crop } => {
-                let item = self.existing_item(&item_id)?;
+            Edit::ItemSetCrop {
+                item_id,
+                scene_id,
+                crop,
+            } => {
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
                 let old = std::mem::replace(&mut item.crop, crop);
-                vec![Edit::ItemSetCrop { item_id, crop: old }]
+                vec![Edit::ItemSetCrop {
+                    item_id,
+                    scene_id,
+                    crop: old,
+                }]
             }
-            Edit::ItemSetVisible { item_id, visible } => {
-                let item = self.existing_item(&item_id)?;
+            Edit::ItemSetVisible {
+                item_id,
+                scene_id,
+                visible,
+            } => {
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
                 let old = std::mem::replace(&mut item.visible, visible);
                 vec![Edit::ItemSetVisible {
                     item_id,
+                    scene_id,
                     visible: old,
                 }]
             }
@@ -1206,6 +1229,31 @@ impl Collection {
             .get_mut(item_id)
             .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))
     }
+
+    /// The item a placement edit changes, with its optional `scene_id` checked as
+    /// `jstream-graph` checks it: only the item's own scene, until keyframe scenes exist.
+    fn placement(
+        &mut self,
+        item_id: &ItemId,
+        scene_id: Option<&SceneId>,
+        at: usize,
+    ) -> Result<&mut Item, ProtocolError> {
+        let own = self.existing_item(item_id)?.scene_id.clone();
+        if let Some(scene_id) = scene_id
+            && *scene_id != own
+        {
+            self.existing_scene(scene_id)?;
+            return Err(invalid(
+                at,
+                "scene_id",
+                format!(
+                    "item `{item_id}` is in scene `{own}`, and only its own scene can be named \
+                     until keyframe scenes exist"
+                ),
+            ));
+        }
+        self.existing_item(item_id)
+    }
 }
 
 /// The largest canvas side the mock accepts, the same as the engine's.
@@ -1293,16 +1341,18 @@ fn wire_index(index: usize) -> Result<u32, ProtocolError> {
     })
 }
 
-/// The edit that puts `item`'s current placement back on `item_id`, in its own form, as
-/// `jstream-graph` builds it.
-fn set_placement(item_id: &ItemId, item: &Item) -> Edit {
+/// The edit that puts `item`'s current placement back on `item_id`, in its own form and
+/// addressed by the same `scene_id` as the edit it undoes, as `jstream-graph` builds it.
+fn set_placement(item_id: &ItemId, scene_id: &Option<SceneId>, item: &Item) -> Edit {
     match item.geometry {
         Some(geometry) => Edit::ItemSetGeometry {
             item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
             geometry,
         },
         None => Edit::ItemSetTransform {
             item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
             transform: item.transform,
         },
     }
@@ -1337,12 +1387,14 @@ fn restore_item(
     if item.crop != Crop::NONE {
         edits.push(Edit::ItemSetCrop {
             item_id: item_id.clone(),
+            scene_id: None,
             crop: item.crop,
         });
     }
     if !item.visible {
         edits.push(Edit::ItemSetVisible {
             item_id: item_id.clone(),
+            scene_id: None,
             visible: false,
         });
     }
@@ -1786,6 +1838,7 @@ mod tests {
                 add("a", "i2", "nested_b"),
                 Edit::ItemSetVisible {
                     item_id: ItemId::new("i1"),
+                    scene_id: None,
                     visible: false,
                 },
                 Edit::ItemReorder {
@@ -1953,6 +2006,7 @@ mod tests {
                 // `i4` is placed by a geometry: its inverse sets the geometry back.
                 Edit::ItemSetTransform {
                     item_id: ItemId::new("i4"),
+                    scene_id: None,
                     transform: ItemTransform::IDENTITY,
                 },
                 Edit::SourceRename {

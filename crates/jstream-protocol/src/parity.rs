@@ -13,7 +13,7 @@ use crate::{
     Batch, Canvas, Crop, Edit, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemInfo,
     ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind, PlacementForm,
     ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo,
-    SceneSummary, Size, SourceId, SourceInfo, SourceKind, Vec2,
+    SceneRole, SceneSummary, Size, SourceId, SourceInfo, SourceKind, Vec2,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -79,14 +79,17 @@ pub fn collection() -> Batch {
             add("i3", "cam"),
             Edit::ItemSetTransform {
                 item_id: ItemId::new("i3"),
+                scene_id: None,
                 transform: MOVED,
             },
             Edit::ItemSetCrop {
                 item_id: ItemId::new("i3"),
+                scene_id: None,
                 crop: CROP,
             },
             Edit::ItemSetVisible {
                 item_id: ItemId::new("i3"),
+                scene_id: None,
                 visible: false,
             },
             Edit::ItemReorder {
@@ -142,11 +145,13 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     SceneSummary {
                         scene_id: scene("b"),
                         name: "B".into(),
+                        role: SceneRole::Scene,
                         item_count: 1,
                     },
                     SceneSummary {
                         scene_id: scene("a"),
                         name: "A".into(),
+                        role: SceneRole::Scene,
                         item_count: 3,
                     },
                 ],
@@ -199,11 +204,13 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     SceneInfo {
                         scene_id: scene("b"),
                         name: "B".into(),
+                        role: SceneRole::Scene,
                         items: items_of_b(),
                     },
                     SceneInfo {
                         scene_id: scene("a"),
                         name: "A".into(),
+                        role: SceneRole::Scene,
                         items: items_of_a(),
                     },
                 ],
@@ -307,6 +314,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
         (
             Batch::single(Edit::ItemSetGeometry {
                 item_id: ItemId::new("i1"),
+                scene_id: None,
                 geometry: ItemGeometry {
                     tilt_deg: finite(10.0),
                     ..BOXED
@@ -320,6 +328,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
         (
             Batch::single(Edit::ItemSetGeometry {
                 item_id: ItemId::new("i1"),
+                scene_id: None,
                 geometry: ItemGeometry {
                     size: Size {
                         width: finite(0.0),

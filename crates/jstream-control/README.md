@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:a63d7c9044d3280f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#183) into B2-f3: re-read; Mock bullet holds with undo plus B3's canvas and geometry" }
+verified = { hash = "b3:b340c8ccb1e16eef", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; mock contents hold; set_role/item.move unimplemented in the mock as stated" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:09deab3c3a9a1c6f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#183 B3) into B2-f3: re-read Mock; kept the outputs and stream-key bullets #183's merge had dropped; undo bullet now covers placement form and canvas.set_size inverses, matching mock.rs set_placement/restore_item and the parity teardown test" }
+verified = { hash = "b3:3503e916c128a77f", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: mock bullet: every edit but 0.12's set_role/item.move; check list has both B3's geometry/canvas checks and B6's scene_id own-scene check, which set_geometry now also takes" }
 -->
 
 ### The trait
@@ -101,13 +101,15 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but protocol 0.12's `scene.set_role` and `item.move` (which answer
+  `internal`), with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
   - reorder indices out of range;
+  - a placement edit's `scene_id` naming a scene other than the item's own;
   - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
     not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or

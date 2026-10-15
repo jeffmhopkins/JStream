@@ -11,9 +11,9 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-vcam-windows/src/**"]
+covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:fd4266ae54a03d8b", by = "agent:claude", note = "Merge of main into #180: main only restamped this section; re-read Trust and Tests paragraphs against trust.rs, win/session.rs and Mapping::owner_sid; holds" }
+verified = { hash = "b3:547f49f5e93f54bc", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#200 session trust rule) into ADR-0042: purpose also covers Cargo.toml; 'depends only on layer-0 crates and Microsoft's windows bindings' still matches (jstream-vcam-proto, windows, windows-core); main's trust text is main's" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
