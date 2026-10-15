@@ -14,6 +14,8 @@ pub use pipeline::OutputStats;
 #[cfg(test)]
 pub(crate) use pipeline::{DrawFn, OpenDraw};
 pub(crate) use pipeline::{Gate, MediaHost, Pending, PipelineEvent, Running, launch, parts_from};
+#[cfg(test)]
+pub(crate) use publish::tests::serve as serve_rtmp;
 pub use publish::{
-    LinkState, LivePublish, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
+    LinkState, LivePublish, OpenPublish, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
 };

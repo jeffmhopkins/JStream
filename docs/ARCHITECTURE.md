@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:c34b01f27b75ec57", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#132 review N1/N2 (lost when #132 auto-merged first): the handover paragraph now says each reader's slot starts as the stopped marker (a never-run thread waits on nothing), a starting thread clears then loads like a resuming one, and the marker/generation stores and reads are SeqCst with a SeqCst fence between each side's store and load (store-buffering), which allocates, locks and waits on nothing so R-RT-001/002 hold; rest of the section unchanged" }
+verified = { hash = "b3:2a23f997fce1180e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main into #135: re-read the section; the #132/#139 handover text is main's and unchanged, and #135's runtime change (OpenPublish opener held in MediaHost, called on the control thread that runs output.start, outside the engine locks) fits 'once the host has injected platform backends and a publish target'; no thread, RT or failure-path change" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from

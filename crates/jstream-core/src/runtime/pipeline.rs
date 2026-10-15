@@ -45,7 +45,7 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
-use crate::runtime::{LinkState, LivePublish};
+use crate::runtime::{LinkState, LivePublish, OpenPublish};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
 const FRAME_NUM: u32 = 1;
@@ -125,6 +125,8 @@ pub(crate) struct MediaHost {
     /// test raised it.
     pub(crate) open_timeout: Mutex<Duration>,
     pub(crate) publish: Mutex<Option<Box<dyn LivePublish>>>,
+    /// Opens a target for a start when `publish` holds none.
+    pub(crate) open_publish: Mutex<Option<OpenPublish>>,
     pub(crate) gate: Mutex<Gate>,
     pub(crate) gate_cv: Condvar,
     pub(crate) next_generation: AtomicU64,
@@ -155,6 +157,7 @@ impl MediaHost {
             draw: Mutex::new(gpu_draw()),
             open_timeout: Mutex::new(OPEN_TIMEOUT),
             publish: Mutex::new(None),
+            open_publish: Mutex::new(None),
             gate: Mutex::new(Gate {
                 running: None,
                 pending: None,
@@ -359,7 +362,8 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
 }
 
 /// Opens the devices and encoders, then the threads. On failure the publish
-/// target is dropped; the host has to set another one.
+/// target is dropped: a one-shot target has to be set again, an opener opens a new
+/// one on the next start.
 pub(crate) fn launch(
     parts: Parts,
     publish: Box<dyn LivePublish>,
