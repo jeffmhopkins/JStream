@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:ae6a5081c076101c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via ARCH crate-map apps row (adds jstream-browser-helper); the daemon creates no browser backend yet, text holds" }
+verified = { hash = "b3:0a2209e42961966b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4: cargo fmt of the browser test only; Serving bullet with the browser feature holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -35,7 +35,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, [Design](#design)), installs
+  file and the placeholder outputs; on Windows a live one, which with the `browser`
+  feature also opens browser sources, [Design](#design)), installs
   the signal handlers that stop it, then binds the server with MCP on.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
@@ -185,7 +186,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1c353819440fc545", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via core design (with_browser, page audio inputs); the daemon calls neither and its design text names neither, holds" }
+verified = { hash = "b3:7ccf4babaceee2b6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4: cargo fmt of the browser test only; Browser sources bullet re-read against cef_browser/browse and holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -249,6 +250,24 @@ verified = { hash = "b3:1c353819440fc545", by = "agent:claude@session_01E4Mb9bbG
   moves, rather than in a directory of its own. Its entries are written as they come;
   on a graceful stop the writer finishes the queue when the engine is dropped. Without `--collection` nothing is saved, as before
   ([Open questions](#open-questions), 6).
+- **Browser sources** (`serve.rs`, feature `browser`, Windows only). Built with
+  `--features browser`, the daemon gives the engine `jstream-browser`'s CEF backend
+  (`Engine::with_browser`) before it goes live, so `browser` sources open their pages
+  ([jstream-browser › Purpose](../../crates/jstream-browser/README.md#purpose)). First
+  it opens a GPU device on the media adapter with the backends' `GpuInterop::open_device`
+  and hands it over with `use_device`, so a page's first paint already lands on it. CEF
+  starts with the first page: its subprocess exe, `jstream-browser-helper.exe`, and CEF's
+  runtime files must be next to `jstream-daemon.exe`; its cache is the data directory's
+  `cef` folder and its log the log directory's `cef.log`. Nothing about the browser
+  stops the daemon: a device that won't open leaves pages playing audio with their
+  frames dropped, and a daemon whose own path is unknown leaves browser sources empty;
+  both are logged at `warn`. The program mix doesn't draw pages' frames yet (that is the
+  render import of GPU frames), so the device the compositor will sample is still to be
+  settled there. The feature is off by default because building it downloads CEF and
+  builds its C++ wrapper with CMake and Ninja (ADR-0046); `dox` type-checks the wiring
+  without CEF, as CI's Windows clippy does. Without the feature, `browser` sources show
+  nothing, as on other platforms. `browse` is that wiring over any backend, which is how
+  the tests run it on `jstream-browser`'s fake.
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server
   answers MCP at `/mcp` on the same port, with its default MCP session cap and idle
   timeout. Each MCP session is one more engine client through the same `Connector`, so
@@ -326,7 +345,9 @@ verified = { hash = "b3:1c353819440fc545", by = "agent:claude@session_01E4Mb9bbG
   (`--token-file`, `--port`, `--output`, `--log-dir`, `--log-level`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
-  `jstream-platform` (`Backends`, the key store trait), `jstream-platform-windows` on
+  `jstream-platform` (`Backends`, the key store trait), `jstream-browser` (the
+  `BrowserBackend` seam, and its CEF backend with the `browser` feature; already in the
+  tree through core), `jstream-platform-windows` on
   Windows only (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `anyhow`, `tracing` (the startup line) and `blake3`
@@ -339,7 +360,8 @@ verified = { hash = "b3:1c353819440fc545", by = "agent:claude@session_01E4Mb9bbG
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
-  `jstream-platform` (feature `fake`), for the live engine and opener tests.
+  `jstream-platform` (feature `fake`), for the live engine and opener tests;
+  `jstream-browser` (feature `fake`), for the browser wiring's test.
 
 <a id="open-questions"></a>
 ### Open questions

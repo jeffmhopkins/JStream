@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:d40cf29820e1fc9f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via ARCH crate-map apps row (adds jstream-browser-helper); the desktop app creates no browser backend yet, text holds" }
+verified = { hash = "b3:ac7c8c9cc9a2eea4", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4: stale via ARCH crate-map apps row, which now says desktop links jstream-browser for a browser backend; the desktop app creates none yet (U5's next PR), and its purpose text makes no claim about it; holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a

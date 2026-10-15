@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:3ae2c886b0075e0a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 after merging main: stale via crate-map only (plugin-proto row, browser rows); CLI text unaffected" }
+verified = { hash = "b3:a184a1cfa4cda719", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4: stale via ARCH crate-map apps row only; CLI text (control and mcp, never the engine) unaffected" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client

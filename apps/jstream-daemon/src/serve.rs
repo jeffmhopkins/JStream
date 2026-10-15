@@ -11,6 +11,8 @@ use std::future::Future;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
+#[cfg(any(all(windows, feature = "browser"), test))]
+use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
 #[cfg(any(windows, test))]
 use {
     jstream_core::{LivePublish, OpenPublish, PublishError},
@@ -52,12 +54,17 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
         .cloned()
         .fold(engine, Engine::with_output);
     #[cfg(windows)]
-    let engine = live(
-        engine,
-        windows_backends()?,
-        Arc::new(jstream_platform_windows::WindowsCredentials),
-        rtmp(),
-    );
+    let engine = {
+        let backends = windows_backends()?;
+        #[cfg(feature = "browser")]
+        let engine = cef_browser(engine, &backends, options);
+        live(
+            engine,
+            backends,
+            Arc::new(jstream_platform_windows::WindowsCredentials),
+            rtmp(),
+        )
+    };
     #[cfg(not(windows))]
     let engine = Arc::new(engine);
     Ok(engine)
@@ -79,6 +86,62 @@ fn windows_backends() -> anyhow::Result<Backends> {
         gpu: Arc::new(WindowsGpu::new()),
         vcam: None,
     })
+}
+
+/// The CEF browser backend for `browser` sources (feature `browser`, ADR-0046), on a
+/// GPU device of the engine's media adapter, opened through `backends.gpu`.
+///
+/// CEF starts when the first page opens, with its subprocess exe
+/// (`jstream-browser-helper.exe`) next to the daemon's, its cache in the data
+/// directory's `cef` folder and its log in the log directory's `cef.log`. Neither a
+/// missing data directory nor a device that won't open stops the daemon: without a
+/// device, pages still play their audio and only their frames are dropped, and when the
+/// daemon's own path is unknown, browser sources show nothing (both are logged).
+#[cfg(all(windows, feature = "browser"))]
+fn cef_browser(engine: Engine, backends: &Backends, options: &Options) -> Engine {
+    use jstream_browser::{CefBackend, CefConfig};
+    let logs = options
+        .log_dir
+        .as_ref()
+        .map(std::path::PathBuf::from)
+        .or_else(crate::logs::default_dir);
+    let Some(state) = crate::logs::data_dir().or_else(|| logs.clone()) else {
+        tracing::warn!("no data directory for the browser's cache, so browser sources are off");
+        return engine;
+    };
+    let mut config = match CefConfig::beside_exe(&state) {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::warn!(%error, "browser sources are off");
+            return engine;
+        }
+    };
+    config.log_file = logs.map(|dir| dir.join("cef.log"));
+    let gpu = backends
+        .gpu
+        .open_device()
+        .inspect_err(|error| {
+            tracing::warn!(%error, "no GPU device for browser pages: their frames are dropped");
+        })
+        .ok();
+    browse(
+        engine,
+        Arc::new(CefBackend::new(config, Arc::clone(&backends.clock))),
+        gpu.as_ref(),
+    )
+}
+
+/// Gives `engine` `browser` for its `browser` sources, delivering pages' frames on `gpu`
+/// (`BrowserBackend::use_device`): the device must come first, so the first page's first
+/// paint already has it.
+#[cfg(any(all(windows, feature = "browser"), test))]
+pub fn browse(
+    engine: Engine,
+    browser: Arc<dyn BrowserBackend>,
+    gpu: Option<&GpuContext>,
+) -> Engine {
+    browser.use_device(gpu);
+    engine.with_browser(browser)
 }
 
 /// Connects with `connect_rtmp`, whose errors never carry the key (R-SEC-001).
@@ -635,5 +698,44 @@ mod tests {
             "not json"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `browse` hands the backend the device before the engine opens any page, and the
+    /// engine opens a page for a `browser` source through it.
+    #[tokio::test]
+    async fn browser_sources_open_pages_through_the_backend() {
+        use jstream_browser::fake::FakeBrowser;
+        use jstream_control::protocol::{Settings, SourceId, SourceKind};
+
+        let browser = FakeBrowser::new();
+        let engine = super::browse(Engine::new(), browser.clone(), None);
+        assert!(!browser.has_device(), "no device was given");
+        let control = session(&engine).await;
+        timely(
+            control.call(Call::Batch(Batch::single(Edit::SourceCreate {
+                source_id: SourceId::new("page"),
+                name: "Page".to_owned(),
+                kind: SourceKind::Builtin {
+                    kind: "browser".into(),
+                },
+                settings: Settings(
+                    [("url".to_owned(), "https://example.com/".into())]
+                        .into_iter()
+                        .collect(),
+                ),
+                duplicated_from: None,
+            }))),
+        )
+        .await
+        .expect("source.create");
+        timely(async {
+            while browser.pages().is_empty() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        let pages = browser.pages();
+        assert_eq!(pages.len(), 1);
+        assert!(!pages[0].is_closed());
     }
 }
