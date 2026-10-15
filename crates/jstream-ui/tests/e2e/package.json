@@ -1,0 +1,13 @@
+{
+  "name": "jstream-ui-e2e",
+  "private": true,
+  "description": "End-to-end tests of the JStream web UI: Playwright against a trunk build and the mock daemon.",
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}
