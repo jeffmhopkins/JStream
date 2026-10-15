@@ -219,3 +219,11 @@ relied_on = "trunk builds a Rust wasm32 binary into a static site (index.html, t
 review_every = "180d"
 status = "unverified"
 checked_note = "Release v0.21.14's linux binary built jstream-ui with a wasm-bindgen 0.2.129 CLI on PATH; the page itself was not reachable from the session"
+
+[[external]]
+id = "cargo-fuzz-book"
+url = "https://rust-fuzz.github.io/book/cargo-fuzz.html"
+relied_on = "cargo-fuzz is installed with `cargo install cargo-fuzz`, needs a nightly toolchain, and runs a target with `cargo fuzz run <target>` (fuzz/README.md)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not fetched from the PR's environment (proxy refused the host); the commands were run against cargo-fuzz 0.13.2"

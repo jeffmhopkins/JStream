@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:5b1ea3ae1a8b1e16", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 cascade from jstream-server design (zero limits refused at bind): re-read; steps set no limits; holds" }
+verified = { hash = "b3:9063782361f58e79", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main into #143: stale through server design (main's subprotocol citation, this PR's zero-limit paragraph); steps set no limits or subprotocols; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI

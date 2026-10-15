@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:90a6615e74f01227", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N3): re-read; config.rs/error.rs contents bullets still accurate with check_limits and InvalidLimit; holds" }
+verified = { hash = "b3:09b3fe682b35378e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main into #143: re-read main's contents list (subprotocol constants); config.rs/error.rs bullets still cover this PR's check_limits and InvalidLimit; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0dd84c65dc8c5366", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N3): Connection limits now says Server::bind refuses a zero limit or timeout (incl. max_mcp_sessions, mcp_idle_timeout) with ServerError::InvalidLimit before opening the socket, matching lib.rs/config.rs; rest unchanged" }
+verified = { hash = "b3:15071629020a7dc1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main into #143: kept main's shared-subprotocol-constants sentence (ADR-0045) and this PR's zero-limit paragraph (Server::bind refuses with InvalidLimit, matching lib.rs/config.rs); re-read; holds" }
 -->
 
 ### Listening and admission
@@ -106,7 +106,9 @@ so it offers two subprotocols in `Sec-WebSocket-Protocol`: `jstream` and
 way, on any `Sec-WebSocket-Protocol` line, in exactly one offered subprotocol; with
 `Authorization` present, only that counts. The upgrade selects `jstream` (browsers
 fail a connection whose offered subprotocols none were selected), never the token's,
-so the answer doesn't echo it, and like every header it is never logged.
+so the answer doesn't echo it, and like every header it is never logged. Both names
+are `jstream-control`'s constants, shared with the client
+([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
 
 **Extra hosts.** Each configured extra host must be `name:port` with one port from 1
 to 65535, and an IPv6 address must be in brackets (`[::1]:4455`), as it is in a
