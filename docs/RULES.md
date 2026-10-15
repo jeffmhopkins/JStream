@@ -258,8 +258,8 @@ depends_on = ["docs/ARCHITECTURE.md#threading"]
 ### R-RT-001: Audio thread does not allocate, lock, block or log
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "review"]
-applies_to = ["crates/jstream-audio/src/rt/**", "crates/jstream-platform-*/src/audio/**"]
+enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "test:jstream_plugin_host::rt::a_pass_does_not_allocate", "review"]
+applies_to = ["crates/jstream-audio/src/rt/**", "crates/jstream-platform-*/src/audio/**", "apps/jstream-plugin-host/src/rt.rs"]
 -->
 In steady state, the audio callback and mixer do not allocate, take locks, block, make
 syscalls other than the device API, or log. Debug builds and tests install
