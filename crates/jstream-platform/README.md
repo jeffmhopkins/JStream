@@ -11,9 +11,9 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-platform/src/**"]
+covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:5d3ea4faa0854913", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D2 cascade from ARCH#threading (now: buses also change through the audio command queue; collector also frees removed buses' state): re-read; prose unchanged, platform traits untouched" }
+verified = { hash = "b3:762a0af98b7f4825", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (F3 #208) into C4b: stamp-only conflict; F3 changed ARCH threading/protocol text (encoder profiles, program-stage collector), no platform trait; C4b's Not yet line re-read and holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -102,7 +102,8 @@ Contents:
   codec and GPU-interop backends and its optional virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
-  (`HRESULT`, `OSStatus`, `errno`).
+  (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
+  as Media Foundation on a Windows N edition) says what the user must install.
 - **Fakes** (`fake.rs`, feature `fake`): deterministic in-memory backends for engine and
   scenario tests ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): `FakeClock` (time moves
   only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and
@@ -118,25 +119,26 @@ Contents:
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 
-**Not yet:** a platform that delivers or consumes GPU frames (the Windows
-`GpuInterop` opens the device and encode targets; its capture and encoders don't use them
-yet), a platform implementation of `VideoDevices` (Media Foundation's source reader is
-C4b) and its place in `Backends`, an MJPEG `Codec` variant with a `CaptureDecoder` built
-from the platform's decoder, and encoder selection by GPU adapter.
+**Not yet:** a platform that consumes GPU frames (Windows capture delivers them through
+`WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet),
+`VideoDevices` in `Backends` (Windows implements it as `MfVideoDevices`, with
+`MfMjpegDecoder` as its `CaptureDecoder`), a decode-failure count in `CaptureStats`, an
+MJPEG `Codec` variant, and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:7856c3f80a2d5b2d", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Stale only through ARCH#crate-map (G2's vcam-windows row gained a logging clause); re-read: the GpuInterop/GpuFrame design and the crate-map reference are unchanged" }
+verified = { hash = "b3:02b6ead9e4c7cecc", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (E1 arc-swap render snapshots) into C4b: section text is main's, untouched by C4b; stale only via platform purpose's C4b Not yet line; design unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
 → NV12 → encoder with no CPU copy). The types below are built in this crate, and the
-Windows `GpuInterop` opens the device and encode targets. `jstream-render` composites one
-scene on that device when the engine has one, and opens its own (software adapter first)
-when it does not; it does not write the NV12 encode target. Capture into shared textures
-and the encoders' GPU input come next.
+Windows `GpuInterop` opens the device and encode targets, and Windows capture
+(`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
+**Frame lifetime** below describes. `jstream-render` composites one scene on
+that device when the engine has one, and opens its own (software adapter first) when it
+does not; it does not write the NV12 encode target. The encoders' GPU input comes next.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -234,9 +236,10 @@ the same reason.
 <!-- @section
 -->
 
-- **GPU frames.** Designed and typed in [GPU frames](#gpu-frames) above. The Windows
-  `GpuInterop` opens the device and encode targets, but no platform delivers or consumes
-  GPU frames yet. How capture and the encoders reach the context is an open question in
+- **GPU frames.** Designed and typed in [GPU frames](#gpu-frames) above. Windows capture
+  delivers them; nothing consumes them yet. Capture reaches the context through a Windows
+  constructor, `WgcCapture::on_gpu(&GpuContext)`, so the trait shapes are unchanged. How
+  the encoders reach it is still open in
   [jstream-platform-windows](../jstream-platform-windows/README.md#open-questions).
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.
   **Proposed default:** backends downmix any other layout to stereo, and new layouts

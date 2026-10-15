@@ -8,6 +8,9 @@
 //!
 //! Wherever Markdown is hashed, well-formed `@doc`, `@section` and `@rule` blocks are
 //! removed first, so recording a verification never stales another section (ADR-0039).
+//! A `covers` entry ending in `#jstream-meta` hashes each matched `Cargo.toml` as its
+//! jstream view only: package name, `[package.metadata.jstream]` and `jstream-*`
+//! dependency entries (ADR-0042).
 //! In covered workflow files, the commit SHA and version comment of `uses:` pins are
 //! ignored, so Dependabot pin bumps don't stale the doc that specifies the workflow
 //! (ADR-0018; review N5 on #7).
@@ -175,13 +178,119 @@ fn file_content(path: &str, bytes: &[u8], strip: bool) -> Vec<u8> {
         .into_bytes()
 }
 
-/// Compiles `globs` into one matcher.
+/// The one view a `covers` entry may name after `#` (ADR-0042).
+pub(crate) const JSTREAM_META: &str = "jstream-meta";
+
+/// Splits a `covers` entry into its glob and whether it names the `#jstream-meta` view.
+/// `#` is reserved in globs, and any other view name is an error (ADR-0042).
+pub(crate) fn split_cover(entry: &str) -> Result<(&str, bool)> {
+    match entry.split_once('#') {
+        None => Ok((entry, false)),
+        Some((glob, JSTREAM_META)) if !glob.is_empty() => Ok((glob, true)),
+        Some((_, view)) => anyhow::bail!(
+            "`covers` entry `{entry}`: `#` is reserved for a view, and the only view is \
+             `#{JSTREAM_META}` after a glob, not `#{view}`"
+        ),
+    }
+}
+
+/// Compiles `covers` entries (globs, each with an optional view) into one matcher.
 pub(crate) fn glob_set(globs: &[String]) -> Result<GlobSet> {
     let mut b = GlobSetBuilder::new();
     for g in globs {
-        b.add(Glob::new(g).with_context(|| format!("invalid glob `{g}`"))?);
+        let (glob, _) = split_cover(g)?;
+        b.add(Glob::new(glob).with_context(|| format!("invalid glob `{glob}`"))?);
     }
     Ok(b.build()?)
+}
+
+/// A `Cargo.toml`'s jstream view (ADR-0042), canonically rendered: `package.name`, the
+/// whole `[package.metadata.jstream]` table, and every entry of `[dependencies]`,
+/// `[dev-dependencies]`, `[build-dependencies]` and their `[target.<cfg>.…]` variants
+/// whose key or `package =` value starts with `jstream-`. `None` when the file is not a
+/// `Cargo.toml` or doesn't parse, so the caller hashes it whole: a view never hashes less
+/// than it can read.
+fn jstream_view(path: &str, text: &str) -> Option<String> {
+    use toml::{Table, Value};
+    if path != "Cargo.toml" && !path.ends_with("/Cargo.toml") {
+        return None;
+    }
+    let manifest: Table = text.parse().ok()?;
+    let deps = |from: &Table| -> Table {
+        let mut out = Table::new();
+        for kind in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            let Some(Value::Table(t)) = from.get(kind) else {
+                continue;
+            };
+            let ours: Table = t
+                .iter()
+                .filter(|(name, v)| {
+                    let package = v.get("package").and_then(Value::as_str).unwrap_or(name);
+                    name.starts_with("jstream-") || package.starts_with("jstream-")
+                })
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            if !ours.is_empty() {
+                out.insert(kind.to_owned(), Value::Table(ours));
+            }
+        }
+        out
+    };
+    let mut view = deps(&manifest);
+    let package = manifest.get("package");
+    for (key, value) in [
+        ("name", package.and_then(|p| p.get("name"))),
+        (
+            "metadata.jstream",
+            package
+                .and_then(|p| p.get("metadata"))
+                .and_then(|m| m.get("jstream")),
+        ),
+    ] {
+        if let Some(v) = value {
+            view.insert(format!("package.{key}"), v.clone());
+        }
+    }
+    if let Some(Value::Table(targets)) = manifest.get("target") {
+        for (cfg, t) in targets {
+            if let Value::Table(t) = t {
+                let d = deps(t);
+                if !d.is_empty() {
+                    view.insert(format!("target.{cfg}"), Value::Table(d));
+                }
+            }
+        }
+    }
+    let mut out = String::new();
+    canonical(&Value::Table(view), &mut out);
+    Some(out)
+}
+
+/// Renders a TOML value with table keys sorted, whatever map order the `toml` crate keeps.
+fn canonical(v: &toml::Value, out: &mut String) {
+    match v {
+        toml::Value::Table(t) => {
+            let mut keys: Vec<&String> = t.keys().collect();
+            keys.sort();
+            out.push('{');
+            for k in keys {
+                out.push_str(&toml_str(k));
+                out.push('=');
+                canonical(&t[k], out);
+                out.push(',');
+            }
+            out.push('}');
+        }
+        toml::Value::Array(a) => {
+            out.push('[');
+            for x in a {
+                canonical(x, out);
+                out.push(',');
+            }
+            out.push(']');
+        }
+        other => out.push_str(&other.to_string()),
+    }
 }
 
 fn short(h: &blake3::Hash) -> String {
@@ -206,12 +315,35 @@ impl<'a> Files<'a> {
 
     /// Tracked files matched by any of `globs`, sorted.
     pub(crate) fn matching(&self, globs: &[String]) -> Result<Vec<&'a str>> {
-        let set = glob_set(globs)?;
+        Ok(self
+            .matching_views(globs)?
+            .into_iter()
+            .map(|(p, _)| p)
+            .collect())
+    }
+
+    /// Tracked files matched by any of `covers`, sorted, each with whether it is hashed as
+    /// its jstream view: only when every entry that matches it names the view, so a file
+    /// also covered plainly is hashed whole.
+    fn matching_views(&self, covers: &[String]) -> Result<Vec<(&'a str, bool)>> {
+        let entries = covers
+            .iter()
+            .map(|c| {
+                let (glob, view) = split_cover(c)?;
+                Ok((glob_set(&[glob.to_owned()])?, view))
+            })
+            .collect::<Result<Vec<_>>>()?;
         Ok(self
             .paths
             .iter()
-            .filter(|p| set.is_match(p.as_str()))
-            .map(String::as_str)
+            .filter_map(|p| {
+                let hits: Vec<bool> = entries
+                    .iter()
+                    .filter(|(set, _)| set.is_match(p.as_str()))
+                    .map(|(_, view)| *view)
+                    .collect();
+                (!hits.is_empty()).then(|| (p.as_str(), hits.iter().all(|v| *v)))
+            })
             .collect())
     }
 
@@ -219,6 +351,14 @@ impl<'a> Files<'a> {
         let bytes =
             std::fs::read(self.root.join(path)).with_context(|| format!("reading {path}"))?;
         Ok(short(&blake3::hash(&file_content(path, &bytes, strip))))
+    }
+
+    /// The hash of `path`'s jstream view, or `None` when it has none (ADR-0042).
+    fn view_hash(&self, path: &str) -> Result<Option<String>> {
+        let bytes =
+            std::fs::read(self.root.join(path)).with_context(|| format!("reading {path}"))?;
+        Ok(jstream_view(path, &String::from_utf8_lossy(&bytes))
+            .map(|v| short(&blake3::hash(v.as_bytes()))))
     }
 }
 
@@ -260,11 +400,21 @@ pub(crate) fn section_hash_by(
             .unwrap_or_default()
             .as_bytes(),
     );
-    for path in files.matching(covers)? {
+    for (path, view) in files.matching_views(covers)? {
         h.update(b"\0file\0");
         h.update(path.as_bytes());
-        h.update(b"\0");
-        h.update(files.content_hash(path, strip)?.as_bytes());
+        match view.then(|| files.view_hash(path)).transpose()?.flatten() {
+            Some(v) => {
+                h.update(b"\0view\0");
+                h.update(JSTREAM_META.as_bytes());
+                h.update(b"\0");
+                h.update(v.as_bytes());
+            }
+            None => {
+                h.update(b"\0");
+                h.update(files.content_hash(path, strip)?.as_bytes());
+            }
+        }
     }
     for dep in depends_on {
         let (file, section, key) = split_dep(dep);
@@ -301,6 +451,74 @@ mod tests {
 
     fn parse(text: &str) -> Doc {
         super::super::parse::parse("t.md", text, &mut Vec::new())
+    }
+
+    const MANIFEST: &str = "[package]\nname = \"jstream-x\"\nversion = \"0.0.0\"\n\n[package.metadata.jstream]\nlayer = 2\nsummary = \"s\"\nunsafe_allowed = false\n\n[lints]\nworkspace = true\n\n[dependencies]\n# A comment.\njstream-types.workspace = true\nserde.workspace = true\n\n[dev-dependencies]\njstream-media = { workspace = true, features = [\"fake\"] }\n";
+
+    fn view(text: &str) -> Option<String> {
+        jstream_view("crates/x/Cargo.toml", text)
+    }
+
+    /// ADR-0042: formatting, comments, ordering, third-party dependencies and other tables
+    /// leave the jstream view alone.
+    #[test]
+    fn jstream_view_ignores_what_the_crate_map_does_not_state() {
+        let base = view(MANIFEST).expect("invariant: the fixture parses");
+        for edit in [
+            MANIFEST.replace("# A comment.\n", ""),
+            MANIFEST.replace(
+                "serde.workspace = true\n",
+                "serde.workspace = true\ntokio.workspace = true\n",
+            ),
+            MANIFEST.replace("version = \"0.0.0\"", "version = \"0.1.0\""),
+            MANIFEST.replace("layer = 2\nsummary = \"s\"", "summary = \"s\"\nlayer   = 2"),
+            format!("{MANIFEST}\n[features]\nmock = []\n"),
+        ] {
+            assert_eq!(view(&edit).as_deref(), Some(base.as_str()), "{edit}");
+        }
+    }
+
+    /// ADR-0042: name, layer, summary, `unsafe_allowed` and every `jstream-*` edge, in any
+    /// dependency table (dev, build, target-specific, renamed via `package =`), change it.
+    #[test]
+    fn jstream_view_changes_with_what_the_crate_map_states() {
+        let base = view(MANIFEST).expect("invariant: the fixture parses");
+        for edit in [
+            MANIFEST.replace("name = \"jstream-x\"", "name = \"jstream-y\""),
+            MANIFEST.replace("layer = 2", "layer = 3"),
+            MANIFEST.replace("summary = \"s\"", "summary = \"t\""),
+            MANIFEST.replace("unsafe_allowed = false", "unsafe_allowed = true"),
+            MANIFEST.replace("jstream-types.workspace = true\n", ""),
+            MANIFEST.replace("[\"fake\"]", "[\"fake\", \"mock\"]"),
+            format!("{MANIFEST}\n[build-dependencies]\njstream-gen.workspace = true\n"),
+            format!("{MANIFEST}\n[target.'cfg(windows)'.dependencies]\njstream-platform-windows.workspace = true\n"),
+            format!("{MANIFEST}\n[dependencies.core]\npackage = \"jstream-core\"\nworkspace = true\n")
+                .replace("[dependencies]\n# A comment.\njstream-types.workspace = true\nserde.workspace = true\n", ""),
+        ] {
+            assert_ne!(view(&edit).as_deref(), Some(base.as_str()), "{edit}");
+        }
+    }
+
+    /// ADR-0042: no view for a file that isn't a `Cargo.toml` or doesn't parse, so it is
+    /// hashed whole.
+    #[test]
+    fn jstream_view_falls_back_to_the_whole_file() {
+        assert!(jstream_view("crates/x/other.toml", MANIFEST).is_none());
+        assert!(view("[package\nname = ").is_none());
+        assert!(jstream_view("Cargo.toml", MANIFEST).is_some());
+    }
+
+    #[test]
+    fn covers_views_are_parsed_strictly() {
+        assert_eq!(split_cover("a/**").ok(), Some(("a/**", false)));
+        assert_eq!(
+            split_cover("a/Cargo.toml#jstream-meta").ok(),
+            Some(("a/Cargo.toml", true))
+        );
+        for bad in ["a/**#other", "a/**#", "#jstream-meta", "a#b#jstream-meta"] {
+            assert!(split_cover(bad).is_err(), "{bad}");
+            assert!(glob_set(&[bad.to_owned()]).is_err(), "{bad}");
+        }
     }
 
     #[test]

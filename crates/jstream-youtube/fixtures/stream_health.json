@@ -1,0 +1,39 @@
+{
+  "kind": "youtube#liveStreamListResponse",
+  "etag": "fixture-etag-health",
+  "pageInfo": { "totalResults": 1, "resultsPerPage": 1 },
+  "items": [
+    {
+      "kind": "youtube#liveStream",
+      "etag": "fixture-etag-stream2-health",
+      "id": "UCfixturechannel000000000fixturestream2",
+      "status": {
+        "streamStatus": "active",
+        "healthStatus": {
+          "status": "bad",
+          "lastUpdateTimeSeconds": "1792030000",
+          "configurationIssues": [
+            {
+              "type": "gopSizeLong",
+              "severity": "error",
+              "reason": "Check video settings",
+              "description": "Please use a keyframe frequency of four seconds or less."
+            },
+            {
+              "type": "bitrateLow",
+              "severity": "warning",
+              "reason": "Check video settings",
+              "description": "The current bitrate is lower than the recommended bitrate."
+            },
+            {
+              "type": "somethingNew",
+              "severity": "notice",
+              "reason": "",
+              "description": ""
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

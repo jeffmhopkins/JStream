@@ -1,6 +1,7 @@
 //! Protocol errors, with stable machine-readable codes.
 
-use crate::id::Rev;
+use crate::history::HistoryDirection;
+use crate::id::{ClientId, Rev};
 use crate::version::ProtocolVersion;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -72,6 +73,26 @@ pub enum ProtocolError {
         /// Why it was rejected.
         reason: String,
     },
+    /// An undo or redo would overwrite another client's work: a batch that client
+    /// applied after the step changed a property the step sets, created or deleted an
+    /// object the step creates or deletes, or made the step's edits no longer apply.
+    /// Nothing was applied, and the step was dropped from the history, so the next undo
+    /// reaches the step before it.
+    #[error("step at rev {step_rev} conflicts with rev {rev} by client `{client_id}`")]
+    UndoConflict {
+        /// The revision the step's batch originally produced.
+        step_rev: Rev,
+        /// The client whose batch conflicts.
+        client_id: ClientId,
+        /// The revision that batch produced.
+        rev: Rev,
+    },
+    /// There is nothing to undo, or nothing to redo.
+    #[error("nothing to {direction}")]
+    HistoryEmpty {
+        /// Which way the call asked to move.
+        direction: HistoryDirection,
+    },
     /// An action was accepted for processing but could not be carried out.
     #[error("action failed: {reason}")]
     ActionFailed {
@@ -104,6 +125,8 @@ impl ProtocolError {
             ProtocolError::NotFound { .. } => "not_found",
             ProtocolError::AlreadyExists { .. } => "already_exists",
             ProtocolError::InvalidArgument { .. } => "invalid_argument",
+            ProtocolError::UndoConflict { .. } => "undo_conflict",
+            ProtocolError::HistoryEmpty { .. } => "history_empty",
             ProtocolError::ActionFailed { .. } => "action_failed",
             ProtocolError::Internal { .. } => "internal",
             ProtocolError::Unknown => "unknown",
@@ -124,6 +147,8 @@ pub enum EntityKind {
     Source,
     /// An output.
     Output,
+    /// An encoder profile.
+    Encoder,
 }
 
 impl fmt::Display for EntityKind {
@@ -133,6 +158,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Item => "item",
             EntityKind::Source => "source",
             EntityKind::Output => "output",
+            EntityKind::Encoder => "encoder",
         })
     }
 }

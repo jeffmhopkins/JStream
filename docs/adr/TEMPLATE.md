@@ -3,7 +3,7 @@ id = "ADR-NNNN"
 title = "Title"
 kind = "adr"
 status = "proposed"        # proposed | accepted | superseded | rejected
-tier = "maintainer"        # maintainer (product/platforms, process/governance, superseding) | agent (R-GOV-005)
+tier = "maintainer"        # maintainer (scope, licensing, security/privacy, compat promises, spending, tier rules) | agent (R-GOV-005)
 # superseded_by = "docs/adr/NNNN-….md"
 -->
 

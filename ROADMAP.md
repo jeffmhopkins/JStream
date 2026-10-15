@@ -16,7 +16,7 @@ that runs from a clean checkout.
 ## M0: Foundation and risk spikes
 <!-- @section
 depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:82028f4d88d590e3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review N1 on #26: Demo now says S1-S3 have results and S4 may finish in M1b but needs a written result before the browser source is built, matching ADR-0021's 'prove it first'; Track B S4 bullet unchanged" }
+verified = { hash = "b3:a5b81f06b2d1f93a", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review N5: Demo line now says S1-S4 each have a written result (S4's is ARCH#browser-source); Track B bullets unchanged" }
 -->
 
 Two tracks run in parallel.
@@ -51,8 +51,8 @@ Two tracks run in parallel.
   ([ADR-0021](docs/adr/0021-browser-source.md)).
 
 **Demo:** CI green with all required checks. A PR that changes covered code without
-re-verifying is rejected. S1–S3 each have a written result. S4 may finish in M1b, but
-must have a written result before the browser source is built.
+re-verifying is rejected. S1–S4 each have a written result (S4 was allowed to finish in M1b,
+but needed one before the browser source is built).
 
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
@@ -140,7 +140,7 @@ verified = { hash = "b3:b0200407002e63d1", by = "agent:claude@session_01QBbMRwRu
 - Full 3D transforms; WGSL effect packs with hot reload.
 - `jstream-youtube`: OAuth, broadcasts, metadata, health, chat, sending chat as the
   channel, a featured chat message shown on stream by a chat message source, and audience
-  stats, all exposed over MCP ([ADR-0034](docs/adr/0034-youtube-interaction-scope-v2.md)).
+  stats, all exposed over MCP ([ADR-0041](docs/adr/0041-youtube-interaction-scope-v3.md)).
 - Direct NVENC/AMF encoders where measurements justify them; HEVC/AV1 via enhanced RTMP.
 - WASM automation plugins.
 - CLAP audio effect filters, hosted out of process

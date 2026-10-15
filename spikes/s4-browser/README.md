@@ -20,10 +20,10 @@ It also picks the Rust CEF bindings and the helper-process layout, and records w
 CEF runtime weighs, which codecs its pages can play and which notices it ships with.
 
 The crate is not a workspace member. It has its own `[workspace]` table and its own
-`Cargo.lock`. The code is compile-checked from Linux only; it needs a Windows run.
+`Cargo.lock`. The maintainer's Windows run passed.
 
-Results don't go in this file. They come from the maintainer's run, and a later PR records
-them in [ARCH](../../docs/ARCHITECTURE.md#gpu-pipeline), and in a new ADR if they change
+Results don't go in this file. They are recorded in
+[ARCH](../../docs/ARCHITECTURE.md#browser-source), and would go in a new ADR if they changed
 ADR-0021's decision. Accepted ADRs are never edited
 ([R-DOC-009](../../docs/RULES.md#R-DOC-009)).
 
@@ -165,8 +165,9 @@ The zip from `run-s4.bat`, or its three JSON lines and `notes.md`. What the fiel
 -->
 
 This code was compile-checked and linted from Linux for `x86_64-pc-windows-msvc`, with
-`cef`'s `dox` feature standing in for the CEF build. It has not been linked or run. The
-parts most likely to need a fix, roughly in order:
+`cef`'s `dox` feature standing in for the CEF build, then run by the maintainer on one
+AMD machine, where it passed ([ARCH](../../docs/ARCHITECTURE.md#browser-source)). These were
+the risks before that run, roughly in order:
 
 - **Building CEF's wrapper.** The first build needs CMake, Ninja and the MSVC environment
   in the shell; `run-s4.ps1` sets that up. CEF's CMake may want a newer CMake than an
