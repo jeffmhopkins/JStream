@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:441d323df887e182", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ported #306's test-only change to tests/sources.rs (fake clock for the by-itself animation test); the section says nothing about that test or its clock" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -190,7 +189,6 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8d15cff5648bdb91", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ported #306's test-only change; live.rs and the sources thread's re-plan are unchanged, so the Live sources text still holds" }
 -->
 
 ### Engine and sessions
@@ -465,8 +463,9 @@ The filters run before the fader and sends the routing sets, which leave them al
 When only settings changed, each changed filter is updated in place
 (`FilterControl::set`), so a gate's envelope or a delay line carries on; a new kind, a
 reorder, or a limiter's look-ahead (its latency) rebuilds the chain. A filter the mixer
-refuses is bypassed and logged at `warn`, never an edit failure, and a reopened input
-gets its chain again. Each input is opened by asking the platform
+refuses to add is bypassed, and new settings it refuses (a full command queue) leave
+the filter on its old ones until the next pass tries again; each refusal is logged at
+`warn`, never an edit failure, and a reopened input gets its chain again. Each input is opened by asking the platform
 for the format the device delivers (`AudioIo::input_format`), adding the mixer input
 in that format, and opening the stream with the input's producer as its handler; a
 stream that opens in another format is closed and tried again. An `audio_input`
@@ -1049,7 +1048,6 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:ee964bed8bad32e1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

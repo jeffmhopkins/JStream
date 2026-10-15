@@ -16,7 +16,6 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:46b9a73f9cf84290", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: geometry placement bullet now says the image is mirrored in the box by flip_h/flip_v before rotation; place.rs applies content's swapped UVs; scene types unchanged; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +112,6 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:908a25964676949d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: Placement math says flips swap content's u or v pair and the box clip keeps the mirrored middle of fill; matches place.rs boxed(); legacy negative-scale text unchanged; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -282,7 +280,6 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:cb6a923ce0f129d5", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: Geometry goldens now lists the flip grid (unflipped, flip_h, flip_v, both, flipped then turned, flipped fill) and the legacy negative scale vs from_legacy grid; both tests in tests.rs, ran on lavapipe; holds" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The

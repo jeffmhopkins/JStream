@@ -17,7 +17,8 @@
 //!
 //! Each source's input runs its audio filter chain (ADR-0026): the thread keeps the
 //! input's filters in line with the chain on the same passes, updating a filter in place
-//! when only its settings changed. A filter the mixer refuses is bypassed and logged.
+//! when only its settings changed. A filter the mixer refuses is bypassed, and new
+//! settings it refuses are tried again on the next pass; both are logged.
 //!
 //! While the collection has no audio source, the program records the default
 //! microphone and desktop audio, as it did before audio sources existed, so a
@@ -383,8 +384,8 @@ enum Note {
     Reopening(Key, &'static str),
     Available(Key),
     Unavailable(Key, String),
-    /// A filter the mixer refused, bypassed.
-    Bypassed(Key, String),
+    /// A filter, or a filter's new settings, the mixer refused.
+    Refused(Key, String),
 }
 
 impl Pass {
@@ -401,8 +402,8 @@ impl Pass {
                 Note::Unavailable(key, reason) => {
                     tracing::warn!(input = ?key, reason, "audio input is unavailable");
                 }
-                Note::Bypassed(key, reason) => {
-                    tracing::warn!(input = ?key, reason, "audio filter is bypassed");
+                Note::Refused(key, reason) => {
+                    tracing::warn!(input = ?key, reason, "audio filter not applied");
                 }
             }
         }
@@ -477,7 +478,7 @@ impl Open {
             if let (Key::Source(id), Some(live)) = (&key, input.live.as_mut()) {
                 let chain = chains.get(id).map_or(&[][..], Vec::as_slice);
                 for reason in live.chain.apply(&live.control, chain) {
-                    notes.push(Note::Bypassed(key.clone(), reason));
+                    notes.push(Note::Refused(key.clone(), reason));
                 }
             }
             self.inputs.insert(key, input);

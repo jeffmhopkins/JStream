@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:291bcc0c3807dd4b", by = "agent:claude", note = "V1b merge of B7's branch: re-read; resolved conflicts: PROTOCOL_VERSION 0.19 history from B7 plus from_legacy mapping a negative scale to the flip; fixture list has the flipped item and the vcam; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -144,7 +143,6 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:08fd520b56a41b9a", by = "agent:claude", note = "V1b merge of B7's branch: re-read; fixed Audio: filters are in the protocol now (source filters), so the 'not in the protocol yet' line was wrong; flip text matches geometry.rs; hello 0.19; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

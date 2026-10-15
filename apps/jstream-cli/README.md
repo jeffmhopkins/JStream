@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:ec9eff71447bdfd0", by = "agent:claude", note = "V1b merge of B7's branch: re-read; contents list (args/run/exit/block/mcp) unaffected by flips or B7's audio/vcam; daemon and mock notes unchanged; holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +46,6 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:79491365ea91ed04", by = "agent:claude", note = "V1b merge of B7's branch: re-read; item.set_geometry still 7 args (id cx cy w h rot fit) per args.rs, sending neutral 3D and flips false; 0.19 audio edits not in the CLI; holds" }
 -->
 
 ```sh
@@ -245,7 +243,6 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5aeb2e0c11388dbe", by = "agent:claude", note = "V1b merge of B7's branch: re-read; fixed-arity edits with only scene.create's optional role; the flip default changes nothing here; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
