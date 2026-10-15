@@ -741,7 +741,7 @@ stamp = { hash = "b3:c470e006d8095daa" }
 stamp = { hash = "b3:3e63f714aef88590" }
 
 ["CRATE-jstream-browser#open-items"."body"]
-stamp = { hash = "b3:1ed8360e5359b996", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: open items match what the CEF backend leaves out (no_sandbox, no file request handler, no host wiring, no render import, no visibility hook)" }
+stamp = { hash = "b3:8ff4228232e4de1c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-browser#open-items"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
@@ -750,7 +750,7 @@ stamp = { hash = "b3:64d21faa19974bc3" }
 stamp = { hash = "b3:1300403d18de6566" }
 
 ["CRATE-jstream-browser#purpose"."body"]
-stamp = { hash = "b3:aa231c43fc78de6d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1 (#290 review N1): seam paragraph says use_device gets a device the host opens on the media adapter for now, not the engine's own; rest re-read against page.rs, audio.rs, fake.rs and cef/" }
+stamp = { hash = "b3:942de68b61b5165f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
 stamp = { hash = "b3:8cc1b893df3a63f1" }
@@ -762,7 +762,7 @@ stamp = { hash = "b3:e7a418098a8ef546" }
 stamp = { hash = "b3:f8343546bd9692f3" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/examples/page_check.rs"]
-stamp = { hash = "b3:cdb5d603e6278b06" }
+stamp = { hash = "b3:721267a766fabe90", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/audio.rs"]
 stamp = { hash = "b3:09a503c0bd3342be" }
@@ -771,25 +771,28 @@ stamp = { hash = "b3:09a503c0bd3342be" }
 stamp = { hash = "b3:4cd2645cc349307d" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/handlers.rs"]
-stamp = { hash = "b3:e50e51e202fe75c8" }
+stamp = { hash = "b3:260bce29e6e7c9ae", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/mod.rs"]
-stamp = { hash = "b3:e3ccb60c7440a82a" }
+stamp = { hash = "b3:efdd7afd1b1a0f83", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/fake.rs"]
-stamp = { hash = "b3:b3446b76280e4cb9" }
+stamp = { hash = "b3:e4729bc158373b96", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/lib.rs"]
-stamp = { hash = "b3:fe1cd7c0c3d41560" }
+stamp = { hash = "b3:f6b24b3ac471a35a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/page.rs"]
-stamp = { hash = "b3:e057d1998087d7f3" }
+stamp = { hash = "b3:bfae3b74fd072f83", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
+
+["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/request.rs"]
+stamp = { hash = "b3:50e650823f1208d3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-browser-helper#purpose"."body"]
 stamp = { hash = "b3:c38bcef596eeb573", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1: stale only via the browser README's seam paragraph; helper main.rs, build.rs and manifest unchanged, text holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:crates/jstream-browser/README.md#purpose"]
-stamp = { hash = "b3:aa231c43fc78de6d" }
+stamp = { hash = "b3:942de68b61b5165f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:8487582a56fd34f6" }
@@ -951,7 +954,7 @@ stamp = { hash = "b3:d7db1d06b04d10fc" }
 stamp = { hash = "b3:edefe86e076ea4e3" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:515db2dc8c902730", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:4b7f99a329a36029" }
@@ -978,7 +981,7 @@ stamp = { hash = "b3:5e06b48ac662790f" }
 stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:98296f7ad634452f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:9bf96ff70481b881", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -1041,7 +1044,7 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:4fa634e0a92724f8" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:1be763883388d12c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:732249ad50d11c2c" }
@@ -1068,7 +1071,7 @@ stamp = { hash = "b3:5e06b48ac662790f" }
 stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:98296f7ad634452f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:9bf96ff70481b881", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -1131,7 +1134,7 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:4fa634e0a92724f8" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:1be763883388d12c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:732249ad50d11c2c" }
@@ -1182,7 +1185,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:861da27967b6506b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#360, #299 D6, #381) into #328: took main's stamp; re-read; main changes no daemon code, only core#design's activity-gain text, which the daemon text doesn't name; this PR's /DELAYLOAD, LNK4199 and delay_load.rs text still matches build.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge of main after ADR-0053 (#376): main changed no text of this section; its text, covered files and dependencies are as re-read and stamped at 2e83bb4 for C8 (browser crate and helper, page own audio, crate-map rows); re-stamped into the ledger" }
+stamp = { hash = "b3:515db2dc8c902730", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 after ADR-0053 (#376): the merge dropped this branch's inline stamp; text and covered files are identical to c56bdf5, where I re-read and stamped them for C8b2 (RequestPolicy, lexical folder check) and C8's N5-N7; re-stamped into the ledger" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:2c41053918072ae6" }
