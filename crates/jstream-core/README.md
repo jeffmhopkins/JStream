@@ -108,7 +108,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:68f5b9927440ad7c", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read main's kind stubs and settings text; connector/MCP-session sentence holds with each /mcp session calling Engine::connect" }
+verified = { hash = "b3:ca661cf0e5fc3972", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#153): E1 render snapshot, compose, collector and locking text intact beside main's Engine::connect/MCP-session sentence; both hold" }
 -->
 
 ### Engine and sessions
