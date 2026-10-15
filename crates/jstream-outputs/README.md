@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:c1bf6f7d3b271685", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "#209: Transport bullet now says shutdown's close_notify is bounded by the write deadline; Tests paragraph lists the write-deadline and shutdown TLS tests; re-read the whole section against transport.rs; holds" }
+verified = { hash = "b3:334446b7785baa52", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "#236: Transport bullet now says shutdown shuts the socket down even when close_notify fails; re-read the section against transport.rs (shutdown, unless_peer_gone); the Tests paragraph's shutdown close_notify test still holds; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -80,7 +80,8 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   timeout is cut to the time left, and past the deadline a write fails with `TimedOut`
   (#138). Each socket write then sends at most 16 KiB, because on macOS and the BSDs a
   write's timeout restarts whenever the peer frees buffer space. `Transport::shutdown` sends TLS `close_notify` before closing the socket, bounded
-  by the write deadline like any other write (#209).
+  by the write deadline like any other write (#209), and shuts the socket down even
+  when that fails (#236).
 - **URLs and keys** (`url`): `rtmp(s)://host[:port]/app[/...]`, with the whole path as the
   application name and the stream key separate. `StreamKey` prints as `***`, and no error
   carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The server's

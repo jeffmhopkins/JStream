@@ -216,14 +216,19 @@ fn a_write_deadline_bounds_a_large_write_over_tls() {
 
 /// #209: `shutdown`'s TLS flush goes through the write deadline too. Past the deadline
 /// `close_notify` is not sent and the shutdown fails at once, where it used to be sent
-/// with only the socket's write timeout to bound it.
+/// with only the socket's write timeout to bound it. #236: the socket is still shut
+/// down, so the server sees the stream end without `close_notify` while the client
+/// still holds the transport.
 #[test]
 fn shutdown_over_tls_honours_the_write_deadline() {
     let pki = TestPki::new(&["localhost"]);
     let (port, server) = tls_server(pki.server_config(&[&TLS13]), |mut s| {
-        // No close_notify arrives, so the end of stream is not a clean one.
+        // A timeout, not a hang, if the client never shuts the socket down.
+        s.sock
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
         let mut rest = Vec::new();
-        s.read_to_end(&mut rest).is_err()
+        s.read_to_end(&mut rest).map_err(|e| e.kind())
     });
     let config = client_config(pki.roots.clone()).unwrap();
     let mut t = connect_tls(&url("rtmps", "localhost", port), TIMEOUT, config).unwrap();
@@ -232,9 +237,10 @@ fn shutdown_over_tls_honours_the_write_deadline() {
         .shutdown()
         .expect_err("close_notify was sent past the deadline");
     assert_eq!(err.kind(), io::ErrorKind::TimedOut, "{err:?}");
+    // Held until the server has read the end, so it sees the shutdown's FIN and not
+    // the reset a drop with unread session tickets would send.
+    let ended = server.join().unwrap().unwrap();
     drop(t);
-    assert!(
-        server.join().unwrap().unwrap(),
-        "the server saw a clean TLS close"
-    );
+    // A clean TLS close reads as `Ok`; an end with no `close_notify` is `UnexpectedEof`.
+    assert_eq!(ended, Err(io::ErrorKind::UnexpectedEof));
 }
