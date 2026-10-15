@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:9594447bffbb367c", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3: PublishError::new public) into #207: took main's stamp; re-read; Runtime, Drop counts and Tests bullets hold with #207's blocked-send and trickle tests" }
+verified = { hash = "b3:80e7a6822ecc0659", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#207 bounded stop drain) into B9 at 0.15: took main's stamp, re-read; #207's blocked-send and trickle Tests bullets hold; B9 only swaps check_key's and the parity test's error constructors" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -141,7 +141,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a614b642dfb99753", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3: output_kind read by the daemon's opener, PublishError::new sentence) into #207: took main's stamp; re-read the outputs, opener, output.stop and stop-drain paragraphs; main's additions and #207's bounded stop both hold" }
+verified = { hash = "b3:6f7fefa8a0dd6e01", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#207 bounded stop drain) into B9 at 0.15: took main's stamp, re-read; STOP_DRAIN/OUTPUT_GRACE/set_write_deadline paragraph and the stream-key invalid_argument text hold; B9 changes no core behavior" }
 -->
 
 ### Engine and sessions
