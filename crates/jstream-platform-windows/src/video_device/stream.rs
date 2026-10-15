@@ -81,9 +81,9 @@ pub(crate) struct Capture {
 struct OnThread(Capture);
 
 // SAFETY: the Media Foundation objects inside (source reader, media source, activation
-// object) are free-threaded, and `MfStarted` keeps the process MTA alive, so the capture
-// thread, which never initialised COM, uses them as an implicit MTA member. They are
-// moved to that thread and used only there. The decoder is `Send` by its trait.
+// object) are free-threaded and were created in the MTA; the capture thread joins the MTA
+// (`Com::init` in `run`) before it touches them. They are moved to that thread and used
+// only there. The decoder is `Send` by its trait.
 unsafe impl Send for OnThread {}
 
 impl OnThread {
