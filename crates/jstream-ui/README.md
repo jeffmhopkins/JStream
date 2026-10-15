@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:03681d80c54c1817", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: outputs.rs gained start_or_stop_all and tests, app.rs connect fields leave the form element; contents list still holds" }
+verified = { hash = "b3:e818b9b54db6312a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#257) into #261: contents list holds; #261 only adds canvas classes to style.css, no inline styles described here" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:594cfdab2c8f74ef", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+verified = { hash = "b3:6139c1ad898270a2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#257) into #261: password-manager and go-live bullets are main's and hold; #261 changes only canvas styling, described in #canvas" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -118,7 +118,7 @@ verified = { hash = "b3:594cfdab2c8f74ef", by = "agent:claude@session_01Wfrx1wPt
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:50bd20b4a20be791", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Review N1/N2: resize follows pointer movement (no jump), aspect-locked corners scale by the axis that changed more so inward drags shrink, nudges and new drags build on the pending geometry; section's claims re-read, hold" }
+verified = { hash = "b3:403c8d08db9ae156", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#261: Styles bullet rewritten: classes in style.css because the hosts' CSP refuses style attributes; rest unchanged; holds" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
@@ -157,7 +157,10 @@ scene and sends the edits. These three are pure and tested natively against
   the protocol yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
   while the canvas has focus) are `history.undo` and `history.redo`; the buttons grey
   out when the engine reports nothing left, and an `undo_conflict` is explained.
-- **Styles** are inline, since the shell's stylesheet belongs to the shell.
+- **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
+  `'unsafe-inline'` for styles, so a `style="…"` attribute would be refused; a style
+  computed at run time would use a Leptos `style:` binding, which sets it through the
+  CSSOM. A test fails on any `style="` in the crate's sources or `index.html`.
 
 <a id="build"></a>
 ## Build
