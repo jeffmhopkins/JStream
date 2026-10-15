@@ -72,7 +72,7 @@ pub enum Edit {
         item_id: ItemId,
         /// The source the item shows.
         source_id: SourceId,
-        /// **Deprecated** since 0.9 (ADR-0022), removed in 1.0: send `geometry`. The
+        /// **Deprecated** since 0.10 (ADR-0022), removed in 1.0: send `geometry`. The
         /// initial legacy placement, with its 0.3 meaning.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         transform: Option<ItemTransform>,
@@ -91,7 +91,7 @@ pub enum Edit {
         /// The item to remove.
         item_id: ItemId,
     },
-    /// **Deprecated** since 0.9 (ADR-0022), removed in 1.0: send `item.set_geometry`.
+    /// **Deprecated** since 0.10 (ADR-0022), removed in 1.0: send `item.set_geometry`.
     /// Replaces an item's placement with a legacy one, which keeps its 0.3 meaning.
     /// Inverse: the previous placement, as `item.set_transform` if it was legacy and
     /// `item.set_geometry` if it was a geometry.
@@ -475,7 +475,7 @@ impl Vec2 {
 /// A protocol 0.3 placement: where a scene item sits until it is stored as
 /// [`ItemGeometry`](crate::ItemGeometry).
 ///
-/// **Deprecated** since 0.9 (ADR-0022) and removed in 1.0, with `item.set_transform`,
+/// **Deprecated** since 0.10 (ADR-0022) and removed in 1.0, with `item.set_transform`,
 /// `item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning
 /// below.
 ///

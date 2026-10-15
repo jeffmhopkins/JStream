@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:230ee996a830c490", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3 0.9 wire surface re-read against the whole PR diff (command.rs: item.set_geometry, canvas.set_size, item.add geometry, deprecations; query.rs: StateGet.canvas, ItemInfo placement/geometry; geometry.rs: Canvas, PlacementForm, transform_view and tests; version.rs 0.8->0.9; parity and fixtures; regenerated protocol/examples snaps). Commands, Queries, Geometry, versions and parity bullets hold" }
+verified = { hash = "b3:a655b1c4ad444569", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: parity bullet now says the collection has a recording output and recording path rejections, matching parity.rs" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -37,8 +37,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Outputs** (`output.rs`): `OutputKind` (only `rtmp` so far), `RtmpTarget` (only a
-  generic `url`), `OutputInfo`, and `SecretString`, the write-only stream key, which
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+  (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
@@ -72,17 +72,20 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.9 because of the
-  canvas and the geometry wire surface ([Item geometry](#design)); 0.8 added the kind
-  queries and settings, 0.7 the output edits, `output.list`, the key actions and
-  `key_set`, 0.6 `stats.tick` and 0.5 `video.snapshot`.
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.10 because of the
+  canvas and the geometry wire surface ([Item geometry](#design)); 0.9 added the
+  `record` output kind, 0.8 the kind queries and settings, 0.7 the output edits,
+  `output.list`, the key actions and `key_set`, 0.6 `stats.tick` and 0.5
+  `video.snapshot`.
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, and one geometry item), the exact answer
-  to every collection read of it, and the exact error for batches rejected against it.
+  canvas, legacy items, one geometry item, two RTMP outputs and a recording output),
+  the exact answer to every collection read of it (`output.list` included), and the
+  exact error for batches rejected against it (geometry, canvas, RTMP URL and
+  recording path checks included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -95,7 +98,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:902ac77fc685c5d6", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3 0.9 wire surface re-read against the whole PR diff (new edits item.set_geometry and canvas.set_size, item.add geometry, both-fields and 3D/size/perspective/canvas validation, placement forms and transform_view reads, deprecations, version 0.9 handshake example, regenerated snaps). Item geometry and its On the wire (0.9) list hold" }
+verified = { hash = "b3:1eebe9000cc00689", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's 0.9 record kind and Compatibility/OQ8; #166 changed only parity.rs and the mock, no wire type" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -115,8 +118,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":9},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":9},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":10},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":10},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -248,7 +251,14 @@ Outputs are collection state too: `output.create` adds one, stopped, with its
 while it runs. A target URL must be an `rtmp://` or `rtmps://` server URL with a host and an
 application name, and is refused if it could carry a credential (`user:password@`, a
 query or a fragment). A key pasted into the path can't be told from a nested
-application name, so it is stored as given. The
+application name, so it is stored as given. A `record` output (0.9) records to a file
+on the engine's machine: `path` must be absolute (`/…`, `\…`, `C:\…` or `C:/…`), have
+no `..` segment and end in a file name, and
+`container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
+`action_failed` when `path` or `<path>.part` already exists, so a recording never
+overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
+so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
+record elsewhere. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
@@ -283,7 +293,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 `rev` they read, so a client can send its next batch with that `expected_rev`:
 
 - `state.get`: the whole collection at one revision: the `canvas` (missing from a
-  pre-0.9 server, it parses as 1920×1080), every source, every scene in display order
+  pre-0.10 server, it parses as 1920×1080), every source, every scene in display order
   with its items, and every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
@@ -432,9 +442,15 @@ after 1.0:
   optional field. Old clients keep working, and a newer server still serves them
   (`can_serve`), because unknown fields are ignored (no type denies them), and because
   unknown server messages, events and error codes parse as an `Unknown` variant that
-  clients skip. An unknown error code still has its `message`. Not yet covered: a new
+  clients skip. An unknown error code still has its `message`. From 0.9, an output's
+  `OutputKind`, `RtmpTarget` and `RecordContainer` parse an unknown `type` or value as
+  `Unknown` too, so later output kinds won't break a 0.9 client. Not yet covered: a new
   value of a string enum (`OutputState`, `EntityKind`) inside a known message breaks an
-  older client's parse, so adding one needs open question 8 settled first.
+  older client's parse, so adding one needs open question 8 settled first. The same
+  break happened once, in 0.9 itself: `OutputKind` had no fallback in 0.7 and 0.8, so a
+  0.7 or 0.8 client can't parse `output.list` or `state.get` once a `record` output
+  exists (the whole response fails, and `WsControl` ends the session). Whether that
+  counts as a minor bump is part of open question 8.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
@@ -470,8 +486,8 @@ function in this crate so the compositor and the UI share one implementation.
   matches the outline and not the reflected corner order. `legacy_quad` is the
   reflected quad.
 
-**On the wire (0.9).** ADR-0022 names these additions as 0.4, which had already
-shipped with `events.dropped`, so they ship as 0.9, an additive minor under
+**On the wire (0.10).** ADR-0022 names these additions as 0.4, which had already
+shipped with `events.dropped`, so they ship as 0.10, an additive minor under
 [R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited
 ([R-DOC-009](../../docs/RULES.md#R-DOC-009)).
 
@@ -492,18 +508,18 @@ shipped with `events.dropped`, so they ship as 0.9, an additive minor under
   the compositor draws 3D, a non-neutral `tilt_deg`, `turn_deg`, `depth_px` or any
   `perspective_px` is `invalid_argument` naming that field; `is_neutral_3d` is that
   predicate. Accepting them later is not a breaking change.
-- **Reads.** `ItemInfo.placement` is `legacy` or `geometry` (missing from a pre-0.9
+- **Reads.** `ItemInfo.placement` is `legacy` or `geometry` (missing from a pre-0.10
   server, it parses as `legacy`). A legacy item reports its transform exactly as
   written and no `geometry`, because its box depends on the source's runtime size. A
   geometry item reports its `geometry`, and a deprecated `transform` computed from it
   alone (`transform_view`): the box's top-left corner after rotation about the centre,
   its rotation, and scale (1, 1). Every read is a function of stored state, so it
   changes only with `rev`.
-- **Deprecated** since 0.9, removed in 1.0: `ItemTransform`, `item.set_transform`,
+- **Deprecated** since 0.10, removed in 1.0: `ItemTransform`, `item.set_transform`,
   `item.add`'s `transform` and `ItemInfo.transform`. Their doc comments, and so the
   schema descriptions in `protocol.snap` and the MCP `tools.snap`, say so
   ([R-TEST-002](../../docs/RULES.md#R-TEST-002)).
-- **Not in 0.9 yet:** `source.sizes` and `source.size_changed` (decision 4), which need
+- **Not in 0.10 yet:** `source.sizes` and `source.size_changed` (decision 4), which need
   the engine's runtime source sizes, and live geometry values (ADR-0032's `live.set`),
   which need the live-value channel. Both are later minors.
 
@@ -555,7 +571,9 @@ described above.
    the pipeline runs.
 8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
    fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
-   a new value as a major change?
+   a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
+   fallbacks from 0.9, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
+   outputs (see Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an

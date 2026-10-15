@@ -34,6 +34,11 @@ const MAX_EDGE: u32 = 1280;
 /// Straight opacity. The graph does not store it yet, and the compositor's default is 1.
 const OPAQUE: f32 = 1.0;
 
+/// How many levels of scene sources a snapshot draws below the program scene. A scene
+/// source deeper than this draws nothing. The graph already rejects cycles; the bound
+/// caps what one snapshot can cost, since each level is a canvas-sized FP16 texture.
+const MAX_NESTING: usize = 8;
+
 /// Why [`crate::Engine::set_source_frame`] refused a frame.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum SourceFrameError {
@@ -96,9 +101,10 @@ impl Frame {
 }
 
 /// What one visible item shows.
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum SourceRef {
-    /// Bytes from [`Frame`], already on the CPU.
-    Frame(Frame),
+    /// A source's latest [`Frame`], kept in [`Shot::frames`].
+    Frame(SourceId),
     /// Another scene, composited first and then placed.
     Scene(SceneId),
 }
@@ -117,33 +123,36 @@ pub(crate) struct Shot {
     /// The first scene in display order. `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
+    /// The frames the copied scenes place, by source.
+    frames: BTreeMap<SourceId, Frame>,
 }
 
 /// Copies the program scene and the scenes it nests, at `graph`'s current revision.
 pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
     let state = graph.state();
     let program = state.scenes().first().map(|scene| scene.id().clone());
-    let mut scenes = BTreeMap::new();
-    if let Some(id) = &program {
-        let mut path = BTreeSet::new();
-        collect(state, frames, id, &mut scenes, &mut path);
-    }
-    Shot {
+    let mut shot = Shot {
         rev: graph.rev(),
         canvas: state.canvas(),
-        program,
-        scenes,
+        program: program.clone(),
+        scenes: BTreeMap::new(),
+        frames: BTreeMap::new(),
+    };
+    if let Some(id) = &program {
+        let mut path = BTreeSet::new();
+        collect(state, frames, id, &mut shot, &mut path);
     }
+    shot
 }
 
 fn collect(
     state: &State,
     frames: &BTreeMap<SourceId, Frame>,
     id: &SceneId,
-    out: &mut BTreeMap<SceneId, Vec<Placed>>,
+    out: &mut Shot,
     path: &mut BTreeSet<SceneId>,
 ) {
-    if out.contains_key(id) || !path.insert(id.clone()) {
+    if out.scenes.contains_key(id) || !path.insert(id.clone()) {
         return;
     }
     let mut placed = Vec::new();
@@ -161,7 +170,12 @@ fn collect(
                     SourceRef::Scene(scene_id.clone())
                 }
                 _ => match frames.get(item.source_id()) {
-                    Some(frame) => SourceRef::Frame(frame.clone()),
+                    Some(frame) => {
+                        out.frames
+                            .entry(item.source_id().clone())
+                            .or_insert_with(|| frame.clone());
+                        SourceRef::Frame(item.source_id().clone())
+                    }
                     None => continue,
                 },
             };
@@ -172,8 +186,110 @@ fn collect(
             });
         }
     }
-    out.insert(id.clone(), placed);
+    out.scenes.insert(id.clone(), placed);
     path.remove(id);
+}
+
+/// One composite in a snapshot: a scene at a nesting depth (the program scene is 0).
+#[derive(Debug, PartialEq)]
+struct Pass {
+    scene: SceneId,
+    depth: usize,
+    layers: Vec<Layer>,
+}
+
+/// One item of a [`Pass`].
+#[derive(Debug, PartialEq)]
+struct Layer {
+    image: Source,
+    placement: Placement,
+    crop: Crop,
+}
+
+/// Where a layer's image comes from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Source {
+    /// The upload of this source's frame.
+    Frame(SourceId),
+    /// The image an earlier pass, by index, rendered.
+    Pass(usize),
+}
+
+/// The composites `draw` makes for the scene `program`, in order: every nested scene
+/// before the scenes that place it, the program scene last.
+///
+/// A scene is rendered once per depth it is reached at, however often it is placed
+/// there. A scene source more than [`MAX_NESTING`] levels below the program scene, or
+/// one that shows a scene already being drawn further up (a cycle, which the graph
+/// rejects), draws nothing.
+fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
+    let mut passes = Vec::new();
+    let mut done = BTreeMap::new();
+    let mut path = BTreeSet::new();
+    visit(shot, program, 0, &mut path, &mut done, &mut passes);
+    passes
+}
+
+fn visit(
+    shot: &Shot,
+    id: &SceneId,
+    depth: usize,
+    path: &mut BTreeSet<SceneId>,
+    done: &mut BTreeMap<(SceneId, usize), usize>,
+    passes: &mut Vec<Pass>,
+) -> usize {
+    let key = (id.clone(), depth);
+    if let Some(index) = done.get(&key) {
+        return *index;
+    }
+    path.insert(id.clone());
+    let mut layers = Vec::new();
+    for placed in shot.scenes.get(id).map(Vec::as_slice).unwrap_or(&[]) {
+        let image = match &placed.source {
+            SourceRef::Frame(source) => Source::Frame(source.clone()),
+            SourceRef::Scene(inner) => {
+                if depth >= MAX_NESTING {
+                    tracing::debug!(
+                        scene = %inner,
+                        max = MAX_NESTING,
+                        "nested scene is past the snapshot's depth bound; not drawn"
+                    );
+                    continue;
+                }
+                if path.contains(inner) {
+                    continue;
+                }
+                Source::Pass(visit(shot, inner, depth + 1, path, done, passes))
+            }
+        };
+        layers.push(Layer {
+            image,
+            placement: placed.placement,
+            crop: placed.crop,
+        });
+    }
+    path.remove(id);
+    passes.push(Pass {
+        scene: id.clone(),
+        depth,
+        layers,
+    });
+    let index = passes.len() - 1;
+    done.insert(key, index);
+    index
+}
+
+/// For each pass, the index of the last pass that places its image.
+fn last_uses(passes: &[Pass]) -> Vec<usize> {
+    let mut last: Vec<usize> = (0..passes.len()).collect();
+    for (index, pass) in passes.iter().enumerate() {
+        for layer in &pass.layers {
+            if let Source::Pass(inner) = layer.image {
+                last[inner] = last[inner].max(index);
+            }
+        }
+    }
+    last
 }
 
 /// The compositor's placement for an item's stored one, in the same form (ADR-0022): a
@@ -429,10 +545,9 @@ fn reply_pair() -> (ReplyTx, SnapshotReply) {
 
 /// Renders `shot` and encodes the capped PNG.
 fn draw(shot: &Shot, compositor: &mut Compositor) -> Result<QueryResult, ProtocolError> {
-    let mut stack = BTreeSet::new();
     let full = match &shot.program {
-        Some(id) => render_scene(compositor, shot, id, &mut stack)?,
-        None => paint(compositor, shot.canvas, &[])?,
+        Some(id) => render(compositor, shot, &schedule(shot, id))?,
+        None => paint(compositor, shot.canvas, Color::BLACK, &[])?,
     };
     let (width, height) = fit(full.width(), full.height());
     let rgba = scale_down(full.width(), full.height(), full.rgba(), width, height);
@@ -446,40 +561,59 @@ fn draw(shot: &Shot, compositor: &mut Compositor) -> Result<QueryResult, Protoco
     })
 }
 
-fn render_scene(
+/// Runs `passes` in order. Each nested scene stays on the GPU as an image (transparent
+/// where it draws nothing), dropped after the last pass that places it; the last pass,
+/// the program scene, is drawn over black and read back.
+fn render(
     compositor: &mut Compositor,
     shot: &Shot,
-    id: &SceneId,
-    stack: &mut BTreeSet<SceneId>,
+    passes: &[Pass],
 ) -> Result<Snapshot, ProtocolError> {
-    if !stack.insert(id.clone()) {
-        return paint(compositor, shot.canvas, &[]);
-    }
-    let layers = shot.scenes.get(id).map(Vec::as_slice).unwrap_or(&[]);
-    let mut stored = Vec::with_capacity(layers.len());
-    for layer in layers {
-        let image = match &layer.source {
-            SourceRef::Frame(frame) => upload(compositor, frame.width, frame.height, &frame.rgba)?,
-            SourceRef::Scene(inner) => {
-                let nested = render_scene(compositor, shot, inner, stack)?;
-                upload(compositor, nested.width(), nested.height(), nested.rgba())?
+    let last = last_uses(passes);
+    let mut uploads: BTreeMap<SourceId, Image> = BTreeMap::new();
+    let mut images: Vec<Option<Image>> = Vec::with_capacity(passes.len());
+    for (index, pass) in passes.iter().enumerate() {
+        for layer in &pass.layers {
+            if let Source::Frame(source) = &layer.image
+                && !uploads.contains_key(source)
+                && let Some(frame) = shot.frames.get(source)
+            {
+                let image = upload(compositor, frame.width, frame.height, &frame.rgba)?;
+                uploads.insert(source.clone(), image);
             }
-        };
-        stored.push((image, layer.placement, layer.crop));
+        }
+        let items: Vec<Item<'_>> = pass
+            .layers
+            .iter()
+            .filter_map(|layer| {
+                let image = match &layer.image {
+                    Source::Frame(source) => uploads.get(source)?,
+                    Source::Pass(inner) => images.get(*inner)?.as_ref()?,
+                };
+                Some(Item {
+                    image,
+                    placement: layer.placement,
+                    crop: layer.crop,
+                    opacity: OPAQUE,
+                    visible: true,
+                })
+            })
+            .collect();
+        if index + 1 == passes.len() {
+            return paint(compositor, shot.canvas, Color::BLACK, &items);
+        }
+        let image = compositor
+            .render_image(&scene(shot.canvas, Color::TRANSPARENT, &items)?)
+            .map_err(from_render)?;
+        drop(items);
+        images.push(Some(image));
+        for (inner, slot) in images.iter_mut().enumerate() {
+            if last[inner] == index {
+                *slot = None;
+            }
+        }
     }
-    let items: Vec<Item<'_>> = stored
-        .iter()
-        .map(|(image, placement, crop)| Item {
-            image,
-            placement: *placement,
-            crop: *crop,
-            opacity: OPAQUE,
-            visible: true,
-        })
-        .collect();
-    let snapshot = paint(compositor, shot.canvas, &items)?;
-    stack.remove(id);
-    Ok(snapshot)
+    paint(compositor, shot.canvas, Color::BLACK, &[])
 }
 
 fn upload(
@@ -493,22 +627,32 @@ fn upload(
         .map_err(from_render)
 }
 
-fn paint(
-    compositor: &mut Compositor,
+/// A scene the size of the collection's canvas.
+fn scene<'a>(
     canvas: Canvas,
-    items: &[Item<'_>],
-) -> Result<Snapshot, ProtocolError> {
+    background: Color,
+    items: &'a [Item<'a>],
+) -> Result<Scene<'a>, ProtocolError> {
     let canvas = FrameSize::new(canvas.width, canvas.height).map_err(|_| RenderError::Invalid {
         what: "canvas",
         detail: "the canvas size is zero".into(),
     });
-    let canvas = canvas.map_err(from_render)?;
-    let scene = Scene {
-        canvas,
-        background: Color::BLACK,
+    Ok(Scene {
+        canvas: canvas.map_err(from_render)?,
+        background,
         items,
-    };
-    let output = compositor.render(&scene, true).map_err(from_render)?;
+    })
+}
+
+fn paint(
+    compositor: &mut Compositor,
+    canvas: Canvas,
+    background: Color,
+    items: &[Item<'_>],
+) -> Result<Snapshot, ProtocolError> {
+    let output = compositor
+        .render(&scene(canvas, background, items)?, true)
+        .map_err(from_render)?;
     output
         .pixels()
         .cloned()
@@ -673,11 +817,262 @@ pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        FIRST_RETRY, Frame, MAX_RETRY, OpenBackoff, SourceFrameError, base64, decode_base64,
-        decode_png, encode_png, fit,
+        FIRST_RETRY, Frame, MAX_NESTING, MAX_RETRY, OpenBackoff, Pass, Placed, Shot, Source,
+        SourceFrameError, SourceRef, base64, decode_base64, decode_png, draw, encode_png, fit,
+        is_no_adapter, last_uses, schedule,
     };
-    use jstream_protocol::ProtocolError;
+    use jstream_protocol::{Canvas, ProtocolError, QueryResult, Rev, SceneId, SourceId};
+    use jstream_render::{Compositor, Crop, LegacyTransform, OpenOptions, Placement};
+    use std::collections::BTreeMap;
+    use std::io::Write;
     use std::time::{Duration, Instant};
+
+    /// A 16x9 frame, scaled by 120 to cover the 1920x1080 canvas.
+    const FULL: Placement = Placement::Legacy(LegacyTransform {
+        position: [0.0, 0.0],
+        scale: [120.0, 120.0],
+        rotation_deg: 0.0,
+    });
+
+    const RED: [u8; 4] = [255, 0, 0, 255];
+    const GREEN: [u8; 4] = [0, 255, 0, 255];
+
+    fn frame(rgba: [u8; 4]) -> Frame {
+        let bytes: Vec<u8> = std::iter::repeat_n(rgba, 16 * 9).flatten().collect();
+        Frame::new(16, 9, &bytes).expect("invariant: 16x9 RGBA8")
+    }
+
+    fn placed(source: SourceRef, placement: Placement) -> Placed {
+        Placed {
+            source,
+            placement,
+            crop: Crop::NONE,
+        }
+    }
+
+    fn nest(scene: &str, placement: Placement) -> Placed {
+        placed(SourceRef::Scene(SceneId::new(scene)), placement)
+    }
+
+    fn fill(source: &str) -> Placed {
+        placed(SourceRef::Frame(SourceId::new(source)), FULL)
+    }
+
+    /// A shot of `scenes`, the first one on program. Sources named `red` and `green`
+    /// have frames of that colour.
+    fn shot(scenes: Vec<(&str, Vec<Placed>)>) -> Shot {
+        let program = scenes.first().map(|(id, _)| SceneId::new(*id));
+        Shot {
+            rev: Rev(1),
+            canvas: Canvas::DEFAULT,
+            program,
+            scenes: scenes
+                .into_iter()
+                .map(|(id, items)| (SceneId::new(id), items))
+                .collect(),
+            frames: BTreeMap::from([
+                (SourceId::new("red"), frame(RED)),
+                (SourceId::new("green"), frame(GREEN)),
+            ]),
+        }
+    }
+
+    /// A chain `s0` → `s1` → … → `s{last}`, each placing the next at the full canvas,
+    /// with green filling the last one over a red program background.
+    fn chain(last: usize) -> Shot {
+        let mut scenes = Vec::new();
+        let names: Vec<String> = (0..=last).map(|i| format!("s{i}")).collect();
+        for (i, name) in names.iter().enumerate() {
+            let items = if i == 0 {
+                vec![fill("red"), nest(&names[1], Placement::IDENTITY)]
+            } else if i == last {
+                vec![fill("green")]
+            } else {
+                vec![nest(&names[i + 1], Placement::IDENTITY)]
+            };
+            scenes.push((name.as_str(), items));
+        }
+        shot(scenes)
+    }
+
+    fn passes(shot: &Shot) -> Vec<(String, usize)> {
+        let program = shot.program.as_ref().expect("invariant: a program scene");
+        schedule(shot, program)
+            .into_iter()
+            .map(|pass| (pass.scene.as_str().to_owned(), pass.depth))
+            .collect()
+    }
+
+    /// Inner scenes come before the scenes that place them, and a scene placed twice at
+    /// one depth is composited once.
+    #[test]
+    fn nested_scenes_are_scheduled_inside_out_once_per_depth() {
+        let half = Placement::Legacy(LegacyTransform {
+            scale: [0.5, 0.5],
+            ..LegacyTransform::IDENTITY
+        });
+        let shot = shot(vec![
+            (
+                "program",
+                vec![nest("a", half), nest("b", half), nest("a", FULL)],
+            ),
+            ("a", vec![fill("green"), nest("b", half)]),
+            ("b", vec![fill("red")]),
+        ]);
+        assert_eq!(
+            passes(&shot),
+            [
+                ("b".to_owned(), 2),
+                ("a".to_owned(), 1),
+                ("b".to_owned(), 1),
+                ("program".to_owned(), 0),
+            ]
+        );
+        let program = shot.program.as_ref().expect("invariant: a program scene");
+        let schedule: Vec<Pass> = schedule(&shot, program);
+        let sources: Vec<&Source> = schedule[3].layers.iter().map(|l| &l.image).collect();
+        assert_eq!(
+            sources,
+            [&Source::Pass(1), &Source::Pass(2), &Source::Pass(1)]
+        );
+        assert_eq!(last_uses(&schedule), [1, 3, 3, 3]);
+    }
+
+    /// The program scene is depth 0. A scene [`MAX_NESTING`] levels down is drawn; one
+    /// level further is not.
+    #[test]
+    fn nesting_stops_at_the_depth_bound() {
+        let deepest = passes(&chain(MAX_NESTING));
+        assert_eq!(deepest.len(), MAX_NESTING + 1);
+        assert_eq!(deepest[0], (format!("s{MAX_NESTING}"), MAX_NESTING));
+
+        let shot = chain(MAX_NESTING + 1);
+        let too_deep = passes(&shot);
+        assert_eq!(
+            too_deep.len(),
+            MAX_NESTING + 1,
+            "s{} is not drawn",
+            MAX_NESTING + 1
+        );
+        let program = shot.program.as_ref().expect("invariant: a program scene");
+        let schedule = schedule(&shot, program);
+        assert!(
+            schedule[0].layers.is_empty(),
+            "the scene at the bound places nothing deeper"
+        );
+    }
+
+    /// The graph rejects cycles, so a shot never has one; if it did, the scene that
+    /// closes it draws nothing instead of recursing.
+    #[test]
+    fn a_cycle_draws_the_closing_scene_source_as_nothing() {
+        let shot = shot(vec![
+            ("a", vec![fill("red"), nest("b", Placement::IDENTITY)]),
+            ("b", vec![fill("green"), nest("a", Placement::IDENTITY)]),
+        ]);
+        assert_eq!(passes(&shot), [("b".to_owned(), 1), ("a".to_owned(), 0)]);
+        let program = shot.program.as_ref().expect("invariant: a program scene");
+        assert_eq!(schedule(&shot, program)[0].layers.len(), 1);
+    }
+
+    /// Draws `shot` on a software adapter and decodes the 1280x720 PNG. `None` when there
+    /// is no adapter outside CI.
+    fn snap(shot: &Shot) -> Option<Vec<u8>> {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let mut compositor = match Compositor::open(OpenOptions::headless()) {
+            Ok(compositor) => compositor,
+            Err(err) => {
+                let error = super::from_render(err);
+                assert!(is_no_adapter(&error), "opening the compositor: {error}");
+                assert!(
+                    std::env::var_os("CI").is_none(),
+                    "CI has no wgpu adapter: {error}"
+                );
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "jstream-core: skipping nested-scene GPU test, no adapter: {error}"
+                );
+                return None;
+            }
+        };
+        let result = draw(shot, &mut compositor).expect("draw");
+        let QueryResult::VideoSnapshot { png, .. } = result else {
+            panic!("not a snapshot: {result:?}");
+        };
+        let (width, height, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+        assert_eq!((width, height), (1280, 720));
+        Some(rgba)
+    }
+
+    /// The pixel at `(x, y)` of a 1280x720 snapshot.
+    fn at(rgba: &[u8], x: u32, y: u32) -> [u8; 4] {
+        let i = (y as usize * 1280 + x as usize) * 4;
+        [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+    }
+
+    /// Two levels: `b` (green) at half size in the bottom-right quarter of `a`, and `a`
+    /// at half size at the program's top-left over red. The nested scenes are
+    /// transparent where they draw nothing, so red shows around the green.
+    #[test]
+    fn nested_scenes_composite_through_two_levels() {
+        let half = |x: f32, y: f32| {
+            Placement::Legacy(LegacyTransform {
+                position: [x, y],
+                scale: [0.5, 0.5],
+                rotation_deg: 0.0,
+            })
+        };
+        let shot = shot(vec![
+            ("program", vec![fill("red"), nest("a", half(0.0, 0.0))]),
+            ("a", vec![nest("b", half(960.0, 540.0))]),
+            ("b", vec![fill("green")]),
+        ]);
+        let Some(rgba) = snap(&shot) else { return };
+        // `b` covers canvas 480..960 x 270..540, which is 320..640 x 180..360 in the PNG.
+        for (x, y) in [(330, 190), (480, 270), (630, 350)] {
+            assert_eq!(at(&rgba, x, y), GREEN, "({x}, {y})");
+        }
+        for (x, y) in [(10, 10), (310, 190), (330, 170), (650, 350), (900, 600)] {
+            assert_eq!(at(&rgba, x, y), RED, "({x}, {y})");
+        }
+    }
+
+    /// At the bound the deepest scene still shows; one level past it, nothing does.
+    #[test]
+    fn the_depth_bound_holds_on_the_gpu() {
+        let Some(rgba) = snap(&chain(MAX_NESTING)) else {
+            return;
+        };
+        assert_eq!(at(&rgba, 640, 360), GREEN);
+        let Some(rgba) = snap(&chain(MAX_NESTING + 1)) else {
+            return;
+        };
+        assert_eq!(at(&rgba, 640, 360), RED);
+    }
+
+    /// A scene placed twice shows in both places, and a cycle still draws.
+    #[test]
+    fn a_scene_placed_twice_and_a_cycle_both_draw() {
+        let left = LegacyTransform {
+            scale: [0.5, 1.0],
+            ..LegacyTransform::IDENTITY
+        };
+        let right = Placement::Legacy(LegacyTransform {
+            position: [960.0, 0.0],
+            ..left
+        });
+        let left = Placement::Legacy(left);
+        let shot = shot(vec![
+            ("program", vec![nest("a", left), nest("a", right)]),
+            (
+                "a",
+                vec![fill("green"), nest("program", Placement::IDENTITY)],
+            ),
+        ]);
+        let Some(rgba) = snap(&shot) else { return };
+        assert_eq!(at(&rgba, 100, 360), GREEN);
+        assert_eq!(at(&rgba, 1100, 360), GREEN);
+    }
 
     /// A failed adapter open is answered from the cache until its wait is over, and
     /// the wait doubles with each failure in a row, up to the cap.

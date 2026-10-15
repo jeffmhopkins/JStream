@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:0b76cc0738c0d4f8", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: re-read; contents list holds (args.rs/run.rs only gained geometry: None fields)" }
+verified = { hash = "b3:40bcd2eae02a4021", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155, 0.8) into A5: re-read; Running bullet (mcp and output set-key read the BufRead) and contents list hold for args.rs with both source.rename and the output commands" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -29,8 +29,8 @@ Contents (a first cut):
   ([Usage](#usage)).
 - **Running** (`run.rs`): opens a session through a connector (the engine's WebSocket
   API through `jstream-control`'s `WsControl`, or the mock), runs the call, and writes
-  human or `--json` output through the `Write` handles it is given (`mcp` also reads
-  the `BufRead` it is given).
+  human or `--json` output through the `Write` handles it is given (`mcp`, and
+  `output set-key` for the stream key, also read the `BufRead` it is given).
 - **Exit codes** (`exit.rs`): one per failure kind, including one per protocol error code.
 - **Blocking** (`block.rs`): a thread-parking `block_on` for `Control`'s futures.
 - **MCP proxy** (`mcp.rs`): `jstream-cli mcp`, the stdio MCP proxy
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:4f91ae6e9af5e439", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: Edits bullet says canvas.set_size, item.set_geometry and item.add geometry are not in the CLI and item.add makes a legacy item (args.rs sends geometry: None); Reads bullet says a geometry item's columns are the transform view and only --json shows geometry and canvas (run/tests.rs goldens)" }
+verified = { hash = "b3:5e8970433d7959a4", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: edit-forms bullet now says output.create's URL form is for generic RTMP and the CLI has no recording form yet; args.rs only parses rtmp(s) URLs" }
 -->
 
 ```sh
@@ -56,6 +56,10 @@ jstream-cli --url ws://127.0.0.1:4455 --token-file /path/to/token scene list
 jstream-cli --mock --mock-output out_1 output start out_1
 jstream-cli --mock edit --expected-rev 0 scene.create main Main \
     source.create cam Camera builtin:webcam item.add main cam_1 cam
+jstream-cli --url ws://127.0.0.1:4455 --token-file /path/to/token \
+    edit output.create yt rtmps://a.rtmps.youtube.com:443/live2
+jstream-cli --url ws://127.0.0.1:4455 --token-file /path/to/token \
+    output set-key yt --key-file /path/to/stream-key
 ```
 
 Global options come before the command: `--json`, `--url <url>`, `--token-file <path>`,
@@ -81,9 +85,12 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `scene list` | query `scene.list` |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
+| `output list` | query `output.list` |
 | `output status <id>` | query `output.status` |
 | `video snapshot` | query `video.snapshot` |
 | `output start <id>`, `output stop <id>` | action `output.start`, `output.stop` |
+| `output set-key <id> [--key-file <path>]` | action `output.set_key`, with the key read from the file or stdin |
+| `output clear-key <id>` | action `output.clear_key` |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
 | `events [--count <n>]` | the event subscription |
 | `mcp` | serves MCP on stdin and stdout; each tool call is one protocol call (see **MCP** below) |
@@ -94,15 +101,30 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings and outputs. `source.set_settings`, and
-  `source.create` with settings, need a JSON argument form the CLI doesn't have yet, so
-  a source it creates gets its kind's defaults. Protocol 0.7's output edits
-  (`output.create`, `output.set_target`, `output.delete`), `output.list` and the
-  stream-key actions are not in the CLI yet, nor are protocol 0.9's
-  `canvas.set_size`, `item.set_geometry` and `item.add`'s `geometry`
-  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)); `item.add` sends
-  neither placement, so its item is a legacy one. Several edits on one line go as **one atomic batch**: one new
+  protocol is supported except settings. `source.set_settings`, and `source.create`
+  with settings, need a JSON argument form the CLI doesn't have yet, so a source it
+  creates gets its kind's defaults. Protocol 0.10's `canvas.set_size`,
+  `item.set_geometry` and `item.add`'s `geometry`
+  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
+  yet; `item.add` sends neither placement, so its item is a legacy one. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
+  `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
+  <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
+  which is the whole target of a generic RTMP output. The CLI has no form for a
+  recording output yet. An argument without an `rtmp` or `rtmps` scheme is a usage
+  error, which leaves other spellings free for later output kinds; the engine checks
+  the rest. Neither message repeats
+  the URL.
+- **Stream keys** are never arguments, so they stay out of shell history and the
+  process list (`ps`), as the control token does. `output set-key <id>` reads the key
+  from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
+  and press Ctrl-D; the terminal shows what is typed). Surrounding whitespace, such as
+  a final newline, is dropped. Anything else after the output ID is a usage error that
+  doesn't repeat it. An empty key, an unreadable file, or input over 4096 bytes (no
+  stream key is that long; it is refused before it is buffered or sent) is a usage
+  error too, and the key is read before connecting. Neither the CLI nor the engine prints a key back: the
+  reply is `output.set_key accepted for <id> (<request>)`, and `output status` says
+  only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
   the `state.changed` event it causes. With `--json`, each result is one line of JSON
@@ -115,10 +137,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `ROTATION` and `CROP` (`left,top,right,bottom`) in the argument order of the edits
   that set them; for an item placed with a geometry, those columns show the
   protocol's deprecated transform view of it, and only `--json` shows its `geometry`
-  and the canvas. `state get` prints the sources, then each scene in display order with
-  its items; it doesn't print the outputs, and `output status` prints the state but
-  not `key_set`, so read those with `--json`. An empty list prints `no scenes`,
-  `no sources` or `no items`.
+  and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
+  server URL, as `output.create` takes it). `state get` prints the sources, then each
+  scene in display order with its items, then the outputs. `output status` prints
+  `<id>: <state>, stream key set` (or `not set`). An empty list prints `no scenes`,
+  `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
 - **Errors** go to stderr. For people: `error: <message>`, with ` (<code>)` appended
@@ -168,7 +191,7 @@ for example:
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | The output could not be written, or `mcp` could not read stdin (a closed pipe exits silently) |
+| 1 | The output could not be written, or `mcp` or `output set-key` could not read stdin (a closed pipe exits silently) |
 | 2 | Usage: the command line could not be parsed, or names no engine or no readable token file |
 | 3 | `Disconnected`: no connection to the engine (unreachable, or it refused the token, `Origin` or `Host`), or it was lost (whether the call took effect is unknown) |
 | 10 | `unsupported_version` |
@@ -188,7 +211,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:963c5802a8e5b2a7", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: re-read; parsing, block_on, connector, mock, writers and MCP proxy bullets unaffected" }
+verified = { hash = "b3:fc2eb1855e933b5e", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: control design change is only the mock's recording checks; CLI design text about WsControl and the mock holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -218,8 +241,8 @@ verified = { hash = "b3:963c5802a8e5b2a7", by = "agent:claude@session_01SS5BBdaw
   branches of `--mock`; the binary-level test (`tests/exit_codes.rs`) needs the feature
   (`required-features`) and runs under `--all-features`.
 - **Output through writers.** Clippy denies `print!` ([R-RS-005](../../docs/RULES.md#R-RS-005)),
-  so `run` writes to the `Write` handles it is given, and `mcp` reads the `BufRead` it
-  is given: locked stdin, stdout and stderr in `main`, byte buffers in tests, which
+  so `run` writes to the `Write` handles it is given, and `mcp` and `output set-key`
+  read the `BufRead` it is given: locked stdin, stdout and stderr in `main`, byte buffers in tests, which
   compare the exact human and JSON output.
 - **The MCP proxy is `jstream-mcp` on the CLI's connection.** The binary keeps the name
   `jstream-cli` (maintainer's choice), so the stdio MCP proxy

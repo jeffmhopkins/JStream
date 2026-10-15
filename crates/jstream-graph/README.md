@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:384712238a6d9c54", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: Model has State.canvas and Item Placement (Legacy|Geometry); new Canvas and geometry bullet checked against apply.rs check_geometry/check_canvas_side/set_placement/restore_item; read.rs to_info view; tests list placement/canvas cases; property test now draws below(23) incl. set_geometry, geometry item.add and canvas.set_size (40 seeds x 150 = 6000); Not yet drops canvas/geometry" }
+verified = { hash = "b3:4352b2d343ce4ac4", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; ADR-0040 text from main; F2b record path checks and Unknown refusals still match target.rs and apply.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -39,7 +39,8 @@ codes, so the engine passes them to clients unchanged.
   one of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two forms: a
   `Geometry` (a box on the canvas) or a `Legacy` 0.3 `ItemTransform`, kept exactly as
   written. Only an edit changes the form.
-- `Output`: an ID and an `OutputKind` (so far only RTMP to a generic URL). Whether it
+- `Output`: an ID and an `OutputKind` (so far RTMP to a generic URL, or a recording
+  to an MP4 file). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -83,7 +84,12 @@ goes up by exactly one, and the result carries the **inverse batch**.
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
   name, and one that could carry a credential (`user:password@`, a query or a
-  fragment). `output.delete` is undone by `output.create` with its kind, and
+  fragment). A recording's `path` is rejected (field `kind.path`) when it is empty,
+  over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
+  `\…`, `C:\…` or `C:/…`, the same on every platform, as for an absolute asset), or
+  doesn't end in a file name; whether it is absolute on the engine's own machine, and
+  whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording fails with
+  `invalid_argument` (it has no RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
   with `invalid_argument`, in edit order.

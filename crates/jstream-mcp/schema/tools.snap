@@ -145,7 +145,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "**Deprecated** since 0.9 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
+                    "description": "**Deprecated** since 0.10 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
                   },
                   "type": {
                     "const": "item.add",
@@ -179,7 +179,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "**Deprecated** since 0.9 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
+                "description": "**Deprecated** since 0.10 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -625,7 +625,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "ItemTransform": {
-            "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n**Deprecated** since 0.9 (ADR-0022) and removed in 1.0, with `item.set_transform`,\n`item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning\nbelow.\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
+            "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n**Deprecated** since 0.10 (ADR-0022) and removed in 1.0, with `item.set_transform`,\n`item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning\nbelow.\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
             "properties": {
               "position": {
                 "$ref": "#/$defs/Vec2",
@@ -652,7 +652,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "OutputKind": {
-            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nOnly RTMP(S) to a generic URL is configurable so far. Recording, the virtual camera\nand the YouTube-bound target of the data model come later as new variants.",
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL and recording to a file are configurable so far. The\nvirtual camera and the YouTube-bound target of the data model come later as new\nvariants.",
             "oneOf": [
               {
                 "description": "A stream sent over RTMP or RTMPS.",
@@ -671,6 +671,39 @@ source: crates/jstream-mcp/src/tests.rs
                   "target"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "A recording to a file on the engine's machine.",
+                "properties": {
+                  "container": {
+                    "$ref": "#/$defs/RecordContainer",
+                    "description": "The file format."
+                  },
+                  "path": {
+                    "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one with control\ncharacters or a `..` segment, and one that ends in a separator or names no\nfile. `output.start` also fails when the path is not absolute on the\nengine's own machine.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "record",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path",
+                  "container"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "RecordContainer": {
+            "description": "The file format a recording is written in. Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "mp4",
+                "description": "MP4 with H.264 video and AAC audio, written fragmented (a fragment per video\nkeyframe, each synced to disk), so a crash loses at most the last fragment and\nthe `.part` file it leaves plays up to there.",
+                "type": "string"
               }
             ]
           },
@@ -1064,7 +1097,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "ItemTransform": {
-            "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n**Deprecated** since 0.9 (ADR-0022) and removed in 1.0, with `item.set_transform`,\n`item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning\nbelow.\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
+            "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n**Deprecated** since 0.10 (ADR-0022) and removed in 1.0, with `item.set_transform`,\n`item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning\nbelow.\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
             "properties": {
               "position": {
                 "$ref": "#/$defs/Vec2",
@@ -1199,7 +1232,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "**Deprecated** since 0.9 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
+                    "description": "**Deprecated** since 0.10 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
                   },
                   "type": {
                     "const": "item.add",
@@ -1233,7 +1266,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "**Deprecated** since 0.9 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
+                "description": "**Deprecated** since 0.10 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -1439,7 +1472,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "OutputKind": {
-            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nOnly RTMP(S) to a generic URL is configurable so far. Recording, the virtual camera\nand the YouTube-bound target of the data model come later as new variants.",
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL and recording to a file are configurable so far. The\nvirtual camera and the YouTube-bound target of the data model come later as new\nvariants.",
             "oneOf": [
               {
                 "description": "A stream sent over RTMP or RTMPS.",
@@ -1458,6 +1491,39 @@ source: crates/jstream-mcp/src/tests.rs
                   "target"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "A recording to a file on the engine's machine.",
+                "properties": {
+                  "container": {
+                    "$ref": "#/$defs/RecordContainer",
+                    "description": "The file format."
+                  },
+                  "path": {
+                    "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one with control\ncharacters or a `..` segment, and one that ends in a separator or names no\nfile. `output.start` also fails when the path is not absolute on the\nengine's own machine.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "record",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path",
+                  "container"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "RecordContainer": {
+            "description": "The file format a recording is written in. Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "mp4",
+                "description": "MP4 with H.264 video and AAC audio, written fragmented (a fragment per video\nkeyframe, each synced to disk), so a crash loses at most the last fragment and\nthe `.part` file it leaves plays up to there.",
+                "type": "string"
               }
             ]
           },

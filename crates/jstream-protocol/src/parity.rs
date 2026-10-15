@@ -11,8 +11,9 @@
 
 use crate::{
     Batch, Canvas, Crop, Edit, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemInfo,
-    ItemTransform, KindCategory, KindDescriptor, PlacementForm, ProtocolError, Query, QueryResult,
-    Rev, SceneId, SceneInfo, SceneSummary, Size, SourceId, SourceInfo, SourceKind, Vec2,
+    ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind, PlacementForm,
+    ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo,
+    SceneSummary, Size, SourceId, SourceInfo, SourceKind, Vec2,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -37,10 +38,12 @@ pub fn kinds() -> Vec<KindDescriptor> {
 /// The batch that builds the fixture collection from an empty one: a 1280×720 canvas,
 /// scenes `b` then `a` (created `a` first, then reordered), source `cam` placed twice in
 /// `a` (the second placement moved, cropped, hidden and reordered to the bottom) and once
-/// in `b` with a geometry, and scene `b` nested in `a` through the scene source `b_src`.
+/// in `b` with a geometry, scene `b` nested in `a` through the scene source `b_src`, the
+/// RTMP outputs `yt` and `tw` (`tw`'s target changed after it was created), and the
+/// recording output `rec`.
 ///
-/// Sources are created in the opposite order of their IDs, so reads that order sources by
-/// ID can't pass by echoing creation order.
+/// Sources and outputs are created in the opposite order of their IDs, so reads that
+/// order them by ID can't pass by echoing creation order.
 pub fn collection() -> Batch {
     let source = |s: SourceInfo| Edit::SourceCreate {
         source_id: s.source_id,
@@ -100,6 +103,24 @@ pub fn collection() -> Batch {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: Some(BOXED),
+            },
+            Edit::OutputCreate {
+                output_id: OutputId::new("yt"),
+                kind: youtube().kind,
+            },
+            Edit::OutputCreate {
+                output_id: OutputId::new("tw"),
+                kind: rtmp("rtmp://old.example.com/app"),
+            },
+            Edit::OutputSetTarget {
+                output_id: OutputId::new("tw"),
+                target: RtmpTarget::Generic {
+                    url: TWITCH_URL.into(),
+                },
+            },
+            Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: recording().kind,
             },
         ],
         expected_rev: Some(Rev(0)),
@@ -186,9 +207,15 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         items: items_of_a(),
                     },
                 ],
-                // The parity collection configures no output: the mock does not
-                // implement the output edits.
-                outputs: vec![],
+                outputs: outputs(),
+            }),
+        ),
+        // Outputs by ID, whatever order they were created in.
+        (
+            Query::OutputList,
+            Ok(QueryResult::OutputList {
+                rev: COLLECTION_REV,
+                outputs: outputs(),
             }),
         ),
     ]
@@ -334,6 +361,187 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 id: "ghost".into(),
             },
         ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new(""),
+                kind: rtmp("rtmp://host/app"),
+            }),
+            invalid("edits.0.output_id", "must not be empty"),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("yt"),
+                kind: rtmp("rtmp://host/app"),
+            }),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Output,
+                id: "yt".into(),
+            },
+        ),
+        // URLs that could carry a credential are refused, and the reason never repeats
+        // the URL.
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: rtmp("rtmp://user:secret@host/app"),
+            }),
+            invalid(
+                "edits.0.kind.target.url",
+                "must not carry credentials (`user:password@`): set the stream key with \
+                 `output.set_key`",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: rtmp("rtmp://host/app?key=secret"),
+            }),
+            invalid(
+                "edits.0.kind.target.url",
+                "must not have a query or fragment: set the stream key with `output.set_key`",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: rtmp("srt://host/app"),
+            }),
+            invalid(
+                "edits.0.kind.target.url",
+                "the scheme must be `rtmp` or `rtmps`",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputSetTarget {
+                output_id: OutputId::new("ghost"),
+                target: RtmpTarget::Generic {
+                    url: "rtmp://host/app".into(),
+                },
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::OutputSetTarget {
+                output_id: OutputId::new("yt"),
+                target: RtmpTarget::Generic {
+                    url: "rtmp://host:99999/app".into(),
+                },
+            }),
+            invalid(
+                "edits.0.target.url",
+                "has a port that is not a number in 1..=65535",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputSetTarget {
+                output_id: OutputId::new("yt"),
+                target: RtmpTarget::Generic {
+                    url: "rtmp://host/".into(),
+                },
+            }),
+            invalid(
+                "edits.0.target.url",
+                "is missing the application name (the path after the host)",
+            ),
+        ),
+        // Recording paths are checked the same way on every platform.
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record("Videos/show.mp4"),
+            }),
+            invalid(
+                "edits.0.kind.path",
+                "must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record("C:\\Videos\\..\\show.mp4"),
+            }),
+            invalid("edits.0.kind.path", "must not contain a `..` segment"),
+        ),
+        (
+            Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new("new"),
+                kind: record("/home/me/Videos/"),
+            }),
+            invalid("edits.0.kind.path", "must end in a file name"),
+        ),
+        (
+            Batch::single(Edit::OutputSetTarget {
+                output_id: OutputId::new("rec"),
+                target: RtmpTarget::Generic {
+                    url: "rtmp://host/app".into(),
+                },
+            }),
+            invalid("edits.0.output_id", "the output is not an RTMP output"),
+        ),
+        // A delete inside the batch applies, the second fails, and the output is back.
+        (
+            Batch {
+                edits: vec![
+                    Edit::OutputDelete {
+                        output_id: OutputId::new("yt"),
+                    },
+                    Edit::OutputDelete {
+                        output_id: OutputId::new("yt"),
+                    },
+                ],
+                expected_rev: None,
+                idempotency_key: None,
+            },
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "yt".into(),
+            },
+        ),
+    ]
+}
+
+/// The server URL output `tw` ends up with.
+const TWITCH_URL: &str = "rtmp://live.twitch.tv/app";
+
+fn rtmp(url: &str) -> OutputKind {
+    OutputKind::Rtmp {
+        target: RtmpTarget::Generic { url: url.into() },
+    }
+}
+
+fn record(path: &str) -> OutputKind {
+    OutputKind::Record {
+        path: path.into(),
+        container: RecordContainer::Mp4,
+    }
+}
+
+fn recording() -> OutputInfo {
+    OutputInfo {
+        output_id: OutputId::new("rec"),
+        kind: record("/home/me/Videos/show.mp4"),
+    }
+}
+
+fn youtube() -> OutputInfo {
+    OutputInfo {
+        output_id: OutputId::new("yt"),
+        kind: rtmp("rtmps://a.rtmps.youtube.com:443/live2"),
+    }
+}
+
+/// The collection's outputs, ordered by ID.
+fn outputs() -> Vec<OutputInfo> {
+    vec![
+        recording(),
+        OutputInfo {
+            output_id: OutputId::new("tw"),
+            kind: rtmp(TWITCH_URL),
+        },
+        youtube(),
     ]
 }
 

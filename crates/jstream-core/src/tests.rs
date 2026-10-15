@@ -1390,7 +1390,7 @@ const GPU_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120
 
 /// One software-adapter test at a time. Parallel compositors starve the pipeline
 /// test's media wait and crash WARP. The lock schedules tests; it is not engine state.
-fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
+pub(crate) fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
     static SLOT: Mutex<()> = Mutex::new(());
     SLOT.lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1760,7 +1760,10 @@ fn deleting_a_source_drops_its_frame() {
 // any machine. The GPU path itself is covered by the tests above.
 
 mod cpu_pipeline {
-    use super::{block_on, code, connected, drain, output_call, output_state, output_steps};
+    use super::{
+        batch, block_on, code, connected, drain, edits, output_call, output_state, output_steps,
+    };
+    use crate::InProcessControl;
     use crate::runtime::{DrawFn, OpenDraw, cpu_draw};
     use crate::{Engine, LinkState, LivePublish, PublishError, RecordingPublish};
     use jstream_control::{Control, EventStream};
@@ -1774,7 +1777,7 @@ mod cpu_pipeline {
         MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
         VideoEncoderConfig, VideoSurface,
     };
-    use jstream_protocol::{Event, OutputId, OutputState};
+    use jstream_protocol::{Edit, Event, OutputId, OutputKind, OutputState, RecordContainer};
     use std::panic::{self, AssertUnwindSafe};
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{Arc, Condvar, Mutex, mpsc};
@@ -2958,6 +2961,209 @@ mod cpu_pipeline {
             "the abandoned packets were not counted: {last_tick:?}"
         );
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
+    }
+
+    // --- Item: a recording output writes fragmented MP4 to the path it names.
+
+    /// A directory under the system temp dir, removed on drop.
+    struct TempDir(std::path::PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir()
+                .join(format!("jstream-core-record-{}-{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).expect("temp dir");
+            Self(dir)
+        }
+
+        fn join(&self, name: &str) -> std::path::PathBuf {
+            self.0.join(name)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// An engine with no publish target and no opener, and the recording output `rec`
+    /// created through the protocol, recording to `path`.
+    fn recording_engine(
+        fakes: &Fakes,
+        draw: OpenDraw,
+        path: &std::path::Path,
+    ) -> (Engine, InProcessControl, EventStream) {
+        let engine = Engine::new()
+            .with_backends(share(&fakes.backends))
+            .with_draw(draw);
+        let control = connected(&engine);
+        let events = control.events();
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: OutputKind::Record {
+                    path: path.to_str().expect("a UTF-8 temp path").into(),
+                    container: RecordContainer::Mp4,
+                },
+            }]),
+        )
+        .expect("output.create");
+        (engine, control, events)
+    }
+
+    /// The top-level MP4 boxes of `bytes`, by type.
+    fn boxes(bytes: &[u8]) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut at = 0;
+        while at + 8 <= bytes.len() {
+            let size = u32::from_be_bytes(bytes[at..at + 4].try_into().expect("4 bytes")) as usize;
+            found.push(String::from_utf8_lossy(&bytes[at + 4..at + 8]).into_owned());
+            if size < 8 {
+                break;
+            }
+            at += size;
+        }
+        found
+    }
+
+    /// `output.start` on a recording output needs no publish target: it records to the
+    /// collection's path as `<path>.part` while active, and `output.stop` renames it
+    /// into place, an `ftyp`, a `moov` and then fragments.
+    #[test]
+    fn a_recording_output_writes_mp4_to_its_path() {
+        let dir = TempDir::new("writes");
+        let path = dir.join("show.mp4");
+        let part = dir.join("show.mp4.part");
+        let fakes = fakes();
+        let (engine, control, mut events) = recording_engine(&fakes, cpu_draw(), &path);
+        drain(&mut events);
+
+        block_on(control.call(output_call("rec", true))).expect("output.start");
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Starting, OutputState::Active]
+        );
+        assert!(part.exists(), "nothing is written to the .part name");
+        assert!(!path.exists(), "the destination exists before the stop");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine.output_stats().is_some_and(|stats| {
+                    stats.video_subscriber.delivered >= 70 && stats.audio_subscriber.delivered >= 10
+                })
+            }),
+            "media never reached the recording"
+        );
+        block_on(control.call(output_call("rec", false))).expect("output.stop");
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Stopping, OutputState::Stopped]
+        );
+
+        assert!(!part.exists(), "the .part file was not renamed");
+        let bytes = std::fs::read(&path).expect("the finished recording");
+        let found = boxes(&bytes);
+        assert_eq!(found.first().map(String::as_str), Some("ftyp"), "{found:?}");
+        assert_eq!(found.get(1).map(String::as_str), Some("moov"), "{found:?}");
+        let fragments = found.iter().filter(|name| *name == "moof").count();
+        assert!(
+            fragments >= 2,
+            "a keyframe every two seconds over more than two seconds: {found:?}"
+        );
+        assert_eq!(
+            found.iter().filter(|name| *name == "mdat").count(),
+            fragments,
+            "{found:?}"
+        );
+    }
+
+    /// A recording never overwrites: a start whose path is taken fails with
+    /// `action_failed`, settles `failed`, and leaves the existing file as it was.
+    #[test]
+    fn a_recording_start_fails_when_the_file_exists() {
+        let dir = TempDir::new("exists");
+        let path = dir.join("show.mp4");
+        std::fs::write(&path, b"keep me").expect("existing file");
+        let fakes = fakes();
+        let (engine, control, mut events) = recording_engine(&fakes, cpu_draw(), &path);
+        drain(&mut events);
+
+        let err = block_on(control.call(output_call("rec", true))).expect_err("refused");
+        assert_eq!(code(&err), Some("action_failed"));
+        assert!(err.to_string().contains("opening the recording"), "{err}");
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Starting, OutputState::Failed]
+        );
+        assert!(engine.output_stats().is_none());
+        assert_eq!(std::fs::read(&path).ok().as_deref(), Some(&b"keep me"[..]));
+        assert!(!dir.join("show.mp4.part").exists());
+    }
+
+    /// The collection takes `/…` and `C:\…` on every platform; a path that is not
+    /// absolute on the engine's machine fails the start rather than recording to a
+    /// relative name in the working directory.
+    #[test]
+    fn a_recording_path_not_absolute_here_fails_the_start() {
+        let foreign = if cfg!(windows) {
+            "/jstream-record-test/show.mp4"
+        } else {
+            "C:\\jstream-record-test\\show.mp4"
+        };
+        let fakes = fakes();
+        let (_engine, control, mut events) =
+            recording_engine(&fakes, cpu_draw(), std::path::Path::new(foreign));
+        drain(&mut events);
+
+        let err = block_on(control.call(output_call("rec", true))).expect_err("refused");
+        assert_eq!(code(&err), Some("action_failed"));
+        assert!(err.to_string().contains("not absolute"), "{err}");
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Starting, OutputState::Failed]
+        );
+        assert!(!std::path::Path::new(&format!("{foreign}.part")).exists());
+    }
+
+    /// A start that fails after its recording was opened (here, the compositor) removes
+    /// the `.part` file, so a later start with a working compositor records.
+    #[test]
+    fn a_failed_recording_start_leaves_no_part_file() {
+        let dir = TempDir::new("failed-start");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let working = Arc::new(AtomicBool::new(false));
+        let draw: OpenDraw = {
+            let working = Arc::clone(&working);
+            Arc::new(move || {
+                if working.load(Ordering::Acquire) {
+                    cpu_draw()()
+                } else {
+                    Err("no adapter".to_owned())
+                }
+            })
+        };
+        let (_engine, control, mut events) = recording_engine(&fakes, draw, &path);
+        drain(&mut events);
+
+        let err = block_on(control.call(output_call("rec", true))).expect_err("refused");
+        assert_eq!(code(&err), Some("action_failed"));
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Starting, OutputState::Failed]
+        );
+        assert!(
+            !dir.join("show.mp4.part").exists(),
+            "the .part file was left"
+        );
+        assert!(!path.exists());
+
+        working.store(true, Ordering::Release);
+        block_on(control.call(output_call("rec", true))).expect("output.start");
+        block_on(control.call(output_call("rec", false))).expect("output.stop");
+        assert!(path.exists(), "the second start did not record");
     }
 }
 

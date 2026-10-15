@@ -1,0 +1,57 @@
+# Spike S4 (ROADMAP M1b, ADR-0021). Throwaway; not a member of the root workspace.
+[package]
+name = "s4-browser"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+default-run = "s4-browser"
+
+# Its own workspace, so the root workspace (crates/*, xtask) never builds or lints it.
+[workspace]
+
+# The spike itself: browser process, wgpu compositor, audio handler, report.
+[[bin]]
+name = "s4-browser"
+path = "src/main.rs"
+
+# The separate-helper layout (`--helper separate`): CEF launches this for its renderer,
+# GPU and utility subprocesses instead of `s4-browser.exe`.
+[[bin]]
+name = "s4-browser-helper"
+path = "src/bin/s4-browser-helper.rs"
+
+[target.'cfg(windows)'.dependencies]
+# Rust bindings to CEF's C API (tauri-apps/cef-rs), pinned exactly: the crate version
+# carries the CEF version it was generated from (`+154.0.34`), and its build script
+# downloads that exact CEF binary distribution. No default features: `sandbox` needs CEF's
+# bootstrap layout (README › Helper processes), and `build-util`/`resources` are for app
+# bundling, not needed here.
+cef = { version = "=154.5.0", default-features = false }
+# Same pins as spike S1: wgpu-hal interop can change between releases (ADR-0004), and
+# `windows` must be the version wgpu-hal uses so the raw D3D12 types are identical.
+wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "dx12", "wgsl"] }
+pollster = "=0.4.0"
+windows = { version = "=0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Security",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_LibraryLoader",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }
+
+# A standalone workspace can't inherit the root `[workspace.lints]`, so the lints that
+# matter most for this code are restated here (R-UNSAFE-002, R-RS-004, R-RS-009).
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+unwrap_used = "deny"
+allow_attributes_without_reason = "deny"
+
+[profile.release]
+debug = "line-tables-only"

@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e33b2a7a9766038f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-RT-001..006 against the handover text: a SeqCst store, load or fence allocates, locks and waits on nothing, so the rules hold unchanged" }
+verified = { hash = "b3:080fea9002e1d852", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: rule text unchanged; ARCH#threading only combines main's collector text and F2b's recording write path, both within R-RT-003/R-RT-004" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:0e3a61c4a7530f79", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: 0.9 is additive (canvas.set_size, item.set_geometry, optional item.add geometry, ItemInfo placement/geometry, state.get canvas with serde defaults) with the ADR-0022 deprecations announced ahead of 1.0's removal, as R-API-001 asks; no rule text changed" }
+verified = { hash = "b3:3419f508dc0e9c6a", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b round 2: rule text unchanged; R-API-001 says additions are minor, and the record kind's break of 0.7/0.8 output reads is now stated in protocol README#design and left to the maintainer as open question 8" }
 -->
 
 <a id="R-API-001"></a>

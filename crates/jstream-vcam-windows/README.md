@@ -1,0 +1,94 @@
+<!-- @doc
+id = "CRATE-jstream-vcam-windows"
+title = "jstream-vcam-windows"
+kind = "normative"
+status = "active"
+review_every = "90d"
+-->
+
+# jstream-vcam-windows
+
+<a id="purpose"></a>
+## Purpose
+<!-- @section
+covers = ["crates/jstream-vcam-windows/src/**"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
+verified = { hash = "b3:abf65baa6c0ede4a", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Review round 1 B2/N2: re-read against frames.rs: a live, fresh producer with no safe frame repeats the last copied frame (Shared::Hold), colour bars only without a live producer or after a shared-path error, and a non-live block drops the opened objects at once; rest unchanged" }
+-->
+
+The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
+Windows camera Frame Server loads, which serves the frames the engine publishes through
+the [`jstream-vcam-proto`](../jstream-vcam-proto/README.md#purpose) contract. Layer 2,
+and one of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001));
+it depends only on layer-0 crates and Microsoft's `windows` bindings
+([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). On other platforms it
+builds only its pixel helpers, which are tested everywhere.
+
+Ported from spike S2 (a Rust port of VCamSample's design), which proved this path on
+Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
+- **COM objects.** The registered class is an `IMFActivate`. Its `ActivateObject`
+  creates an `IMFMediaSourceEx` (also `IMFGetService`, `IKsControl` and `IMFAttributes`)
+  with one `IMFMediaStream2` (also `IKsControl` and `IMFAttributes`). The stream offers
+  the contract's 1920x1080 at 30 fps as NV12 (current) and RGB32, with the device-stream
+  attributes Frame Server expects and a legacy and a high-frame-rate sensor profile.
+- **Frames.** The DLL finds the control block (`Global\`, then the console session, then
+  sessions 1 to 4, as the contract orders them), opens the ring textures and the fence by
+  name on the producer's adapter, and per sample copies the newest frame whose fence
+  signal already completed (the contract's `choose_frame`), so it never waits on a
+  producer that died. Samples are system memory. When no frame is safe to copy but the
+  producer is still live and fresh, it repeats the last frame it copied; with no live
+  producer, or after an error on the shared path, it serves its own colour bars. A
+  producer that stops drops the opened objects at once, so one that restarts in the same
+  process is reopened. It writes its identity and counters into the block's consumer half.
+- **Trust.** The block is written by another process: the DLL requires the contract's
+  format (`format_matches`), requires the scope and session the block names to be the
+  namespace it was found in, and after opening the shared objects re-checks that the
+  block is still live for the same producer.
+- **Panics.** Every COM method and export runs inside a panic guard that returns
+  `E_UNEXPECTED` and logs ([R-UNSAFE-005](../../docs/RULES.md#R-UNSAFE-005)).
+- **Log.** Frame Server gives the DLL no `tracing` subscriber, so it writes short lines
+  to the debugger (`OutputDebugString`) and to `JStream\vcam\vcam.log` in the host
+  account's own local app data folder (for Frame Server, LOCAL SERVICE's profile, which
+  no interactive user can write), capped at 1 MiB with one older file.
+- **Registration.** `DllRegisterServer` (`regsvr32`, elevated) writes
+  `HKLM\Software\Classes\CLSID\{…}` with `InprocServer32` pointing at the DLL and
+  `ThreadingModel = Both`; `DllUnregisterServer` removes it. The app's
+  `--register-vcam` step, the engine-side producer and the `VirtualCam` output are G3.
+
+The DLL only opens the shared objects. The engine creates them, with the contract's DACL
+(`sddl_objects`), in `jstream-platform-windows`.
+
+**Tests.** The pixel helpers (test pattern, strided copies, BGRA to NV12) are unit-tested
+on every platform. The COM path needs Frame Server, so it is checked by hand with the
+`vcam_smoke` example ([Hardware check](#hardware-check)). CI compiles the crate and the
+example on Windows.
+
+<a id="hardware-check"></a>
+## Hardware check
+<!-- @section
+covers = ["crates/jstream-vcam-windows/examples/**"]
+depends_on = ["docs/ARCHITECTURE.md#packaging"]
+verified = { hash = "b3:e71245c93f81f3f6", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "New section: steps match examples/vcam_smoke after fmt (args --seconds/--no-camera/--no-producer, report verdict line), the DLL file name and the log path from src/win/log.rs" }
+-->
+
+`examples/vcam_smoke` stands in for the engine side: it publishes the ring, the fence and
+the control block as the contract describes, in this session's namespace with the
+contract's DACL, creates the camera with `MFCreateVirtualCamera`, renders dark teal with
+a moving white bar, and prints what the DLL recorded. On Windows 11, from the repository
+root:
+
+1. Build: `cargo build --release -p jstream-vcam-windows --example vcam_smoke`.
+2. Copy `target\release\jstream_vcam_windows.dll` to a folder outside your user profile,
+   such as `C:\JStreamVcamTest\`, because Frame Server runs as LOCAL SERVICE and can't
+   read your profile.
+3. In an elevated prompt, `net stop FrameServer`, then
+   `regsvr32 C:\JStreamVcamTest\jstream_vcam_windows.dll`.
+4. In a normal prompt, run `target\release\examples\vcam_smoke.exe --seconds 60`, open
+   the Camera app and pick "JStream Virtual Camera". `--no-producer` shows the DLL's
+   colour bars instead; `--no-camera` only publishes frames.
+5. Clean up in an elevated prompt with
+   `regsvr32 /u C:\JStreamVcamTest\jstream_vcam_windows.dll`.
+
+The report's `verdict` line says whether shared frames reached the camera. The DLL's log
+is `C:\Windows\ServiceProfiles\LocalService\AppData\Local\JStream\vcam\vcam.log`, readable
+from an elevated prompt.

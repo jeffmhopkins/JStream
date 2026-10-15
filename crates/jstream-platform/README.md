@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:5d5148d1cf21bd10", by = "agent:claude@session_01CinhSCRTBiaJNaiD4w6CUq", note = "Y2: re-read the purpose section; new OAuth tokens bullet (OAuthTokenStore set/get/clear/is_set per account, Secret only, separate from StreamKeyStore, refresh tokens only, no token in errors) and MemoryTokenStore in Fakes match keys.rs and fake.rs; the rest is unchanged" }
+verified = { hash = "b3:244d70caa87b2ce8", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose unchanged; ARCH#threading change (recording sink) doesn't touch platform traits" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -128,7 +128,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:8c1c47ec0e8976b0", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: stale via ARCH#gpu-pipeline only (compositor placement forms); the interop split, safe-method rule and device sharing text are unaffected" }
+verified = { hash = "b3:7856c3f80a2d5b2d", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Stale only through ARCH#crate-map (G2's vcam-windows row gained a logging clause); re-read: the GpuInterop/GpuFrame design and the crate-map reference are unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

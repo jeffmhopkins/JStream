@@ -13,12 +13,13 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:c890b3b9db54eb66", by = "agent:claude@session_01Gkayyrtq9Ahc5U37dAfdoB", note = "Re-read for #137: test-only change (shutdown tests wait on counted conditions instead of fixed sleeps; CLOSE_TIMEOUT made pub(crate) for the test). No behaviour change; the section still matches" }
+verified = { hash = "b3:d3afc9942048b8ef", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1 CI fix (macOS broken pipe in the 413 test): mcp.rs now refuses a body declared over 4 MiB from Content-Length; contents list unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
 clients (the CLI, the web UI, a stdio MCP proxy) reach the engine through
-`jstream-control`'s WebSocket client. It is written against `dyn Control` and
+`jstream-control`'s WebSocket client, and, when the host turns it on, serves MCP's
+streamable-HTTP transport on the same port, so agents reach it directly. It is written against `dyn Control` and
 `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host app hands it a `Connector`
 that opens one session per connection. Layer 4
@@ -27,8 +28,11 @@ that opens one session per connection. Layer 4
 Contents (a first cut; [Design](#design) explains the choices):
 - **Server** (`lib.rs`): `Server::bind`, `serve` and `serve_with_shutdown`, the
   `Connector` type, and the `GET /api/v1/ws` upgrade handler.
+- **MCP** (`mcp.rs`): the streamable-HTTP transport at `/mcp` (`MCP_PATH`), its
+  sessions, and their limits.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
-  origins, connection limits) and `Token`, the control token.
+  origins, connection limits, the MCP switch and its limits) and `Token`, the control
+  token.
 - **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
   an accepted upgrade request in time.
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every upgrade passes
@@ -38,20 +42,19 @@ Contents (a first cut; [Design](#design) explains the choices):
   its events.
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
-Not here yet: serving the UI assets, the MCP streamable-HTTP transport (decided: served
-here on the control port) and TLS ([Open questions](#design)).
+Not here yet: serving the UI assets and TLS ([Open questions](#design)).
 
 Why a crate and not a module of `jstream-control` or `jstream-mcp`: it owns the HTTP
 stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 `jstream-control` nor the runtime-free `jstream-mcp` may carry, and it sits above both
-(it will mount MCP), so it is its own layer-4 crate, as the crate map plans.
+(it mounts MCP), so it is its own layer-4 crate, as the crate map plans.
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e3a2ddfa8f9bce85", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: stale via ARCH#protocol and control design only; the server forwards protocol messages opaquely, so canvas.set_size and item.set_geometry change no admission, session, limit or logging rule" }
+verified = { hash = "b3:c24ceae945978770", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: control design gained only mock recording checks, which the server design doesn't describe" }
 -->
 
 ### Listening and admission
@@ -167,6 +170,51 @@ before the close frame. A client that doesn't take them within a short timeout
 (`CLOSE_TIMEOUT`) is dropped without one, so a client that stopped reading can't keep
 its connection or session open.
 
+### MCP over streamable HTTP
+
+With `ServerConfig::mcp` on (`ServerConfig::new` leaves it off; `jstream-daemon` turns
+it on), `/mcp` (`MCP_PATH`) serves MCP's
+[streamable-HTTP transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
+on the control port. Every request, whatever its method, first passes the same `Host`,
+`Origin` and token checks as an upgrade, with the same refusals (403, 401), so a
+request without `Origin` (a native agent) goes on to the token check, as on the
+WebSocket API: browsers send `Origin` on a cross-origin `fetch`, and the bearer token
+forces a preflight. Each body is one JSON-RPC message, answered by a
+`jstream_mcp::Server` ([jstream-mcp › Design](../jstream-mcp/README.md#design)):
+
+| Request | Answer |
+|---|---|
+| `POST`, a request | 200, `Content-Type: application/json`, the JSON-RPC reply. Never an SSE stream: every request this server serves completes on its own |
+| `POST`, a notification or a response | 202, no body |
+| `POST` `initialize` | a new session; on success its ID comes back in `Mcp-Session-Id`, and a failed `initialize` keeps none. One that carries `Mcp-Session-Id` ends that session first. 503 when `max_mcp_sessions` are open |
+| `POST` with `Mcp-Session-Id` | served by that session; 404 if it is unknown or expired, so the client initializes again |
+| `POST` without `Mcp-Session-Id` | served by the one shared stateless server (MCP 2026-07-28 requests carry no session) |
+| `DELETE` with `Mcp-Session-Id` | ends that session: 204, or 404 if it is unknown |
+| `GET` | 405 with `Allow: POST, DELETE`: the server sends no server-initiated messages |
+| A body that isn't `Content-Type: application/json` / is over 4 MiB (refused from its `Content-Length` before it is read, when it declares one) / isn't UTF-8 | 415 / 413 / 400 |
+| `MCP-Protocol-Version` naming a revision `jstream-mcp` doesn't serve | 400 |
+
+The `Accept` header isn't checked: the answer is always JSON, which every client
+accepts.
+
+**Sessions.** An `initialize` gets a new `jstream_mcp::Server` over a new `Control`
+session from the `Connector`: a client of its own, with its own undo history and its
+own `events` buffer ([ADR-0013](../../docs/adr/0013-command-model.md)). Its ID is 16
+bytes from the OS's random source (`getrandom`) as 32 hex digits. It is not a secret
+that admits anyone: every request still needs the token. Requests that carry no session
+share one stateless server, opened at the first of them, so those clients share a
+session ([jstream-mcp › Open questions](../jstream-mcp/README.md#open-questions)).
+Requests to one session may run concurrently.
+
+**Limits.** At most `max_mcp_sessions` (default 16) sessions are open. One unused for
+`mcp_idle_timeout` (default 30 minutes) is ended, and its `Control` session dropped,
+when the next MCP request arrives; until then it holds its place. These are separate
+from `max_connections`, which counts WebSocket connections: an MCP request holds no
+connection slot. A request that passes the checks disarms its connection's header-read
+deadline, as an accepted upgrade does, so an authenticated client can keep the
+connection open for more requests (HTTP keep-alive) and wait on calls longer than the
+deadline.
+
 ### Logging
 
 The server logs through `tracing` ([R-RS-005](../../docs/RULES.md#R-RS-005)) and
@@ -176,8 +224,10 @@ alone.
 
 - **Refused upgrades** are logged at `warn` as `connection refused`, with the peer
   address and the reason (`Host not allowed`, `Origin not allowed`, `missing or wrong
-  control token`, or `too many connections`). No header value is logged: not the token, nor the refused `Host` or
-  `Origin` ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The test
+  control token`, `too many connections`, or `too many MCP sessions`). No header value
+  is logged: not the token, nor the refused `Host` or `Origin`
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Refused MCP requests are logged the
+  same way. The test
   `gate::tests::refusals_are_logged_without_the_token` checks this with a capturing
   subscriber, and `jstream-daemon`'s end-to-end test checks its stderr.
 - **Accepted connections** get an `info` span `connection` with a number (counting from
@@ -188,6 +238,11 @@ alone.
   `warn` when the engine failed (close code 1011). A slow client's dropped events are
   logged at `warn` (`client reads too slowly: events dropped`) with their count. Message
   contents are never logged.
+- **MCP sessions** get an `info` span `mcp_client` with a number (counting from 1 per
+  server) and `kind` (`session` or `stateless`), under which the engine session and
+  `jstream-mcp`'s own spans nest. Opening one logs `mcp session opened` with the peer
+  address, and ending one `mcp session ended` with the reason (`idle`, `deleted by the
+  client`, `replaced by a new initialize`, `initialize failed`). The session ID is never logged, nor any message.
 - A request that isn't a WebSocket upgrade is logged at `debug`, and so is a connection
   dropped by the header-read timeout. A connection closed by the handshake timeout logs
   `connection closed` at `info` with its code and reason, like any other close.
@@ -198,7 +253,9 @@ axum (features `http1`, `tokio`, `ws`, no defaults) for HTTP and the upgrade, wh
 brings hyper, tower and `tokio-tungstenite` without TLS; tokio for the listener and the
 connection tasks; `futures-util` to split the socket, run calls concurrently
 (`FuturesUnordered`) and box the writer's send in progress; `blake3` (the workspace's `pure` build, already used by `xtask`)
-for the token digest; `tracing` for the spans and events above. No TLS crate is in the tree, so no `ring` or `rustls`.
+for the token digest; `tracing` for the spans and events above; `jstream-mcp` for the
+MCP server behind `/mcp`; `getrandom` for MCP session IDs, already in the tree through
+tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is in the tree, so no `ring` or `rustls`.
 
 ### Open questions
 
@@ -210,10 +267,9 @@ for the token digest; `tracing` for the spans and events above. No TLS crate is 
    design sends the token in `Sec-WebSocket-Protocol` instead
    ([jstream-control › Design](../jstream-control/README.md#design)); the subprotocol
    naming is not decided, so the server accepts only `Authorization` today.
-3. **UI assets and MCP over HTTP.** Serving the web UI is deferred. Decided for MCP:
-   this server serves MCP's streamable-HTTP transport (`jstream_mcp::Server::handle`) on
-   the control port, behind the same token, `Origin` and `Host` checks, and stdio stays
-   in the CLI. Neither is built yet.
+3. **UI assets.** Serving the web UI is deferred. MCP over streamable HTTP is settled
+   and built (see *MCP over streamable HTTP*); whether it should also offer SSE, once
+   the MCP server has notifications to push, is open.
 4. **Requests without `Origin`.** Settled and built (#44): an upgrade with no `Origin`
    header is allowed, because the token is the gate, so non-browser tools (`websocat`,
    scripts) needn't invent one. An `Origin` that is present must still be the server's

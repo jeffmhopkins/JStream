@@ -134,7 +134,7 @@ pub enum QueryResult {
     StateGet {
         /// The revision the state was read at.
         rev: Rev,
-        /// The canvas every scene is laid out on. Missing (from a server older than 0.9)
+        /// The canvas every scene is laid out on. Missing (from a server older than 0.10)
         /// parses as 1920×1080.
         #[serde(default)]
         canvas: Canvas,
@@ -246,11 +246,11 @@ pub struct ItemInfo {
     pub item_id: ItemId,
     /// The source it places.
     pub source_id: SourceId,
-    /// Which form its placement is stored in. Missing (from a server older than 0.9)
+    /// Which form its placement is stored in. Missing (from a server older than 0.10)
     /// parses as `legacy`.
     #[serde(default)]
     pub placement: PlacementForm,
-    /// **Deprecated** since 0.9 (ADR-0022), removed in 1.0: read `geometry`. For a
+    /// **Deprecated** since 0.10 (ADR-0022), removed in 1.0: read `geometry`. For a
     /// legacy item, the stored transform exactly as written. For a geometry item, a
     /// view computed from the geometry alone: the box's rotated top-left corner, its
     /// rotation, and scale (1, 1).
