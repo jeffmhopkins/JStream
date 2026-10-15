@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bbe0134327a8b9ce", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305 merge of main 92cd698 (#309): took main's stamp; Connecting bullet now lists a URL the page's policy blocks among the failures that read the same; e2e connect spec confirms the alert shows and the form stays usable" }
+verified = { hash = "b3:f7f1b4ed53212ab0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324 merge of main at 94fb25d: connect form text (a policy-blocked URL reads the same as other failed connects) matches the browser client; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
