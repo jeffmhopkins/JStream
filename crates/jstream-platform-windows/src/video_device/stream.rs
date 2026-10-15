@@ -64,7 +64,6 @@ pub(crate) enum Deliver {
 /// What the capture thread needs, moved into it.
 pub(crate) struct Capture {
     pub(crate) opened: Opened,
-    pub(crate) mf: MfStarted,
     pub(crate) deliver: Deliver,
     pub(crate) size: FrameSize,
     /// The selected type's subtype, as `u128`.
@@ -74,6 +73,8 @@ pub(crate) struct Capture {
     pub(crate) id: String,
     /// The device, for `DeviceLost`.
     pub(crate) what: String,
+    /// Declared last, so a `Capture` dropped whole releases the MF objects above first.
+    pub(crate) mf: MfStarted,
 }
 
 /// The capture thread's objects, moved to it.
@@ -211,15 +212,18 @@ fn run(
     clock: &QpcClock,
     started: mpsc::SyncSender<Result<(), PlatformError>>,
 ) {
+    // Bound first, so it drops last: Media Foundation stays started until the reader,
+    // the source and the decoder (bound below) are released, at every exit.
+    let _mf = capture.mf;
     let Capture {
         opened,
-        mf: _mf,
         mut deliver,
         size,
         subtype,
         color,
         id,
         what,
+        ..
     } = capture;
     let lost = |reason: &str| PlatformError::DeviceLost {
         what: what.clone(),
