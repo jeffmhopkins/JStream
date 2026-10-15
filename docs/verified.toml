@@ -210,7 +210,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:8c0c258dab2abccb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:05e5d44b88a9d28c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
 stamp = { hash = "b3:fd09ac6b1fd3bbb5", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main at 41cfb15 (#376 ledger): the merge dropped this branch's inline stamps; re-read the section as merged; this branch's Y3 YouTube text (protocol 0.20) is unchanged and main's merged text (D6 activity gain, K2 anim row, LNK4199 note) sits beside it without overlap; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
@@ -228,13 +228,13 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:5cfecfc81ec458c2", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:c0cf40a5e3d85b7c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:1a3440543e416c7a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main at 41cfb15 (#376 ledger): the merge dropped this branch's inline stamps; re-read the section as merged; this branch's Y3 YouTube text (protocol 0.20) is unchanged and main's merged text (D6 activity gain, K2 anim row, LNK4199 note) sits beside it without overlap; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
@@ -321,7 +321,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:69a83bcc7bc7abfe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:97b1f74645fd0b8d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:de0e3c78ff4cd78e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main at 41cfb15 (#376 ledger): the merge dropped this branch's inline stamps; re-read the section as merged; this branch's Y3 YouTube text (protocol 0.20) is unchanged and main's merged text (D6 activity gain, K2 anim row, LNK4199 note) sits beside it without overlap; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
@@ -414,10 +414,10 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 stamp = { hash = "b3:05057d7979293830" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Control protocol summary against the server shutdown change: envelope, request/response and versioning claims unaffected; a call after shutdown fails Disconnected as the connection closes, detailed in jstream-server README design." }
+stamp = { hash = "b3:a3f51e2804fc1490", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Control protocol summary against the server shutdown change: envelope, request/response and versioning claims unaffected; a call after shutdown fails Disconnected as the connection closes, detailed in jstream-server README design." }
+stamp = { hash = "b3:ba68a58b43011f41", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -885,7 +885,7 @@ stamp = { hash = "b3:cba4bae08e1765d8", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
+stamp = { hash = "b3:9d9690d83901b626", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:dd2937b77c33e9ee", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main at 41cfb15 (#376 ledger): the merge dropped this branch's inline stamps; re-read the section as merged; this branch's Y3 YouTube text (protocol 0.20) is unchanged and main's merged text (D6 activity gain, K2 anim row, LNK4199 note) sits beside it without overlap; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
@@ -966,7 +966,7 @@ stamp = { hash = "b3:918fe91ec11037de" }
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:c7afb7b2bff7299a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only tests.rs's cpu_pipeline poll helpers changed: pump_until and wait_until wait up to a 30 s HANG_BOUND instead of 5 s (#392). Design describes engine behaviour (start's 10 s compositor-open bound, RenderHub::caught_up polled by tests) and states no test-helper deadline; no engine code changed, so it holds" }
+stamp = { hash = "b3:a8c63fdc849a1081", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -1062,7 +1062,7 @@ stamp = { hash = "b3:918fe91ec11037de" }
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:c7afb7b2bff7299a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only tests.rs's cpu_pipeline poll helpers changed: pump_until and wait_until share a 30 s HANG_BOUND instead of 5 s (#392). The Tests list (render and mixer panics reported as failed on the CPU stand-in, the stage-failure, late-tick, teardown tests) names no deadline and still holds; no engine code changed" }
+stamp = { hash = "b3:a8c63fdc849a1081", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -1422,10 +1422,10 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:21668f51b28f0233" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:5b96261143804d2d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:9d9690d83901b626", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1467,7 +1467,7 @@ stamp = { hash = "b3:c5dfc4f94c042e67" }
 stamp = { hash = "b3:490d41a1b4731026" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/target.rs"]
-stamp = { hash = "b3:675f46eea33b1c83", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:45ffe3f32a447d4f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
 stamp = { hash = "b3:381c8cf17eea8c11", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main at 41cfb15 (#376 ledger): the merge dropped this branch's inline stamps; re-read the section as merged; this branch's Y3 YouTube text (protocol 0.20) is unchanged and main's merged text (D6 activity gain, K2 anim row, LNK4199 note) sits beside it without overlap; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
@@ -1476,7 +1476,7 @@ stamp = { hash = "b3:381c8cf17eea8c11", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:943bb9518712a4b5" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:c252221e9c760096", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:859f04b95cf8af9b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
 stamp = { hash = "b3:6cdab90f92ddf600", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main at 41cfb15 (#376 ledger): the merge dropped this branch's inline stamps; re-read the section as merged; this branch's Y3 YouTube text (protocol 0.20) is unchanged and main's merged text (D6 activity gain, K2 anim row, LNK4199 note) sits beside it without overlap; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
@@ -1506,13 +1506,13 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:5cfecfc81ec458c2", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:c0cf40a5e3d85b7c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:1a3440543e416c7a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main at 41cfb15 (#376 ledger): the merge dropped this branch's inline stamps; re-read the section as merged; this branch's Y3 YouTube text (protocol 0.20) is unchanged and main's merged text (D6 activity gain, K2 anim row, LNK4199 note) sits beside it without overlap; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
@@ -1536,13 +1536,13 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against server.rs (with_timeout/Timer bounding open_early's hello at 3 s) and tests.rs: contents list and 'needs no async runtime' still hold (timer is its own thread)" }
+stamp = { hash = "b3:5cfecfc81ec458c2", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against server.rs (with_timeout/Timer bounding open_early's hello at 3 s) and tests.rs: contents list and 'needs no async runtime' still hold (timer is its own thread)" }
+stamp = { hash = "b3:c0cf40a5e3d85b7c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:1a3440543e416c7a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main at 41cfb15 (#376 ledger): the merge dropped this branch's inline stamps; re-read the section as merged; this branch's Y3 YouTube text (protocol 0.20) is unchanged and main's merged text (D6 activity gain, K2 anim row, LNK4199 note) sits beside it without overlap; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
@@ -1944,7 +1944,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:9d9690d83901b626", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2247,10 +2247,10 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 stamp = { hash = "b3:05057d7979293830" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
+stamp = { hash = "b3:a3f51e2804fc1490", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
+stamp = { hash = "b3:ba68a58b43011f41", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2280,10 +2280,10 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 stamp = { hash = "b3:05057d7979293830" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
+stamp = { hash = "b3:a3f51e2804fc1490", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
+stamp = { hash = "b3:ba68a58b43011f41", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#223 merge of main and wave/m1: re-read as merged; main's text (MCP hello wait, server shutdown drain and bind limits, absolute-path rules, vcam row, effects row) sits beside this branch's Y3 YouTube text (protocol 0.20) without overlap; with_youtube and with_open_early_timeout both kept in server.rs; core, protocol, mcp, control, server, youtube and graph tests pass; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
