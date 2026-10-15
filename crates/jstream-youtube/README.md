@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:98030ce9c8c274d4", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "New crate README for Y1: each Contents bullet re-read against its module (http seam and Secret-typed bearer/form, HttpsTransport framing, 4 MiB cap incl. overflow-safe chunk sizes, timeouts, OAuth PKCE/exchange/refresh/revoke and scopes checked against Google's native-app page and the Live API reference pages, loopback Host/state checks, LiveClient refresh margin, 401 retry and calls, fake transport and fixtures); Not yet lists chat, stats, quota, protocol/MCP, credential store and engine wiring" }
+verified = { hash = "b3:4a46f132296dbcde", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via #142's platform Purpose rewrite after merging main: it now documents Secret (redacted Debug, not Clone, zeroed on drop), which is what this README says tokens, codes and stream keys travel in; the youtube contents are unchanged" }
 -->
 
 Layer-2 client for Google sign-in and the

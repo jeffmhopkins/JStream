@@ -1,12 +1,13 @@
 //! Reading the graph as protocol query results: what an engine answers to the queries
-//! that read collection state (`scene.list`, `source.list`, `item.list`, `state.get`).
+//! that read collection state (`scene.list`, `source.list`, `item.list`, `output.list`,
+//! `state.get`).
 //!
 //! Reads never change the graph. Each result carries the revision it was read at.
 
-use crate::model::{Graph, Item, Scene, Source};
+use crate::model::{Graph, Item, Output, Scene, Source};
 use jstream_protocol::{
-    EntityKind, ItemInfo, ProtocolError, Query, QueryResult, SceneId, SceneInfo, SceneSummary,
-    SourceInfo,
+    EntityKind, ItemInfo, OutputInfo, ProtocolError, Query, QueryResult, SceneId, SceneInfo,
+    SceneSummary, SourceInfo,
 };
 
 impl Graph {
@@ -21,6 +22,7 @@ impl Graph {
             Query::SourceList => Ok(self.source_list()),
             Query::ItemList { scene_id } => self.item_list(scene_id),
             Query::StateGet => Ok(self.state_get()),
+            Query::OutputList => Ok(self.output_list()),
             _ => return None,
         })
     }
@@ -67,13 +69,22 @@ impl Graph {
         })
     }
 
-    /// The `state.get` result: every source by ID, and every scene with its items in
-    /// display order.
+    /// The `output.list` result: every output, ordered by ID.
+    pub fn output_list(&self) -> QueryResult {
+        QueryResult::OutputList {
+            rev: self.rev,
+            outputs: self.state.outputs().map(Output::to_info).collect(),
+        }
+    }
+
+    /// The `state.get` result: every source by ID, every scene with its items in
+    /// display order, and every output by ID.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
             sources: self.state.sources().map(Source::to_info).collect(),
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
+            outputs: self.state.outputs().map(Output::to_info).collect(),
         }
     }
 }
@@ -84,6 +95,16 @@ impl Source {
         SourceInfo {
             source_id: self.id.clone(),
             name: self.name.clone(),
+            kind: self.kind.clone(),
+        }
+    }
+}
+
+impl Output {
+    /// This output as `output.list` and `state.get` report it.
+    pub fn to_info(&self) -> OutputInfo {
+        OutputInfo {
+            output_id: self.id.clone(),
             kind: self.kind.clone(),
         }
     }
@@ -171,6 +192,14 @@ mod tests {
                 rev: Rev(0),
                 sources: vec![],
                 scenes: vec![],
+                outputs: vec![],
+            }
+        );
+        assert_eq!(
+            graph.output_list(),
+            QueryResult::OutputList {
+                rev: Rev(0),
+                outputs: vec![],
             }
         );
         assert_eq!(
@@ -210,6 +239,7 @@ mod tests {
                 rev,
                 sources,
                 scenes,
+                ..
             },
             QueryResult::StateGet {
                 sources: was_sources,

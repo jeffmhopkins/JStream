@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:0696ded807993477", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against event.rs: only the DropCounts::render_ticks doc comment changed (schema description regenerated in protocol.snap); no message added or renamed, 0.6 holds" }
+verified = { hash = "b3:4a0ec5b672b9d8d0", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Commands and Queries list the 0.7 output edits, key actions and output.list; new Outputs (output.rs) bullet; PROTOCOL_VERSION 0.7 with stats.tick as 0.6; checked against command.rs, query.rs, output.rs, version.rs" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -31,11 +31,16 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
   `scene.reorder`, `item.add`, `item.remove`, `item.reorder`, `item.set_transform`,
   `item.set_crop`, `item.set_visible`, `source.create`, `source.duplicate`,
-  `source.delete`), with `ItemTransform`, `Crop` and `SourceKind`; `Action`
-  (`output.start`, `output.stop`); `Batch`; and the `Command`/`CommandClass`
+  `source.delete`, `output.create`, `output.set_target`, `output.delete`), with
+  `ItemTransform`, `Crop` and `SourceKind`; `Action` (`output.start`, `output.stop`,
+  `output.set_key`, `output.clear_key`); `Batch`; and the `Command`/`CommandClass`
   classification view.
+- **Outputs** (`output.rs`): `OutputKind` (only `rtmp` so far), `RtmpTarget` (only a
+  generic `url`), `OutputInfo`, and `SecretString`, the write-only stream key, which
+  never prints and never comes back from the engine
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.status` and `video.snapshot`, with `QueryResult` and the `SceneSummary`,
+  `output.list`, `output.status` and `video.snapshot`, with `QueryResult` and the `SceneSummary`,
   `SceneInfo`, `SourceInfo` and `ItemInfo` shapes the collection reads report.
   `video.snapshot` returns the program mix as a PNG.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `events.dropped` and
@@ -54,8 +59,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
   transform. A negative scale is not refused: `from_legacy` returns the drawn outline
   and flags the reflection, which geometry cannot store. These types are not
-  messages. `PROTOCOL_VERSION` is 0.6 because of `stats.tick`; `video.snapshot` is
-  the 0.5 addition, and the geometry wire surface ships as a later minor. `ItemTransform`'s schema description names
+  messages. `PROTOCOL_VERSION` is 0.7 because of the output edits, `output.list`,
+  the key actions and `key_set`; `stats.tick` is the 0.6 addition, `video.snapshot`
+  the 0.5 one, and the geometry wire surface ships as a later minor. `ItemTransform`'s schema description names
   `ItemGeometry` as the replacement (`protocol.snap` and the MCP `tools.snap`).
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
@@ -73,7 +79,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:ae9c8a3dd9de1fb4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#128 B2: stats.tick now says the render loop skips a tick a whole period behind and counts it in render_ticks (pipeline.rs catch_up), replacing 'render_ticks stays 0'; the render_ticks field gloss matches the core README drop table" }
+verified = { hash = "b3:e6e59bc369fcff37", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: handshake example at 0.7; actions include storing a stream key; new outputs paragraph (create/set_target/delete, URL checks from graph target.rs, write-only key, key outlives delete, clear_key on a deleted output); state.get outputs, output.list, key_set with pre-0.7 defaults; geometry paragraph says 0.7" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -93,8 +99,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":6},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":6},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":7},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":7},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -136,7 +142,8 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
 - **Edit** (`Edit`): changes the collection state, the data that is saved in the
   collection file and that `rev` counts. Undoable, batchable, atomic.
 - **Action** (`Action`): has effects outside the collection state, such as network,
-  devices, files or time (starting an output, going live, OAuth). Never undoable or
+  devices, files, secrets or time (starting an output, going live, storing a stream
+  key, OAuth). Never undoable or
   batchable. The response only says the action was accepted; progress arrives as
   events (`output.state_changed`).
 
@@ -151,7 +158,7 @@ The types enforce the split: a `Batch` holds only `Edit`s, an action travels alo
 `is_batchable()`. The tests `names_are_valid` and `every_command_is_classified` check
 every name in the generated schema.
 
-Creating edits carry a client-chosen ID (`scene_id`, `item_id`). A batch can then refer
+Creating edits carry a client-chosen ID (`scene_id`, `item_id`, `output_id`). A batch can then refer
 to an object it creates earlier in the same batch, a retry can't create a duplicate,
 and an undo can re-create a deleted object under its old ID. IDs are opaque strings.
 
@@ -172,6 +179,21 @@ non-finite or out-of-`f32`-range number fails deserialization, and
 `ClientMessage::parse` rejects the whole message as `malformed`. In-process clients
 can't build a non-finite value either: `Finite32::new` and `Vec2::new` return `None`
 for one.
+
+Outputs are collection state too: `output.create` adds one, stopped, with its
+`OutputKind`; `output.set_target` changes where an RTMP output sends, from its next
+`output.start`; `output.delete` removes one, and is refused with `invalid_argument`
+while it runs. A target URL must be an `rtmp://` or `rtmps://` server URL with a host and an
+application name, and is refused if it could carry a credential (`user:password@`, a
+query or a fragment). A key pasted into the path can't be told from a nested
+application name, so it is stored as given. The
+stream key is not collection state: it is a secret held in the OS credential store,
+so it is set with the `output.set_key` action and removed with `output.clear_key`.
+It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
+error, query or log carries it, and `output.status` reports only `key_set`. A key
+outlives `output.delete`, so undoing the delete gives back a working output; a client
+that deletes for good also sends `output.clear_key`, which succeeds for an output no
+longer in the collection. Its errors carry fixed reasons that never quote the key.
 
 ### Batches, revisions and `expected_rev`
 
@@ -198,16 +220,20 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
 Queries read and never change `rev`. Those that read the collection state carry the
 `rev` they read, so a client can send its next batch with that `expected_rev`:
 
-- `state.get`: the whole collection at one revision: every source, and every scene in
-  display order with its items. A client reads it on connecting, and again after a
+- `state.get`: the whole collection at one revision: every source, every scene in
+  display order with its items, and every output (`outputs`, ordered by ID; missing
+  from a pre-0.7 server, it parses as empty). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
   its name and `SourceKind`.
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
-- `output.status {output_id}`: an output's runtime state, which is not collection
-  state, so it carries no `rev`.
+- `output.list`: the outputs, ordered by ID (outputs have no display order), each with
+  its `OutputKind`, at a `rev`.
+- `output.status {output_id}`: an output's runtime state and `key_set`, whether the
+  credential store holds its key (missing from a pre-0.7 server, it parses as
+  `false`). Neither is collection state, so it carries no `rev`.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
@@ -374,8 +400,9 @@ function in this crate so the compositor and the UI share one implementation.
   reflected quad.
 
 These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.6 because
-`stats.tick` is that minor. `video.snapshot` remains the 0.5 addition. ADR-0022
+`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.7 because the
+outputs are that minor. `stats.tick` remains the 0.6 addition and `video.snapshot` the
+0.5 one. ADR-0022
 names the geometry additions as 0.4, which already shipped with `events.dropped`;
 the geometry wire surface ships as a later minor, under
 [R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited

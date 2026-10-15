@@ -1,7 +1,7 @@
 [package]
 name = "jstream-outputs"
 version = "0.0.0"
-description = "Stream outputs: the RTMP publish client, later recording and virtual-camera outputs."
+description = "Stream outputs: the RTMP publish client and the recording file sink, later the virtual-camera output."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

@@ -926,6 +926,10 @@ name = "jstream-types"
 version = "0.0.0"
 
 [[package]]
+name = "jstream-vcam-proto"
+version = "0.0.0"
+
+[[package]]
 name = "jstream-youtube"
 version = "0.0.0"
 dependencies = [
