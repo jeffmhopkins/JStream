@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:0ccda6723c3bb204", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
+verified = { hash = "b3:39656b935e135817", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (F3 #208) into #207: #138 re-applied on F3's per-output Running (drain_by, OUTPUT_GRACE join, FailLine); re-read; Runtime, Drop counts and Tests bullets hold, incl. the blocked-send stop and trickle tests" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -141,7 +141,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0a1d6d40d7cae6a3", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
+verified = { hash = "b3:cb9c8835c650da76", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (F3 #208) into #207: output.stop prose now F3's (shared program stage, encoder session per key) plus #207's bounded wait; re-read output.stop, failure, link and stop-drain paragraphs against Running::drop (finish last session, cut, join_output by deadline+OUTPUT_GRACE, close FailLine, then registration and program); holds" }
 -->
 
 ### Engine and sessions
@@ -818,7 +818,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:65493ddbfc38461c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5/N7: last sentence now says the mixer also has its own collector for input rings, beside the program stage's collector the render and mixer threads feed; push_each now takes a retire closure, behaviour unchanged" }
+verified = { hash = "b3:07b3d004843dfc8a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (F3 #208) into #207: re-read; F3's shared program stage and per-output thread text holds with #138's bounded output join (detail in Design)" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

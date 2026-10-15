@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:ef53c92177c408c8", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: stale via ARCH#threading's Collector row rewording only (program-stage collector fed by render and mixer; mixer's own for input rings); this section's text unchanged and consistent; holds" }
+verified = { hash = "b3:1654ec2d172c91fa", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (ADR-0041 depends_on, F3) into #207: took main's depends_on and ADR-0041 wording; re-read; Transport bullet's write-deadline and 16 KiB cap text matches transport.rs; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
