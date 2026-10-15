@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:504b05fb93e6f736", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: Groups and moves bullet holds; F2b's record output checks in the Outputs bullet kept; apply.rs imports both" }
+verified = { hash = "b3:9db23eee4ad1206a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; graph code unchanged by B2; recording path rules (#170) unaffected; inverse bullet holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

@@ -176,6 +176,20 @@ source: crates/jstream-protocol/src/fixtures.rs
             "query"
           ],
           "type": "object"
+        },
+        {
+          "$ref": "#/$defs/HistoryCall",
+          "description": "Undo or redo one of this client's own steps (ADR-0032). Carries no command: the\nengine applies a batch of edits it already holds.",
+          "properties": {
+            "kind": {
+              "const": "history",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -228,6 +242,43 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "kind",
             "result"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The undo or redo was applied (or had already been applied under its idempotency\nkey).",
+          "properties": {
+            "kind": {
+              "const": "history",
+              "type": "string"
+            },
+            "redo_depth": {
+              "description": "How many steps the client can redo.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the undo or redo produced."
+            },
+            "step_rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the step's batch originally produced. It names the step."
+            },
+            "undo_depth": {
+              "description": "How many steps the client can still undo.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "rev",
+            "step_rev",
+            "undo_depth",
+            "redo_depth"
           ],
           "type": "object"
         }
@@ -946,6 +997,17 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The collection state moved to a new revision: one per applied batch (or undo).\nClients holding a copy of the state re-query, or apply the change if they made it.",
           "properties": {
+            "cause": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HistoryDirection"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`undo` or `redo` when a history call made the change; absent for a batch."
+            },
             "client_id": {
               "$ref": "#/$defs/ClientId",
               "description": "The client whose request caused it."
@@ -1082,6 +1144,87 @@ source: crates/jstream-protocol/src/fixtures.rs
         "client_name"
       ],
       "type": "object"
+    },
+    "HistoryCall": {
+      "description": "An undo or redo request, sent as `{\"kind\":\"history\",\"op\":{\"type\":\"history.undo\"}}`.",
+      "properties": {
+        "expected_rev": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rev"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`.\nChecked before anything else about the history. Omitted means apply against\nwhatever is current."
+        },
+        "idempotency_key": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdempotencyKey"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Makes a retry safe, sharing the client's batch keys: a retried undo whose answer\nwas lost gets the original result and does not undo a second step."
+        },
+        "op": {
+          "$ref": "#/$defs/HistoryOp",
+          "description": "Which way to move through the client's history."
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "type": "object"
+    },
+    "HistoryDirection": {
+      "description": "A direction through a client's history: the `cause` of a `state.changed` that an\nundo or redo produced, and the `direction` of a `history_empty` error.",
+      "oneOf": [
+        {
+          "const": "undo",
+          "description": "Backward: an undo.",
+          "type": "string"
+        },
+        {
+          "const": "redo",
+          "description": "Forward again: a redo.",
+          "type": "string"
+        }
+      ]
+    },
+    "HistoryOp": {
+      "description": "What a [`HistoryCall`] asks for. Serialized with an internal `type` tag holding the\ncall's name (`history.undo`).",
+      "oneOf": [
+        {
+          "description": "Undoes the client's most recent step that is not undone yet: applies its inverse\nand moves it to the redo stack. Fails with `history_empty` when there is none, and\nwith `undo_conflict` when another client has since changed what the step touched.",
+          "properties": {
+            "type": {
+              "const": "history.undo",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Applies the client's most recently undone step again and moves it back to the\nundo stack. The client's next batch clears what can be redone.",
+          "properties": {
+            "type": {
+              "const": "history.redo",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "IdempotencyKey": {
       "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
@@ -2587,6 +2730,52 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "An undo or redo would overwrite another client's work: a batch that client\napplied after the step changed a property the step sets, created or deleted an\nobject the step creates or deletes, or made the step's edits no longer apply.\nNothing was applied, and the step was dropped from the history, so the next undo\nreaches the step before it.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose batch conflicts."
+            },
+            "code": {
+              "const": "undo_conflict",
+              "type": "string"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision that batch produced."
+            },
+            "step_rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the step's batch originally produced."
+            }
+          },
+          "required": [
+            "code",
+            "step_rev",
+            "client_id",
+            "rev"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "There is nothing to undo, or nothing to redo.",
+          "properties": {
+            "code": {
+              "const": "history_empty",
+              "type": "string"
+            },
+            "direction": {
+              "$ref": "#/$defs/HistoryDirection",
+              "description": "Which way the call asked to move."
+            }
+          },
+          "required": [
+            "code",
+            "direction"
+          ],
+          "type": "object"
+        },
+        {
           "description": "An action was accepted for processing but could not be carried out.",
           "properties": {
             "code": {
@@ -2645,5 +2834,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.10"
+  "title": "JStream protocol 0.11"
 }

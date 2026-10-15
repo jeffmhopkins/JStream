@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:1da1b9cacc1ab2dd", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: apps diagram/table unaffected by either side" }
+verified = { hash = "b3:bd9768d2ab90a22e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; apps changes from main (MCP on, CLI outputs) and B2's CLI cause print fit the diagram" }
 -->
 
 ```
@@ -507,7 +507,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:b03f9ccde4182975", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: edits bullet says groups are 0.10, record kind 0.9" }
+verified = { hash = "b3:70362ac384ff3ac8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): History bullet says protocol 0.10; record kind bullet 0.9 from main holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -522,7 +522,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
   id, `scene.set_role` marks a scene as a group, and placement edits take an optional
   `scene_id` so they can write a keyframe scene's override
-  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.10). Until keyframe scenes are
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.11). Until keyframe scenes are
   built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
@@ -545,7 +545,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0032](adr/0032-live-edits-and-undo.md)).
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
-  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+  ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
+  rather than overwrite another client's later change (protocol 0.10).
 - **Privacy screen** (planned): the action `privacy.set { on }` on the master stage, never
   undoable or batchable and with no `rev` change; every change emits
   `privacy.changed { on }` to every client and goes to the audit log
@@ -610,11 +611,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:d62cf7553f98e02b", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (F2b #170 record output 0.9, G2 #174) into B6, now protocol 0.10: tools.snap regenerated at ~92 KB; 'about 90 KB' still holds; ops in existing tools" }
+verified = { hash = "b3:93f000624e12ab05", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): grouped tools list includes history; tools.snap about 83 KB, so about 80 KB holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -624,7 +625,7 @@ verified = { hash = "b3:d62cf7553f98e02b", by = "agent:claude@session_01Vy4KuKBC
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 90 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 95 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

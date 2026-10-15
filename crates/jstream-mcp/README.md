@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:993572bf1e636ad2", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; contents bullets unchanged, streamable HTTP served by jstream-server" }
+verified = { hash = "b3:1f3e22433cf83dce", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; HTTP transport text (#153) and the history group tool both hold" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,29 +45,32 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:0b7eb5e014a50078", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: tools table unchanged; new ops land in the existing scene and item tools from the generated schema (tools.snap regenerated)" }
+verified = { hash = "b3:def975a39c65fe0d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; tool table lists history; expected_rev/idempotency_key for edits and history ops; tools.snap regenerated at 0.10" }
 -->
 
 ### Tools
 
 Tools are grouped by noun ([ARCH › MCP](../../docs/ARCHITECTURE.md#mcp)). The table is
 generated from the protocol's JSON Schema when a `Server` is built: every variant of
-`Edit`, `Action` and `Query` is named `noun.verb`, and the tool named after its noun
+`Edit`, `Action` and `Query`, and each `HistoryOp`, is named `noun.verb`, and the tool
+named after its noun
 takes it as its `op` argument. A command added to the protocol becomes an op with no
 change here, and a new noun becomes a new tool. The generated list is in the snapshot
 below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`item`, `kind`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action or query of that noun | an edit: a batch of one; an action: an action; a query: a query |
+| one per noun (`history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
 
 A group tool's arguments are `{"op": {...}, "expected_rev"?, "idempotency_key"?}`. `op`
 is the protocol's own object, tagged by `type`, and its schema is the protocol's variant
-schemas under `oneOf`. The two batch options apply to edits only: an action or query that
-carries them is rejected. Unknown argument keys are rejected too, so a misspelt
+schemas under `oneOf`. The two batch options apply to edits and history ops only
+([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): an action or query that
+carries them is rejected. The `history` tool undoes and redoes the session's own steps,
+never another client's. Unknown argument keys are rejected too, so a misspelt
 `expected_rev` can't silently drop the concurrency check. Each tool's `inputSchema`
 carries, under `$defs`, every protocol definition it refers to, so it stands alone. Tool
 names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-root test
