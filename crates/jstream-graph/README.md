@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:2104ccf88d92445d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#345 round 1 after merging main: re-read the recording path sentence; it matches record_path_problem in target.rs and no longer claims to match the absolute asset rule; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

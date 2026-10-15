@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:184e33b36f2e1477", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Review N4 on #373: settings.rs Asset.path doc comment reworded to match the README Rejections bullet (no : but the drive letter's, and no ? or *); comment only, no code change; section text holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -134,7 +133,6 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:b321b12d0bff1b12", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Review N4 on #373: settings.rs Asset.path doc comment reworded to match the README Rejections bullet (no : but the drive letter's, and no ? or *); comment only, no code change; section text holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
