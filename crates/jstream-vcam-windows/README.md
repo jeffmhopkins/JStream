@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:abf65baa6c0ede4a", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Review round 1 B2/N2: re-read against frames.rs: a live, fresh producer with no safe frame repeats the last copied frame (Shared::Hold), colour bars only without a live producer or after a shared-path error, and a non-live block drops the opened objects at once; rest unchanged" }
+verified = { hash = "b3:bbe04a871856bc5b", by = "agent:claude", note = "#180: re-read whole section against the diff: new Trust text matches trust.rs (active session + owner is session user/SY/BA, Global unchecked) and win/session.rs + shared.rs owner_sid (GetSecurityInfo, WTSQuerySessionInformationW, LookupAccountNameW, fail closed); Tests and other-platform sentences now include the trust rule; Frames probe order unchanged" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -22,7 +22,8 @@ the [`jstream-vcam-proto`](../jstream-vcam-proto/README.md#purpose) contract. La
 and one of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001));
 it depends only on layer-0 crates and Microsoft's `windows` bindings
 ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). On other platforms it
-builds only its pixel helpers, which are tested everywhere.
+builds only its pixel helpers and its control-block trust rule, which are tested
+everywhere.
 
 Ported from spike S2 (a Rust port of VCamSample's design), which proved this path on
 Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
@@ -40,8 +41,16 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
   producer, or after an error on the shared path, it serves its own colour bars. A
   producer that stops drops the opened objects at once, so one that restarts in the same
   process is reopened. It writes its identity and counters into the block's consumer half.
-- **Trust.** The block is written by another process: the DLL requires the contract's
-  format (`format_matches`), requires the scope and session the block names to be the
+- **Trust.** The block is written by another process. A block found in a session's
+  namespace is used only if that session is active (at the console, or an active remote
+  connection) and the mapping's owner is the session's logged-on user, SYSTEM or
+  Administrators (`trust`), so another user's engine, say in a session switched away
+  from, can't feed this camera. The DLL runs as LOCAL SERVICE, which can't call
+  `WTSQueryUserToken`, so it reads the owner with `GetSecurityInfo` and the session's
+  user with `WTSQuerySessionInformationW` and `LookupAccountNameW`; anything unreadable
+  refuses the block. `Global\` blocks are not owner-checked: only administrators and
+  services can create them. The DLL then requires the contract's format
+  (`format_matches`), requires the scope and session the block names to be the
   namespace it was found in, and after opening the shared objects re-checks that the
   block is still live for the same producer.
 - **Panics.** Every COM method and export runs inside a panic guard that returns
@@ -58,10 +67,11 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
 The DLL only opens the shared objects. The engine creates them, with the contract's DACL
 (`sddl_objects`), in `jstream-platform-windows`.
 
-**Tests.** The pixel helpers (test pattern, strided copies, BGRA to NV12) are unit-tested
-on every platform. The COM path needs Frame Server, so it is checked by hand with the
-`vcam_smoke` example ([Hardware check](#hardware-check)). CI compiles the crate and the
-example on Windows.
+**Tests.** The pixel helpers (test pattern, strided copies, BGRA to NV12) and the
+session-block trust rule are unit-tested on every platform. The COM path, and the
+Windows queries behind the trust rule, need Frame Server, so they are checked by hand
+with the `vcam_smoke` example ([Hardware check](#hardware-check)). CI compiles the crate
+and the example on Windows.
 
 <a id="hardware-check"></a>
 ## Hardware check
