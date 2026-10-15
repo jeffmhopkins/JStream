@@ -13,14 +13,15 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mux", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0034-youtube-interaction-scope-v2.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:1c9f649924564d01", by = "agent:claude@session_01MsvHxNcKDw6nuUVq4SwHac", note = "Re-read Purpose against the new fmp4 module: the intro now names fragmented MP4 for recording, the fmp4 bullet matches fmp4.rs (init segment boxes, moof/traf/trun layout, track IDs and time scales, keyframe and audio-only cuts, held-back last sample, deferred init, errors), and Not yet drops MP4/fMP4; the ARCH crate-map row (FLV, MP4/fMP4) and ADR-0031/0034 still hold" }
+verified = { hash = "b3:1fda1c8dfd7be7e6", by = "agent:claude@session_01M7dd6pdhEEieUbct9m5TkJ", note = "F5: re-read Purpose against the enhanced RTMP change: intro and framing paragraph name HEVC (Annex B) and AV1 (low-overhead OBU temporal units, TD and padding dropped by av1::to_sample); new flv Enhanced RTMP bullet matches with_enhanced_video/ExVideoConfig, the ExVideoTagHeader layout, SequenceStart/CodedFrames/CodedFramesX/SequenceEnd choice, AV1 cts error and FourCC videocodecid; new hevc and av1 bullets match hevc.rs and av1.rs; Not yet now lists fourCcList signalling, HEVC/AV1 in MP4 and mid-stream parameter-set changes; ARCH crate-map row (FLV with enhanced RTMP) and ADR-0031/0034 still hold" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):
 muxers are written in Rust, no FFmpeg). It writes H.264 and AAC into **FLV**, the
 container M1a's RTMP(S) output sends to YouTube
-([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)), and into
-**fragmented MP4**, the container recording writes. It consumes
+([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)), along with HEVC and
+AV1 through [enhanced RTMP](https://github.com/veovera/enhanced-rtmp/blob/main/docs/enhanced/enhanced-rtmp-v2.md);
+and it writes H.264 and AAC into **fragmented MP4**, the container recording writes. It consumes
 [`jstream-media`](../jstream-media/README.md#purpose) `Packet`s, does no network I/O,
 has no `unsafe`, and depends only on `jstream-media` and `thiserror`.
 
@@ -28,7 +29,10 @@ has no `unsafe`, and depends only on `jstream-media` and `thiserror`.
 codes) throughout the engine, because that is what OS encoders such as Media Foundation
 emit. A container that needs AVCC (length prefixes: FLV, RTMP, MP4) converts at mux time
 with `h264::annexb_to_avcc`, which copies NAL units unchanged, so emulation-prevention
-bytes are preserved. AAC payloads are **raw access units** without ADTS headers, which is
+bytes are preserved. HEVC payloads are Annex B too, and convert the same way. AV1
+payloads are one **temporal unit of low-overhead OBUs** (each with its size field, except
+perhaps the last), which FLV and MP4 store without temporal delimiters and padding
+(`av1::to_sample`). AAC payloads are **raw access units** without ADTS headers, which is
 what FLV and MP4 store.
 
 Contents:
@@ -45,6 +49,20 @@ Contents:
     that exactly one prefix then reaches the wire.
   - Without a configured `AvcDecoderConfig`, the record is built from the SPS and PPS of
     the first video packet, which must be a keyframe.
+  - **Enhanced RTMP:** `FlvTagger::with_enhanced_video` (and
+    `FlvWriter::with_enhanced_video`) makes the video track HEVC or AV1, given as an
+    `ExVideoConfig` whose decoder configuration, if `None`, is built from the first
+    video packet the same way (a keyframe carrying VPS, SPS and PPS, or a sequence
+    header OBU). `VideoTrack` still gives the size, rate and bitrate, with `avc` left
+    `None`. Video tags then use the `ExVideoTagHeader`: the `IsExHeader` bit, frame type
+    and `VideoPacketType` in one byte, then the FourCC (`hvc1`, `av01`). The track
+    starts with `SequenceStart` (the `HEVCDecoderConfigurationRecord` or
+    `AV1CodecConfigurationRecord`) and ends with `SequenceEnd`. HEVC frames are
+    `CodedFrames` with a 24-bit composition time, or `CodedFramesX` when it is zero; AV1
+    frames are `CodedFrames` with none, so an AV1 packet whose pts and dts differ is an
+    error. `onMetaData`'s `videocodecid` is the FourCC as a number. Neither multitrack,
+    `ModEx` nor video metadata packets are written, and FourCC audio is not used: AAC
+    stays a legacy tag.
   - Timestamps are each packet's dts, converted to milliseconds by `flv::to_ms`
     (`MediaTime::rescale`, rounded to nearest) from a configurable origin, wrapped to 32
     bits by `flv::wrap_timestamp`, with the high byte in the extended timestamp field.
@@ -85,6 +103,17 @@ Contents:
   and PPS extraction, and `AvcDecoderConfig`, the ISO/IEC 14496-15 record. For profiles
   other than Baseline, Main and Extended it appends the chroma format and bit depths read
   from the SPS, as FFmpeg does.
+- **`hevc`:** NAL unit types and `HevcDecoderConfig`, the ISO/IEC 14496-15
+  `HEVCDecoderConfigurationRecord`, built from VPS, SPS and PPS. Profile, tier, level,
+  compatibility and constraint flags, chroma format, bit depths and temporal layering
+  come from the first SPS. One array each holds the VPS, SPS and PPS, marked incomplete
+  because frames keep their in-band copies; spatial segmentation, parallelism and frame
+  rate are written as unknown (0). These match FFmpeg's FLV muxer byte for byte on the
+  test stream.
+- **`av1`:** OBU splitting (`av1::obus`), `av1::to_sample`, and `Av1CodecConfig`, the AV1
+  ISOBMFF `AV1CodecConfigurationRecord`, with its profile, level, tier, bit depth,
+  monochrome flag and chroma subsampling read from the sequence header OBU, which it
+  stores as `configOBUs` (with a size field). No initial presentation delay is written.
 - **`aac`:** `AudioSpecificConfig`, built from object type, rate and channels, or kept as
   the encoder produced it.
 - **`amf0`:** the workspace's one AMF0 encoder and decoder (number, boolean, string
@@ -95,6 +124,6 @@ Contents:
   input claims, and reports the byte offset of truncated input.
 - **Errors:** one `thiserror` enum, `MuxError`.
 
-**Not yet:** enhanced RTMP (HEVC and AV1 through FourCC video tags, which ADR-0034 calls
-for), non-fragmented MP4, and a mid-stream change of SPS/PPS (a new sequence header or
-sample entry).
+**Not yet:** signalling enhanced RTMP in the RTMP `connect` (`fourCcList`, which is
+`jstream-outputs`' job), HEVC and AV1 in MP4, non-fragmented MP4, and a mid-stream change
+of parameter sets (a new sequence header or sample entry).

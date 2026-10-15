@@ -14,7 +14,8 @@ pub enum MediaKind {
 }
 
 /// A compressed format. The baseline set follows docs/adr/0031-source-types-and-decoding-scope.md:
-/// H.264 video and AAC audio, from OS encoders.
+/// H.264 video and AAC audio, from OS encoders. HEVC and AV1 are the video codecs enhanced
+/// RTMP carries (docs/adr/0034-youtube-interaction-scope-v2.md).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Codec {
@@ -22,13 +23,18 @@ pub enum Codec {
     H264,
     /// AAC audio. Payloads are raw access units, without ADTS headers.
     Aac,
+    /// HEVC / H.265 video. Payloads are Annex B (start codes), like H.264.
+    Hevc,
+    /// AV1 video. A payload is one temporal unit: OBUs in the low-overhead bitstream
+    /// format, each with its size field (the last one may omit it), as encoders emit them.
+    Av1,
 }
 
 impl Codec {
     /// Whether the codec is for video or audio.
     pub fn kind(self) -> MediaKind {
         match self {
-            Self::H264 => MediaKind::Video,
+            Self::H264 | Self::Hevc | Self::Av1 => MediaKind::Video,
             Self::Aac => MediaKind::Audio,
         }
     }
@@ -135,6 +141,8 @@ mod tests {
     fn codec_kinds() {
         assert_eq!(Codec::H264.kind(), MediaKind::Video);
         assert_eq!(Codec::Aac.kind(), MediaKind::Audio);
+        assert_eq!(Codec::Hevc.kind(), MediaKind::Video);
+        assert_eq!(Codec::Av1.kind(), MediaKind::Video);
     }
 
     #[test]

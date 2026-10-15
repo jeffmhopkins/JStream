@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:0ea935c5788237e5", by = "agent:claude@session_01Q6eRwxiAzJidNbXNzEDHVJ", note = "F4: Codecs bullet now names VideoEncoder::request_keyframe and its refusing default; FakeCodecs restarts its keyframe pattern at a forced keyframe; on-demand keyframes dropped from Not yet" }
+verified = { hash = "b3:b189b2ad940d3cbb", by = "agent:claude@session_01M7dd6pdhEEieUbct9m5TkJ", note = "F5: only the jstream-media Purpose it depends on changed (Codec gained HEVC and AV1); re-read the Codecs bullet: platform encoders still emit H.264 Annex B and raw AAC, which is still jstream-media's framing for those codecs, so the section holds unchanged" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
