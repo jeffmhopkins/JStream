@@ -321,7 +321,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:5cfa3cb55bbe75fa", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
+stamp = { hash = "b3:6a017838d22991cc", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of wave/m1 (#402 DOS device names, #320 vcam crate note): cascade from protocol README; mix bullets hold" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:dad47ff26eda2f86", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main at 9540179 (wave/m2: D6 activity gain, #371/#373, ledger ADR-0053, waves): mix edits (0.20), video_mix.list (0.20), session key by mix and profile; holds" }
@@ -885,7 +885,7 @@ stamp = { hash = "b3:e820e86b35a52b68", by = "agent:claude@session_01KvbMUfF6qWH
 stamp = { hash = "b3:9de817ca9a7be8f7", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main at 9540179 (wave/m2: D6 activity gain, #371/#373, ledger ADR-0053, waves): render snapshot, compose, video mixes and session key paragraphs read next to D6's activity gain (program-only, mixes don't affect audio); holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: re-read; engine/session design does not restate asset-path rules; the protocol Design change only tightens a per-value check" }
+stamp = { hash = "b3:46c1e08c8d9c4216", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of wave/m1 (#402 DOS device names, #320 vcam crate note): cascade from protocol design; mix paragraphs unaffected" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:a125f8ec8f95d7ac", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main at 9540179 (wave/m2: D6 activity gain, #371/#373, ledger ADR-0053, waves): render snapshot, compose, video mixes and session key paragraphs read next to D6's activity gain (program-only, mixes don't affect audio); holds" }
@@ -1413,7 +1413,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:558a47b52a78d5aa", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main at 9540179 (wave/m2: D6 activity gain, #371/#373, ledger ADR-0053, waves): mixes beside buses/sends in state, touched sets, reads, plan, persist and tests; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: re-read; graph purpose relies on protocol Edits, IDs and errors, unaffected by the tighter absolute asset-path check" }
+stamp = { hash = "b3:46c1e08c8d9c4216", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of wave/m1 (#402 DOS device names, #320 vcam crate note): cascade from protocol design; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1935,7 +1935,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
+stamp = { hash = "b3:46c1e08c8d9c4216", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of wave/m1 (#402 DOS device names, #320 vcam crate note): main's DOS-device asset rule sits in the settings text, unrelated to mixes; video mix text at 0.20 holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
