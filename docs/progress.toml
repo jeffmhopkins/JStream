@@ -447,7 +447,7 @@ prs = [231]
 id = "D5"
 milestone = "M1b"
 title = "Audio in the protocol"
-status = "review"
+status = "done"
 prs = [240]
 
 [[item]]
@@ -526,8 +526,9 @@ prs = [194]
 id = "G3b"
 milestone = "M1c"
 title = "VirtualCam output kind"
-status = "review"
-prs = [213]
+status = "hardware"
+prs = [213, 297]
+note = "camera run on Windows 11"
 
 [[item]]
 id = "G3c"
@@ -675,7 +676,7 @@ prs = [302]
 id = "U1"
 milestone = "M2"
 title = "Preview stream"
-status = "review"
+status = "done"
 prs = [251]
 
 [[item]]
@@ -685,6 +686,13 @@ title = "Tauri desktop app"
 status = "hardware"
 prs = [258]
 note = "desktop app check"
+
+[[item]]
+id = "Q3"
+milestone = "M2"
+title = "UI end-to-end tests"
+status = "review"
+prs = [309]
 
 [[item]]
 id = "T1"

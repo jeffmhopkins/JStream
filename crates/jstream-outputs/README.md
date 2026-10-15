@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:55eb83845957a2da", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): stale only via ARCH#threading (main's text plus the Preview thread row, which is not real-time); this section's text is main's and consistent; holds" }
+verified = { hash = "b3:8c72470ee2145229", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge-only round: main 6be5647 (#331 Transport::shutdown closes only the sending side); outputs text is main's, stale only through this PR's ARCH#threading Preview row; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -80,7 +80,11 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   timeout is cut to the time left, and past the deadline a write fails with `TimedOut`
   (#138). Each socket write then sends at most 16 KiB, because on macOS and the BSDs a
   write's timeout restarts whenever the peer frees buffer space. `Transport::shutdown` sends TLS `close_notify` before closing the socket, bounded
-  by the write deadline like any other write (#209).
+  by the write deadline like any other write (#209), and shuts the socket down even
+  when that fails (#236). It shuts down only the sending side, so the server sees a FIN
+  and its reply stays readable; the drop closes the rest. Shut down both ways, Windows
+  aborts the connection when the server's data (TLS 1.3 session tickets, say) sits
+  unread (#243).
 - **URLs and keys** (`url`): `rtmp(s)://host[:port]/app[/...]`, with the whole path as the
   application name and the stream key separate. `StreamKey` prints as `***`, and no error
   carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The server's
@@ -192,7 +196,7 @@ rustls server on loopback TCP with a CA and server certificate that `rcgen` gene
 for the test, and a client that trusts only that CA: a round trip over TLS 1.3 and 1.2,
 a full publish session, a read timeout that splits a TLS record during `poll_incoming`,
 a handshake timeout, a write deadline bounding a large write and a shutdown's
-`close_notify`, and refusal of a certificate for another host or from an untrusted
+`close_notify`, the server's reply staying readable after a shutdown, and refusal of a certificate for another host or from an untrusted
 CA. Reconnect tests drive a clock the test advances by hand: a fake server on loopback
 TCP that hangs up mid-stream, after which the test checks the wait before the first
 attempt, the drop counts, the re-sent headers and the resume at the keyframe on the

@@ -216,14 +216,21 @@ fn a_write_deadline_bounds_a_large_write_over_tls() {
 
 /// #209: `shutdown`'s TLS flush goes through the write deadline too. Past the deadline
 /// `close_notify` is not sent and the shutdown fails at once, where it used to be sent
-/// with only the socket's write timeout to bound it.
+/// with only the socket's write timeout to bound it. #236: the socket is still shut
+/// down, so the server sees the stream end without `close_notify` while the client
+/// still holds the transport. #243: that end is a FIN on every platform, though the
+/// client has left the server's TLS 1.3 session tickets unread; a shutdown in both
+/// directions makes Windows abort the connection instead.
 #[test]
 fn shutdown_over_tls_honours_the_write_deadline() {
     let pki = TestPki::new(&["localhost"]);
     let (port, server) = tls_server(pki.server_config(&[&TLS13]), |mut s| {
-        // No close_notify arrives, so the end of stream is not a clean one.
+        // A timeout, not a hang, if the client never shuts the socket down.
+        s.sock
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
         let mut rest = Vec::new();
-        s.read_to_end(&mut rest).is_err()
+        s.read_to_end(&mut rest).map_err(|e| e.kind())
     });
     let config = client_config(pki.roots.clone()).unwrap();
     let mut t = connect_tls(&url("rtmps", "localhost", port), TIMEOUT, config).unwrap();
@@ -232,9 +239,52 @@ fn shutdown_over_tls_honours_the_write_deadline() {
         .shutdown()
         .expect_err("close_notify was sent past the deadline");
     assert_eq!(err.kind(), io::ErrorKind::TimedOut, "{err:?}");
+    // Held until the server has read the end, so whatever end it sees came from the
+    // shutdown, not from a drop.
+    let ended = server.join().unwrap().unwrap();
     drop(t);
-    assert!(
-        server.join().unwrap().unwrap(),
-        "the server saw a clean TLS close"
-    );
+    // A clean TLS close reads as `Ok`, no shutdown as the read timeout, and an abort
+    // as `ConnectionAborted` or `ConnectionReset`. The shutdown's FIN, with no
+    // `close_notify`, is `UnexpectedEof`.
+    assert_eq!(ended, Err(io::ErrorKind::UnexpectedEof));
+}
+
+/// #243: `shutdown` closes only the sending side, so the client can still read what the
+/// server sends after the client's `close_notify`, here a last message and the
+/// server's own `close_notify`. Shut down in both directions, the read finds the end
+/// of stream at once (Linux, macOS) or fails (Windows), and the server's
+/// `close_notify` never arrives.
+#[test]
+fn shutdown_leaves_the_server_s_reply_readable() {
+    let pki = TestPki::new(&["localhost"]);
+    let (port, server) = tls_server(pki.server_config(&[&TLS13]), |mut s| {
+        s.sock
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut rest = Vec::new();
+        let ended = s.read_to_end(&mut rest).map_err(|e| e.kind());
+        // Lets the client reach its read first, so the reply arrives at a socket
+        // already shut down, not one with the reply queued.
+        thread::sleep(Duration::from_millis(100));
+        let sent = s.write_all(b"bye").and_then(|()| {
+            s.conn.send_close_notify();
+            s.flush()
+        });
+        (ended, sent.map_err(|e| e.kind()))
+    });
+    let config = client_config(pki.roots.clone()).unwrap();
+    let mut t = connect_tls(&url("rtmps", "localhost", port), TIMEOUT, config).unwrap();
+    t.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    t.shutdown().unwrap();
+    let mut reply = Vec::new();
+    let read = t.read_to_end(&mut reply).map_err(|e| e.kind());
+    // The server's reply, then its close_notify: a clean end of stream.
+    assert_eq!(read, Ok(3), "the client read {reply:?}");
+    assert_eq!(reply, b"bye");
+    let (ended, sent) = server.join().unwrap().unwrap();
+    // The client's close_notify, then its FIN: a clean end of stream too.
+    assert_eq!(ended, Ok(0));
+    // Linux resets a connection whose receiving side is shut down when more data
+    // arrives, so with that side open the reply reaches the client whole.
+    assert_eq!(sent, Ok(()));
 }

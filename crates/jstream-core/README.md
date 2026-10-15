@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:1ecb30e7b67ecc24", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: preview cites ADR-0045 (its own small H.264 encoder session, binary frames, WebCodecs) instead of superseded ADR-0002; only the citation changed; re-read, holds" }
+verified = { hash = "b3:ae5c5dd195ed5eb5", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: main's audio text beside the Preview bullet and preview tests; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -27,7 +27,8 @@ host hands them an `InProcessControl` as a `dyn Control`.
 The control plane is the scene graph, the sessions and `video.snapshot`.
 `output.start` runs the media pipeline when the host calls
 `with_backends` and gives it a publish target (`with_publish` or
-`with_publish_opener`); a recording output needs no publish target. Without backends, an output action stays the placeholder
+`with_publish_opener`); a recording output needs no publish target, nor does a
+virtual camera, which publishes to the backends' `VcamSink`. Without backends, an output action stays the placeholder
 state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
@@ -60,10 +61,12 @@ state machine. Contents:
   on the render thread (see *Live sources* and *Snapshots* in [Design](#design)).
   Audio-only kinds make no frames and have no live source.
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
-  input, sent to master at unity, for each `audio_input`, `desktop_audio` and
-  `app_audio` source, added when the source is created and removed when it is deleted;
-  while there is none, the default microphone and desktop audio (see *Audio sources*
-  in [Design](#design)).
+  input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
+  on, added when the source is created or turned on and removed when it is deleted or
+  turned off, and listed for the audio routing,
+  which sets its fader, mute and sends; while there is none, the default microphone
+  and desktop audio, sent to master at unity (see *Audio sources* in
+  [Design](#design)).
 - **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -84,7 +87,16 @@ state machine. Contents:
   clock. Encode threads live in the encoder sessions, one per encoder profile in use,
   shared by the outputs on that profile. Each output's own thread muxes FLV and
   publishes it, or muxes MP4 and records it
-  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
+  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
+  thread converts and publishes the frames the render thread sends it through a tap
+  (`runtime/vcam.rs`).
+- **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
+  program mixer follows the collection's audio. While the program stage runs, every bus
+  of the collection has a mixer bus with its fader and mute, and every source with a
+  mixer input has its fader and its sends (silenced while it is `muted`);
+  `meters.tick` carries their levels about ten times a second, with the master's true
+  peak and BS.1770 loudness, which the mixer thread measures on each block, and
+  `audio.reset_loudness` restarts its integrated loudness.
 - **History** (`history.rs`): per-client undo and redo
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
   stacks, built from the inverse batches `Graph::apply` returns, and the log of what
@@ -104,8 +116,10 @@ state machine. Contents:
   registers the capture cell, both encode sessions, each mixer input, the mix
   bus, and the packets the output thread drops (muxer rejects and what a stop's
   drain abandons) and the publish link's, and a sampler thread
-  emits a tick about once a second until the last output stops.
-- **Tests** (`tests.rs`, `src/tests/history.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
+  emits a tick about once a second until the last output stops. The same thread emits
+  `meters.tick` about ten times a second.
+- **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/audio.rs`,
+  `src/tests/audio_routing.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
   end), the shared parity fixture, a differential run against
@@ -128,7 +142,10 @@ state machine. Contents:
   (renamed into place on stop, refused when the file exists or the path is not
   absolute on this machine, no `.part` file left by a failed start), recording while
   streaming on one shared encoder session (and separate sessions on separate
-  profiles), a render panic failing both outputs, overload drops from a
+  profiles), a virtual camera publishing the program as BGRA at the canvas size
+  (fitted into a canvas of another size, started again after a stop, running beside
+  a stream, refused without a camera in the backends or while another output uses
+  it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
   fake encoder and the mixer reported in `stats.tick`, render and mixer panics
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
   the hidden `Engine::with_cpu_compositor`), audio sources becoming mixer inputs on the CPU
@@ -152,9 +169,16 @@ state machine. Contents:
   leaving the latest collection and no temporary file), `scene.switch` and the program
   scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
   that follows program, and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
-  engine in-process.
+  engine in-process. The audio routing (`audio.rs` and
+  `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
+  batches and undo, `meters.tick` while a mixer is attached and none after,
+  `audio.reset_loudness`, and the master's true peak and loudness; `src/tests/audio.rs`
+  also checks that a recording audio source is metered, and that turning its audio
+  off closes its input and its meter and turning it on opens them again. The parity
+  tests add the fixture's `mic` kind, which no built-in kind matches.
 
-Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
+Not here yet: live values, `when_shown`'s activity
+gain (D6), the audio and outputs snapshots, a GPU encode target, and
 the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -167,7 +191,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:83c5a15fb07599d9", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: preview cites ADR-0045 (its own small H.264 encoder session, binary frames, WebCodecs) instead of superseded ADR-0002; only the citation changed; re-read, holds" }
+verified = { hash = "b3:fbef51a65175ecce", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: Preview streams subsection unchanged and matches preview/mod.rs; Locking takes main's mixer and meters sentences, and the preview-lock sentence now follows the snapshot-thread sentence whole (it had split its 'the queue to it' referent)" }
 -->
 
 ### Engine and sessions
@@ -263,7 +287,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), and
-  `scene.switch` (see *Program scene* below).
+  `scene.switch` (see *Program scene* below), and `audio.reset_loudness` (see *Audio
+  routing*), which succeeds whether or not the mixer runs.
 - **`studio.get`** reads the program scene under the collection lock.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
@@ -302,8 +327,11 @@ collection lock:
   role, an item's placement, whether set as a transform or a geometry, crop,
   visibility, an item's index, which `item.move` also sets, which source an item
   places, each settings parameter, an output's target and encoder choice, a profile's
-  encoding), the scenes'
-  order, and the canvas size. An undo or redo first applies the step's edits to a copy of the
+  encoding, each audio field a `source.set_audio` or `bus.set_fader` sets, a bus's
+  name, a send's gain), the scenes'
+  order, and the canvas size. A send is an object of its own, which uses its source
+  and its bus, so changing two sources' sends into one bus doesn't conflict, and
+  deleting a bus conflicts with every change to its sends. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
   `scene.create` also deletes the items the scene holds now, even ones whose own step
   was dropped. The step conflicts with another client's later entry, logged after
@@ -419,11 +447,14 @@ is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 `Source`: the program stage records them (*Audio sources*).
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
-`jstream_sources::AudioTarget` of every audio-only source; `sync` runs beside the live
+`jstream_sources::AudioTarget` of every audio-only source, or none while the source's
+audio is off (ADR-0028: off, the engine doesn't open its stream); `sync` runs beside the live
 sources' and wakes the program stage's thread when that set changes. When the program
-stage starts, its `AudioInputs` opens one mixer input per audio source through
-`MixerControl` (D1's live API), sent to the master bus at unity as every new input
-is; gain, mute and routing come with D5. Each input is opened by asking the platform
+stage starts, its `AudioInputs` opens one mixer input per audio source that is on through
+`MixerControl` (D1's live API). A source's input opens muted and is listed in
+`audio_sources::Routed`, where the audio routing finds it (see *Audio routing*) and
+sets it up as the collection says; the default microphone and desktop inputs send to
+the master bus at unity, as every new input does. Each input is opened by asking the platform
 for the format the device delivers (`AudioIo::input_format`), adding the mixer input
 in that format, and opening the stream with the input's producer as its handler; a
 stream that opens in another format is closed and tried again. An `audio_input`
@@ -451,7 +482,7 @@ ledger's. When the program stage stops it joins the thread and closes every inpu
 after the mixer thread has stopped. While the collection has no audio source, the
 program records the default microphone and desktop audio, as it did before audio
 sources existed, so an earlier collection is not silent; the first audio source
-replaces them. Whether a source is recording or unavailable is not reported to
+replaces them, and keeps them away while its audio is off. Whether a source is recording or unavailable is not reported to
 clients yet: that needs a protocol field (D5's lane).
 
 `snapshot::plan_with` asks for the frame of each source an item it reaches places:
@@ -462,7 +493,9 @@ the source hands out a different one, so a still image is uploaded once. The pla
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image advances on the clock and a still one is
 never re-planned. Sources run on the media clock of the backends the host injects
-(`with_backends`), else on a monotonic clock of the engine's own. `collection` asset
+(`with_backends`), else on a monotonic clock of the engine's own. A clock swap
+restarts every running source's timing and drops the re-plan timed on the old clock:
+the thread re-plans at once on the new one. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
 for every `app` reference, the asset is unreadable and the source draws nothing.
 
@@ -586,6 +619,43 @@ and their sources load the counters those handles expose. `drops` runs on the sa
 thread and must not call back into the engine. The fake capture generates a frame when
 it is read, so it does not simulate mailbox skips.
 
+### Audio routing (`meters.tick`)
+
+[ADR-0028](../../docs/adr/0028-audio-model-v2.md)'s mixer lives in the program stage,
+so the collection's audio reaches it only while an output runs. When the program
+stage opens, it hands the engine its mixer's controls (`MixerControl`, the master's
+`BusControl`) and the master meters, and the engine routes the collection into it
+(`audio.rs`); when the stage stops, it detaches them again. Each attach is numbered,
+so a stage that stops after another has opened detaches only its own. After every
+applied batch, undo and redo, and on attach and collection load, `AudioRouting::sync`
+brings the mixer in line with the collection under the collection lock:
+- each bus other than the master gets a mixer bus (`MixerControl::add_bus`), and a
+  mixer bus whose collection bus is gone is removed; a bus the mixer refuses to add or
+  remove is retried on the next sync (a refused add is logged);
+- every bus's fader and mute, the master's on `Mixer::bus`;
+- for each source with a mixer input, its fader and a send into each mixer bus as the
+  collection's sends say, removing the others. A `muted` source keeps its sends at
+  silence, so its post-fader meter still reads, as ADR-0028's mute requires. A source
+  whose audio is off has no input, since the program stage closes it; until it has,
+  the routing mutes it and leaves it out of `meters.tick`. The
+  inputs are the ones the program stage's audio sources thread lists in `Routed` as it
+  opens and closes them (see *Audio sources*); it removes them from the mixer itself.
+  An input it opened since the last sync is routed on the next `meters.tick` at the
+  latest, and stays muted until then. Every control is a few atomics, so a sync never
+  waits on the mixer thread ([R-RT-003](../../docs/RULES.md#R-RT-003)), and the
+  `Routed` lock is the last one taken. The program stage's microphone and desktop
+  inputs are not sources and keep sending to the master at unity.
+
+The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
+reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
+reading) and RMS, linear per channel. The master adds its true peak and BS.1770
+loudness, which the mixer thread measures on every block it mixes (`MasterMetering`,
+whose meters are built before the thread starts, since the loudness meter allocates,
+and never allocate after) and publishes through atomics (`MasterMeters`). An
+`audio.reset_loudness` sets a flag the mixer thread reads before its next block, which
+restarts the integrated loudness. With no program stage running, no `meters.tick` is
+emitted and `audio.reset_loudness` does nothing.
+
 ### Outputs
 
 An output's configuration is collection state (`output.create`, `output.set_target`,
@@ -691,6 +761,32 @@ dropped and counted in `output_packets`. Disk writes run on the output thread an
 may block; the encoder subscriber queues absorb that and drop when full, without
 holding up a stream on the same session.
 
+**Virtual camera.** `with_backends` takes the backends' `VcamSink` out and keeps it for
+the engine's life. When the collection's output is `VirtualCam`, the start takes that
+sink and joins the program stage like any output (opening it when no other output
+runs), but with no encoder session (`launch_vcam`, `runtime/vcam.rs`). With no sink it
+fails with `action_failed` before `starting`: `this engine has no virtual camera`, or
+`the virtual camera is in use by another output` when another `VirtualCam` output has
+it. It starts the camera at the canvas size the collection has then, as BGRA8 at
+1/30 s (a refusal fails the start with `starting the virtual camera: <reason>`), hands
+the render thread a tap, and starts the output's camera thread, `jstream-vcam`. The
+tap and that thread share only the output's stop flag and two bounded channels, never
+a lock ([R-RT-003](../../docs/RULES.md#R-RT-003)). Each tick the tap copies the
+program frame (RGBA) into a buffer the camera thread handed back and sends it,
+without blocking: with a frame still waiting, it drops this one and counts it in
+`output_stats`' output drops. The camera thread converts each frame to BGRA at the
+canvas size (as is when the program frame is the canvas size, otherwise fitted inside
+it, centred, by nearest neighbour, with black bars), publishes it and hands the
+buffer back. It runs beside streams and recordings on the same program frame, and
+`output_stats` counts no encoder input for it. A publish error fails that output
+alone, through its own failure line; the others keep running. Once the camera thread
+ends (a stop, or a failed publish) it stops the camera and returns the sink to the
+engine, as a start that fails does, so the next start finds it. A stop sets the flag
+and waits for that as it waits for any output thread (`STOP_DRAIN` plus the grace);
+the render thread never waits on it, and the tap leaves on its next tick, to the
+collector. A canvas resize applies from the next start. The daemon's backends don't
+carry `WindowsVcam` yet; that wiring is the daemon's.
+
 Once the pipeline is `active`, a fatal error on any pipeline thread is sent on a
 channel: a `send_tag` or `poll` failure, a recording write failure, an encoder stream that ends before the
 pipeline was told to stop (the encoder failed, or its session closed), and the
@@ -738,7 +834,9 @@ it: it stores its generation in the hub's reader slot (one `SeqCst` store) and h
 the snapshot it held to the program stage's `jstream-collector` thread. The GPU images the
 cache frees go there too, and so does the input of an encoder session that has
 finished (the session may already be gone, leaving that input the last reference to
-its shared state and channel), so nothing the render thread lets go of is freed on it
+its shared state and channel), and so does a virtual camera's tap that leaves (once
+its camera thread has ended it holds the last reference to the channels and the stop
+flag), so nothing the render thread lets go of is freed on it
 ([R-RT-003](../../docs/RULES.md#R-RT-003)). The mixer thread hands a finished audio
 input to the same collector. The thread clears the stopped marker
 before its first load (`SeqCst`, then a fence), and publishes it again when it stops
@@ -746,7 +844,7 @@ or a fatal error stops its drawing, so `RenderHub::caught_up` treats it as caugh
 ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading), "Live-value handover"; only
 tests poll it until live edits exist). The collector ends when the render and mixer
 threads have dropped their senders, and the program stage (`Program`) joins it right
-after them. While the stage has no encoder session it draws nothing but still adopts
+after them. While the stage has no encoder session and no virtual camera it draws nothing but still adopts
 each new snapshot, so it never holds a gesture up. The compositor
 and its cache drop on the render thread when it exits, after the tick loop. What it rides out
 and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
@@ -756,7 +854,8 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 - **Fatal, reported:** a 31st composite error in a row, a panic inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
   thread then keeps pushing the last frame until the pipeline stops, so the stream
-  does not freeze before the teardown.
+  does not freeze before the teardown. A virtual camera's publish error is not
+  the render thread's: it fails only that output, which leaves the stage.
 - The render and mixer threads both catch a panic at their boundary. A fatal error
   becomes `output.state_changed` `failed`, the error event this protocol has. A
   mixer panic, a rejected mix block
@@ -766,7 +865,10 @@ The render thread reuses its capture, composite and readback buffers, and its GP
 textures through the cache. Each tick allocates one frame-sized buffer, the frame the
 encoder session takes ownership of (`VideoInput::push` cannot hand buffers back), the
 item list `compose` fills once per tick, the frame-fence callback, and the
-premultiplied copy of a capture that changed; the mixer likewise copies each block
+premultiplied copy of a capture that changed. A virtual camera's tap reuses the
+buffers its camera thread hands back, so it allocates only until they circulate; the
+camera thread allocates the BGRA frame it publishes, one per frame, off the render
+thread. The mixer likewise copies each block
 into the buffer `AudioInput::push` keeps. Not measured. The mixer thread
 polls the audio sources' inputs into 48 kHz stereo blocks. Encode
 sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
@@ -821,11 +923,14 @@ thread takes it alone, and otherwise only its own inputs mutex and, under that, 
 drop ledger's, never the collection lock (see *Audio sources*).
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
-engine while that mutex is held. The snapshot compositor belongs to the snapshot
-thread, which takes no engine lock; the preview thread takes its own state lock, and
-the collection lock alone and only to load the render snapshot and `rev`, never while
-drawing or encoding. A session's preview streams and binary channel are leaf locks; the queue to it is taken only after the
-collection lock is released. The render snapshot is published under the collection
+engine while that mutex is held. A stopping program stage detaches its mixer from the
+audio routing under the collection lock, which is why it is never dropped while that
+lock is held, as its final `stats.tick` already requires. The master's meters are
+atomics the mixer thread writes and the sampler reads, with no lock. The snapshot compositor belongs to the snapshot
+thread, which takes no engine lock; the queue to it is taken only after the
+collection lock is released. The preview thread takes its own state lock, and the
+collection lock alone and only to load the render snapshot and `rev`, never while
+drawing or encoding; a session's preview streams and binary channel are leaf locks. The render snapshot is published under the collection
 lock (which makes the control side its one writer) and loaded by the render thread
 with no lock at all. `video.snapshot` reads it under the collection lock and the
 snapshot thread only receives it. A stream's poll takes only its queue's lock. No lock
@@ -945,6 +1050,8 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
+- `when_shown`'s activity gain (D6), filter
+  chains in the protocol (the mixer has them since D7b; the routing sets none yet), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one
@@ -956,13 +1063,13 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:42e1cacb465218ae", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): stale via ARCH#threading only (main's CLAP text plus the Preview row); runtime text is main's; holds" }
+verified = { hash = "b3:419b20458c8e8f93", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: runtime text is main's (audio routing, meters); preview hub outside the program stage; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
 [ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading) that is built.
 `output.start`, once the host has injected platform backends and a publish target
-(a recording output needs none), starts it and emits `output.state_changed` from the
+(a recording output or a virtual camera needs none), starts it and emits `output.state_changed` from the
 control thread. The render thread calls the platform capture mailbox and, on each
 1/30 s tick, composites the program mix from the render snapshot (see *Snapshots* in
 Design) at the encoder size: the program scene and the scenes it nests, with every
@@ -971,22 +1078,27 @@ it draws the capture filling the frame. It repeats the last capture when the mai
 is empty, and reads the frame back. This cut encodes that CPU readback, and the
 readback is counted. The mixer thread polls the media clock and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs (see *Audio sources* in Design; the
-microphone and the desktop loopback while the collection has none). Every running
-output shares that one program stage (capture, render, mixer, audio inputs); the first `output.start` builds it and the
+microphone and the desktop loopback while the collection has none), and meters each
+master block's true peak and loudness. Once the stage is up, the engine routes the
+collection's buses, faders and sends into its mixer until it stops (see *Audio
+routing* in Design). Every running output shares that one program stage (capture,
+render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same encoder profile share one
 session, and the render and mixer threads take a new session's inputs from a channel,
 never a lock, and hand a finished session's input to the collector rather than drop
-it. While the stage has no session it
-draws nothing but still adopts the latest render snapshot. Each output has its own
-output thread. An output leaving a session others still use takes what is queued for
+it. While the stage has no session and no virtual camera it
+draws nothing but still adopts the latest render snapshot. Each output but a virtual
+camera has its own output thread that muxes; a virtual camera's thread converts and
+publishes what the render thread sends it through a tap, which the render thread takes
+from a channel like a session's input and hands to the collector when it leaves. An output leaving a session others still use takes what is queued for
 it and goes; the last one drains the encoders. The output thread muxes FLV and sends
 tags to the publish target, or, for a recording output, muxes fragmented MP4 and
 writes it to the file, syncing each fragment (writes may block on the disk; the
 encoder queues absorb that and drop when full). The `output.start` that opens the
 program stage also starts `jstream-stats`, which is not a real-time thread: it emits
 `stats.tick` about once a second from the stage counters, and once more when the last
-output stops. The render loop publishes capture mailbox skips, and a tick that falls a
+output stops, and `meters.tick` about ten times a second. The render loop publishes capture mailbox skips, and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. None of those threads lock the collection: the render thread reads the
 render snapshot, and what the render and mixer threads let go of (replaced snapshots,
