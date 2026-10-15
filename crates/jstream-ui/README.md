@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ce85433ba5e25ec6", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge-only round: merged main at e1e2a94 (#295 clock swap, #297 vcam Windows backends, #309 e2e, #286, #237); took main's text, this PR only changes CallResult::batch constructors here (core design keeps the removed_hotkeys sentence); clippy clean; holds" }
+verified = { hash = "b3:5147b8af968798bb", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at Q3 (#309): the design text is main's (Playwright against a mock daemon); D5's mock additions (buses, sends, audio) are additive to the state the mock daemon serves; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

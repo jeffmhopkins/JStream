@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2d7425b366119aae", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge-only round: merged main at e1e2a94 (#295 clock swap, #297 vcam Windows backends, #309 e2e, #286, #237); took main's text, this PR only changes CallResult::batch constructors here (core design keeps the removed_hotkeys sentence); clippy clean; holds" }
+verified = { hash = "b3:8c58a5105c467013", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at #295 (clock swap re-plan): re-read against both sides: daemon text is main's; names no audio routing; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

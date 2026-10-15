@@ -241,7 +241,8 @@ fn source_list_golden() {
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"source.list","rev":2,"#,
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}},"#,
-            r#"{"source_id":"nest","name":"Nested BRB","kind":{"type":"scene","scene_id":"brb"}}]}}}"#,
+            r#"{"source_id":"nest","name":"Nested BRB","kind":{"type":"scene","scene_id":"brb"},"#,
+            r#""audio":{"enabled":true,"follow":"when_shown","gain_db":0.0,"muted":false}}]}}}"#,
             "\n"
         ))
     );
@@ -335,12 +336,13 @@ fn state_get_golden() {
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "state", "get"]),
         ok(&format!(
-            "{}{}{},{}{}\n",
+            "{}{}{},{}{}{}\n",
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"state.get","rev":2,"canvas":{"width":1920,"height":1080},"#,
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
-            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"hotkeys":[]}}}"#,
+            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"#,
+            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[],"hotkeys":[]}}}"#,
         ))
     );
     assert_eq!(

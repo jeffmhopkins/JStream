@@ -133,7 +133,7 @@ pub enum CallResult {
         rev: Rev,
         /// The hotkey bindings the batch removed because their action named an object it
         /// deleted (ADR-0040 §3), in the order it removed them. Undoing the batch restores
-        /// them. Omitted when there are none, and missing (from a server older than 0.19)
+        /// them. Omitted when there are none, and missing (from a server older than 0.20)
         /// parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         removed_hotkeys: Vec<HotkeyBinding>,

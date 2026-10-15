@@ -165,6 +165,8 @@ pub enum EntityKind {
     Output,
     /// An encoder profile.
     Encoder,
+    /// An audio bus.
+    Bus,
     /// A hotkey binding, named by its chord.
     Hotkey,
 }
@@ -177,6 +179,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Source => "source",
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
+            EntityKind::Bus => "bus",
             EntityKind::Hotkey => "hotkey",
         })
     }

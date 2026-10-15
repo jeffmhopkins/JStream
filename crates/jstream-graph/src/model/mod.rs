@@ -26,6 +26,13 @@
 //!   credential store, outside the collection.
 //! - Every output's encoder profile exists, and every profile holds an encoding the
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
+//! - A source has audio settings exactly when it is an audio source: its kind produces
+//!   audio, or it is a `scene` source (ADR-0028). A `scene` source's fader is 0 dB and
+//!   unmuted.
+//! - The master bus always exists, and there are at most [`MAX_BUSES`] buses. Every
+//!   fader and send gain is within the protocol's −100 to +24 dB.
+//! - Every send's source is an audio source that is not a `scene` source, and its bus
+//!   exists. Sends only run from sources into buses, so the audio graph has no cycle.
 //! - Every hotkey binding's chord is valid, its action can be bound, and every object
 //!   its action names exists (ADR-0024 §5, ADR-0040 §3).
 //!
@@ -33,9 +40,9 @@
 //! `effects[]`, the full 3D transform) don't break callers.
 
 use jstream_protocol::{
-    Action, Canvas, Chord, Crop, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId,
-    ItemTransform, KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole,
-    Settings, SourceId, SourceKind,
+    Action, BusId, Canvas, Chord, Crop, EncoderProfile, EncoderProfileId, Finite32, ItemGeometry,
+    ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId,
+    SceneRole, Settings, SourceAudio, SourceId, SourceKind,
 };
 use std::collections::BTreeMap;
 
@@ -92,16 +99,44 @@ impl Graph {
 /// 7680×4320; each side may be up to this, in either orientation.
 pub const MAX_CANVAS_EDGE: u32 = 8192;
 
+/// The most buses a collection holds, the master included: what the mixer holds.
+pub const MAX_BUSES: usize = 16;
+
 /// The collection state without its revision: what undo restores exactly.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct State {
     pub(crate) canvas: Canvas,
     pub(crate) sources: BTreeMap<SourceId, Source>,
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
     pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
+    /// The master bus among them.
+    pub(crate) buses: BTreeMap<BusId, Bus>,
+    /// Each send's gain in dB, keyed by bus, then by source: the order `bus.list`
+    /// reports them in.
+    pub(crate) sends: BTreeMap<(BusId, SourceId), Finite32>,
     pub(crate) hotkeys: BTreeMap<Chord, Action>,
 }
+
+impl Default for State {
+    /// An empty collection: the default canvas and the master bus.
+    fn default() -> Self {
+        let master = Bus::new(BusId::master(), MASTER_NAME.to_owned());
+        Self {
+            canvas: Canvas::default(),
+            sources: BTreeMap::new(),
+            scenes: Vec::new(),
+            outputs: BTreeMap::new(),
+            encoders: BTreeMap::new(),
+            buses: BTreeMap::from([(master.id.clone(), master)]),
+            sends: BTreeMap::new(),
+            hotkeys: BTreeMap::new(),
+        }
+    }
+}
+
+/// The master bus's name in a new collection.
+pub(crate) const MASTER_NAME: &str = "Master";
 
 impl State {
     /// The canvas every scene is laid out on.
@@ -174,6 +209,28 @@ impl State {
         })
     }
 
+    /// Every bus, ordered by ID, the master among them.
+    pub fn buses(&self) -> impl ExactSizeIterator<Item = &Bus> {
+        self.buses.values()
+    }
+
+    /// The bus with this ID.
+    pub fn bus(&self, id: &BusId) -> Option<&Bus> {
+        self.buses.get(id)
+    }
+
+    /// Every send as (source, bus, gain in dB), ordered by bus, then by source.
+    pub fn sends(&self) -> impl Iterator<Item = (&SourceId, &BusId, Finite32)> {
+        self.sends
+            .iter()
+            .map(|((bus, source), gain)| (source, bus, *gain))
+    }
+
+    /// The gain in dB of `source`'s send into `bus`, if it has one.
+    pub fn send(&self, source: &SourceId, bus: &BusId) -> Option<Finite32> {
+        self.sends.get(&(bus.clone(), source.clone())).copied()
+    }
+
     /// Every hotkey binding, ordered by chord: the chord and the action it runs.
     pub fn hotkeys(&self) -> impl ExactSizeIterator<Item = (&Chord, &Action)> {
         self.hotkeys.iter()
@@ -205,6 +262,8 @@ pub struct Source {
     pub(crate) kind: SourceKind,
     pub(crate) settings: Settings,
     pub(crate) duplicated_from: Option<SourceId>,
+    /// Set exactly for an audio source.
+    pub(crate) audio: Option<SourceAudio>,
 }
 
 impl Source {
@@ -233,6 +292,12 @@ impl Source {
     /// deleted, and queries report it only while that source exists.
     pub fn duplicated_from(&self) -> Option<&SourceId> {
         self.duplicated_from.as_ref()
+    }
+
+    /// Its audio settings, if it is an audio source: its kind produces audio, or it is
+    /// a `scene` source.
+    pub fn audio(&self) -> Option<&SourceAudio> {
+        self.audio.as_ref()
     }
 }
 
@@ -373,5 +438,46 @@ impl Encoder {
     /// The encoding.
     pub fn profile(&self) -> &EncoderProfile {
         &self.profile
+    }
+}
+
+/// One audio bus: its fader and mute, applied after the sum of its sends.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Bus {
+    pub(crate) id: BusId,
+    pub(crate) name: String,
+    pub(crate) gain_db: Finite32,
+    pub(crate) muted: bool,
+}
+
+impl Bus {
+    /// A new bus: at 0 dB, unmuted.
+    pub(crate) fn new(id: BusId, name: String) -> Self {
+        Self {
+            id,
+            name,
+            gain_db: Finite32::ZERO,
+            muted: false,
+        }
+    }
+
+    /// Its ID.
+    pub fn id(&self) -> &BusId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Its fader, in dB.
+    pub fn gain_db(&self) -> Finite32 {
+        self.gain_db
+    }
+
+    /// Whether it is muted.
+    pub fn muted(&self) -> bool {
+        self.muted
     }
 }

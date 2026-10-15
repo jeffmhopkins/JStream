@@ -3,7 +3,7 @@
 //! source that can't be recorded is unavailable and doesn't fail the output; a failed
 //! stream is reopened, and an application is found again when it restarts.
 
-use super::{batch, block_on, connected, edits, output_call, output_state};
+use super::{batch, block_on, connected, drain, edits, output_call, output_state};
 use crate::audio_sources::AudioStatus;
 use crate::runtime::cpu_draw;
 use crate::{Engine, RecordingPublish};
@@ -13,7 +13,7 @@ use jstream_platform::fake::{
     FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
 };
 use jstream_platform::{AudioInputTarget, AudioProcess, Backends};
-use jstream_protocol::{Batch, Edit, OutputId, OutputState, Settings, SourceId, SourceKind};
+use jstream_protocol::{Batch, Edit, Event, OutputId, OutputState, Settings, SourceId, SourceKind};
 use serde_json::json;
 use std::sync::Arc;
 use std::thread;
@@ -262,4 +262,83 @@ fn a_settings_change_reopens_the_input_and_stopping_clears_the_status() {
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(eventually(|| audio.open_streams() == 0));
     assert_eq!(status(&engine, "mic"), None);
+}
+
+/// The routing (D5) finds the inputs the program stage opens: an audio source that
+/// records is metered in `meters.tick`. Turning its audio off closes its input and drops
+/// its meter, and doesn't bring the default microphone and desktop back; turning it on
+/// opens it again.
+#[test]
+fn recording_audio_sources_are_routed_and_metered() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let mut events = control.events();
+    batch(
+        &control,
+        Batch::single(audio_source("desk", "desktop_audio", None)),
+    )
+    .expect("desk");
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(eventually(
+        || status(&engine, "desk") == Some(AudioStatus::Recording)
+    ));
+    let metered = |events: &mut jstream_control::EventStream| {
+        engine.emit_meters_tick();
+        drain(events)
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::MetersTick { sources, .. } => Some(
+                    sources
+                        .into_iter()
+                        .map(|s| s.source_id.as_str().to_owned())
+                        .collect::<Vec<_>>(),
+                ),
+                _ => None,
+            })
+            .expect("a meters.tick while the program runs")
+    };
+    assert_eq!(metered(&mut events), ["desk"]);
+
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetAudio {
+            source_id: SourceId::new("desk"),
+            enabled: Some(false),
+            follow: None,
+            gain_db: None,
+            muted: None,
+        }),
+    )
+    .expect("audio off");
+    assert!(
+        eventually(|| inputs(&audio).is_empty()),
+        "{:?}",
+        inputs(&audio)
+    );
+    assert_eq!(status(&engine, "desk"), None);
+    assert!(metered(&mut events).is_empty());
+
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetAudio {
+            source_id: SourceId::new("desk"),
+            enabled: Some(true),
+            follow: None,
+            gain_db: None,
+            muted: None,
+        }),
+    )
+    .expect("audio on");
+    assert!(eventually(
+        || status(&engine, "desk") == Some(AudioStatus::Recording)
+    ));
+    assert_eq!(
+        inputs(&audio),
+        names(&[AudioInputTarget::DefaultOutputLoopback])
+    );
+    assert_eq!(metered(&mut events), ["desk"]);
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
