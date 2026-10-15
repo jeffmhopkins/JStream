@@ -20,6 +20,8 @@ permissions:
   contents: read
   pull-requests: read
   statuses: write
+  actions: write   # dispatch ci.yml's after-review jobs (ADR-0054)
+  checks: read     # see whether they already ran for the head SHA
 
 concurrency:
   group: review-gate-${{ github.event.pull_request.number || github.event.issue.number }}
@@ -47,6 +49,25 @@ jobs:
               core.info(`${state}: ${description}`);
             };
 
+            // ADR-0054: once review passes, run ci.yml's after-review jobs (Windows, macOS,
+            // ui-e2e) on the PR's branch, once per head SHA. A failed dispatch (e.g. a branch
+            // whose ci.yml predates the trigger) is logged; merging main fixes it.
+            const dispatchAfterReview = async () => {
+              const { data: runs } = await github.rest.checks.listForRef({
+                owner, repo, ref: head, check_name: 'test (windows-latest)',
+              });
+              if (runs.total_count > 0) return core.info('after-review jobs already ran for this SHA');
+              if (pr.head.repo?.full_name !== `${owner}/${repo}`) {
+                return core.warning('PR branch is in a fork: after-review jobs not dispatched');
+              }
+              try {
+                await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'ci.yml', ref: pr.head.ref });
+                core.info(`dispatched ci.yml on ${pr.head.ref}`);
+              } catch (e) {
+                core.warning(`could not dispatch ci.yml on ${pr.head.ref}: ${e.message}`);
+              }
+            };
+
             // Session ids, normalized so URLs and bare ids compare equal.
             const norm = (s) => (s.match(/session_[A-Za-z0-9]+/) || [s.trim()])[0];
 
@@ -61,7 +82,8 @@ jobs:
             const labels = pr.labels.map((l) => l.name);
             if (labels.includes('review-override')) {
               if (section(pr.body, 'Review override').length >= 40) {
-                return setStatus('success', 'Overridden via review-override (justified in PR description)');
+                await setStatus('success', 'Overridden via review-override (justified in PR description)');
+                return dispatchAfterReview();
               }
               return setStatus('failure', 'review-override label needs a "## Review override" justification section');
             }
@@ -78,7 +100,9 @@ jobs:
             //    that round any fail/escalate beats pass (parallel reviewer runs can't race).
             const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
             const [state, description] = decide(comments, authors, head);
-            return setStatus(state, description);
+            await setStatus(state, description);
+            if (state === 'success') await dispatchAfterReview();
+            return;
 
             // BEGIN decide (tested by extracting this block; keep it self-contained)
             function decide(comments, authors, head) {

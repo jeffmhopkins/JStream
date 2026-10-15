@@ -169,6 +169,10 @@ those, the **highest round** decides, and within it any `fail` or `escalate` bea
 
 The marker must be on its own line, exactly in this format.
 
+A `success` on the head SHA also makes `review-gate` dispatch the Windows, macOS and
+end-to-end CI jobs for that SHA ([ADR-0054](docs/adr/0054-platform-ci-after-review.md)), so the PR
+merges once they pass.
+
 <a id="rounds"></a>
 ## Re-review rounds and disputes
 <!-- @section

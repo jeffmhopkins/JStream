@@ -8,12 +8,17 @@
 
 name: ci
 
+# Two phases on a PR (ADR-0054). On every push, `pull_request` runs the Linux jobs. Once
+# the reviewer passes the head SHA, review-gate.yml dispatches this workflow on the PR's
+# branch, and `workflow_dispatch` runs only the Windows matrix legs, `ui-e2e` and `macos`.
+# A push to main runs everything.
 on:
   pull_request:
     # ready_for_review: draft PRs skip every job below, so CI runs when a draft is marked ready.
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,7 +33,7 @@ env:
 
 jobs:
   fmt:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -40,7 +45,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # Linux on a PR push, Windows once review passes (dispatch), both on main.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || github.event_name == 'workflow_dispatch' && '["windows-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,7 +63,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # Linux on a PR push, Windows once review passes (dispatch), both on main.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || github.event_name == 'workflow_dispatch' && '["windows-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,7 +88,7 @@ jobs:
         run: cargo test --workspace --locked
 
   doc:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -D warnings
@@ -92,7 +99,7 @@ jobs:
       - run: cargo doc --workspace --no-deps --locked
 
   deny:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,7 +113,7 @@ jobs:
   # and checked against pinned SHA-256 sums; the wasm-bindgen CLI must match Cargo.lock.
   # `ui-e2e` pins the same versions: change both together.
   wasm:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     env:
       TRUNK_VERSION: 0.21.14
@@ -144,9 +151,10 @@ jobs:
   # The web UI end to end (crates/jstream-ui/tests/e2e/README.md): Playwright drives the
   # trunk build in the runner's Google Chrome against the mock daemon. trunk and the
   # wasm-bindgen CLI are installed as in `wasm`; Playwright comes from the lockfile, with
-  # install scripts off, and downloads no browser. Not required (R-GIT-003).
+  # install scripts off, and downloads no browser. Not required (R-GIT-003). Runs after review
+  # on a PR (ADR-0054).
   ui-e2e:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       TRUNK_VERSION: 0.21.14
@@ -207,7 +215,7 @@ jobs:
 
   # The documentation graph (docs/DOCS.md); R-DOC-* rules the tool implements so far.
   docs:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -217,7 +225,7 @@ jobs:
 
   # Crate layering, unsafe declarations, links= allowlist, workspace deps (xtask/src/lint_deps.rs).
   lint-deps:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -227,15 +235,15 @@ jobs:
 
   # The merge gate's decision logic (ADR-0019), tested against the deployed workflow file.
   gate-test:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: node .github/tests/review-gate-decide.test.mjs
 
-  # Not required until M3 (R-GIT-003).
+  # Not required until M3 (R-GIT-003). Runs after review on a PR (ADR-0054).
   macos:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request'
     runs-on: macos-latest
     continue-on-error: true
     steps:
