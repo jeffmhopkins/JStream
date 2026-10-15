@@ -57,8 +57,9 @@ state machine. Contents:
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
   mix shows their frames and advances animations on the media clock. A frame stored
   with `set_source_frame` wins over the live one, and a kind that is only described
-  draws nothing, except that a `display` source shows the output pipeline's capture
-  on the render thread (see *Live sources* and *Snapshots* in [Design](#design)).
+  draws nothing. A `display` or `window` source shows what the output pipeline
+  captures for its `target` on the render thread (see *Live sources* and *Snapshots*
+  in [Design](#design)).
   Audio-only kinds make no frames and have no live source.
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input, sent to master at unity, for each `audio_input`, `desktop_audio` and
@@ -73,8 +74,9 @@ state machine. Contents:
   collection lock that `scene.switch` sets and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
-  one program stage: the render thread reads the platform capture mailbox, composites
-  the program mix from the render snapshot the control side publishes
+  one program stage: the render thread reads the platform capture mailbox of
+  each display and window the program mix shows (`runtime/captures.rs`, which starts
+  and stops them on a `jstream-capture` thread), composites the program mix from the render snapshot the control side publishes
   (`runtime/render.rs`) and reads the frame back, and the mixer thread polls the media
   clock. The render thread composites on the platform's GPU context when the interop
   opens one, and samples the captured textures there with no CPU copy when the capture
@@ -112,12 +114,15 @@ state machine. Contents:
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
-  thread's output size (the capture filling it with no scene, the program scaled from
-  the canvas, a `display` source showing the capture, the same for a GPU capture of
-  another size) and nested-scene layers reused
+  thread's output size (the primary display's capture filling it with no scene, the
+  program scaled from the canvas, a `display` source showing its capture, the same for
+  a GPU capture of another size) and nested-scene layers reused
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
-  published snapshot (CPU stand-in), which capture path an output takes and each
+  published snapshot (CPU stand-in), an output starting a capture for each display and
+  window on program, sharing one between sources, stopping it when its source leaves
+  and starting it again after a failed start or a lost target
+  (`src/tests/cpu_pipeline/captures.rs`), which capture path an output takes and each
   fallback, and an output compositing GPU capture frames, on a software device that
   stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
   the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, behind
@@ -395,7 +400,7 @@ changed. `video.snapshot` reads `rev` and the published snapshot together under 
 lock and hands both to the snapshot thread.
 
 `snapshot::compose` draws a `Shot` for both threads through a `jstream-render`
-`ResourceCache` keyed by `GpuKey`: a source's upload, the capture's (an upload of a
+`ResourceCache` keyed by `GpuKey`: a source's upload, each capture's (an upload of a
 CPU frame, or an import of the platform's texture, `ResourceCache::import`), a nested
 scene's layer at its depth, and the program at the canvas size. An unchanged frame is not
 uploaded again, and each nested scene is redrawn into the layer it had
@@ -403,11 +408,15 @@ uploaded again, and each nested scene is redrawn into the layer it had
 are retired and freed after the GPU has finished with them. The program scene is drawn
 at the canvas: straight to the output when that is the canvas size (`video.snapshot`),
 else into a layer that a last pass scales to the output (the render thread draws at the
-encoder size). Without a program scene the output is the capture scaled to fill it, or
-black.
-A `display` source with no stored frame shows the pipeline's capture on the render
-thread and nothing in `video.snapshot`, which has no capture; a stored frame wins.
-That mapping holds until per-source capture exists.
+encoder size). Without a program scene the output is the primary display's capture
+scaled to fill it, or black.
+A `display` or `window` source with no stored frame shows what the pipeline captures
+for it on the render thread, and nothing in `video.snapshot`, which has no capture; a
+stored frame wins. The `Shot` lists what its passes capture (`Shot::captures`, a
+`jstream-sources` `CaptureSpec` each: a display or window by its capture-backend target
+ID, or the primary display), and sources that capture the same thing share one
+capture. A window source with no window chosen shows nothing. The capture is part of
+what the shot draws, so a new target publishes a new snapshot.
 
 **Live sources.** `live::LiveSources` keeps one running `jstream-sources` `Source` per
 source in the collection with a built-in kind, built from the registry
@@ -462,9 +471,10 @@ sources existed, so an earlier collection is not silent; the first audio source
 replaces them. Whether a source is recording or unavailable is not reported to
 clients yet: that needs a protocol field (D5's lane).
 
-`snapshot::plan_with` asks for the frame of each source an item it reaches places:
-the stored frame if `set_source_frame` gave one, else the live source's frame at the
-current time, counted from when the source was built. A live frame is shared with
+`snapshot::plan_with` asks what each source an item it reaches places shows: the
+stored frame if `set_source_frame` gave one, else, for a live `display` or `window`
+source, what the pipeline captures for it (`Source::capture`), else the live source's
+frame at the current time, counted from when the source was built. A live frame is shared with
 the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version only when
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
@@ -729,12 +739,13 @@ instead of waiting, and the attempt runs on a thread of its own. Giving up
 `failed` from `reconnecting` as from `active`. `output.stop` while reconnecting
 emits `stopping` and `stopped` as from `active`.
 
-The render thread reads the platform capture mailbox, composites the program mix of
-the render snapshot (see *Snapshots*) at 30 frames per second, repeats the last
-capture when the mailbox is empty, and reads the composite back as RGBA8 because this
+The render thread reads the capture mailbox of each capture the render snapshot places
+(see [Runtime](#runtime)), composites the program mix of the render snapshot (see
+*Snapshots*) at 30 frames per second, repeats a capture's last frame when its mailbox
+is empty, and reads the composite back as RGBA8 because this
 cut has no GPU encode target. Which device it composites on, and how the capture
 reaches it, is chosen when the program stage opens (see [Runtime](#runtime)). On the GPU path it
-keeps the newest `GpuFrame` until a newer one replaces it, and the cache attaches the
+keeps each capture's newest `GpuFrame` until a newer one replaces it, and the cache attaches the
 frame's hold only to the frame that draws it, so a held capture slot is the frame on
 screen and nothing more. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
@@ -756,8 +767,10 @@ after them. While the stage has no encoder session and no virtual camera it draw
 each new snapshot, so it never holds a gesture up. The compositor
 and its cache drop on the render thread when it exits, after the tick loop. What it rides out
 and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
-- **Recoverable:** a capture error or a missing frame repeats the last capture (a
-  missing source frame, [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)); a
+- **Recoverable:** a capture error or a missing frame repeats that capture's last
+  frame (a missing source frame,
+  [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)), and a capture that doesn't
+  start or whose target is lost is started again 2 s later; a
   composite error repeats the last composited frame, up to 30 in a row.
 - **Fatal, reported:** a 31st composite error in a row, a panic inside a tick (the
   compositor's state is unknown after it), and a frame time that overflows. The
@@ -769,7 +782,7 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   mixer panic, a rejected mix block
   or a mixer poll error is fatal: the encoder would get no more audio.
 
-The render thread reuses its capture, composite and readback buffers, and its GPU
+The render thread reuses each capture's buffer, its composite and readback buffers, and its GPU
 textures through the cache. Each tick allocates one frame-sized buffer, the frame the
 encoder session takes ownership of (`VideoInput::push` cannot hand buffers back), the
 item list `compose` fills once per tick, the frame-fence callback, the premultiplied
@@ -956,9 +969,12 @@ history, idempotency keys and the program scene are not saved (see *Program scen
   it.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
-  [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one
-  captured display, a CPU readback into the encoder, and the platform fakes in the
-  test. Other sources show frames the host injects with `set_source_frame`.
+  [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with its
+  captured displays and windows, a CPU readback into the encoder, and the platform
+  fakes in the test. The output is the primary display's size.
+- A query that lists the capture targets, so a client can fill a capture source's
+  `target`, and keeping a window source on its window across restarts (its target ID
+  names a window handle, which a new session of the app doesn't keep).
 
 <a id="runtime"></a>
 ## Runtime
@@ -972,12 +988,13 @@ The output pipeline (`src/runtime/`) is the part of
 [ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading) that is built.
 `output.start`, once the host has injected platform backends and a publish target
 (a recording output or a virtual camera needs none), starts it and emits `output.state_changed` from the
-control thread. The render thread calls the platform capture mailbox and, on each
-1/30 s tick, composites the program mix from the render snapshot (see *Snapshots* in
-Design) at the encoder size: the program scene and the scenes it nests, with every
-`display` source that has no stored frame showing the captured display. With no scene
-it draws the capture filling the frame. It repeats the last capture when the mailbox
-is empty, and reads the frame back. This cut encodes that CPU readback, and the
+control thread. The output is the size of the primary display (else the first capture
+target). On each 1/30 s tick the render thread adopts the render snapshot, reads the
+capture mailboxes, and composites the program mix (see *Snapshots* in Design) at the
+encoder size: the program scene and the scenes it nests, with every `display` and
+`window` source that has no stored frame showing its capture. With no scene it draws
+the primary display's capture filling the frame. A capture whose mailbox is empty
+repeats its last frame. It reads the frame back. This cut encodes that CPU readback, and the
 readback is counted (`OutputStats::readbacks`).
 
 **Capture path** (ARCH › GPU pipeline, step 6). Opening the program stage asks the
@@ -988,9 +1005,24 @@ the render thread samples where they are, with no CPU copy, and counts
 (`OutputStats::gpu_captures`). Each fallback is logged and keeps the output running on
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
 opens its own device, software adapter first), a backend with no GPU path or one that
-refuses the context, and a GPU capture that does not start. The render loop drops the
-held frame, the compositor and the capture stream before the context, so the
-platform's state goes first as `GpuContext` requires.
+refuses the context, and a GPU capture that does not start (that capture then runs on
+CPU frames). The render loop drops the held frames, the compositor and the capture
+streams before the context, so the platform's state goes first as `GpuContext`
+requires.
+
+**Captures** (`runtime/captures.rs`). `output.start` starts no capture. Each tick the
+render thread compares what the snapshot captures (`Shot::captures`) with what it runs:
+it asks the pipeline's `jstream-capture` thread to start each new one, and hands it
+the stream of each one no longer shown, which that thread drops, so starting and
+stopping a capture (OS calls that can block) never run on the render thread. Both go
+through channels it never waits on, and it takes the started streams with `try_recv`
+([R-RT-002](../../docs/RULES.md#R-RT-002),
+[R-RT-003](../../docs/RULES.md#R-RT-003)). The primary display is looked up when its
+capture starts. A capture that doesn't start, or whose stream reports `DeviceLost` (a
+closed window, an unplugged display), keeps its last frame and is started again 2 s
+later on the media clock. The skips of every stream the pipeline ran are added up into
+`capture_frames`. At the end of the render loop the captures are stopped and the
+`jstream-capture` thread joined, before the context is dropped.
 
 The mixer thread polls the media clock and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs (see *Audio sources* in Design; the

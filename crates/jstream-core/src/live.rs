@@ -23,10 +23,10 @@ use std::time::{Duration, Instant};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::MediaClock;
 use jstream_protocol::{Settings, SourceId, SourceKind};
-use jstream_sources::{Context, Registry, Source, SourceError};
+use jstream_sources::{CaptureSpec, Context, Registry, Source, SourceError};
 
 use crate::lock;
-use crate::snapshot::Frame;
+use crate::snapshot::{Frame, Look};
 
 /// What the `jstream-sources` thread calls back into: the engine, held weakly so the
 /// thread never keeps it alive.
@@ -119,8 +119,15 @@ impl LiveSources {
     /// backends, else a monotonic clock of the engine's own.
     pub(crate) fn set_clock(&mut self, clock: Arc<dyn MediaClock>) {
         let now = clock.now();
-        lock(&self.worker.queue).clock = clock;
-        // Times on the old clock mean nothing on the new one: restart the timing.
+        let mut queue = lock(&self.worker.queue);
+        queue.clock = clock;
+        // Times on the old clock mean nothing on the new one: restart the timing, and
+        // re-plan now if a re-plan was due, so the next one is timed on this clock.
+        if queue.wake.is_some() {
+            queue.wake = Some(now);
+            self.worker.wake.notify_all();
+        }
+        drop(queue);
         for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
             running.start = now;
         }
@@ -217,15 +224,20 @@ impl LiveSources {
         self.worker.now()
     }
 
-    /// The frame `source_id` shows at `now`, numbered from `versions` when it is new,
-    /// and when it is next replaced. `None` when the source has no live instance.
-    pub(crate) fn frame(
+    /// What `source_id` shows at `now`: what the pipeline captures for a capture source,
+    /// else its frame, numbered from `versions` when it is new, and when that frame is
+    /// next replaced. `None` when the source has no live instance.
+    pub(crate) fn look(
         &mut self,
         source_id: &SourceId,
         now: MediaTime,
         versions: &mut u64,
-    ) -> Option<(Frame, Option<MediaTime>)> {
+    ) -> Option<Look> {
         let running = self.entries.get_mut(source_id)?.running.as_mut()?;
+        if let Some(spec) = running.source.capture() {
+            // A window source with no window chosen shows nothing.
+            return (*spec != CaptureSpec::Window(None)).then(|| Look::Capture(spec.clone()));
+        }
         let at = since(now, running.start);
         let video = match running.source.frame(at) {
             Ok(video) => video,
@@ -247,7 +259,7 @@ impl LiveSources {
             .source
             .next_change(at)
             .and_then(|change| after(running.start, change, now.timebase()));
-        Some((frame, next))
+        Some(Look::Frame(frame, next))
     }
 
     /// Asks the thread to re-plan at `at`, or at no set time.

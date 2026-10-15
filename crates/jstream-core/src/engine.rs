@@ -22,7 +22,7 @@ use crate::runtime::{
     parts_from,
 };
 use crate::session::InProcessControl;
-use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
 use crate::studio::Studio;
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
@@ -1830,8 +1830,8 @@ impl State {
         let now = live.now();
         let (shot, wake) =
             snapshot::plan_with(graph, studio.program(), &mut |id| match frames.get(id) {
-                Some(frame) => Some((frame.clone(), None)),
-                None => live.frame(id, now, frame_versions),
+                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                None => live.look(id, now, frame_versions),
             });
         render.publish(shot);
         live.wake_at(wake);

@@ -1139,8 +1139,11 @@ fn output_stop_during_start_cancels_the_pipeline() {
         release: Arc<Hold>,
     }
 
+    /// Holds the start in the output's first capture call, listing the targets.
     impl Capture for HoldCapture {
         fn targets(&self) -> Result<Vec<jstream_platform::CaptureTargetInfo>, PlatformError> {
+            self.entered.signal();
+            self.release.wait();
             self.inner.targets()
         }
 
@@ -1148,8 +1151,6 @@ fn output_stop_during_start_cancels_the_pipeline() {
             &self,
             target: &CaptureTarget,
         ) -> Result<Box<dyn jstream_platform::CaptureStream>, PlatformError> {
-            self.entered.signal();
-            self.release.wait();
             self.inner.start(target)
         }
     }
@@ -1601,8 +1602,8 @@ fn output_state(control: &dyn Control, output: &str) -> OutputState {
 }
 
 /// Edits and stored frames republish the render snapshot only when the program mix
-/// changes. A `display` source shows the pipeline's capture until a frame is stored
-/// for it, and a frame for a source nothing on program shows publishes nothing.
+/// changes. A `display` source shows what the pipeline captures for it until a frame is
+/// stored for it, and a frame for a source nothing on program shows publishes nothing.
 #[test]
 fn the_render_snapshot_follows_the_program_mix() {
     let engine = Engine::new();
@@ -1625,26 +1626,33 @@ fn the_render_snapshot_follows_the_program_mix() {
         idempotency_key: None,
     };
     batch(&control, edits).expect("batch");
-    assert_eq!(generation(), 2);
-    assert!(
-        hub.load().shot().uses_capture(),
-        "no stored frame: the capture"
+    assert!(engine.settle_sources(), "the display source was built");
+    // The scene, then the display source's build.
+    assert_eq!(generation(), 3);
+    let primary = std::collections::BTreeSet::from([jstream_sources::CaptureSpec::Display(None)]);
+    assert_eq!(
+        hub.load().shot().captures(),
+        &primary,
+        "no stored frame: the primary display's capture"
     );
 
     engine
         .set_source_frame(&SourceId::new("elsewhere"), 1, 1, &[0, 0, 0, 255])
         .expect("frame");
-    assert_eq!(generation(), 2, "nothing on program shows that source");
+    assert_eq!(generation(), 3, "nothing on program shows that source");
 
     engine
         .set_source_frame(&SourceId::new("screen"), 1, 1, &[0, 0, 0, 255])
         .expect("frame");
-    assert_eq!(generation(), 3);
-    assert!(!hub.load().shot().uses_capture(), "a stored frame wins");
+    assert_eq!(generation(), 4);
+    assert!(
+        hub.load().shot().captures().is_empty(),
+        "a stored frame wins"
+    );
     engine
         .set_source_frame(&SourceId::new("screen"), 1, 1, &[9, 9, 9, 255])
         .expect("frame");
-    assert_eq!(generation(), 4, "a new frame is a new version");
+    assert_eq!(generation(), 5, "a new frame is a new version");
 }
 
 /// The render thread's program mix follows program: a switch republishes it with the
@@ -2107,6 +2115,8 @@ fn deleting_a_source_drops_its_frame() {
 // any machine. The GPU path itself is covered by the tests above.
 
 mod cpu_pipeline {
+    mod captures;
+
     use super::{
         batch, block_on, code, connected, drain, edits, output_call, output_state, output_steps,
         query,

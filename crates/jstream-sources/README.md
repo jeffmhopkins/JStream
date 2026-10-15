@@ -34,12 +34,15 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   update. `next_change(at)` says when that frame is next replaced (`None`: never), so
   a renderer can skip re-uploading a still. `update(settings)` applies a change to
   `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
-  needs a new source instead.
+  needs a new source instead. `capture()` is `Some` for a `display` or `window`
+  source: what the platform captures for it (a `CaptureSpec`). Its frames come from
+  the platform's capture backend on the engine's render thread, so its `frame` is
+  `SourceError::Captured`.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
-  and its program mix asks each source for `frame` and `next_change` (see
-  `jstream-core`'s *Live sources*).
+  and its program mix asks each source for `capture`, else `frame` and `next_change`
+  (see `jstream-core`'s *Live sources*).
 - `Context`: the folders behind the `collection` and `app` asset roots
   (`AssetRoots`), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
   sides and 1 GiB of decoded memory by default. The image's size is checked before
@@ -100,8 +103,15 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`.
-- `display`, `media`, `webcam` and `window` are described only, with the settings B4
-  gave them: sources of them can be created and configured, and `create` fails with
+- `display` and `window`: what the platform captures, by the `target` setting, a
+  capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
+  `hwnd:0x` and the window handle). An empty `display` target is the primary display,
+  which is what a `display` source showed before it had settings, so the kind keeps
+  version 1 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). An
+  empty `window` target captures nothing. A new target needs a new source. No query
+  lists the targets yet.
+- `media` and `webcam` are described only, with the settings B4 gave them:
+  sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
