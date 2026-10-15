@@ -7,17 +7,19 @@
 //! Ported from spike S2, a Rust port of VCamSample's design: the registered class is an
 //! `IMFActivate` whose `ActivateObject` creates an `IMFMediaSourceEx` with one
 //! `IMFMediaStream2`. Each sample is copied from the producer's newest completed ring
-//! texture, or is the DLL's own colour-bar pattern when no producer is live. Every COM
-//! method and export runs inside a panic guard (R-UNSAFE-005). A control block found in a
-//! session's namespace is used only if that session is active and its user, SYSTEM or
-//! Administrators owns the block ([`trust`]).
+//! texture, or is the DLL's own colour-bar pattern when no producer is live. Samples go
+//! out no faster than the frame rate ([`pace`]). Every COM method and export runs inside a
+//! panic guard (R-UNSAFE-005). A control block found in a session's namespace is used only
+//! if that session is active and its user, SYSTEM or Administrators owns the block
+//! ([`trust`]).
 //!
 //! The COM objects exist only on Windows. On other platforms the crate builds only its
-//! platform-independent pixel helpers and the control-block trust rule, which are tested
-//! everywhere.
+//! platform-independent pixel helpers, the sample pacer and the control-block trust rule,
+//! which are tested everywhere.
 //!
 //! Docs: crates/jstream-vcam-windows/README.md#purpose, crates/jstream-vcam-windows/README.md#hardware-check, docs/ARCHITECTURE.md#crate-map, docs/adr/0020-portable-windows-distribution.md
 
+pub mod pace;
 pub mod pixels;
 pub mod trust;
 

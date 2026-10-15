@@ -354,6 +354,7 @@ mod tests {
         assert!(seen.iter().all(|&(len, jpeg, _)| len > 4 && jpeg));
         assert_eq!(seen[1].2, MediaTime::new(33, Timebase::MILLIS));
         assert_eq!(stream.stats().frames_captured, 3);
+        assert_eq!(stream.stats().frames_undecodable, 1);
     }
 
     #[test]

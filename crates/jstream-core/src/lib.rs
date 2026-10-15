@@ -20,6 +20,7 @@
 
 #![forbid(unsafe_code)]
 
+mod audio_sources;
 mod audit;
 mod collection;
 mod drops;
@@ -27,6 +28,7 @@ mod engine;
 mod events;
 mod history;
 mod kinds;
+mod live;
 mod outputs;
 mod runtime;
 mod session;

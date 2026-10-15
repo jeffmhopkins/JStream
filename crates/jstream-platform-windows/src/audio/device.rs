@@ -1,5 +1,6 @@
-//! WASAPI endpoints: listing them, resolving a target to one, opening an event-driven
-//! shared-mode client on it, process loopback, and watching for default-device changes.
+//! WASAPI endpoints: listing them, resolving a target to one, the format a client on it
+//! uses, opening an event-driven shared-mode client on it, process loopback, and
+//! watching for default-device changes.
 //!
 //! Everything here runs on the calling thread, which has COM initialised.
 
@@ -434,13 +435,8 @@ pub(crate) fn open_process(pid: u32) -> Result<Session, PlatformError> {
         })?
         .cast()
         .os("process loopback as IAudioClient")?;
-    let plan = plan(MixFormat {
-        rate: PROCESS_RATE,
-        channels: PROCESS_CHANNELS,
-        float32: true,
-        mask: None,
-    })?;
-    let wf = float_format(plan.format);
+    let format = process_format()?;
+    let wf = float_format(format);
     let flags = AUDCLNT_STREAMFLAGS_LOOPBACK
         | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
         | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
@@ -451,9 +447,30 @@ pub(crate) fn open_process(pid: u32) -> Result<Session, PlatformError> {
             (&raw const wf).cast(),
             flags,
             CAPTURE_BUFFER_HNS,
-            plan.format,
+            format,
         )
     }
+}
+
+/// The format [`open_endpoint`] opens `device` in, without opening it.
+pub(crate) fn endpoint_format(device: &IMMDevice) -> Result<AudioFormat, PlatformError> {
+    // SAFETY: plain COM activation.
+    let client: IAudioClient =
+        unsafe { device.Activate(CLSCTX_ALL, None) }.os("IMMDevice::Activate(IAudioClient)")?;
+    // SAFETY: plain COM call; the returned memory is owned by CoFormat.
+    let mix = CoFormat(unsafe { client.GetMixFormat() }.os("IAudioClient::GetMixFormat")?);
+    Ok(plan(mix.mix()?)?.format)
+}
+
+/// The format [`open_process`] asks process loopback for.
+pub(crate) fn process_format() -> Result<AudioFormat, PlatformError> {
+    Ok(plan(MixFormat {
+        rate: PROCESS_RATE,
+        channels: PROCESS_CHANNELS,
+        float32: true,
+        mask: None,
+    })?
+    .format)
 }
 
 /// Signals an event when the default endpoint of one flow (console role) changes.

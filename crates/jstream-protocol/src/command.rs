@@ -8,9 +8,10 @@
 //!
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
+use crate::encoder::EncoderProfile;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
-use crate::id::{IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
 use schemars::JsonSchema;
@@ -175,6 +176,22 @@ pub enum Edit {
         /// relative order.
         index: u32,
     },
+    /// Changes which source an item places, keeping the item's ID, transform, crop,
+    /// visibility and stacking position (ADR-0023). It switches an item between a
+    /// reference and a clone: `source.duplicate` then `item.set_source` to the copy makes
+    /// a clone, and `item.set_source` back to the copy's `duplicated_from` (then
+    /// `source.delete` of the copy if nothing else places it) makes it a reference again.
+    /// Rejected with `not_found` if the item or the source doesn't exist, and with
+    /// `invalid_argument` naming the cycle if the scene would then contain itself,
+    /// directly or through other scenes. Inverse: `item.set_source` with the previous
+    /// source.
+    #[serde(rename = "item.set_source")]
+    ItemSetSource {
+        /// The item to change.
+        item_id: ItemId,
+        /// The source it places from now on.
+        source_id: SourceId,
+    },
     /// Replaces an item's crop. Inverse: `item.set_crop` with the previous one.
     #[serde(rename = "item.set_crop")]
     ItemSetCrop {
@@ -203,6 +220,12 @@ pub enum Edit {
         /// defaults.
         #[serde(default, skip_serializing_if = "Settings::is_empty")]
         settings: Settings,
+        /// The source this one was copied from, as `source.duplicate` records it. A plain
+        /// link: it may name a source that no longer exists (`source.delete`'s inverse
+        /// restores it that way), and is reported only while that source exists. It must
+        /// not name the new source itself, else `invalid_argument`. Omitted means none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duplicated_from: Option<SourceId>,
     },
     /// Renames a source. Inverse: `source.rename` back to the previous name.
     #[serde(rename = "source.rename")]
@@ -226,8 +249,9 @@ pub enum Edit {
         patch: Settings,
     },
     /// Copies a source under a new ID: a separate instance with the same kind and
-    /// settings, which changes independently from then on. Placing the *same* source again
-    /// is `item.add` with its existing `source_id`. Inverse: `source.delete` of the copy.
+    /// settings, which changes independently from then on. The copy's `duplicated_from`
+    /// names the source it was copied from. Placing the *same* source again is `item.add`
+    /// with its existing `source_id`. Inverse: `source.delete` of the copy.
     #[serde(rename = "source.duplicate")]
     SourceDuplicate {
         /// The source to copy.
@@ -239,8 +263,9 @@ pub enum Edit {
     },
     /// Deletes a source. Rejected with `invalid_argument` while any item still places it,
     /// or any source's settings refer to it: remove those items, or clear those
-    /// references, first (in the same batch if needed). Inverse: `source.create` with its
-    /// name, kind and settings.
+    /// references, first (in the same batch if needed). Deleting a source that others were
+    /// copied from is allowed: their `duplicated_from` then reads as absent. Inverse:
+    /// `source.create` with its name, kind, settings and `duplicated_from`.
     #[serde(rename = "source.delete")]
     SourceDelete {
         /// The source to delete.
@@ -297,6 +322,49 @@ pub enum Edit {
         /// The output to delete.
         output_id: OutputId,
     },
+    /// Chooses the encoder profile an output uses, or the engine's default. A running
+    /// output keeps its encoder session; the profile applies from its next
+    /// `output.start`. Inverse: `output.set_encoder` with the previous profile.
+    #[serde(rename = "output.set_encoder")]
+    OutputSetEncoder {
+        /// The output to change.
+        output_id: OutputId,
+        /// The profile, which must exist, else `not_found`. Absent or `null` means the
+        /// engine's default.
+        #[serde(default)]
+        profile_id: Option<EncoderProfileId>,
+    },
+    /// Adds an encoder profile. Inverse: `encoder.delete`.
+    #[serde(rename = "encoder.create")]
+    EncoderCreate {
+        /// The new profile's ID, chosen by the client. Rejected if it exists.
+        profile_id: EncoderProfileId,
+        /// Display name.
+        name: String,
+        /// The encoding. Out-of-range values, and codecs or rate controls the engine
+        /// doesn't know, are rejected with `invalid_argument`.
+        profile: EncoderProfile,
+    },
+    /// Replaces an encoder profile's name and encoding. Running outputs keep their
+    /// encoder sessions; the new encoding applies from each output's next
+    /// `output.start`. Inverse: `encoder.update` with the previous name and encoding.
+    #[serde(rename = "encoder.update")]
+    EncoderUpdate {
+        /// The profile to change.
+        profile_id: EncoderProfileId,
+        /// The new display name.
+        name: String,
+        /// The new encoding, validated as in `encoder.create`.
+        profile: EncoderProfile,
+    },
+    /// Deletes an encoder profile. Rejected with `invalid_argument` while an output
+    /// uses it: point those outputs elsewhere with `output.set_encoder` first (in the
+    /// same batch if needed). Inverse: `encoder.create` with its name and encoding.
+    #[serde(rename = "encoder.delete")]
+    EncoderDelete {
+        /// The profile to delete.
+        profile_id: EncoderProfileId,
+    },
 }
 
 impl Edit {
@@ -316,6 +384,7 @@ impl Edit {
             Edit::ItemReorder { .. } => "item.reorder",
             Edit::SceneReorder { .. } => "scene.reorder",
             Edit::ItemSetCrop { .. } => "item.set_crop",
+            Edit::ItemSetSource { .. } => "item.set_source",
             Edit::SourceCreate { .. } => "source.create",
             Edit::SourceRename { .. } => "source.rename",
             Edit::SourceSetSettings { .. } => "source.set_settings",
@@ -324,6 +393,10 @@ impl Edit {
             Edit::OutputCreate { .. } => "output.create",
             Edit::OutputSetTarget { .. } => "output.set_target",
             Edit::OutputDelete { .. } => "output.delete",
+            Edit::OutputSetEncoder { .. } => "output.set_encoder",
+            Edit::EncoderCreate { .. } => "encoder.create",
+            Edit::EncoderUpdate { .. } => "encoder.update",
+            Edit::EncoderDelete { .. } => "encoder.delete",
             Edit::CanvasSetSize { .. } => "canvas.set_size",
         }
     }

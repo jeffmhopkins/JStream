@@ -1,30 +1,34 @@
 //! The one video stream (VCamSample's `MediaStream`): `IMFMediaStream2`, plus
 //! `IKsControl` and `IMFAttributes`. 1920x1080 at 30 fps, offered as NV12 and RGB32.
-//! Each `RequestSample` builds one system-memory sample on the calling thread from
-//! [`super::frames::FrameSource`].
+//! Each `RequestSample` takes the next 30 fps slot ([`crate::pace`]) and builds one
+//! system-memory sample from [`super::frames::FrameSource`]: on the calling thread when
+//! the slot is due, otherwise from a Media Foundation timer work item.
 
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::S_OK;
 use windows::Win32::Media::KernelStreaming::{
     IKsControl, IKsControl_Impl, KSIDENTIFIER, PINNAME_VIDEO_CAPTURE,
 };
 use windows::Win32::Media::MediaFoundation::{
-    IMFAsyncCallback, IMFAsyncResult, IMFAttributes, IMFMediaEvent, IMFMediaEventGenerator_Impl,
-    IMFMediaEventQueue, IMFMediaSource, IMFMediaStream_Impl, IMFMediaStream2, IMFMediaStream2_Impl,
-    IMFMediaType, IMFStreamDescriptor, MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS, MEMediaSample,
-    MEStreamStarted, MEStreamStopped, MF_DEVICESTREAM_ATTRIBUTE_FRAMESOURCE_TYPES,
-    MF_DEVICESTREAM_FRAMESERVER_SHARED, MF_DEVICESTREAM_STREAM_CATEGORY, MF_DEVICESTREAM_STREAM_ID,
-    MF_E_MEDIA_SOURCE_WRONGSTATE, MF_E_SHUTDOWN, MF_MT_ALL_SAMPLES_INDEPENDENT, MF_MT_AVG_BITRATE,
-    MF_MT_DEFAULT_STRIDE, MF_MT_FIXED_SIZE_SAMPLES, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
-    MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SAMPLE_SIZE,
-    MF_MT_SUBTYPE, MF_MT_YUV_MATRIX, MF_STREAM_STATE, MF_STREAM_STATE_RUNNING,
-    MF_STREAM_STATE_STOPPED, MFCreateMediaType, MFCreateStreamDescriptor, MFFrameSourceTypes_Color,
-    MFGetSystemTime, MFMediaType_Video, MFSampleExtension_Token, MFVideoFormat_NV12,
-    MFVideoFormat_RGB32, MFVideoInterlace_Progressive, MFVideoTransferMatrix_BT709,
+    IMFAsyncCallback, IMFAsyncCallback_Impl, IMFAsyncResult, IMFAttributes, IMFMediaEvent,
+    IMFMediaEventGenerator_Impl, IMFMediaEventQueue, IMFMediaSource, IMFMediaStream_Impl,
+    IMFMediaStream2, IMFMediaStream2_Impl, IMFMediaType, IMFStreamDescriptor,
+    MEDIA_EVENT_GENERATOR_GET_EVENT_FLAGS, MEMediaSample, MEStreamStarted, MEStreamStopped,
+    MF_DEVICESTREAM_ATTRIBUTE_FRAMESOURCE_TYPES, MF_DEVICESTREAM_FRAMESERVER_SHARED,
+    MF_DEVICESTREAM_STREAM_CATEGORY, MF_DEVICESTREAM_STREAM_ID, MF_E_MEDIA_SOURCE_WRONGSTATE,
+    MF_E_SHUTDOWN, MF_MT_ALL_SAMPLES_INDEPENDENT, MF_MT_AVG_BITRATE, MF_MT_DEFAULT_STRIDE,
+    MF_MT_FIXED_SIZE_SAMPLES, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE,
+    MF_MT_MAJOR_TYPE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SAMPLE_SIZE, MF_MT_SUBTYPE, MF_MT_YUV_MATRIX,
+    MF_STREAM_STATE, MF_STREAM_STATE_RUNNING, MF_STREAM_STATE_STOPPED, MF_VERSION,
+    MFCreateMediaType, MFCreateStreamDescriptor, MFFrameSourceTypes_Color, MFGetSystemTime,
+    MFMediaType_Video, MFSTARTUP_LITE, MFSampleExtension_Token, MFScheduleWorkItem, MFShutdown,
+    MFStartup, MFVideoFormat_NV12, MFVideoFormat_RGB32, MFVideoInterlace_Progressive,
+    MFVideoTransferMatrix_BT709,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
-use windows_core::{ComObject, GUID, HRESULT, IUnknown, Ref, Result, implement};
+use windows_core::{ComObject, GUID, HRESULT, IUnknown, IUnknownImpl, Ref, Result, implement};
 
 use super::activate::{lock, new_attributes};
 use super::attrs::impl_attributes;
@@ -32,6 +36,7 @@ use super::dll::{ObjectToken, guard, guard_quiet};
 use super::frames::FrameSource;
 use super::log::log;
 use super::source::{ks_not_found, pv_i64};
+use crate::pace::Pacer;
 use crate::pixels::nv12_size;
 use jstream_vcam_proto::{FPS, HEIGHT, WIDTH};
 
@@ -97,6 +102,54 @@ struct StreamState {
     state: MF_STREAM_STATE,
     queue: IMFMediaEventQueue,
     source: Option<IMFMediaSource>,
+    /// Paces `RequestSample` to the stream's frame rate.
+    pacer: Pacer,
+    /// Bumped whenever the stream starts, stops, changes state or shuts down, so a
+    /// delayed sample from an earlier run is dropped rather than delivered into this one.
+    run: u64,
+}
+
+/// Holds a Media Foundation start-up for the stream's lifetime, so its timer work items
+/// ([`MFScheduleWorkItem`]) work in any host. Start-ups are counted, so this never stops MF
+/// for the host process.
+struct MfStarted;
+
+impl MfStarted {
+    fn new() -> Result<Self> {
+        // SAFETY: plain call; paired with MFShutdown in Drop.
+        unsafe { MFStartup(MF_VERSION, MFSTARTUP_LITE) }?;
+        Ok(Self)
+    }
+}
+
+impl Drop for MfStarted {
+    fn drop(&mut self) {
+        // SAFETY: paired with the successful MFStartup in `new`.
+        let _ = unsafe { MFShutdown() };
+    }
+}
+
+/// A sample request waiting for its slot: Media Foundation's timer calls it back on a
+/// work-queue thread, so `RequestSample` never blocks the caller's thread.
+#[implement(IMFAsyncCallback)]
+struct Deliver {
+    stream: ComObject<MediaStream>,
+    token: Option<IUnknown>,
+    /// The stream's run when the slot was reserved.
+    run: u64,
+}
+
+impl IMFAsyncCallback_Impl for Deliver_Impl {
+    fn GetParameters(&self, _flags: *mut u32, _queue: *mut u32) -> Result<()> {
+        // E_NOTIMPL means the defaults: the standard work queue, no flags.
+        Err(windows::Win32::Foundation::E_NOTIMPL.into())
+    }
+
+    fn Invoke(&self, _result: Ref<IMFAsyncResult>) -> Result<()> {
+        guard("Stream::Deliver", || {
+            self.stream.deliver(self.token.as_ref(), self.run)
+        })
+    }
 }
 
 #[implement(IMFMediaStream2, IKsControl, IMFAttributes)]
@@ -105,6 +158,7 @@ pub(crate) struct MediaStream {
     descriptor: IMFStreamDescriptor,
     state: Mutex<StreamState>,
     frames: Mutex<FrameSource>,
+    _mf: MfStarted,
     _token: ObjectToken,
 }
 
@@ -127,8 +181,11 @@ impl MediaStream {
                 state: MF_STREAM_STATE_STOPPED,
                 queue,
                 source: Some(source),
+                pacer: Pacer::new(FPS),
+                run: 0,
             }),
             frames: Mutex::new(FrameSource::new()),
+            _mf: MfStarted::new()?,
             _token: ObjectToken::new(),
         }))
     }
@@ -147,6 +204,8 @@ impl MediaStream {
             return Err(MF_E_SHUTDOWN.into());
         }
         st.state = MF_STREAM_STATE_RUNNING;
+        st.run += 1;
+        st.pacer.reset();
         log("Stream: started");
         // SAFETY: the PROPVARIANT outlives the call, which copies it.
         unsafe {
@@ -165,6 +224,7 @@ impl MediaStream {
             return Ok(());
         }
         st.state = MF_STREAM_STATE_STOPPED;
+        st.run += 1;
         log("Stream: stopped");
         // SAFETY: the PROPVARIANT outlives the call, which copies it.
         unsafe {
@@ -181,6 +241,7 @@ impl MediaStream {
     pub(crate) fn shutdown(&self) {
         let mut st = lock(&self.state);
         st.shutdown = true;
+        st.run += 1;
         st.source = None;
         // SAFETY: plain call on a live COM object.
         let _ = unsafe { st.queue.Shutdown() };
@@ -193,6 +254,30 @@ impl MediaStream {
             return Err(MF_E_SHUTDOWN.into());
         }
         Ok(st.queue.clone())
+    }
+
+    /// Builds one sample and queues it as `MEMediaSample` with the request's `token`. A
+    /// request from an earlier `run` (the stream stopped, restarted, changed state or shut
+    /// down since) is dropped.
+    fn deliver(&self, token: Option<&IUnknown>, run: u64) -> Result<()> {
+        let queue = {
+            let st = lock(&self.state);
+            if st.shutdown || st.state != MF_STREAM_STATE_RUNNING || st.run != run {
+                return Ok(());
+            }
+            st.queue.clone()
+        };
+        let subtype = self.current_subtype();
+        let sample = lock(&self.frames).make_sample(&subtype)?;
+        // SAFETY: plain calls on live COM objects with pointers to statics.
+        unsafe {
+            sample.SetSampleTime(MFGetSystemTime())?;
+            sample.SetSampleDuration(10_000_000 / i64::from(FPS))?;
+            if let Some(token) = token {
+                sample.SetUnknown(&MFSampleExtension_Token, token)?;
+            }
+            queue.QueueEventParamUnk(MEMediaSample.0 as u32, &GUID::zeroed(), S_OK, &sample)
+        }
     }
 
     /// The subtype the client chose (NV12 unless it set RGB32).
@@ -267,27 +352,31 @@ impl IMFMediaStream_Impl for MediaStream_Impl {
 
     fn RequestSample(&self, token: Ref<IUnknown>) -> Result<()> {
         guard("Stream::RequestSample", || {
-            let queue = {
-                let st = lock(&self.state);
+            let (wait, run) = {
+                let mut st = lock(&self.state);
                 if st.shutdown {
                     return Err(MF_E_SHUTDOWN.into());
                 }
                 if st.state != MF_STREAM_STATE_RUNNING {
                     return Err(MF_E_MEDIA_SOURCE_WRONGSTATE.into());
                 }
-                st.queue.clone()
+                (st.pacer.reserve(Instant::now()), st.run)
             };
-            let subtype = self.current_subtype();
-            let sample = lock(&self.frames).make_sample(&subtype)?;
-            // SAFETY: plain calls on live COM objects with pointers to statics.
-            unsafe {
-                sample.SetSampleTime(MFGetSystemTime())?;
-                sample.SetSampleDuration(10_000_000 / FPS as i64)?;
-                if let Some(token) = token.as_ref() {
-                    sample.SetUnknown(&MFSampleExtension_Token, token)?;
-                }
-                queue.QueueEventParamUnk(MEMediaSample.0 as u32, &GUID::zeroed(), S_OK, &sample)
+            let token = token.as_ref().cloned();
+            if wait < Duration::from_millis(1) {
+                return self.deliver(token.as_ref(), run);
             }
+            // Whole milliseconds, rounded up, so a sample is never early.
+            let ms = i64::try_from(wait.as_micros().div_ceil(1000)).unwrap_or(i64::MAX);
+            let callback: IMFAsyncCallback = Deliver {
+                stream: self.to_object(),
+                token,
+                run,
+            }
+            .into();
+            // SAFETY: plain call; a negative timeout is a delay in milliseconds. The work
+            // queue holds `callback`, and with it the stream, until it runs.
+            unsafe { MFScheduleWorkItem(&callback, None::<&IUnknown>, -ms, None) }
         })
     }
 }
@@ -300,7 +389,10 @@ impl IMFMediaStream2_Impl for MediaStream_Impl {
             if st.shutdown {
                 return Err(MF_E_SHUTDOWN.into());
             }
-            st.state = value;
+            if st.state != value {
+                st.state = value;
+                st.run += 1;
+            }
             Ok(())
         })
     }
