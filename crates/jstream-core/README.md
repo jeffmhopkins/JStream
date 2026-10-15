@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:4f0cadd2c8881d43", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b: Live sources bullet matches live.rs (build on create, rebuild on settings change, drop on delete, stored frame wins, display capture); Not here yet line rewrapped only, drops registry rendering" }
+verified = { hash = "b3:d8077027baf70ffa", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#222 C1b) into png 0.18: kept main's C1b text; png 0.18 only changes the test-only decode_png helper; purpose holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -135,7 +135,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:60cc80bfe2234827", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b on main after #217: re-read the Live sources paragraphs and re-plan triggers against live.rs, snapshot.rs plan_with and engine.rs publish_render; collection asset references go through #217's AssetRoots::read; holds" }
+verified = { hash = "b3:d6099f4bbc46f9f2", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#222 C1b) into png 0.18: kept main's C1b text and Dependencies list (png still listed); png 0.18 only changes the test-only decode_png helper; holds" }
 -->
 
 ### Engine and sessions
