@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:2623ed8268e70844", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#147 C6 nested scene rendering) into F2b; took main's verified line and re-read; C6's snapshot/nesting text and F2b's recording text (no publish target needed, four recording tests) both present and accurate" }
+verified = { hash = "b3:1fe7bce3ebeaacf6", by = "agent:claude", note = "#189: test-only change to the RTMP reconnect test and its send_until helper in runtime/publish.rs; re-read, no prose describes that test or its budget; still holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -100,7 +100,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c6fc31d036233f3d", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's Recording paragraph plus main's; re-read against sink.rs, pipeline.rs and engine.rs on the merged tree" }
+verified = { hash = "b3:3976649becadb7e2", by = "agent:claude", note = "#189: test-only change to the RTMP reconnect test and its send_until helper in runtime/publish.rs; re-read, no prose describes that test or its budget; still holds" }
 -->
 
 ### Engine and sessions
