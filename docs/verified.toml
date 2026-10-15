@@ -210,7 +210,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:8c0c258dab2abccb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:c52975806ec5635d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: mcp README and tests.rs changed only for the hello wait; this section's tool list, events and 249 KB size hold (tools.snap unchanged)" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
 stamp = { hash = "b3:a1cd4f7b911578ff", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): tool list merged; meters.tick and live.changed sentences both hold; tools.snap regenerated on the merged tree is 249375 bytes, so about 249 KB" }
@@ -234,7 +234,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:429d63ac539be57e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: mcp README and tests.rs changed only for the hello wait; this section's tool list, events and 249 KB size hold (tools.snap unchanged)" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:1aa8ebb24f400356", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): tool list merged; meters.tick and live.changed sentences both hold; tools.snap regenerated on the merged tree is 249375 bytes, so about 249 KB" }
@@ -393,7 +393,7 @@ stamp = { hash = "b3:c594f42e1b065295" }
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:6d997bdefee6d70b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301) into #268: server shutdown and zero-limit details are server Design detail; envelope and versioning text unchanged; holds" }
+stamp = { hash = "b3:404a7a3b75f66ce7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: server README changed only for zero-limit refusal; Live values bullet holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
 stamp = { hash = "b3:c93c7afdc52f6566", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-server config/error/lib changes (zero-limit refusal): section summarises the wire protocol and doesn't state server limits; holds" }
@@ -456,7 +456,7 @@ stamp = { hash = "b3:f7c235327227029b" }
 stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
 ["ARCH#threading"."body"]
-stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: PR's rewrap of render-snapshot and live-value handover paragraphs, wording fix 'a change that would contradict it', marker cleared to STARTING (below every generation, runtime/render.rs); thread table unchanged; holds" }
+stamp = { hash = "b3:da86e2ea2b88f3f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: took the wave's reflowed render-snapshot and handover paragraphs (adds the below-every-generation start value) with this PR's collector clause and built-for-the-render-thread status line; matches render.rs" }
 
 ["ARCH#threading"."dep:docs/adr/0014-media-clock.md"]
 stamp = { hash = "b3:68451099d1cf8c6d" }
@@ -573,7 +573,7 @@ stamp = { hash = "b3:c14e3114d974adb4", by = "agent:claude@session_01PpGi5RaafND
 stamp = { hash = "b3:308082ece28cb86f" }
 
 ["CRATE-jstream-audio#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
+stamp = { hash = "b3:da86e2ea2b88f3f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: cascade only from ARCH#threading's reflow or server#design's zero-limit refusal; scanned for claims they would falsify; none; holds" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/error.rs"]
 stamp = { hash = "b3:d8e9ac73d567425f" }
@@ -678,7 +678,7 @@ stamp = { hash = "b3:e5a6edbd7802a068" }
 stamp = { hash = "b3:044226cbcf228628", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph (input_push 1024 / 940-941 frames) holds against benches/mix.rs" }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
+stamp = { hash = "b3:da86e2ea2b88f3f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: cascade only from ARCH#threading's reflow or server#design's zero-limit refusal; scanned for claims they would falsify; none; holds" }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/RULES.md#R-RT-001"]
 stamp = { hash = "b3:3221ab22f6747616" }
@@ -1095,7 +1095,7 @@ stamp = { hash = "b3:993e780364d6f4d3" }
 stamp = { hash = "b3:85f2f0dff0ee58c3", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): not-yet list keeps main's transition/filter/meter line and this PR's 'mixer's parameter channel' wording, since the render channel and release are built; holds against render.rs" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
+stamp = { hash = "b3:da86e2ea2b88f3f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: cascade only from ARCH#threading's reflow or server#design's zero-limit refusal; scanned for claims they would falsify; none; holds" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/RULES.md#R-RT-006"]
 stamp = { hash = "b3:f2c3ac9292e67cf2" }
@@ -1125,7 +1125,7 @@ stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:5cf054814e42a585", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): cascade only; this PR adds no text here; scanned the merged text for claims about live values, parameter channels or the protocol version this change would falsify; none; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
+stamp = { hash = "b3:94c7dff337eb598a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: cascade only from ARCH#threading's reflow or server#design's zero-limit refusal; scanned for claims they would falsify; none; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:7ab4accbf98f6662" }
@@ -1395,7 +1395,7 @@ stamp = { hash = "b3:984f333744172f87" }
 stamp = { hash = "b3:d72def29f6861e6d" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
+stamp = { hash = "b3:da86e2ea2b88f3f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: cascade only from ARCH#threading's reflow or server#design's zero-limit refusal; scanned for claims they would falsify; none; holds" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/audio.rs"]
 stamp = { hash = "b3:79b9830d47ed6557" }
@@ -1476,7 +1476,7 @@ stamp = { hash = "b3:534ac6c88886c8f2" }
 stamp = { hash = "b3:943bb9518712a4b5" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:c252221e9c760096", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:71fa84f22db9b8ca", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: re-read the wave's bounded hello wait beside this PR's live tool, ends_gesture and events merge text; no interaction; holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
 stamp = { hash = "b3:2da6547f86080b21", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): tool table lists live with main's audio, bus and send; batch takes ends_gesture; events paragraph keeps main's meters.tick sentence and this PR's in-place merge rule; tools/list count 19 in tests.rs" }
@@ -1512,7 +1512,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:429d63ac539be57e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: re-read the wave's bounded hello wait beside this PR's live tool, ends_gesture and events merge text; no interaction; holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:1aa8ebb24f400356", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): tool table lists live with main's audio, bus and send; batch takes ends_gesture; events paragraph keeps main's meters.tick sentence and this PR's in-place merge rule; tools/list count 19 in tests.rs" }
@@ -1542,7 +1542,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against server.rs (with_timeout/Timer bounding open_early's hello at 3 s) and tests.rs: contents list and 'needs no async runtime' still hold (timer is its own thread)" }
+stamp = { hash = "b3:429d63ac539be57e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: tests.rs gained the wave's hello-wait tests; contents hold" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:1aa8ebb24f400356", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): events.rs keeps main's meters slot beside this PR's supersede; tools gained live beside audio/bus/send; holds" }
@@ -1638,7 +1638,7 @@ stamp = { hash = "b3:593d770c1aad557d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:230ac9edc35e19b9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main: rtmp and record modules as lib.rs says; Output trait still later; vcam output is in jstream-core runtime (runtime/vcam.rs), and the jstream-core README#runtime anchor exists; deps unchanged." }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
+stamp = { hash = "b3:da86e2ea2b88f3f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: cascade only from ARCH#threading's reflow or server#design's zero-limit refusal; scanned for claims they would falsify; none; holds" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
@@ -1722,7 +1722,7 @@ stamp = { hash = "b3:e204cadb57ccceae" }
 stamp = { hash = "b3:4179d522e3055d3d" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
+stamp = { hash = "b3:da86e2ea2b88f3f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: cascade only from ARCH#threading's reflow or server#design's zero-limit refusal; scanned for claims they would falsify; none; holds" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -1794,7 +1794,7 @@ stamp = { hash = "b3:ac6493f8088539b9" }
 stamp = { hash = "b3:dfa8602587609b6c" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
+stamp = { hash = "b3:da86e2ea2b88f3f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: cascade only from ARCH#threading's reflow or server#design's zero-limit refusal; scanned for claims they would falsify; none; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/RULES.md#real-time"]
 stamp = { hash = "b3:c60cba487fc0a5e5" }
@@ -2211,7 +2211,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
+stamp = { hash = "b3:94c7dff337eb598a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: re-read the wave's zero-limit refusal beside this PR's live.changed buffer and gesture expiry text; holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:9abefea51e344fb4", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at f0cb974 (#324, #301, #373, #371, #395): re-read main's shutdown and close-drain text; a closed connection still drops its session, so this PR's gesture-expiry sentence holds" }
@@ -2925,7 +2925,7 @@ stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 stamp = { hash = "b3:c60cba487fc0a5e5", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
 
 ["RULES#real-time"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
+stamp = { hash = "b3:da86e2ea2b88f3f8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: cascade only from ARCH#threading's reflow or server#design's zero-limit refusal; scanned for claims they would falsify; none; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."body"]
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
@@ -2955,7 +2955,7 @@ stamp = { hash = "b3:071766bcb5e3e8ca", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; step 7 (Ctrl-C prints stopped, exits 0) holds with #301's bounded close wait; default limits are non-zero; holds" }
+stamp = { hash = "b3:94c7dff337eb598a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of wave/m1 at 900a8c1: cascade only from ARCH#threading's reflow or server#design's zero-limit refusal; scanned for claims they would falsify; none; holds" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:c40bfcab7de124d7", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }
