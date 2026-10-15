@@ -256,17 +256,23 @@ pub fn Scenes() -> impl IntoView {
 #[component]
 pub fn RenameField(value: String, done: impl Fn(String) + Clone + 'static) -> impl IntoView {
     let text = RwSignal::new(value.clone());
-    // Enter commits and then the field's removal blurs it: commit once.
+    // Enter commits and then the field's removal blurs it: commit once. By that blur the
+    // component is disposed, so its handles are read with `try_`, and a gone one means
+    // done.
     let finished = StoredValue::new(false);
     let finish = move |name: String| {
-        if !finished.get_value() {
+        if finished.try_get_value() == Some(false) {
             finished.set_value(true);
             done(name);
         }
     };
     let commit = {
         let finish = finish.clone();
-        move || finish(text.get_untracked())
+        move || {
+            if let Some(name) = text.try_get_untracked() {
+                finish(name);
+            }
+        }
     };
     let on_blur = commit.clone();
     view! {

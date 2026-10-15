@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:9a542442725677b7", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line gained the e2e README sections; contents list holds" }
+verified = { hash = "b3:34036b9f6b4ddd56", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Merge of main (Q3 e2e, #266/#274 styles) into U3a: contents list unchanged by the merge and still matches the modules; re-read, holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -58,7 +58,7 @@ Contents ([Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:da1819386bb664ea", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line changed; design bullets untouched and exercised by the e2e specs (connect, outputs, key handling)" }
+verified = { hash = "b3:c62055b6e524769a", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Merge of main into U3a: main's Styles bullet and lib.rs Docs line kept; added that a new session starts on the program scene and that a failing kind.list offers no new kinds; RenameField tolerates its post-removal blur; re-read, holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -94,7 +94,9 @@ verified = { hash = "b3:da1819386bb664ea", by = "agent:claude@session_016cfwAwen
   holds no handle of its own, so Disconnecting drops the last one, which closes the
   socket.
 - **Selection.** `Selection` is the scene being edited (shown by the sources list) and
-  an item in it (edited by the properties form). It is fixed up after every change: a
+  an item in it (edited by the properties form). A new session reads the program scene
+  before the state, so it starts on the scene on program. It is fixed up after every
+  change: a
   deleted scene falls back to the program scene, then the first listed scene, and an
   item that left the scene is dropped. The canvas still draws the program scene with a
   selection of its own; moving it onto `Selection` is a canvas follow-up.
@@ -105,7 +107,8 @@ verified = { hash = "b3:da1819386bb664ea", by = "agent:claude@session_016cfwAwen
   the session's client ID so two UIs on one engine don't pick the same one. "Add"
   creates a source of a kind `kind.list` reports, or places an existing source or
   another scene (a `scene` source), as one batch, with a geometry covering the canvas
-  (ADR-0022). Deleting a scene, or a source everywhere, reads `delete.plan` first,
+  (ADR-0022). An engine whose `kind.list` fails (a test double) offers no new kinds,
+  only existing sources and scenes. Deleting a scene, or a source everywhere, reads `delete.plan` first,
   shows what else it takes, and sends the plan's edits expecting the plan's revision,
   so a change in between makes the engine refuse it rather than delete more than the
   user saw. Removing an item from its scene is a plain `item.remove`.
@@ -213,7 +216,7 @@ scene and sends the edits. These three are pure and tested natively against
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:5a04a748741bf41a", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: added the pointer to CI's ui-e2e job and tests/e2e/README.md; trunk build steps unchanged and still what CI runs" }
+verified = { hash = "b3:f9f43351b35ddde2", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Merge of main into U3a: main's ui-e2e pointer kept; Cargo.toml keeps serde_json; trunk build --locked --offline succeeds; holds" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for

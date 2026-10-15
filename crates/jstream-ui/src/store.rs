@@ -249,24 +249,27 @@ impl Studio {
 
     /// Reads everything a new session needs: the state, the program scene and the kinds.
     pub fn load(&self, session: &Session) {
-        self.refresh(session);
         let studio = *self;
-        let program = session.clone();
+        let first = session.clone();
         spawn_local(async move {
             if let Ok(QueryResult::StudioGet { program_scene }) =
-                query(&program, Query::StudioGet).await
+                query(&first, Query::StudioGet).await
             {
                 studio.program.set(program_scene);
-                studio.reconcile();
             }
+            // The state is read after the program scene, so the first selection is the
+            // scene on program.
+            studio.refresh(&first);
         });
         let kinds = session.clone();
         spawn_local(async move {
-            match query(&kinds, Query::KindList).await {
-                Ok(QueryResult::KindList { kinds }) => studio.kinds.set(Some(kinds)),
-                Ok(_) => {}
-                Err(error) => studio.report(&error),
-            }
+            // An engine that lists no kinds (a test double) leaves "New source" empty;
+            // existing sources and scenes can still be placed.
+            let listed = match query(&kinds, Query::KindList).await {
+                Ok(QueryResult::KindList { kinds }) => kinds,
+                _ => Vec::new(),
+            };
+            studio.kinds.set(Some(listed));
         });
     }
 
