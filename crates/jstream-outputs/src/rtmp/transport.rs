@@ -98,14 +98,18 @@ impl Transport {
     /// in both directions.
     ///
     /// A socket the peer has already disconnected or reset counts as shut down, at
-    /// either step.
+    /// either step. With a [write deadline](Self::set_write_deadline) set, sending
+    /// `close_notify` (and whatever TLS data is still queued ahead of it) is bounded
+    /// by it like any other write (#209).
     ///
     /// # Errors
-    /// Transport errors while sending `close_notify` or shutting the socket down.
+    /// Transport errors while sending `close_notify` or shutting the socket down;
+    /// [`TimedOut`](io::ErrorKind::TimedOut) when the write deadline passes first.
     pub fn shutdown(&mut self) -> io::Result<()> {
         if let Link::Tls(s) = &mut self.link {
             s.conn.send_close_notify();
-            match s.flush() {
+            // Through `Write::flush`, which honours the write deadline.
+            match Write::flush(self) {
                 Err(e) if peer_gone(&e) => return Ok(()),
                 result => result?,
             }
