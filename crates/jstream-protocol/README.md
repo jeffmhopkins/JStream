@@ -104,7 +104,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:cee51e3468583d57", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the YouTube planned-commands link (0034 -> 0041); ADR-0041 restates those commands unchanged" }
+verified = { hash = "b3:3cdfa6858f0463d2", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#214 ADR-0041) into #217, stamp-only conflicts: re-read; main's text taken as is; #168's ':' in the Rejections bullet holds against check_asset_path" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
