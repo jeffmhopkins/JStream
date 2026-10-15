@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:9ce22b7cc46effb8", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
+verified = { hash = "b3:4978601308838c96", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#310: re-read; the virtual-camera output is no longer promised here, it runs in jstream-core's runtime (runtime/vcam.rs, #213), linked to jstream-core#runtime; Output trait still later; RTMP and recorder text unchanged; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -21,7 +21,8 @@ first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, writte
 as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) requires and needed for the
 generic RTMP/RTMPS output of [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md). The
 second is the **recording file sink** in the `record` module (below). The `Output` trait
-and the virtual-camera output come later. Its JStream dependencies are `jstream-media`
+comes later. The virtual-camera output is not here: it runs in `jstream-core`'s runtime
+([jstream-core › Runtime](../jstream-core/README.md#runtime)). Its JStream dependencies are `jstream-media`
 (for `MediaTime` and `Packet`) and the layer-2 `jstream-mux`, whose public `amf0` codec
 and `flv::to_ms` conversion the client uses, and whose `fmp4` muxer the recorder
 uses. Its third-party dependencies are `thiserror`, `tracing` for logging

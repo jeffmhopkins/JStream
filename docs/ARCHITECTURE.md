@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:928b559944b79c2d", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: re-read; jstream-plugin-proto row now matches its new manifest summary (layer 0, no unsafe); lint-deps passes; plugin-clap and plugin-host rows stay planned" }
+verified = { hash = "b3:6dcda20a25fdeed7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#310: re-read; jstream-outputs row (and its manifest summary) drops the vcam output and says it runs in jstream-core's runtime, as runtime/vcam.rs does; no ADR places it in outputs; core row lists no output kinds, unchanged; holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -152,7 +152,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
-| 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
+| 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording. Uses `encode`, `mux` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
