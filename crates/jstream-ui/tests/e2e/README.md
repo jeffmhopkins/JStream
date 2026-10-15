@@ -19,7 +19,7 @@ input on the canvas.
 ## Harness
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests/e2e/*.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:1b06d08929287180", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305: covers glob *.js also matches specs/connect.spec.js (test.fail removed); re-read mock daemon, per-test daemon, console-error, setup and browser bullets; harness unchanged, holds" }
+verified = { hash = "b3:fa56f6e0d4967c3d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324: console errors fail a test unless allowed; connect.spec.js now allows both Chromium wordings of the CSP refusal; harness unchanged; holds" }
 -->
 
 - **The mock daemon** (`mock-daemon/`, the test-only crate `jstream-ui-e2e`) puts
@@ -49,7 +49,7 @@ verified = { hash = "b3:1b06d08929287180", by = "agent:claude@session_01K4N6DrL8
 ## What the tests cover
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/specs/**"]
-verified = { hash = "b3:95b00893b0e9b0c7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324 B1: Connecting bullet says a policy-refused URL shows a reason and re-enables Connect, matching connect.spec.js without test.fail; 13 tests passed locally in Playwright's Chromium 1194" }
+verified = { hash = "b3:0058c223ec20fba1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324: Connecting bullet holds; the policy test passes in Playwright's headless shell and Chromium 1194, and its allow pattern matches CI Chrome's 'Connecting to ... violates' wording" }
 -->
 
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
