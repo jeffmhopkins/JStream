@@ -13,10 +13,10 @@ use crate::{
     AudioCodec, AudioEncoding, Batch, BlendMode, Canvas, Crop, Edit, EncoderProfile,
     EncoderProfileId, EncoderProfileInfo, EntityKind, FilterChain, FilterChains, FilterId,
     FilterInfo, FilterOwner, Finite32, FitMode, HardwarePreference, ItemGeometry, ItemId, ItemInfo,
-    ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind, ParamDescriptor,
-    ParamType, PlacementForm, ProtocolError, Query, QueryResult, RateControl, RecordContainer, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId, SourceInfo,
-    SourceKind, Vec2, VideoCodec, VideoEncoding,
+    ItemTransform, KindCategory, KindDescriptor, MasterInfo, OutputId, OutputInfo, OutputKind,
+    ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query, QueryResult, RateControl,
+    RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId,
+    SourceInfo, SourceKind, Vec2, VideoCodec, VideoEncoding,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -253,6 +253,8 @@ pub fn collection() -> Batch {
                 filter_id: FilterId::new("g1"),
                 index: 0,
             },
+            gain_on(FilterOwner::Master, "m1", FilterChain::Audio, -1.0),
+            gain_on(rec_owner(), "o1", FilterChain::Audio, -6.0),
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
@@ -343,6 +345,14 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     },
                 ],
                 outputs: outputs(),
+                master: MasterInfo {
+                    filters: audio_chain(vec![FilterInfo {
+                        filter_id: FilterId::new("m1"),
+                        kind: "gain".into(),
+                        enabled: true,
+                        settings: gain_db(-1.0),
+                    }]),
+                },
                 encoders: encoders(),
             }),
         ),
@@ -918,7 +928,66 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             },
             invalid("edits.6.chain", "a chain holds at most 8 filters"),
         ),
+        // The master stage and outputs (ADR-0027): audio chains only, on an output
+        // that exists.
+        (
+            Batch::single(gain_on(FilterOwner::Master, "v", FilterChain::Video, 0.0)),
+            invalid(
+                "edits.0.chain",
+                "the master stage's and outputs' video chains are not available yet; only \
+                 their audio chains hold filters",
+            ),
+        ),
+        (
+            Batch::single(gain_on(
+                FilterOwner::Output {
+                    output_id: OutputId::new("ghost"),
+                },
+                "g",
+                FilterChain::Audio,
+                0.0,
+            )),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(gain_on(rec_owner(), "o1", FilterChain::Audio, 0.0)),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Filter,
+                id: "o1".into(),
+            },
+        ),
     ]
+}
+
+/// A `gain` filter at `db` on `owner`'s `chain`, last.
+fn gain_on(owner: FilterOwner, id: &str, chain: FilterChain, db: f32) -> Edit {
+    Edit::FilterAdd {
+        owner,
+        chain,
+        filter_id: FilterId::new(id),
+        kind: "gain".into(),
+        settings: gain_db(db),
+        enabled: None,
+        index: None,
+    }
+}
+
+/// The output `rec`, as a filter owner.
+fn rec_owner() -> FilterOwner {
+    FilterOwner::Output {
+        output_id: OutputId::new("rec"),
+    }
+}
+
+/// Chains with `audio` and no video filter.
+fn audio_chain(audio: Vec<FilterInfo>) -> FilterChains {
+    FilterChains {
+        video: vec![],
+        audio,
+    }
 }
 
 /// A `gain` filter on `source`, at 0 dB.
@@ -1018,6 +1087,12 @@ fn recording() -> OutputInfo {
         output_id: OutputId::new("rec"),
         kind: record("/home/me/Videos/show.mp4"),
         encoder_profile: Some(EncoderProfileId::new("hq")),
+        filters: audio_chain(vec![FilterInfo {
+            filter_id: FilterId::new("o1"),
+            kind: "gain".into(),
+            enabled: true,
+            settings: gain_db(-6.0),
+        }]),
     }
 }
 
@@ -1026,6 +1101,7 @@ fn youtube() -> OutputInfo {
         output_id: OutputId::new("yt"),
         kind: rtmp("rtmps://a.rtmps.youtube.com:443/live2"),
         encoder_profile: Some(EncoderProfileId::new("low")),
+        filters: FilterChains::default(),
     }
 }
 
@@ -1037,6 +1113,7 @@ fn outputs() -> Vec<OutputInfo> {
             output_id: OutputId::new("tw"),
             kind: rtmp(TWITCH_URL),
             encoder_profile: None,
+            filters: FilterChains::default(),
         },
         youtube(),
     ]

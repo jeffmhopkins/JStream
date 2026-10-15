@@ -4,8 +4,12 @@
 //! filter is a kind from `kind.list` (a `video_filter` or `audio_filter` kind), an
 //! on/off switch and settings checked against the kind's descriptor, like a source's
 //! (ADR-0025). The `filter.*` edits address a filter by its owner and its ID.
+//!
+//! Sources own chains, and so do the master stage and each output (ADR-0027). The
+//! master's and an output's chains are audio only until video mixes run their video
+//! chains.
 
-use crate::id::{FilterId, SourceId};
+use crate::id::{FilterId, OutputId, SourceId};
 use crate::settings::Settings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -13,8 +17,8 @@ use serde::{Deserialize, Serialize};
 /// The most filters one chain holds: the mixer's capacity per chain (ADR-0026 §1).
 pub const MAX_CHAIN_FILTERS: usize = 8;
 
-/// What owns a filter chain. Serialized with an internal `type` tag. Only sources own
-/// chains so far; buses, scenes and outputs will be further variants.
+/// What owns a filter chain. Serialized with an internal `type` tag. Sources, the master
+/// stage and outputs own chains so far; buses and scenes will be further variants.
 #[derive(
     Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
@@ -26,13 +30,26 @@ pub enum FilterOwner {
         /// The source.
         source_id: SourceId,
     },
+    /// The master stage's chains, which apply to everything leaving JStream: every
+    /// output, after the bus it takes (ADR-0027 §1). Not the `master` bus, whose
+    /// fader feeds it. Its audio chain runs once per block on each bus that feeds an
+    /// output, and monitoring hears the bus before it.
+    Master,
+    /// An output's own chains, which run after the master stage for that output only
+    /// (ADR-0027 §2). An output with filters on its audio chain gets its own audio
+    /// encode.
+    Output {
+        /// The output.
+        output_id: OutputId,
+    },
 }
 
 impl FilterOwner {
-    /// The source that owns the chain.
-    pub fn source_id(&self) -> &SourceId {
+    /// The source that owns the chain, or `None` for another owner.
+    pub fn source_id(&self) -> Option<&SourceId> {
         match self {
-            FilterOwner::Source { source_id } => source_id,
+            FilterOwner::Source { source_id } => Some(source_id),
+            FilterOwner::Master | FilterOwner::Output { .. } => None,
         }
     }
 }
@@ -63,7 +80,7 @@ impl FilterChain {
     }
 }
 
-/// One filter, as `source.list` and `state.get` report it.
+/// One filter, as `source.list`, `output.list` and `state.get` report it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct FilterInfo {
     /// Its ID, unique within its source.
@@ -78,7 +95,7 @@ pub struct FilterInfo {
     pub settings: Settings,
 }
 
-/// A source's two chains, each first filter first.
+/// An owner's two chains, each first filter first.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct FilterChains {
     /// The video chain. Omitted when empty.
@@ -90,7 +107,7 @@ pub struct FilterChains {
 }
 
 impl FilterChains {
-    /// Whether both chains are empty, as `SourceInfo` then omits them.
+    /// Whether both chains are empty, as `SourceInfo` and `OutputInfo` then omit them.
     pub fn is_empty(&self) -> bool {
         self.video.is_empty() && self.audio.is_empty()
     }

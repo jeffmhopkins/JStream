@@ -588,7 +588,7 @@ fn apply_edit(
                             format!("kind `{kind}` is a filter kind, not a source kind"),
                         ));
                     }
-                    complete_settings(state, kinds, descriptor, source_id, settings, at)?
+                    complete_settings(state, kinds, descriptor, Some(source_id), settings, at)?
                 }
                 _ => {
                     return Err(unsupported(at, "kind", "this source kind"));
@@ -695,6 +695,7 @@ fn apply_edit(
                     id: output_id.clone(),
                     kind: kind.clone(),
                     encoder_profile: None,
+                    filters: Chains::default(),
                 },
             );
             Ok(vec![Edit::OutputDelete {
@@ -730,14 +731,15 @@ fn apply_edit(
                 .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
             let mut inverse = vec![Edit::OutputCreate {
                 output_id: output.id.clone(),
-                kind: output.kind,
+                kind: output.kind.clone(),
             }];
-            if let Some(profile_id) = output.encoder_profile {
+            if let Some(profile_id) = &output.encoder_profile {
                 inverse.push(Edit::OutputSetEncoder {
-                    output_id: output.id,
-                    profile_id: Some(profile_id),
+                    output_id: output.id.clone(),
+                    profile_id: Some(profile_id.clone()),
                 });
             }
+            inverse.extend(crate::filter::restore_output(&output));
             Ok(inverse)
         }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
@@ -972,7 +974,7 @@ pub(crate) fn complete_settings(
     state: &State,
     kinds: &Kinds,
     descriptor: &KindDescriptor,
-    source_id: &SourceId,
+    source_id: Option<&SourceId>,
     given: &Settings,
     at: usize,
 ) -> Result<Settings, ProtocolError> {
@@ -1043,7 +1045,7 @@ fn set_settings(
         let value = if value.is_null() && !param.is_reference() {
             &param.default
         } else {
-            check_value(state, kinds, source_id, param, value, at, &field)?;
+            check_value(state, kinds, Some(source_id), param, value, at, &field)?;
             value
         };
         new.push((id.to_owned(), value.clone()));
@@ -1066,14 +1068,15 @@ fn set_settings(
     }])
 }
 
-/// Checks one settings value for `param` of source `source_id`: its type and
-/// constraints, that a referenced scene or source exists (`not_found` if not), and that a
-/// referenced source produces what the parameter needs. A source may name itself here;
-/// [`check_reference_cycles`] rejects that as a cycle.
+/// Checks one settings value for `param` of source `source_id` (`None` for a filter of
+/// the master stage or an output): its type and constraints, that a referenced scene or
+/// source exists (`not_found` if not), and that a referenced source produces what the
+/// parameter needs. A source may name itself here; [`check_reference_cycles`] rejects
+/// that as a cycle.
 pub(crate) fn check_value(
     state: &State,
     kinds: &Kinds,
-    source_id: &SourceId,
+    source_id: Option<&SourceId>,
     param: &ParamDescriptor,
     value: &Value,
     at: usize,
@@ -1086,7 +1089,7 @@ pub(crate) fn check_value(
         Some(Reference::Scene { scene_id }) => {
             find_scene(state, &scene_id)?;
         }
-        Some(Reference::Source { source_id: target }) if &target != source_id => {
+        Some(Reference::Source { source_id: target }) if Some(&target) != source_id => {
             let referenced = state
                 .source(&target)
                 .ok_or_else(|| not_found(EntityKind::Source, target.as_str()))?;

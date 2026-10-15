@@ -108,6 +108,8 @@ pub struct State {
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
     pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
+    /// The master stage's chains (ADR-0027 §1).
+    pub(crate) master: Chains,
 }
 
 impl State {
@@ -124,6 +126,12 @@ impl State {
     /// The source with this ID.
     pub fn source(&self, id: &SourceId) -> Option<&Source> {
         self.sources.get(id)
+    }
+
+    /// The master stage's filter chains, which apply to everything leaving JStream
+    /// (ADR-0027 §1). Only the audio chain holds filters so far.
+    pub fn master(&self) -> &Chains {
+        &self.master
     }
 
     /// Every scene, in display order.
@@ -437,6 +445,8 @@ pub struct Output {
     pub(crate) id: OutputId,
     pub(crate) kind: OutputKind,
     pub(crate) encoder_profile: Option<EncoderProfileId>,
+    /// Its own chains, after the master stage (ADR-0027 §2).
+    pub(crate) filters: Chains,
 }
 
 impl Output {
@@ -453,6 +463,21 @@ impl Output {
     /// The encoder profile it uses, or `None` for the engine's default.
     pub fn encoder_profile(&self) -> Option<&EncoderProfileId> {
         self.encoder_profile.as_ref()
+    }
+
+    /// Its own filter chains, which run after the master stage (ADR-0027 §2). Only the
+    /// audio chain holds filters so far.
+    pub fn filters(&self) -> &Chains {
+        &self.filters
+    }
+
+    /// Whether it carries audio, and so can have an audio chain: every output kind but
+    /// one that sends video only (a virtual camera).
+    pub fn has_audio(&self) -> bool {
+        matches!(
+            self.kind,
+            OutputKind::Rtmp { .. } | OutputKind::Record { .. }
+        )
     }
 }
 

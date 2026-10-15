@@ -203,6 +203,10 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
+        /// The master stage. Omitted while it has no filters; missing (from a server
+        /// older than 0.17) parses as empty.
+        #[serde(default, skip_serializing_if = "MasterInfo::is_empty")]
+        master: MasterInfo,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -293,6 +297,23 @@ pub struct SceneSummary {
     pub role: SceneRole,
     /// How many items it has.
     pub item_count: u32,
+}
+
+/// The master stage, as `state.get` reports it: what applies to everything leaving
+/// JStream (ADR-0027 §1).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MasterInfo {
+    /// Its chains, which `filter.*` edits with the owner `{"type":"master"}`. Only the
+    /// audio chain holds filters so far. Omitted while both are empty.
+    #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
+    pub filters: FilterChains,
+}
+
+impl MasterInfo {
+    /// Whether it has nothing to report, as `state.get` then omits it.
+    pub fn is_empty(&self) -> bool {
+        self.filters.is_empty()
+    }
 }
 
 /// One source, as `source.list` and `state.get` report it.

@@ -390,6 +390,10 @@ struct Collection {
     output_encoders: BTreeMap<OutputId, EncoderProfileId>,
     /// The encoder profiles, ordered by ID: name and encoding.
     encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
+    /// Each output's own filter chains, for those that have had a filter (ADR-0027).
+    output_filters: BTreeMap<OutputId, jstream_protocol::FilterChains>,
+    /// The master stage's filter chains.
+    master: jstream_protocol::FilterChains,
 }
 
 /// A source: its name, what it shows, and its settings. The mock describes no kinds, so
@@ -707,6 +711,9 @@ impl State {
                     .collect(),
                 outputs: self.collection.output_infos(),
                 encoders: self.collection.encoder_infos(),
+                master: jstream_protocol::MasterInfo {
+                    filters: self.collection.master.clone(),
+                },
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
@@ -1159,7 +1166,8 @@ impl Collection {
                     settings: source.settings,
                     duplicated_from: source.duplicated_from,
                 }];
-                inverse.extend(filter::restore_all(&source_id, source.filters));
+                let owner = jstream_protocol::FilterOwner::Source { source_id };
+                inverse.extend(filter::restore_all(&owner, source.filters));
                 inverse
             }
             Edit::OutputCreate { output_id, kind } => {
@@ -1213,9 +1221,13 @@ impl Collection {
                 }];
                 if let Some(profile_id) = self.output_encoders.remove(&output_id) {
                     inverse.push(Edit::OutputSetEncoder {
-                        output_id,
+                        output_id: output_id.clone(),
                         profile_id: Some(profile_id),
                     });
+                }
+                if let Some(filters) = self.output_filters.remove(&output_id) {
+                    let owner = jstream_protocol::FilterOwner::Output { output_id };
+                    inverse.extend(filter::restore_all(&owner, filters));
                 }
                 inverse
             }
@@ -1429,6 +1441,7 @@ impl Collection {
                 output_id: id.clone(),
                 kind: kind.clone(),
                 encoder_profile: self.output_encoders.get(id).cloned(),
+                filters: self.output_filters.get(id).cloned().unwrap_or_default(),
             })
             .collect()
     }
@@ -2305,6 +2318,7 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                master,
                 ..
             } => QueryResult::StateGet {
                 rev: Rev(0),
@@ -2313,6 +2327,7 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                master,
             },
             other => panic!("not a state: {other:?}"),
         }
@@ -2415,8 +2430,13 @@ mod tests {
                 Edit::OutputDelete {
                     output_id: OutputId::new("yt"),
                 },
+                // Its inverse re-adds its own filter (ADR-0027).
                 Edit::OutputDelete {
                     output_id: OutputId::new("rec"),
+                },
+                Edit::FilterRemove {
+                    owner: jstream_protocol::FilterOwner::Master,
+                    filter_id: jstream_protocol::FilterId::new("m1"),
                 },
                 Edit::EncoderDelete {
                     profile_id: EncoderProfileId::new("low"),
@@ -2439,6 +2459,7 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                master: Default::default(),
             }
         );
         drain(&mut events);
@@ -3339,6 +3360,7 @@ mod tests {
                     output_id: OutputId::new("yt"),
                     kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
                     encoder_profile: None,
+                    filters: Default::default(),
                 }],
             })
         );

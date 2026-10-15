@@ -220,7 +220,19 @@
         "path": "/home/me/Videos/show.mp4",
         "container": "mp4"
       },
-      "encoder_profile": "hq"
+      "encoder_profile": "hq",
+      "filters": {
+        "audio": [
+          {
+            "id": "o1",
+            "kind": "gain",
+            "kind_version": 1,
+            "settings": {
+              "gain_db": -6.0
+            }
+          }
+        ]
+      }
     },
     {
       "id": "tw",
@@ -284,5 +296,19 @@
         }
       }
     }
-  ]
+  ],
+  "master": {
+    "filters": {
+      "audio": [
+        {
+          "id": "m1",
+          "kind": "gain",
+          "kind_version": 1,
+          "settings": {
+            "gain_db": -1.0
+          }
+        }
+      ]
+    }
+  }
 }

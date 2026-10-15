@@ -7,6 +7,7 @@
 //! an action (`output.set_key`) and never appears in the collection, in any result,
 //! event or error, or in a `Debug` print. A read reports only whether a key is set.
 
+use crate::filter::FilterChains;
 use crate::id::{EncoderProfileId, OutputId};
 use schemars::JsonSchema;
 use serde::de::{self, Unexpected, Visitor};
@@ -101,6 +102,12 @@ pub struct OutputInfo {
     /// default, as from a server older than 0.13.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encoder_profile: Option<EncoderProfileId>,
+    /// Its own chains, which `filter.*` edits with the owner
+    /// `{"type":"output","output_id":…}` and which run after the master stage
+    /// (ADR-0027 §2). Only the audio chain holds filters so far, and a virtual camera,
+    /// which has no audio, has none. Omitted while both are empty.
+    #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
+    pub filters: FilterChains,
 }
 
 /// A secret string, such as a stream key, sent by a client to the engine.

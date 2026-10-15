@@ -56,7 +56,9 @@ pub use kind::{
     VisibleIf, check_asset_path,
 };
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
-pub use query::{DeleteTarget, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
+pub use query::{
+    DeleteTarget, ItemInfo, MasterInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo,
+};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};

@@ -6,10 +6,10 @@
 //! Reads never change the graph. Each collection result carries the revision it was
 //! read at; kinds are not collection state, so their results carry none.
 
-use crate::model::{Encoder, Filter, Graph, Item, Output, Placement, Scene, Source, State};
+use crate::model::{Chains, Encoder, Filter, Graph, Item, Output, Placement, Scene, Source, State};
 use jstream_protocol::{
-    EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, ItemInfo, KindDescriptor, OutputInfo,
-    ProtocolError, Query, QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
+    EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, ItemInfo, KindDescriptor, MasterInfo,
+    OutputInfo, ProtocolError, Query, QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
 };
 
 impl Graph {
@@ -121,7 +121,7 @@ impl Graph {
     }
 
     /// The `state.get` result: the canvas, every source by ID, every scene with its items
-    /// in display order, and every output and encoder profile by ID.
+    /// in display order, every output and encoder profile by ID, and the master stage.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
@@ -134,6 +134,9 @@ impl Graph {
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
             encoders: self.state.encoders().map(Encoder::to_info).collect(),
+            master: MasterInfo {
+                filters: self.state.master().to_info(),
+            },
         }
     }
 }
@@ -151,10 +154,7 @@ impl Source {
                 .duplicated_from
                 .clone()
                 .filter(|original| state.source(original).is_some()),
-            filters: FilterChains {
-                video: self.filters.video.iter().map(Filter::to_info).collect(),
-                audio: self.filters.audio.iter().map(Filter::to_info).collect(),
-            },
+            filters: self.filters.to_info(),
         }
     }
 }
@@ -171,6 +171,16 @@ impl Filter {
     }
 }
 
+impl Chains {
+    /// These chains as query results report them.
+    pub fn to_info(&self) -> FilterChains {
+        FilterChains {
+            video: self.video.iter().map(Filter::to_info).collect(),
+            audio: self.audio.iter().map(Filter::to_info).collect(),
+        }
+    }
+}
+
 impl Output {
     /// This output as `output.list` and `state.get` report it.
     pub fn to_info(&self) -> OutputInfo {
@@ -178,6 +188,7 @@ impl Output {
             output_id: self.id.clone(),
             kind: self.kind.clone(),
             encoder_profile: self.encoder_profile.clone(),
+            filters: self.filters.to_info(),
         }
     }
 }
@@ -308,6 +319,7 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                master: Default::default(),
             }
         );
         assert_eq!(
