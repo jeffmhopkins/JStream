@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:edf5009f933857d6", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (U0, U3b, U4, U5, B6-r, B10) into U2: purpose unchanged by main; web UI and token bullets hold" }
+verified = { hash = "b3:ffc570d6f098b272", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: contents list devices.rs, pair.rs, admitted.rs and device_file; TLS is the only thing not here yet" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -34,8 +34,16 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Web UI** (`ui.rs`): the UI bundle's files from `ServerConfig::ui_dir`, with their
   types and a Content Security Policy.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
-  origins, connection limits, the MCP switch and its limits, the UI directory) and
-  `Token`, the control token.
+  origins, connection limits, the MCP switch and its limits, the UI directory, the
+  device file) and `Token`, the control token.
+- **Devices** (`devices.rs`): the paired devices, the open pairing code, and the device
+  file that keeps the devices' token digests
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
+- **Pairing** (`pair.rs`): `POST /api/v1/pair` (`PAIR_PATH`), which trades the open code
+  for a device token.
+- **Admitted session** (`admitted.rs`): the `Control` wrapper every connection and MCP
+  session gets, which answers `pairing.start`, `device.list` and `device.revoke` itself
+  ([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)).
 - **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
   an accepted upgrade request in time.
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every request passes
@@ -45,7 +53,7 @@ Contents (a first cut; [Design](#design) explains the choices):
   its events.
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
-Not here yet: TLS and pairing ([Open questions](#design)).
+Not here yet: TLS ([Open questions](#design)).
 
 Why a crate and not a module of `jstream-control` or `jstream-mcp`: it owns the HTTP
 stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
@@ -57,7 +65,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:83ee56d2ea651e19", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (#246 landed) into ADR-0044 PR: open question 2 now links ADR-0044 as decided and not built; rest is #246's text as merged; holds" }
+verified = { hash = "b3:d87e1aa0433cfe69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through ARCH#protocol Pairing and transport bullets, which match this section's Pairing subsection; holds" }
 -->
 
 ### Listening and admission
@@ -74,7 +82,7 @@ served
 |---|---|---|
 | `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra; without a port only on port 80 (below) | 403 |
 | `Origin` | absent, or `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
-| `Authorization` | `Bearer <token>`, or `Basic` credentials whose password is the token (any user name); without `Authorization`, the offered subprotocol `jstream.token.<token>` (below). Matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` (`Basic` on the UI's paths) |
+| `Authorization` | `Bearer <token>`, or `Basic` credentials whose password is the token (any user name); without `Authorization`, the offered subprotocol `jstream.token.<token>` (below). The token is the control token or, on a loopback bind, a paired device's (see *Pairing*). Matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` (`Basic` on the UI's paths) |
 
 `Host` must appear exactly once, `Authorization` at most once (exactly once unless the
 subprotocol carries the token) and `Origin` at most once, and
@@ -194,10 +202,63 @@ replaced on every response by a fresh nonce, 16 bytes from `getrandom` as 32 hex
 digits, and the policy names it as `'nonce-N'`. Other files get the policy without a
 nonce.
 
+### Pairing
+
+[ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md) lets a device get a token of
+its own from a short code instead of the control token.
+
+- **The code.** `pairing.start`, from any admitted client, opens a code: 8 Crockford
+  base32 characters (40 bits from `getrandom`), shown `XXXX-XXXX`. One is open at a time,
+  and a new `pairing.start` replaces it. It lives 2 minutes, works once, and is void
+  after 5 wrong attempts (logged at `warn`, without the code). Entry ignores case,
+  dashes and spaces, and reads `O` as `0` and `I`/`L` as `1`. `pairing.start` is refused
+  (`action_failed`) unless the server is bound to loopback: there is no TLS yet, so a
+  device token is accepted only over loopback ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
+- **The exchange.** `POST /api/v1/pair` (`PAIR_PATH`) with
+  `{"code": "...", "name": "..."}` is the one request answered without a token; it still
+  passes the `Host` and `Origin` checks. The name is trimmed, 1 to 64 characters, with
+  no control characters.
+
+| Request | Answer |
+|---|---|
+| A method other than `POST` | 405 with `Allow: POST` |
+| No code open | 401 |
+| A body that isn't `Content-Type: application/json` | 415 |
+| A body over 4 KiB, one that isn't `{"code", "name"}`, or a name that isn't allowed | 400 (no attempt used up) |
+| A wrong code | 403 (its message says when that attempt voided the code) |
+| The open code | 200, `Cache-Control: no-store`, `{"device_id": "dev_…", "token": "<64 hex digits>"}` |
+| The device file can't be written | 500, and nothing is paired |
+
+- **Device tokens.** A device token is 32 bytes from `getrandom` as 64 hex digits,
+  presented exactly like the control token. The server keeps only its BLAKE3 digest,
+  compared in constant time as above. A device's session says `hello` as
+  `device:<name>`, so the engine's audit log names it, and it may do anything the
+  control token may (ADR-0006). One unused for 30 days lapses; use is recorded at most
+  hourly.
+- **The device file.** With `ServerConfig::device_file` set (`jstream-daemon` sets it
+  beside the token file), the devices (ID, name, digest, paired and last-used times) are
+  kept there as JSON, written through a temporary file and renamed, user-only on Unix;
+  `Server::bind` refuses a file others can read (`ServerError::DeviceFile`). Without it,
+  devices last as long as the server.
+- **Listing and revoking.** `device.list` answers each device's ID, name, and when it was
+  paired and last used. `device.revoke` forgets one and closes its open WebSocket
+  connections (close code 1008, `the device was revoked`); its MCP sessions are dropped
+  at the next MCP request.
+- **Secrets.** Codes and device tokens are never logged, nor put in an event, the audit
+  log or a snapshot; the code appears only in `pairing.start`'s answer and the token only
+  in the exchange's ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The test
+  `tests::pairing_codes_and_device_tokens_are_never_logged` checks this.
+
+These three calls are answered by the server, not the engine
+([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)): see *Sessions*.
+
 ### Sessions
 
 Each accepted connection gets a fresh session from the `Connector`
-(`Arc<dyn Fn() -> Box<dyn Control>>`), dropped when the connection ends. The connection
+(`Arc<dyn Fn() -> Box<dyn Control>>`), dropped when the connection ends, wrapped in the
+server's own `Control` (`admitted.rs`), which answers `pairing.start`, `device.list` and
+`device.revoke` from the device store (after a successful `hello`, like any call),
+renames a device's `hello` to `device:<name>`, and passes everything else through. The connection
 task speaks the envelope
 ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
 
@@ -276,13 +337,19 @@ The `Accept` header isn't checked: the answer is always JSON, which every client
 accepts.
 
 **Sessions.** An `initialize` gets a new `jstream_mcp::Server` over a new `Control`
-session from the `Connector`: a client of its own, with its own undo history and its
-own `events` buffer ([ADR-0013](../../docs/adr/0013-command-model.md)). Its ID is 16
+session from the `Connector`, wrapped like a connection's (see *Sessions*): a client of
+its own, with its own undo history and its own `events` buffer
+([ADR-0013](../../docs/adr/0013-command-model.md)). Its ID is 16
 bytes from the OS's random source (`getrandom`) as 32 hex digits. It is not a secret
 that admits anyone: every request still needs the token. Requests that carry no session
-share one stateless server, opened at the first of them, so those clients share a
+share one stateless server per credential (the control token, or each paired device),
+opened at the first of them, so those clients share a
 session ([jstream-mcp › Open questions](../jstream-mcp/README.md#open-questions)).
 Requests to one session may run concurrently.
+
+**Credentials.** A session belongs to the credential that opened it: a request with
+another token gets 404 for it. A session or stateless server a device opened ends at the
+next MCP request once that device is revoked or has lapsed.
 
 **Limits.** At most `max_mcp_sessions` (default 16) sessions are open. One unused for
 `mcp_idle_timeout` (default 30 minutes) is ended, and its `Control` session dropped,
@@ -321,6 +388,12 @@ alone.
   `jstream-mcp`'s own spans nest. Opening one logs `mcp session opened` with the peer
   address, and ending one `mcp session ended` with the reason (`idle`, `deleted by the
   client`, `replaced by a new initialize`, `initialize failed`). The session ID is never logged, nor any message.
+- **Pairing.** A refused pairing request is logged as `connection refused` too (`pairing
+  attempted while no pairing code is open`, `wrong pairing code`). A started pairing,
+  a paired device (ID and name), a revoked or lapsed device (ID), and a connection a
+  device's token admitted (`device_id`) are logged at `info`; a voided code and a device
+  file that can't be updated at `warn`. No code or device token is ever logged (see
+  *Pairing*).
 - A UI file that can't be read is logged at `warn` with the error (500 to the
   client); the path is not logged.
 - A request that isn't a WebSocket upgrade is logged at `debug`, and so is a connection
@@ -333,8 +406,9 @@ axum (features `http1`, `tokio`, `ws`, no defaults) for HTTP and the upgrade, wh
 brings hyper, tower and `tokio-tungstenite` without TLS; tokio for the listener and the
 connection tasks; `futures-util` to split the socket, run calls concurrently
 (`FuturesUnordered`) and box the writer's send in progress; `blake3` (the workspace's `pure` build, already used by `xtask`)
-for the token digest; `tracing` for the spans and events above; `jstream-mcp` for the
-MCP server behind `/mcp`; `getrandom` for MCP session IDs, already in the tree through
+for the token and device-token digests; `tracing` for the spans and events above; `jstream-mcp` for the
+MCP server behind `/mcp`; `serde_json` for the pairing exchange and the device file;
+`getrandom` for MCP session IDs, pairing codes and device tokens, already in the tree through
 tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is in the tree, so no `ring` or `rustls`.
 
 ### Open questions
@@ -347,8 +421,10 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    a subprotocol*): a page load presents the token as `Basic` credentials, and the
    UI's upgrade either carries the same credentials (checked in Chromium) or offers
    `jstream.token.<token>` ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
-   Pairing a remote browser with a short code instead of pasting the token is decided
-   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) and not built yet.
+   Pairing a device with a short code instead of pasting the token is settled and built
+   (see *Pairing*, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)). Open: how
+   a browser that gets a 401 reaches a pairing form and then presents its device token
+   on page loads, since the UI's files sit behind the gate.
 3. **UI assets.** Settled and built (see *The web UI*). Open: caching with `ETag`s
    instead of `no-cache`, and compressed variants, if the bundle grows enough to
    matter. MCP over streamable HTTP is settled and built (see *MCP over streamable

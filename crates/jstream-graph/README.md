@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:2627015178af28cd", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: scene.create role and delete inverse text hold beside B9 blockers / B2-f2 touched sets" }
+verified = { hash = "b3:c51bb82f45239bd8", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through protocol design; the new calls are server-answered and touch no graph edit or inverse; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

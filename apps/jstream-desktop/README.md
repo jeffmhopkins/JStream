@@ -92,14 +92,16 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:8f9d5cf1567e1fcb", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through amended R-SEC-002; desktop serves loopback with an in-memory token and pairs nothing, so the amendment changes nothing here; holds" }
+verified = { hash = "b3:c6465831cff00bd7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: host.rs uses ServerConfig::new with no device_file, so devices paired from the app are in memory and loopback-only; added that sentence; rest holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
   picks, behind a 32-byte random token made at each start and kept only in memory: no
   token file, and no other client can connect. MCP is off. The server accepts the
   webview's origin besides its own (R-SEC-002); every connection still presents the
-  token. On Windows the engine is live with the same wiring as the daemon (OS backends,
+  token. No device file is set, so a device paired from the app
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) lasts only until it exits,
+  and, like the token, is accepted only on loopback. On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
   When the app exits, the server closes its connections and the engine stops.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and

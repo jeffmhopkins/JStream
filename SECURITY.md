@@ -42,7 +42,7 @@ advisory unless they ask not to be.
 ## What JStream promises
 <!-- @section
 depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002", "docs/RULES.md#R-SEC-003", "docs/RULES.md#R-SEC-004"]
-verified = { hash = "b3:cd89155fa16c5930", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0044 accepted: control API bullet now allows a paired device's token and the code-gated pairing exchange, per R-SEC-002's amended text; other bullets unchanged" }
+verified = { hash = "b3:3eeb502554114005", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing deferred note: control API bullet now says a device token is accepted only over loopback or TLS, matching amended R-SEC-002; other bullets unchanged" }
 -->
 
 A report is in scope when it breaks one of these. The rules they cite are the authority.
@@ -50,8 +50,9 @@ A report is in scope when it breaks one of these. The rules they cite are the au
 - **Secrets:** stream keys and OAuth tokens stay in the OS credential store and are
   redacted everywhere else ([R-SEC-001](docs/RULES.md#R-SEC-001)).
 - **The control API:** every connection needs the control token or a paired device's
-  token (the pairing exchange aside, which needs an open one-time code), and the listener
-  binds to localhost by default and checks `Host`, and `Origin` when one is present
+  token (the pairing exchange aside, which needs an open one-time code), a device token
+  is accepted only over loopback or TLS, and the listener binds to localhost by default
+  and checks `Host`, and `Origin` when one is present
   ([R-SEC-002](docs/RULES.md#R-SEC-002)).
 - **WASM plugins** get no filesystem or network access unless the manifest declares it
   and the user grants it ([R-SEC-003](docs/RULES.md#R-SEC-003)).

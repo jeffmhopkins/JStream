@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:87e4c854a688b8f9", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
+verified = { hash = "b3:9f3695b07c172118", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: engine only gains unsupported arms and CallResult::action(); purpose and contents hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -156,7 +156,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:2b52c41afc0969e5", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server design; core's mentions of jstream-server (connector, subscriptions) unchanged; holds" }
+verified = { hash = "b3:f3b81266360b4788", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through ARCH#protocol Pairing bullet; consistent with the session's unsupported bullet here; holds" }
 -->
 
 ### Engine and sessions
@@ -186,6 +186,13 @@ WebSocket API does, minus serialization:
   a poll loop that parks until woken, and it needs no async runtime. It never fails
   with `Disconnected`. `output.start` and `output.stop` still block inside `call`
   while devices open and threads join.
+- `pairing.start`, `device.list` and `device.revoke` fail with `unsupported`: they
+  concern whom a listener admits, which only the server in front of the session knows,
+  and it answers them before they reach the engine
+  ([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)). Behind a server
+  they never reach the engine, so the audit log doesn't record them; the server logs
+  them. A device's `hello` reaches the engine as `device:<name>`, so the audit
+  log names it.
 
 ### Dependencies
 

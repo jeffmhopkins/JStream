@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:483779712b0c3581", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: round 1 B1 wording kept (server serves ui_dir, daemon has no flag yet); holds" }
+verified = { hash = "b3:e3158489702558e4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: token.rs bullet now names the device file; serving, tests and not-yet list still hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -33,7 +33,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   prints where it listens, and maps failures to exit codes.
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
-  creates the file with a new random token ([Design](#design)).
+  creates the file with a new random token, and names the device file beside it
+  ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
   file and the placeholder outputs; on Windows a live one, [Design](#design)), installs
   the signal handlers that stop it, then binds the server with MCP on.
@@ -72,7 +73,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:71f39c73730f3eae", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 B2: exit-code 0 row now includes a successful --register-vcam; N1: Virtual camera bullet says an already-current registration keeps the file's ACL as it is" }
+verified = { hash = "b3:446e95ad0e568f7e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Paired devices bullet (token.devices beside the token file, digests only, refusal at startup), audit log names device:<name>, exit 1 row adds the device file; checked against token.rs, main.rs, devices.rs load" }
 -->
 
 ```sh
@@ -102,6 +103,14 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   group or others any permission (mode bits `077`), is refused with exit code 1, and
   left as it is.
   The parent directory must exist. The token itself is never printed.
+- **Paired devices.** Devices paired with `jstream-cli pair`
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) are kept in
+  `<token file>.devices` beside the token file (for example `token.devices`): their
+  names and token digests, never a token, user-only on Unix. It is created at the first
+  pairing, so devices stay paired across restarts; deleting it unpairs them all. A
+  device file that can't be read or parsed, or (on Unix) that group or others can read,
+  is a startup failure (exit 1). A device token works only while the daemon listens on
+  `127.0.0.1`, which it always does for now.
 - **Output.** On stdout: `token file: <path> (created, new token)` or
   `… (existing token)`, then `mcp endpoint: http://127.0.0.1:<port>/mcp` (point an MCP
   client there, with the token as `Authorization: Bearer <token>`), then
@@ -166,7 +175,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   succeeds. Undo history is not saved. Nothing stops two daemons from using the same
   file: each saves over the other's changes, so give each its own.
 - **Audit log.** Every batch, undo, redo and action, by any client, is one JSON line
-  in `audit.jsonl` in the log directory: the time, the client's ID and `hello` name,
+  in `audit.jsonl` in the log directory: the time, the client's ID and `hello` name
+  (`device:<name>` for a paired device),
   the call and its edits by name, the output an action names, the `rev` before and
   after, and the result code. Never a call's arguments, so never a stream key
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). When it would pass 8 MiB it becomes
@@ -176,7 +186,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -185,7 +195,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1642d2deda2f92bd", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through server design; Listening bullet (loopback only until TLS and pairing) still holds" }
+verified = { hash = "b3:cece3401b4add964", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through server and core design edits made in this change; daemon's device file and listening bullets match them; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -259,8 +269,15 @@ verified = { hash = "b3:1642d2deda2f92bd", by = "agent:claude@session_01WbL3WRbc
 - **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port and MCP changed):
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
-  option to listen on other addresses until remote browsers need it (with TLS and token
-  pairing, [ROADMAP › M2](../../ROADMAP.md#m2)).
+  option to listen on other addresses until remote browsers need it (with TLS,
+  [ROADMAP › M2](../../ROADMAP.md#m2)). Pairing is served already, and its device tokens
+  are accepted on loopback only until then.
+- **The device file** (`token.rs`, `main.rs`). The daemon names
+  `ServerConfig::device_file` as the token file's path plus `.devices`, so the devices
+  live and move with the token they stand beside, and deleting the two together resets
+  every credential. The server owns the file: it loads it at bind, writes it, and keeps
+  only BLAKE3 digests in it
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)).
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random
   token in a user-only file). New tokens are 32 bytes from the OS's random source
   (`getrandom`), written as 64 lowercase hex characters, so they fit an `Authorization`

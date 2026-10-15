@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:50bc892eab491877", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (B6-f CLI groups): args.rs keeps B6-f's scene.set_role/item.move/set_geometry and adds scene.create's optional trailing role:; purpose holds" }
+verified = { hash = "b3:8edd9b77c39086ec", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: args.rs gains pair and device commands mapped onto protocol calls, run.rs prints them; contents list still accurate" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:d87d877168335337", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took B6-f's Edits bullet and added scene.create's optional role:group/role:scene; grouping batch now creates the scene as a group" }
+verified = { hash = "b3:a64de0dde3697f59", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: table rows for pair, device list, device revoke and a Pairing bullet checked against args.rs and run.rs output; exit 20 row names unsupported" }
 -->
 
 ```sh
@@ -93,6 +93,9 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `output start <id>`, `output stop <id>` | action `output.start`, `output.stop` |
 | `output set-key <id> [--key-file <path>]` | action `output.set_key`, with the key read from the file or stdin |
 | `output clear-key <id>` | action `output.clear_key` |
+| `pair` | action `pairing.start`: prints a one-time code to enter on the device |
+| `device list` | query `device.list` |
+| `device revoke <device-id>` | action `device.revoke` (also closes the device's connections) |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
 | `events [--count <n>]` | the event subscription |
 | `mcp` | serves MCP on stdin and stdout; each tool call is one protocol call (see **MCP** below) |
@@ -168,6 +171,15 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
+- **Pairing** ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): `pair`
+  prints `pairing code: XXXX-XXXX` and how long it stays open; the user enters it on the
+  device, which posts it to the server's `/api/v1/pair` for a device token of its own
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). The code is
+  printed because it is the answer, and is never logged. `device list` prints a table
+  of `ID`, `NAME` and when each was paired and last used (Unix seconds), or `no paired
+  devices`; `device revoke <id>` prints `device <id> revoked (<request>)`. The server
+  answers these calls, so the engine must be reached through `--url`; `--mock` answers
+  `unsupported` (exit 20).
 - **Errors** go to stderr. For people: `error: <message>`, with ` (<code>)` appended
   when it is an engine error (``error: scene `x` does not exist (not_found)``). With
   `--json` (found among the global options even when parsing fails): an object
@@ -235,7 +247,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a34fd13265bd97a8", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server/control design; WsControl and MCP test text unchanged; holds" }
+verified = { hash = "b3:6c48cdff02231792", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through control design (mock answers pairing calls unsupported); CLI design's mock text holds, usage documents the exit 20" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

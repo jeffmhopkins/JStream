@@ -103,12 +103,14 @@ pub struct OutputInfo {
     pub encoder_profile: Option<EncoderProfileId>,
 }
 
-/// A secret string, such as a stream key, sent by a client to the engine.
+/// A secret string, such as a stream key sent by a client to the engine, or the
+/// pairing code a server answers `pairing.start` with.
 ///
 /// On the wire it is a plain JSON string. In Rust it never prints: its `Debug` is
 /// `"***"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).
 /// A value that is not a string fails to parse with a message that doesn't repeat it.
-/// The engine never sends one back (R-SEC-001).
+/// The engine never sends one back, and a pairing code travels only in that one answer
+/// (R-SEC-001).
 #[derive(Clone, PartialEq, Eq, JsonSchema)]
 #[schemars(transparent)]
 pub struct SecretString(String);

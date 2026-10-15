@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b0ab2649efe3d49f", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: PROTOCOL_VERSION now 0.17 for scene.create's optional role; version history line names 0.16 for B10's scene.switch/studio" }
+verified = { hash = "b3:688f98779b783a45", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: SecretString doc comment now names the pairing code; purpose text holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -26,7 +26,8 @@ first cut defines its own wire types for them.
 
 Contents (a deliberately small first cut; [Design](#design) describes the whole model):
 - **Envelope** (`envelope.rs`): `ClientMessage` (`hello`, `request`) and `ServerMessage`
-  (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`.
+  (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`,
+  and `ActionResult`, the data an action may answer with (`pairing.start`'s code).
   `ClientMessage::parse` maps every parse failure to `malformed`.
 - **History** (`history.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
   `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
@@ -41,7 +42,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `encoder.create`, `encoder.update`, `encoder.delete`), with `ItemTransform`
   (deprecated), `Crop`, `SourceKind` and `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch`);
+  `scene.switch`, `pairing.start`, `device.revoke`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
@@ -55,9 +56,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `video.snapshot`, `kind.list`, `kind.describe`,
-  `delete.plan` (with its `DeleteTarget`) and `studio.get`, with `QueryResult` and the `SceneSummary`,
-  `SceneInfo`, `SourceInfo` and `ItemInfo`
-  shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
+  `delete.plan` (with its `DeleteTarget`), `studio.get` and `device.list`, with `QueryResult` and the `SceneSummary`,
+  `SceneInfo`, `SourceInfo`, `ItemInfo` and `DeviceInfo`
+  shapes the reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
   mix as a PNG.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
@@ -86,8 +87,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.17 because of
-  `scene.create`'s optional `role`; 0.16 added `scene.switch`, `studio.get` and
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
+  pairing (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
+  `unsupported` error and the `device` entity kind,
+  [ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)); 0.17 added
+  `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
@@ -121,7 +125,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:f923ef8b515be15c", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r at 0.17: Groups paragraph marks scene.create's role as protocol 0.17; inverse text holds" }
+verified = { hash = "b3:c3d137b9a32cb658", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: protocol.snap regenerated for the SecretString description only (reviewed diff); design text holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -188,8 +192,10 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
 - **Action** (`Action`): has effects outside the collection state, such as network,
   devices, files, secrets, time or runtime state (starting an output, going live,
   storing a stream key, OAuth, switching the program scene). Never undoable or
-  batchable. The response only says the action was accepted; progress arrives as
-  events (`output.state_changed`).
+  batchable. The response says the action was accepted, and carries an
+  `ActionResult` only for an action that answers with data (`pairing.start`'s code,
+  0.18; every other action omits `result`); progress arrives as events
+  (`output.state_changed`).
 
 The classification rule: **if the command's whole effect is a change to the collection
 state, and its inverse can be computed from the state before it, it is an edit.
@@ -405,6 +411,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   has no scene). Runtime state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
+- `device.list`: the devices paired with the listener this client reached, each with
+  its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
+  collection state, so no `rev`. Added in 0.18 (see *Pairing* below).
 - `delete.plan {target}`: the batch that deletes a scene or source (`target` is
   `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
   everything that refers to it, as `edits` and the `rev` it was planned at, or
@@ -430,6 +439,17 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([jstream-server › Design](../jstream-server/README.md#design)), so a client must
   accept an answer of that size: `jstream-control`'s WebSocket client keeps
   tungstenite's default limits, which are well above it.
+
+**Pairing** (0.18, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
+`pairing.start` opens a one-time code and answers it in `result`
+(`{"type":"pairing.start","code":"XXXX-XXXX","expires_in_secs":120}`), `device.list`
+lists the paired devices, and `device.revoke {device_id}` forgets one (`not_found` with
+entity `device` for an unknown one). They concern whom a listener admits, so the server
+in front of the engine answers them
+([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md),
+[jstream-server › Design](../jstream-server/README.md#design)); a `Control` with no
+server in front answers `unsupported`. The code is a `SecretString`: it never prints,
+and nothing but this answer carries it ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 An item is reported with its `source_id`, `placement` form, `transform`, `geometry`,
 `crop` and `visible`, and a source with its name, kind and settings: every property an
@@ -579,6 +599,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
 | `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
+| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front; 0.18) | `call` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to
@@ -613,7 +634,8 @@ after 1.0:
   exists (the whole response fails, and `WsControl` ends the session). Whether that
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
-  than 0.13, which sends none, never reads it. The encoder enums (`VideoCodec`,
+  than 0.13, which sends none, never reads it. 0.18 adds `device` the same way: only an
+  error answering `device.revoke` names it. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or

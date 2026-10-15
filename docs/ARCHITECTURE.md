@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:bcf5d3053a8f0044", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: Hosts table desktop row adds the first cut (Windows, WebView2, fresh in-memory token handed to the page) with a README link; diagram and the new apps/jstream-desktop/src/main.rs (a thin entry point) fit the shape" }
+verified = { hash = "b3:b82fb75e7f8ccaaa", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: daemon main.rs passes the device file beside the token; diagram and hosts table hold" }
 -->
 
 ```
@@ -523,7 +523,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e3759c009695f67a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through server design; transport bullet (UI, Basic, subprotocol) unchanged; holds" }
+verified = { hash = "b3:cda3aa5f7d08fa87", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through protocol design (snapshot description change); Pairing and transport bullets hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -559,6 +559,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
+- **Pairing** (protocol 0.18, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
+  action `pairing.start` answers a one-time code (an action result, the one place it is
+  sent), which a device trades at `POST /api/v1/pair` for a device token of its own;
+  `device.list` and the action `device.revoke` manage the paired devices. They concern
+  whom a listener admits, so `jstream-server` answers them, and a session with no server
+  in front answers `unsupported`
+  ([ADR-0046](adr/0046-server-answers-credential-calls.md)).
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
@@ -625,7 +632,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the browser, where the token travels as a subprotocol because a page can't set
   `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)). `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
-  default, with the token required and `Origin`/`Host` validated
+  default, with the token (the control token, or a paired device's on loopback until TLS)
+  required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
   for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
@@ -649,11 +657,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:b7e9fc969c2bf475", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: re-read; Origin/preflight reasoning from round 1 intact, main unchanged here; holds" }
+verified = { hash = "b3:c327a4133ce81fd7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: tools.snap regenerated for the SecretString description only; tool list with device and pairing holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio` and `video` so far; `audio`, `youtube`
+  (`canvas`, `delete`, `device`, `encoder`, `history`, `item`, `kind`, `output`, `pairing`, `scene`, `source`, `state`, `studio` and `video` so far; `audio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events

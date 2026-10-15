@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d576006e7238ccc1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through cascade; R-API-001 untouched, subprotocol is transport only; holds" }
+verified = { hash = "b3:a6183ea3ed45da41", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through ARCH#protocol's new Pairing bullet; 0.18 is additive, R-API-001/002 hold (pairing.start, device.list, device.revoke are noun.verb)" }
 -->
 
 <a id="R-API-001"></a>
@@ -543,7 +543,8 @@ applies_to = ["crates/jstream-server/**", "crates/jstream-mcp/**"]
 Every HTTP, WebSocket and MCP listener requires the control token or a paired device's
 token (even on localhost), except `POST /api/v1/pair` while a pairing code is open
 ([ADR-0044](adr/0044-pairing-remote-browsers.md)), and validates the `Host` header, and
-the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
+the `Origin` header when one is present. A device token is accepted only over loopback
+or TLS. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>

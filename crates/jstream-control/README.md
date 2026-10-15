@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:a9973fec51b3aea6", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (B6-f groups, B2-f3 undo in the mock): mock applies scene.create's role and returns its inverse; purpose holds" }
+verified = { hash = "b3:0fa0b670a63bf7dc", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: mock.rs gains unsupported arms only; contents list holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:ea9e34acfc706302", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: took main's browser-client text (ws_web, ADR-0045) and replaced 'jstream-server doesn't accept the subprotocol yet' with a link saying it accepts both; open question 3 is main's; holds" }
+verified = { hash = "b3:cd480f2a43276974", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through ARCH#protocol Pairing bullet; consistent with the mock's unsupported bullet here; holds" }
 -->
 
 ### The trait
@@ -151,6 +151,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `output.status`, but it is not in the collection, so `output.list` and `state.get`
   don't report it and `output.set_key` answers `not_found` for it. It runs no
   encoders, so `output.status` reports no encoder session and zero sessions;
+- the pairing calls (`pairing.start`, `device.list`, `device.revoke`) answered with
+  `unsupported`, as the in-process engine answers them: only a server in front of a
+  session serves them
+  ([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md));
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty, over-long or whitespace key; `output.clear_key` always succeeds.

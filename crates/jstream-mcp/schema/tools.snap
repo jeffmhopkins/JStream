@@ -2606,7 +2606,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SecretString": {
-            "description": "A secret string, such as a stream key, sent by a client to the engine.\n\nOn the wire it is a plain JSON string. In Rust it never prints: its `Debug` is\n`\"***\"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).\nA value that is not a string fails to parse with a message that doesn't repeat it.\nThe engine never sends one back (R-SEC-001).",
+            "description": "A secret string, such as a stream key sent by a client to the engine, or the\npairing code a server answers `pairing.start` with.\n\nOn the wire it is a plain JSON string. In Rust it never prints: its `Debug` is\n`\"***\"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).\nA value that is not a string fails to parse with a message that doesn't repeat it.\nThe engine never sends one back, and a pairing code travels only in that one answer\n(R-SEC-001).",
             "type": "string"
           }
         },
