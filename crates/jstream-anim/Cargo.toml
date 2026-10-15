@@ -1,0 +1,16 @@
+[package]
+name = "jstream-anim"
+version = "0.0.0"
+description = "The JStream keyframe-scene model: a variant's overrides with their inverses, effective values over the live parent, and the plan for a switch between keyframes."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 0
+summary = "Keyframe-scene model (ADR-0049): a variant's overrides and their inverses, effective values over the live parent, and the switch plan between keyframes; generic over geometry, no dependencies"
+unsafe_allowed = false
+
+[lints]
+workspace = true
