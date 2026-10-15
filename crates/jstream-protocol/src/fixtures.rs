@@ -307,6 +307,9 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::OutputClearKey {
             output_id: OutputId::new("out_yt"),
         },
+        Action::SceneSwitch {
+            scene_id: SceneId::new("scn_2"),
+        },
     ]
 }
 
@@ -327,6 +330,7 @@ pub(crate) fn queries() -> Vec<Query> {
             kind_id: "color".into(),
         },
         Query::OutputList,
+        Query::StudioGet,
         Query::EncoderList,
         Query::DeletePlan {
             target: DeleteTarget::Scene {
@@ -632,6 +636,12 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             rev: Rev(12),
             outputs: output_infos(),
         },
+        QueryResult::StudioGet {
+            program_scene: Some(SceneId::new("scn_2")),
+        },
+        QueryResult::StudioGet {
+            program_scene: None,
+        },
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
@@ -697,6 +707,16 @@ pub(crate) fn events() -> Vec<Event> {
             state,
         });
     }
+    events.push(Event::StudioChanged {
+        program_scene: Some(SceneId::new("scn_2")),
+        client_id: ClientId::new("cli_7"),
+        request_id: Some(RequestId::new("r2")),
+    });
+    events.push(Event::StudioChanged {
+        program_scene: None,
+        client_id: ClientId::new("cli_8"),
+        request_id: None,
+    });
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::StatsTick {
         seq: 4,

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:3114ad1e18d827f8", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 N2: register.rs log_status doc now says warn for Moved, info for Missing; purpose bullets unchanged and hold" }
+verified = { hash = "b3:ad97b64af661e6fa", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; nothing on program; holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -184,7 +184,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:a5098b579b640504", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221 C2 text, G3c vcam registration): re-read; main's Virtual camera registration paragraph kept; C5 changes no daemon text, stale only through the core cascade; holds" }
+verified = { hash = "b3:cf30da78ad103197", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; tests consume studio.changed; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

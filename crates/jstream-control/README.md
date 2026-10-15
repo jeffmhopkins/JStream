@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:b24d855a6714afcc", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: re-read; contents list holds" }
+verified = { hash = "b3:dc4a175c9db22757", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:b10544e7956fd894", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: kept main's B9 line (delete.plan internal, no blockers on refused deletes) beside this branch's set_role/item.move bullets; matches mock.rs" }
+verified = { hash = "b3:4f01ca03eca60fa8", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; mock now implements item.move and set_role (B6-f), which delete no scene, so the program bullet (batch, undo or redo) holds" }
 -->
 
 ### The trait
@@ -183,6 +183,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - `state.changed` events carrying the request ID (and `cause` for an undo or redo), and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
+- the program scene with the engine's rules
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)): `scene.switch`
+  (`not_found` for a missing scene, no `rev`), `studio.get`, and `studio.changed` for a
+  switch and after a batch, undo or redo that creates the first scene or deletes the
+  program scene;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.

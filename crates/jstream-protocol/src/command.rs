@@ -4,7 +4,8 @@
 //!   [`Batch`], which the engine applies atomically, increments `rev` by one, and records
 //!   as one undo step for the sending client.
 //! - An [`Action`] has side effects outside the collection state (starting an output,
-//!   going live). Actions are never undoable and never batchable.
+//!   going live, switching the program scene). Actions are never undoable and never
+//!   batchable.
 //!
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
@@ -448,6 +449,17 @@ pub enum Action {
         /// The output whose key to remove.
         output_id: OutputId,
     },
+    /// Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every
+    /// output that shows program) shows it from the next frame. The program scene is
+    /// runtime state, not collection state (ADR-0030): the switch changes no `rev`, is
+    /// never undone, and emits `studio.changed`, which `studio.get` reads back. Switching
+    /// to the scene already on program succeeds and emits nothing. Fails with
+    /// `not_found` for a scene not in the collection.
+    #[serde(rename = "scene.switch")]
+    SceneSwitch {
+        /// The scene to put on program.
+        scene_id: SceneId,
+    },
 }
 
 impl Action {
@@ -458,6 +470,7 @@ impl Action {
             Action::OutputStop { .. } => "output.stop",
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
+            Action::SceneSwitch { .. } => "scene.switch",
         }
     }
 }

@@ -349,8 +349,9 @@ fn events_tool() -> Tool {
     let description = format!(
         "Returns the engine's events after the cursor `after`, oldest first, without \
          waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` \
-         say whose batch did it) and `output.state_changed`, from every client, yours \
-         included, and `events.dropped` (the server dropped `count` events because this \
+         say whose batch did it), `studio.changed` (another scene went on program) and \
+         `output.state_changed`, from every client, yours included, and \
+         `events.dropped` (the server dropped `count` events because this \
          session fell behind; re-read the state). The once-a-second `stats.tick` \
          is not in `events`: each read returns the newest one as `stats` (running drop \
          totals). Each comes with a `seq`, a sequence number of this MCP server, starting \

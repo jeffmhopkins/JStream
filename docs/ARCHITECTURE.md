@@ -165,8 +165,8 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:7021d11fa3e50d0d", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221 C2 text): Built so far now lists color, image and text as built and keeps C5's audio-only sentence; re-read, holds" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
+verified = { hash = "b3:ceeba392ba295c97", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "ADR-0030 dependency changed (What follows program now says the render thread follows it): re-read; Program bullet and Built so far hold" }
 -->
 
 ```
@@ -181,7 +181,6 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ├── folders        Folder { id, name }   ordered, one level; organising only
 ├── labels         Label { id, name, icon, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
-├── studio         { program_scene, preview_scene }   (studio-mode state)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
@@ -197,9 +196,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
                    kind: Rtmp { target: Generic { url } | YouTube { broadcast_binding } } | Record { path, container } | VirtualCam
 ```
 
-- `Program` and `Preview` are mixes driven by the studio state. `Program` shows
-  `program_scene`, including any transition in progress. A `VideoMix` with input
-  `Program` follows it.
+- `Program` and `Preview` are mixes driven by the studio state: `program_scene` and
+  `preview_scene`, which are runtime state beside the outputs' state, not part of the
+  collection or its `rev` ([ADR-0030](adr/0030-studio-state-and-scene-switching.md)).
+  `Program` shows `program_scene`, including any transition in progress. A `VideoMix`
+  with input `Program` follows it. The collection's first scene goes on program when it
+  is created, and a deleted program scene gives way to the first scene left.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
   Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
   shares everything with the other placements of that source except its own placement,
@@ -381,6 +383,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `outputs` and `encoders`. The collection file saves everything built so
   far, encoder profiles, each output's profile and `duplicated_from` included
   ([Persistence](#persistence)).
+  The program scene is built in `jstream-core` as runtime state, so the file doesn't
+  hold it (no preview scene yet).
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -519,7 +523,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:b84d57b23cb0f078", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: main's B9 delete.plan/blockers text kept; unaffected by this branch" }
+verified = { hash = "b3:7d085801f43bd2e3", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; Program scene bullet at 0.16; no wire change in #231 or #210" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -547,9 +551,14 @@ The wire format, versioning, error codes and compatibility policy are designed i
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
   `output.status` reports only `key_set`.
-- **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
+- **Actions** (`output.start`, `scene.switch`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
+- **Program scene** (protocol 0.16, [ADR-0030](adr/0030-studio-state-and-scene-switching.md)):
+  the action `scene.switch { scene_id }` puts a scene on program with a cut, with no
+  `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
+  change of it, including the ones a batch, undo or redo causes by creating the first scene or
+  deleting the program scene.
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
@@ -634,11 +643,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; tool list includes delete and encoder; tools.snap 146 KB, text says about 145 KB" }
+verified = { hash = "b3:89b4f7228ad5ed37", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; studio moved into the built tool list beside delete and encoder" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio` and `video` so far; `audio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
