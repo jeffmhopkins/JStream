@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:a666c3114a15586e", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: command.rs docs only (scene.delete and item.remove inverses now name scene.set_transitions and item.set_transition), snapshots regenerated; re-read, section holds" }
+verified = { hash = "b3:b4650be831c06275", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: src change is one envelope test; contents list and layer description unchanged" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -97,9 +97,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.17 because of
-  transition presets and studio mode's preview; 0.16 added `scene.switch`, `studio.get`
-  and `studio.changed`, 0.15 `delete.plan` and the
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
+  transition presets and studio mode's preview; 0.17 added `scene.create`'s optional
+  `role`, 0.16 `scene.switch`, `studio.get` and `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
@@ -132,7 +132,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:30a71edceec94550", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: command.rs docs only (scene.delete and item.remove inverses now name scene.set_transitions and item.set_transition), snapshots regenerated; re-read, section holds" }
+verified = { hash = "b3:7aa5f3f591196354", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 (N2): sentence now says non-integer numbers are f64; rest is main's text" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -240,18 +240,18 @@ order with 0 at the bottom.
 ### Groups and placement addressing
 
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
-`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`, and
-`scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
+`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`. `scene.create` takes
+an optional `role` (omitted means `scene`; protocol 0.17), and `scene.set_role { scene_id, role }`
+changes it; the role changes no engine behaviour.
 `scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.11 reader sees
 no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
 to a position in another scene, keeping its ID and every placement property, under the
 same cycle check as `item.add` (field `scene_id`). `index` is the item's position after
 the move: up to the number of items already there for another scene, and below it for
 the item's own scene, where the move is a reorder. Grouping is a client-built batch:
-`scene.create`, `scene.set_role` to `group`, `source.create` of a `scene` source,
+`scene.create` with `role: group`, `source.create` of a `scene` source,
 `item.add` of it with `item.move` to the lowest selected index, then an `item.move` of
-each selected item into the group, bottom first. `scene.create` doesn't take a `role`
-yet.
+each selected item into the group, bottom first.
 
 The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
 `item.set_visible`) take an
@@ -323,7 +323,9 @@ then serializes as `null` and no longer parses. So a
 non-finite or out-of-`f32`-range number fails deserialization, and
 `ClientMessage::parse` rejects the whole message as `malformed`. In-process clients
 can't build a non-finite value either: `Finite32::new` and `Vec2::new` return `None`
-for one.
+for one. Settings values keep non-integer JSON numbers as `f64`, parsed to the nearest
+one (serde_json's `float_roundtrip`), so a message with a long number still serializes
+and parses back to itself.
 
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next
@@ -365,7 +367,7 @@ share one encoder session, and `output.status` reports the sharing.
 
 [ADR-0029](../../docs/adr/0029-transitions.md) and
 [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
-the model (0.17). A transition preset is collection state:
+the model (0.18). A transition preset is collection state:
 `{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
 kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
 `settings` are checked against its descriptor as a source's are (`unmatched`, the
@@ -423,7 +425,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty) and the transition presets with
-  the default (`transitions`; missing from a pre-0.17 server, it parses as the one
+  the default (`transitions`; missing from a pre-0.18 server, it parses as the one
   initial `cut`). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
@@ -447,7 +449,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
 - `studio.get`: the scene on program (`program_scene`) and on preview
-  (`preview_scene`, 0.17), each omitted only while the collection has no scene. Runtime
+  (`preview_scene`, 0.18), each omitted only while the collection has no scene. Runtime
   state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
@@ -501,9 +503,9 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop` and
-`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
-`scene.reorder` unless it was last, `scene.set_role` for a group, and each item's
-restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`
+with the scene's `role` (omitted for `scene`), `scene.reorder` unless it was last, and
+each item's restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings and its
 `duplicated_from`, undoing `item.set_source` is `item.set_source` back, and undoing
@@ -578,7 +580,7 @@ After `welcome`, the server pushes every event to every client.
   transition lasts in milliseconds (`duration_ms`, 0 for a cut), so a client can show
   progress; no event marks the end. Program and preview are runtime state, so it
   carries no `rev` ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
-  Added in 0.16; `preview_scene` and `transition` in 0.17.
+  Added in 0.16; `preview_scene` and `transition` in 0.18.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

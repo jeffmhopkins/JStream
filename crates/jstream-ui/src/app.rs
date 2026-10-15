@@ -114,6 +114,11 @@ pub fn App() -> impl IntoView {
         });
     };
 
+    // In the desktop app, connect to its engine at once (`host.rs`).
+    if let Some(engine) = crate::host::desktop() {
+        connect(engine.url, engine.token);
+    }
+
     view! {
         <Show
             when=move || status.get() == Status::Connected
@@ -135,6 +140,9 @@ fn ConnectForm(
     let url = RwSignal::new(default_engine_url());
     let token = RwSignal::new(String::new());
     let busy = move || status.get() == Status::Connecting;
+    // The fields are in no form element: browsers offer to save a password when a form
+    // with a password field is submitted. A click or Enter connects instead.
+    let submit = move || connect(url.get_untracked(), token.get_untracked());
     let problem = move || match status.get() {
         Status::Disconnected(Some(reason)) => Some(reason),
         _ => None,
@@ -142,27 +150,39 @@ fn ConnectForm(
     view! {
         <main class="connect">
             <h1>"JStream"</h1>
-            <form on:submit=move |event| {
-                event.prevent_default();
-                connect(url.get_untracked(), token.get_untracked());
-            }>
+            <div
+                class="fields"
+                on:keydown=move |event| {
+                    if event.key() == "Enter" && !busy() {
+                        event.prevent_default();
+                        submit();
+                    }
+                }
+            >
                 <label>
                     "Engine URL"
-                    <input type="text" placeholder="ws://127.0.0.1:4455" bind:value=url />
+                    <input
+                        type="text"
+                        name="engine-url"
+                        placeholder="ws://127.0.0.1:4455"
+                        bind:value=url
+                    />
                 </label>
                 <label>
                     "Control token"
                     <input
                         type="password"
+                        name="control-token-entry"
                         autocomplete="off"
+                        spellcheck="false"
                         placeholder="Not needed if the browser already signed in"
                         bind:value=token
                     />
                 </label>
-                <button type="submit" disabled=busy>
+                <button type="button" class="primary" disabled=busy on:click=move |_| submit()>
                     {move || if busy() { "Connecting…" } else { "Connect" }}
                 </button>
-            </form>
+            </div>
             {move || problem().map(|reason| view! { <p class="problem" role="alert">{reason}</p> })}
         </main>
     }
@@ -185,7 +205,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             </header>
             <aside class="region scenes"><SceneTree /></aside>
             <section class="region canvas"><Canvas /></section>
-            <aside class="region inspector"><Inspector /></aside>
+            <aside class="region inspector"><Inspector /><crate::panels::Outputs /></aside>
             <footer class="region mixer"><Mixer /></footer>
         </div>
     }

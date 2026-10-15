@@ -126,6 +126,7 @@ mod tests {
         Edit::SceneCreate {
             scene_id: scene(id),
             name: id.to_uppercase(),
+            role: None,
         }
     }
 

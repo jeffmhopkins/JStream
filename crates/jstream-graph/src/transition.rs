@@ -408,6 +408,7 @@ mod tests {
         let scene = |id: &str| Edit::SceneCreate {
             scene_id: SceneId::new(id),
             name: id.into(),
+            role: None,
         };
         graph
             .apply(&[scene("a"), scene("b")], None)

@@ -35,6 +35,12 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::SceneCreate {
             scene_id: SceneId::new("scn_1"),
             name: "Main".into(),
+            role: None,
+        },
+        Edit::SceneCreate {
+            scene_id: SceneId::new("scn_grp"),
+            name: "Lower third".into(),
+            role: Some(SceneRole::Group),
         },
         Edit::SceneRename {
             scene_id: SceneId::new("scn_1"),

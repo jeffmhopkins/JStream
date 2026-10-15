@@ -103,6 +103,7 @@ fn scene_create(id: &str) -> Edit {
     Edit::SceneCreate {
         scene_id: SceneId::new(id),
         name: format!("Scene {id}"),
+        role: None,
     }
 }
 
@@ -364,6 +365,7 @@ fn invalid_arguments_name_the_field() {
             Edit::SceneCreate {
                 scene_id: SceneId::new(""),
                 name: "n".into(),
+                role: None,
             },
             "edits.0.scene_id",
         ),
@@ -2142,6 +2144,39 @@ fn set_role_changes_only_the_role_and_is_reported() {
 }
 
 #[test]
+fn scene_create_sets_the_role_it_names() {
+    let mut g = fixture();
+    let applied = apply_ok(
+        &mut g,
+        vec![
+            Edit::SceneCreate {
+                scene_id: SceneId::new("g"),
+                name: "G".into(),
+                role: Some(SceneRole::Group),
+            },
+            Edit::SceneCreate {
+                scene_id: SceneId::new("s"),
+                name: "S".into(),
+                role: Some(SceneRole::Scene),
+            },
+        ],
+    );
+    assert_eq!(role(&g, "g"), SceneRole::Group);
+    assert_eq!(role(&g, "s"), SceneRole::Scene);
+    assert_eq!(
+        applied.inverse.edits,
+        vec![
+            Edit::SceneDelete {
+                scene_id: SceneId::new("s"),
+            },
+            Edit::SceneDelete {
+                scene_id: SceneId::new("g"),
+            },
+        ]
+    );
+}
+
+#[test]
 fn deleting_a_group_restores_its_role() {
     let mut g = fixture();
     apply_ok(
@@ -2158,12 +2193,24 @@ fn deleting_a_group_restores_its_role() {
             scene_id: SceneId::new("g"),
         }],
     );
+    // The role rides on the inverse's `scene.create`; no separate `scene.set_role`.
+    assert_eq!(
+        applied.inverse.edits[0],
+        Edit::SceneCreate {
+            scene_id: SceneId::new("g"),
+            name: "Scene g".into(),
+            role: Some(SceneRole::Group),
+        }
+    );
     assert!(
-        applied
+        !applied
             .inverse
             .edits
-            .contains(&set_role("g", SceneRole::Group))
+            .iter()
+            .any(|e| matches!(e, Edit::SceneSetRole { .. }))
     );
+    apply_ok(&mut g, applied.inverse.edits);
+    assert_eq!(role(&g, "g"), SceneRole::Group);
 }
 
 #[test]

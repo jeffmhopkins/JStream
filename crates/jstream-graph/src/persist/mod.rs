@@ -407,23 +407,14 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         ));
     }
     for scene in &file.scenes {
-        let object = format!("scene `{}`", scene.id);
         edits.push((
-            object.clone(),
+            format!("scene `{}`", scene.id),
             Edit::SceneCreate {
                 scene_id: scene.id.clone(),
                 name: scene.name.clone(),
+                role: (!scene.role.is_scene()).then_some(scene.role),
             },
         ));
-        if !scene.role.is_scene() {
-            edits.push((
-                object,
-                Edit::SceneSetRole {
-                    scene_id: scene.id.clone(),
-                    role: scene.role,
-                },
-            ));
-        }
     }
     let sources: BTreeMap<&SourceId, &FileSource> =
         file.sources.iter().map(|s| (&s.id, s)).collect();

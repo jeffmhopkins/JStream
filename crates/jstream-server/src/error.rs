@@ -2,6 +2,7 @@
 
 use std::io;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 /// Why the server could not start or stopped.
 #[derive(Debug, thiserror::Error)]
@@ -20,6 +21,14 @@ pub enum ServerError {
         host: String,
         /// What is wrong with it.
         reason: &'static str,
+    },
+    /// The configured UI directory is missing or isn't a directory.
+    #[error("unusable UI directory `{}`: {source}", dir.display())]
+    UiDir {
+        /// The directory as configured.
+        dir: PathBuf,
+        /// What is wrong with it.
+        source: io::Error,
     },
     /// The listening socket could not be opened.
     #[error("could not listen on {addr}: {source}")]

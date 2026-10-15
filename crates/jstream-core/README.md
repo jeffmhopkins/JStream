@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:7dad70749f260cc2", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: Studio bullet adds preview and the running transition; new Transitions bullet (resolve, plan); tests paragraph lists src/tests/transitions.rs" }
+verified = { hash = "b3:3a75e323ed3b2ea2", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: main's text; re-checked its render-snapshot mentions (program mix drawn from it, PNG on the snapshot thread) make no lock-free claim for the snapshot thread, holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -162,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:2628870907434d00", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: Actions add studio.set_preview; Program scene adds Preview and Transitions paragraphs (resolution, Running, plan_with, on_screen retarget, flattening rule, legacy conversion, no audio follow); render snapshot and compose paragraphs updated; checked against engine.rs, studio.rs, transition.rs, snapshot.rs" }
+verified = { hash = "b3:5f83b0d81693f253", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 merge of main: stale via protocol design's number sentence only; engine text unaffected" }
 -->
 
 ### Engine and sessions
@@ -818,8 +818,9 @@ release it before taking the collection lock. A source must not call back into t
 engine while that mutex is held. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The render snapshot is published under the collection
-lock (which makes the control side its one writer) and loaded by the render and
-snapshot threads with no lock at all. A stream's poll takes only its queue's lock. No lock
+lock (which makes the control side its one writer) and loaded by the render thread
+with no lock at all. `video.snapshot` reads it under the collection lock and the
+snapshot thread only receives it. A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
@@ -947,7 +948,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:d320c0a443c44520", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: render thread composites a running transition sampled at the tick's media time (DrawFn takes the time); rest holds" }
+verified = { hash = "b3:037387eaec0b2653", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

@@ -18,12 +18,12 @@ pub(crate) const INDEX_PATH: &str = "docs/adr/README.md";
 const ADR_DIR: &str = "docs/adr/";
 
 /// The line that opens a generated block.
-fn begin(name: &str) -> String {
+pub(crate) fn begin(name: &str) -> String {
     format!("<!-- @generated begin {name} -->")
 }
 
 /// The line that closes a generated block.
-fn end(name: &str) -> String {
+pub(crate) fn end(name: &str) -> String {
     format!("<!-- @generated end {name} -->")
 }
 
@@ -45,7 +45,7 @@ fn relative(from: &str, to: &str) -> String {
 }
 
 /// Text that is safe inside a Markdown link label or table cell.
-fn escape(text: &str) -> String {
+pub(crate) fn escape(text: &str) -> String {
     text.replace('\\', "\\\\")
         .replace('[', "\\[")
         .replace(']', "\\]")
@@ -89,7 +89,7 @@ fn status_line(doc: &Doc, by_path: &BTreeMap<&str, &Doc>) -> Result<String, Stri
 }
 
 /// Lines of `text` that are not inside a fenced code block, as 0-based indices.
-fn outside_fences(lines: &[&str]) -> Vec<bool> {
+pub(crate) fn outside_fences(lines: &[&str]) -> Vec<bool> {
     let mut fence: Option<&str> = None;
     lines
         .iter()
@@ -136,7 +136,7 @@ fn strip_lines(lines: &mut Vec<&str>, name: &str, strict: bool) {
 }
 
 /// Joins lines, keeping `like`'s final newline.
-fn join(lines: &[&str], like: &str) -> String {
+pub(crate) fn join(lines: &[&str], like: &str) -> String {
     let mut out = lines.join("\n");
     if like.ends_with('\n') {
         out.push('\n');

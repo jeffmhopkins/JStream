@@ -1,9 +1,11 @@
 //! The server's configuration: where it listens, the control token, which `Host` and
-//! `Origin` values it accepts beyond its own, the connection limits, and the MCP transport.
+//! `Origin` values it accepts beyond its own, the connection limits, the MCP transport, and
+//! the web UI's directory.
 
 use crate::error::ServerError;
 use std::fmt;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::time::Duration;
 
 /// The default [`ServerConfig::max_connections`]: a handful of UIs, CLIs and MCP
@@ -108,6 +110,12 @@ pub struct ServerConfig {
     /// How long an MCP session may go unused before it is ended, and its `Control`
     /// session with it. [`ServerConfig::new`] sets 30 minutes.
     pub mcp_idle_timeout: Duration,
+    /// The web UI's built bundle (`trunk build`'s `dist` directory), served at every
+    /// path the API doesn't use, behind the same checks, with a browser's `Basic`
+    /// credentials carrying the token. [`Server::bind`](crate::Server::bind) refuses one
+    /// that isn't a directory ([`ServerError::UiDir`]). [`ServerConfig::new`] leaves it
+    /// unset: no UI, and those paths are 404.
+    pub ui_dir: Option<PathBuf>,
 }
 
 impl ServerConfig {
@@ -125,6 +133,7 @@ impl ServerConfig {
             mcp: false,
             max_mcp_sessions: MAX_MCP_SESSIONS,
             mcp_idle_timeout: MCP_IDLE_TIMEOUT,
+            ui_dir: None,
         }
     }
 }

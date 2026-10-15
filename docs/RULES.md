@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:2fe1e753ac46d93d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b cascade from ARCH#threading (Collector row: the mixer's own collector also frees removed buses' state, filter chains and filters): re-read; rule text unchanged; chains and filters retired via the collector are within R-RT-003" }
+verified = { hash = "b3:e23ff09bf4f04289", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
 -->
 
 <a id="R-RT-001"></a>
@@ -451,7 +451,7 @@ The PR shows before and after.
 <!-- @rule
 status = "active"
 enforced_by = ["ci:test"]
-applies_to = ["crates/**", "tests/**"]
+applies_to = ["crates/**", "apps/**", "tests/**"]
 -->
 Tests need no network, real devices or physical GPU, unless they are platform tests
 behind `hw-tests`.
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2f60f1d20d726213", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: stale via ARCH protocol/persistence; additive minor and optional collection fields, rules hold" }
+verified = { hash = "b3:d576006e7238ccc1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through cascade; R-API-001 untouched, subprotocol is transport only; holds" }
 -->
 
 <a id="R-API-001"></a>
@@ -540,9 +540,13 @@ status = "active"
 enforced_by = ["test:jstream_server::rejects_missing_token", "test:jstream_server::rejects_foreign_origin"]
 applies_to = ["crates/jstream-server/**", "crates/jstream-mcp/**"]
 -->
-Every HTTP, WebSocket and MCP listener requires the control token (even on localhost) and
-validates the `Host` header, and the `Origin` header when one is present. Listeners bind
-to `127.0.0.1` by default
+Every HTTP, WebSocket and MCP listener requires the control token or a paired device's
+token (even on localhost), except `POST /api/v1/pair` while a pairing code is open
+([ADR-0044](adr/0044-pairing-remote-browsers.md)) and `GET /pair` on a TLS listener
+([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
+device token, never the control token, as the `__Host-jstream_device` cookie. Every
+listener validates the `Host` header, and
+the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>
