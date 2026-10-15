@@ -641,7 +641,7 @@ verified = { hash = "b3:90489d48b902b02d", by = "agent:claude@session_017CbEsAJT
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:40d6041b79574568", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the one-scene paragraph against the premultiply-on-upload change: the composite still writes premultiplied linear into Rgba16Float and resolves to Rgba8UnormSrgb, blend still premultiplied src-over; source alpha handling is detailed in the crate README, not here. Steps 1-6 unchanged." }
+verified = { hash = "b3:d9ef248382cce5c7", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): added the sentence that a nested scene goes through render_image as an on-GPU Rgba16Float image placed in its parent, with the caller bounding depth; plus review N5 rename; steps 1-6, S1 table and output path unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -676,7 +676,9 @@ src-over. The composite pass writes premultiplied linear light into `Rgba16Float
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a software adapter
-first. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
+first. A nested scene is composited with `render_image` into an `Rgba16Float` image
+that stays on the GPU and is placed in its parent; the caller walks the nesting,
+bounded in depth. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
 fit modes, 3D, effect packs, and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
