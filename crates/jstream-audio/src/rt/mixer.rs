@@ -1172,6 +1172,38 @@ mod tests {
         assert_eq!(blk.pts.ticks(), 41_920);
     }
 
+    /// ADR-0028: a delay filter's output is stamped later by its delay. It has no
+    /// latency, so `pts` stays the mixed frame while the samples it carries come from
+    /// the input that much earlier.
+    #[test]
+    fn a_delay_filter_is_stamped_later_by_its_delay() {
+        use crate::FilterSpec;
+        let tone =
+            |n: u64| (0.25 * (std::f64::consts::TAU * 100.0 * n as f64 / 48_000.0).sin()) as f32;
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        feed_with(&mut a, |n| [tone(n), tone(n)], 1.0);
+        let delay = ca
+            .add_filter(FilterSpec::Delay {
+                max_ms: 100.0,
+                delay_ms: 10.0,
+            })
+            .unwrap();
+        assert_eq!(delay.latency_frames(), 0);
+        let mut out = vec![0.0; 960];
+        m.mix(40_000, &mut out).unwrap();
+        for frame in [40_480, 40_960] {
+            let blk = m.mix(frame, &mut out).unwrap();
+            assert_eq!(m.latency_frames(), 0);
+            assert_eq!(blk.pts.ticks(), frame);
+            // Input frame t is in the block stamped t + 480.
+            for (i, f) in out.chunks_exact(2).enumerate() {
+                let want = tone((frame + i as i64 - 480) as u64);
+                assert!((f[0] - want).abs() < 1e-3, "frame {i}: {} vs {want}", f[0]);
+            }
+        }
+    }
+
     #[test]
     fn filter_additions_and_edits_are_checked() {
         use crate::filter::{GateParams, LimiterParams};

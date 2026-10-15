@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:287fe52c7214ec19", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b: re-read against chain.rs, cmd.rs, mixer.rs, handle.rs and tests/no_alloc.rs: routing paragraph now has chains and compensation, add_filter/insert_filter/FilterControl API, limits (8 filters, 100 ms), pts = first frame minus Mixer::latency_frames, new errors, test lists" }
+verified = { hash = "b3:f5466514d68278a7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b B1: re-read; tests list adds the delay-stamp test; pts = first frame minus compensated latency, which a Delay doesn't add to" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -112,7 +112,8 @@ not start. No variant allocates.
 - filter chains: an input's chain before its fader and a bus's on its sum, edits and
   removal applied live, latency compensation (a limiter on one input and one bus: every
   input and bus lines up, and `pts` moves back by the total, then returns when they are
-  removed), and the limits and rejected edits;
+  removed), a delay filter's output stamped later by its delay, and the limits and
+  rejected edits;
 - inputs added from another thread while the mixer runs, then removed, the 64-input
   limit, and the ring freed on the collector thread whichever of the mixer and the
   producer lets go last, and the collector ending with its last handle.
@@ -144,7 +145,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:54cc237067fb074e", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b: re-read against chain.rs and mixer.rs: per-block order (chain, comp delay, fader, meter, sends; bus chain, comp, fader), chain reserve and collector hand-off, edit check on control plane, compensation to the longest input/bus chain with pts shift, no_alloc's new bus/send/filter phases; #228 N1 retarget wording" }
+verified = { hash = "b3:dc68a6d18d0b8dc5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b B1: re-read latency paragraph against mixer.rs mix(): Delay counts 0, so input media time t lands in the block stamped t + delay (ADR-0028 'stamped later by its delay'), proven by a_delay_filter_is_stamped_later_by_its_delay" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -259,7 +260,9 @@ ADR-0028). After its chain, every input is delayed to the longest input chain's 
 and every bus to the longest bus chain's, by a compensation delay each chain allocates
 for 100 ms when built, so every bus sum lines up and buses line up with each other.
 Each block's `pts` is its first frame minus the two maxima: the media time of the input
-it carries. Adding or removing a filter with latency changes the delays at once (the
+it carries. A `Delay` adds nothing to that, so input audio from media time `t` lands
+in the block stamped `t` plus the delay: ADR-0028's "stamped later by its delay". Adding
+or removing a filter with latency changes the delays at once (the
 frames in between are skipped or repeated) and moves `pts` by the difference, so a
 consumer sees a gap or an overlap there.
 
@@ -364,7 +367,7 @@ true-peak cases from files) are not run; they would add binary fixtures.
 <!-- @section
 covers = ["crates/jstream-audio/src/filter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:3f4a8a7d7913c85e", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b: re-read; kernels unchanged; now says the mixer runs them in chains with latency compensated and how no_alloc exercises each; Not yet keeps keys, settings and CPU cost" }
+verified = { hash = "b3:8cae68faa9d8e330", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b B1: re-read Delay row: not compensated, so its output is stamped later by its delay; matches mixer.rs and the new test" }
 -->
 
 `src/filter/` holds the audio filter kernels
@@ -387,7 +390,7 @@ source first), `latency_frames` and `reset`.
 | `NoiseGate` | Open and close thresholds (hysteresis), hold, linear attack and release ramps, a range (gain when closed). Detector: the larger channel's level, instant attack, 10 ms decay. Defaults are OBS's | 0 |
 | `Compressor` | Threshold, ratio (up to `inf`), quadratic soft knee, makeup; gain reduction smoothed in dB with attack and release time constants (Giannoulis, Massberg and Reiss, 2012). With a key, it detects on the key instead: ADR-0028's ducking | 0 |
 | `Limiter` | Look-ahead (0 to 20 ms, fixed when built) sample-peak limiter: sliding minimum of the needed gain over the look-ahead, release smoothing, then a box average over the look-ahead, so the gain ramps down before a peak and the output never exceeds the ceiling | the look-ahead |
-| `Delay` | Up to a maximum fixed when built (at most 5000 ms) | 0: a deliberate shift, which the mixer stamps later instead of compensating |
+| `Delay` | Up to a maximum fixed when built (at most 5000 ms) | 0: a deliberate shift, which the mixer doesn't compensate, so its output is stamped later by its delay |
 
 Detectors are stereo-linked (one gain for both channels). The limiter's last step clamps
 at the ceiling, which only catches rounding, or audio already in its delay line when
