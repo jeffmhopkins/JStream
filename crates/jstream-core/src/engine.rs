@@ -17,8 +17,8 @@ use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
-    Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
-    Pending, PipelineEvent, RenderHub, Running, launch, launch_program, parts_from,
+    Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
+    OutputStats, Pending, PipelineEvent, RenderHub, Running, launch, launch_program, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
@@ -1126,18 +1126,31 @@ impl Drop for SettleOnDrop<'_> {
     }
 }
 
-/// Which encoder sessions `output_id` shares: its profile and that profile's encoding
-/// now, or the engine's default for an output with none or one the host declared.
+/// Which encoder sessions `output_id` shares: the video mix it shows with that mix's
+/// size and rate now, and its profile with that profile's encoding now. An output with
+/// no mix, or one the host declared, gets the program at the capture size and base
+/// rate; one with no profile the engine's default.
 fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
     let state = graph.state();
-    let profile_id = state
-        .output(output_id)
-        .and_then(|output| output.encoder_profile())
-        .cloned();
+    let output = state.output(output_id);
+    let profile_id = output.and_then(|output| output.encoder_profile()).cloned();
     let profile = state
         .encoding_of(output_id)
         .unwrap_or(EncoderProfile::DEFAULT);
-    (profile_id, profile)
+    let mix = output
+        .and_then(|output| output.video_mix())
+        .and_then(|id| state.video_mix(id))
+        .map_or(MixKey::PROGRAM, |mix| {
+            let spec = mix.mix();
+            MixKey {
+                mix: Some(mix.id().clone()),
+                // The graph keeps every resolution in range, so this is never `None`.
+                size: jstream_media::FrameSize::new(spec.resolution.width, spec.resolution.height)
+                    .ok(),
+                divisor: spec.fps_divisor,
+            }
+        });
+    (mix, profile_id, profile)
 }
 
 /// Where a recording output in the collection records to, or `None` when the output

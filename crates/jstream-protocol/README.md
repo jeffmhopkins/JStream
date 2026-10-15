@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:573804037ce32dde", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; Commands keeps main's set_source/encoder edits plus scene.switch; Queries add studio.get beside delete.plan; version line 0.16 then main's 0.15 to 0.5" }
+verified = { hash = "b3:9f3e649a73466575", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes (0.17): re-read; Commands list the video_mix edits and output.set_video_mix, new Video mixes bullet for mix.rs, video_mix.list in Queries, version line 0.17, parity fixture holds two mixes" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -37,15 +37,16 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
   `item.set_visible`, `item.set_source`, `canvas.set_size`, `source.create`,
   `source.rename`, `source.set_settings`, `source.duplicate`, `source.delete`,
-  `output.create`, `output.set_target`, `output.set_encoder`, `output.delete`,
-  `encoder.create`, `encoder.update`, `encoder.delete`), with `ItemTransform`
+  `output.create`, `output.set_target`, `output.set_encoder`, `output.set_video_mix`,
+  `output.delete`, `encoder.create`, `encoder.update`, `encoder.delete`,
+  `video_mix.create`, `video_mix.update`, `video_mix.delete`), with `ItemTransform`
   (deprecated), `Crop`, `SourceKind` and `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
-  (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
+  (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo` (with the `video_mix` it shows), and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
@@ -53,8 +54,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
   and `EncoderSessionInfo`, the per-output sharing `output.status` reports
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+- **Video mixes** (`mix.rs`): `VideoMix`, what an output's video shows: a `MixInput`
+  (`program`, `preview` or one `scene`), a `MixResolution` and an `fps_divisor` of the
+  base frame rate, with its range checks (`VideoMix::problem`, shared by every
+  implementation), and `VideoMixInfo`.
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `encoder.list`, `video.snapshot`, `kind.list`, `kind.describe`,
+  `output.list`, `output.status`, `encoder.list`, `video_mix.list`, `video.snapshot`, `kind.list`, `kind.describe`,
   `delete.plan` (with its `DeleteTarget`) and `studio.get`, with `QueryResult` and the `SceneSummary`,
   `SceneInfo`, `SourceInfo` and `ItemInfo`
   shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
@@ -86,8 +91,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.16 because of
-  `scene.switch`, `studio.get` and `studio.changed`; 0.15 added `delete.plan` and the
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.17 because of
+  video mixes (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and
+  the mixes in `state.get` and `output.list`); 0.16 added `scene.switch`, `studio.get`
+  and `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
@@ -101,10 +108,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a recording output and two
-  encoder profiles), the exact answer to every collection read of it (`output.list`
+  canvas, legacy items, one geometry item, two RTMP outputs, a recording output, two
+  encoder profiles and two video mixes), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path and encoder profile checks, and `item.set_source` and
+  URL, recording path, encoder profile and video mix checks, and `item.set_source` and
   `duplicated_from`, included). The collection also holds a clone made with
   `source.duplicate` and `item.set_source`, and a `duplicated_from` naming a missing
   source.
@@ -120,7 +127,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:3adf477bdf0f66e2", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; studio.get beside delete.plan in Queries, both Added in 0.16 for studio.get/studio.changed; OQ5 settled" }
+verified = { hash = "b3:53493340465d55cd", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes (0.17): re-read; new Video mixes paragraph (input, resolution, divisor, letterbox, delete refusal, live input change), scene.delete blocker mix.input.scene_id, delete.plan repoints mixes, state.get video_mixes and video_mix.list" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -295,10 +302,11 @@ never a type per kind.
 - **Deletes are refused while anything refers to the target**, with no cascading edit
   ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   `source.delete` is refused while an item places the source, and `scene.delete` while a
-  `scene` source shows the scene; either is refused while a setting refers to its
-  target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
-  `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
-  or the source whose setting refers to it (`settings.<param>`). `delete.plan` returns
+  `scene` source or a video mix shows the scene; either is refused while a setting
+  refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a
+  `Blocker` `{entity, id, field}`: the item (`source_id`), the `scene` source
+  (`kind.scene_id`), the video mix (`mix.input.scene_id`) or the source whose setting
+  refers to it (`settings.<param>`). `delete.plan` returns
   the batch that removes them with the target (see [Queries](#design)).
 
 `SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
@@ -349,6 +357,23 @@ no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe 
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
 
+Video mixes (0.17) are collection state too: what an output's video shows.
+`video_mix.create` and `video_mix.update` take a `mix_id`, a `name` and a `VideoMix`: an
+`input` (`program`, the scene on program; `preview`, which shows the program until
+studio mode has a preview scene; or `scene` with a `scene_id`, one scene whatever is on
+program), a `resolution` whose sides are even and 16..=8192, and an `fps_divisor` of
+1..=60 (missing, it parses as 1): the mix renders on every `fps_divisor`th tick of the
+engine's base frame rate. The canvas is fitted inside the resolution, centred, with
+black bars where the aspect ratios differ, never stretched
+([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Anything else,
+including an input a newer server sent as `unknown`, is refused with `invalid_argument`
+naming the field (`edits.N.mix.resolution.width`), and a missing scene with
+`not_found`. `video_mix.delete` is refused while an output shows the mix.
+`output.set_video_mix` points an output at a mix, or with no `mix_id` back at the
+program at the engine's capture size and base rate. A running output follows a change
+of its mix's `input` from the next frame; a new resolution, rate or mix applies from
+its next `output.start`, like an encoder profile.
+
 ### Batches, revisions and `expected_rev`
 
 Edits are only sent inside a `Batch`; a single edit is a batch of one.
@@ -377,8 +402,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `state.get`: the whole collection at one revision: the `canvas` (missing from a
   pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
-  server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
-  missing from a pre-0.13 server, it parses as empty). A client reads it on connecting, and again after a
+  server, it parses as empty), every encoder profile (`encoders`, ordered by ID;
+  missing from a pre-0.13 server, it parses as empty) and every video mix
+  (`video_mixes`, ordered by ID; missing from a pre-0.17 server, it parses as empty). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
@@ -387,8 +413,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
 - `output.list`: the outputs, ordered by ID (outputs have no display order), each with
-  its `OutputKind` and `encoder_profile` (absent for the default), at a `rev`.
+  its `OutputKind`, `encoder_profile` (absent for the default) and `video_mix` (absent
+  for the program), at a `rev`.
 - `encoder.list`: the encoder profiles, ordered by ID, at a `rev` (0.13).
+- `video_mix.list`: the video mixes, ordered by ID, at a `rev` (0.17).
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the
   credential store holds its key (missing from a pre-0.7 server, it parses as
   `false`). While it runs, `encoder` names its session's profile (absent for the
@@ -410,7 +438,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `not_found` for a missing target. In order, the edits remove the items that place a
   deleted source, set every settings reference to a deleted object to `null` (one
   `source.set_settings` per source, which keeps the source), delete the `scene` sources
-  that show a deleted scene, and last delete the target. Deleting a scene deletes the
+  that show a deleted scene, point every video mix that shows it at `program` (one
+  `video_mix.update`, which keeps the mix), and last delete the target. Deleting a
+  scene deletes the
   `scene` sources that show it, and the cascade stops there, since deleting a source
   deletes no scene. A target nothing refers to plans just its own delete. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is

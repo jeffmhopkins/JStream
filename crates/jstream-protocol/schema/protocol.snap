@@ -4014,5 +4014,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.16"
+  "title": "JStream protocol 0.17"
 }

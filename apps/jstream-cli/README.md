@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:889d8fc912b3ef44", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; contents hold with B6-f's commands and scene switch/studio get" }
+verified = { hash = "b3:48981673d580fbaa", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; video mix edits listed as needing the JSON argument form, like encoder profiles" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:a5ec524c34e496eb", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; scene switch and studio get rows hold beside B6-f's set_role/item.move/set_geometry rows" }
+verified = { hash = "b3:8d562bdd942bed3e", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; command table unchanged, version prints the bumped protocol version; holds" }
 -->
 
 ```sh
@@ -103,12 +103,13 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings, encoder profiles and `source.create`'s
-  `duplicated_from`. `source.set_settings`,
-  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
-  and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
+  protocol is supported except settings, encoder profiles, video mixes and
+  `source.create`'s `duplicated_from`. `source.set_settings`,
+  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`,
+  `output.set_encoder`, `video_mix.create`, `video_mix.update`, `video_mix.delete` and
+  `output.set_video_mix` need a JSON argument form the CLI doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
-  default encoder (MCP and the WebSocket API take them). `item.add` sends neither
+  default encoder and the program (MCP and the WebSocket API take them). `item.add` sends neither
   placement, so its item is a legacy one; place it with `item.set_geometry <item-id>
   <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
   batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
@@ -234,7 +235,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4f5fca2208c71215", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:a680168acb68ef53", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; design unaffected by mixes; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

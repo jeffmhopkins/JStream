@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a883234871ab7b25", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; program not in the graph; holds" }
+verified = { hash = "b3:d2f439ca5a88e1ac", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; State and Output carry mixes, Video mixes bullet (mix.rs checks and inverses), touched sets, blockers, delete.plan repoint, reads, file and tests updated" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -27,8 +27,8 @@ codes, so the engine passes them to clients unchanged.
   sources against. The engine supplies them (`Graph::with_kinds`); they are not
   collection state, and `Graph::new()` describes none.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
-  in display order, the `outputs`, keyed by ID, and the `encoders` (encoder profiles),
-  keyed by ID.
+  in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
+  keyed by ID, and the `video_mixes`, keyed by ID.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -48,8 +48,11 @@ codes, so the engine passes them to clients unchanged.
   ([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)).
 - `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
   `State::encoding_of` gives the encoding an output starts with.
+- `VideoMix`: a video mix, an ID, a name and the protocol's `VideoMix` (an input, a
+  resolution and a divisor of the base frame rate).
 - `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, or a recording
-  to an MP4 file) and the encoder profile it uses, if not the default. Whether it
+  to an MP4 file), the encoder profile it uses, if not the default, and the video mix
+  it shows, if not the program. Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -73,9 +76,10 @@ the batch **touched**.
   delete also names what it removed), the objects created or deleted, the objects used
   (an item's scene and source, both sources of an `item.set_source`, a `scene`
   source's scene, a duplicate's original, the scene an `item.move` names, the profile
-  an `output.set_encoder` names), the properties set (names, a scene's role, an item's
-  placement, crop, visibility, index and source, each settings parameter, an output's
-  target and encoder choice, a profile's encoding), and whether the scenes' order or
+  an `output.set_encoder` names, the mix an `output.set_video_mix` names, a `scene`
+  mix's scene), the properties set (names, a scene's role, an item's placement, crop,
+  visibility, index and source, each settings parameter, an output's target, encoder
+  and mix choices, a profile's encoding, a mix's spec), and whether the scenes' order or
   the canvas size was set. An edit it doesn't know marks the set as conflicting with
   everything. `conflicts_with` is the undo rule the engine's history applies to other
   clients' later batches: one set creates or deletes an object the other touches, both
@@ -91,9 +95,10 @@ the batch **touched**.
   a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
   places the source or a setting refers to it, and `scene.delete` while a `scene`
-  source shows the scene or a setting refers to it. The `invalid_argument` lists every
-  blocker in `blockers` (`deps::blockers`, the reverse of the cycle check's edges): the
-  item (`source_id`), the `scene` source (`kind.scene_id`) or the setting
+  source or a video mix shows the scene or a setting refers to it. The
+  `invalid_argument` lists every blocker in `blockers` (`deps::blockers`, the reverse
+  of the cycle check's edges, plus the mixes): the item (`source_id`), the `scene`
+  source (`kind.scene_id`), the mix (`mix.input.scene_id`) or the setting
   (`settings.<param>`). The client removes them first, in the same batch if it likes,
   or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
   edit's effect, and its inverse, limited to the object it names.
@@ -119,7 +124,7 @@ the batch **touched**.
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
   with `invalid_argument`, in edit order. The `OutputDelete` inverse also restores the
-  output's encoder profile.
+  output's encoder profile and video mix.
 - **Encoder profiles** (`encoder.rs`): `encoder.create` and `encoder.update` check the
   profile with the protocol's `EncoderProfile::problem` (`invalid_argument`, field
   `profile.<field>`) and the name; `encoder.delete` is refused with `invalid_argument`
@@ -127,6 +132,14 @@ the batch **touched**.
   then the profile (`not_found`), and needs no running check: it applies from the
   output's next start. Each is undone by its opposite (`encoder.delete` by
   `encoder.create`, `encoder.update` and `output.set_encoder` by the previous value).
+- **Video mixes** (`mix.rs`): `video_mix.create` and `video_mix.update` check the mix
+  with the protocol's `VideoMix::problem` (`invalid_argument`, field `mix.<field>`),
+  then that a `scene` input's scene exists (`not_found`), and the name;
+  `video_mix.delete` is refused with `invalid_argument` while an output shows the mix,
+  naming it. `output.set_video_mix` checks the output, then the mix (`not_found`), and
+  needs no running check: the engine reads a mix's size and rate at an output's start.
+  Each is undone by its opposite, as for encoder profiles. A mix is not a dependency
+  edge: nothing can depend on a mix, so it can't close a cycle.
 - **Groups and moves** ([ADR-0024](../../docs/adr/0024-scene-structure.md) §1):
   `scene.set_role` changes a scene's role and is undone by the previous role.
   `item.move` moves an item to an index in another scene (up to one past its top) or
@@ -148,8 +161,8 @@ the batch **touched**.
   (for example scene `a` -> source `sa` -> scene `a`).
 
 **Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
-collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list` and
-`encoder.list`)
+collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list`,
+`encoder.list` and `video_mix.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
 unknown kind), and `delete.plan` (`plan.rs`,
@@ -158,9 +171,11 @@ unknown kind), and `delete.plan` (`plan.rs`,
 target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
-to `null` (one `source.set_settings` per source), and the target's own delete comes
-last. Sources come ordered by ID, scenes in
-display order, items bottom first, outputs and encoder profiles ordered by ID.
+to `null` (one `source.set_settings` per source), the video mixes that show a deleted
+scene are pointed at the program (`video_mix.update`), and the target's own delete
+comes last. Sources come ordered by ID, scenes in
+display order, items bottom first, outputs, encoder profiles and video mixes ordered
+by ID.
 `state.get` carries the
 canvas. A geometry item reads its `geometry`, and the deprecated `transform` view the
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
@@ -176,8 +191,9 @@ its own form, a legacy `transform` or a `geometry`, exactly one of them, then it
 and `visible`), sources ordered by ID (with `kind_version`, the descriptor version a
 `builtin` source's settings follow, ADR-0025, and `duplicated_from` as stored, even
 when it names a deleted source), outputs ordered by ID (each with its
-`encoder_profile`, omitted for the default), and encoder profiles (`encoders`) ordered by
-ID, omitted when there are none. Kinds, undo history and runtime state are not in it, and
+`encoder_profile`, omitted for the default, and its `video_mix`, omitted for the
+program), encoder profiles (`encoders`) ordered by ID, omitted when there are none, and
+video mixes (`video_mixes`) ordered by ID, omitted when there are none. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -190,7 +206,8 @@ the engine's; this crate does no I/O.
   rebuilds the state by applying the edits that create it, one at a time, to an empty
   graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
   sources its settings refer to), then items in their placement form with their crop
-  and visibility, then encoder profiles, then outputs with their profiles. A
+  and visibility, then encoder profiles, then video mixes, then outputs with their
+  profiles and mixes. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
@@ -212,6 +229,8 @@ placement conversions and their inverses, geometry and canvas validation,
 delete rejection by references, roles, moves and the grouping and ungrouping batches,
 `scene_id` addressing, output URL checks and the refused delete of a running
 output, encoder edits and their inverses (a profile freed and deleted in one batch),
+video mix edits and their inverses, a mix blocking its scene's delete and the plan
+pointing it at the program,
 exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
@@ -225,15 +244,18 @@ it has blockers, the error lists them, and the `delete.plan` batch applies at th
 planned `rev`, removes the target, and undoes exactly.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
+two video mixes that two outputs show,
 scene `b` made a group, a clone and a `duplicated_from` naming a missing source) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); a file without `encoders` or any
-`encoder_profile` (as saved before profiles existed) loading with none; a profile's
+`encoder_profile` (as saved before profiles existed) loading with none, and one without
+`video_mixes` or any `video_mix` likewise; a profile's
 round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
-references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
+references (an output naming a missing profile or mix, and a mix naming a missing
+scene, among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that
 no error quotes a credential-like value placed where a number, key or tag belongs.
 

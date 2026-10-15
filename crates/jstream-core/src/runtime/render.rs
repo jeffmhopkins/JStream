@@ -194,6 +194,10 @@ pub(crate) enum Garbage {
     Video(VideoInput),
     /// The same for the audio input the mixer thread let go of.
     Audio(AudioInput),
+    /// A frame buffer of a video mix the render thread stopped drawing.
+    Pixels(Vec<u8>),
+    /// The emptied list of sessions such a mix fed.
+    Inputs(Vec<VideoInput>),
 }
 
 /// The sending side of a program stage's collector thread (R-RT-003): the render
@@ -239,6 +243,8 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Images(images) => drop(images),
             Garbage::Video(input) => drop(input),
             Garbage::Audio(input) => drop(input),
+            Garbage::Pixels(pixels) => drop(pixels),
+            Garbage::Inputs(inputs) => drop(inputs),
         }
     }
 }

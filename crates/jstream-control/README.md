@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:c7ee3fb4d79fb3e4", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:8b2769c681441431", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; trait and contents unaffected; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:fe4924343077e36e", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:e3927c156d96243f", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; mock keeps mixes, checks video_mix edits and the scene-delete refusal, answers video_mix.list, undo restores an output's mix" }
 -->
 
 ### The trait
@@ -95,7 +95,8 @@ its own, and is used with default features off.
 ### Mock
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
-`dev-dependencies`) keeps scenes, items, sources, outputs and encoder profiles in memory, with an
+`dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles and video
+mixes in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
@@ -113,8 +114,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - a placement edit's `scene_id` naming a scene other than the item's own;
   - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
     not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
-  - deleting a source that an item places, or a scene that a scene source shows, or
-    either while a source's settings refer to it;
+  - deleting a source that an item places, or a scene that a scene source or a video
+    mix shows, or either while a source's settings refer to it;
   - nesting cycles from `item.add`, `item.set_source` and `item.move`;
   - a `source.create` whose `duplicated_from` names the source itself. Like the graph,
     the mock stores `duplicated_from` as a plain link (`source.duplicate` sets it) and
@@ -127,7 +128,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
-    naming a missing output, then a missing profile.
+    naming a missing output, then a missing profile;
+  - video mixes: `VideoMix::problem`'s checks and a missing scene in
+    `video_mix.create` and `video_mix.update`, deleting a mix an output shows, and
+    `output.set_video_mix` naming a missing output, then a missing mix.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind, stores settings as sent without
@@ -138,11 +142,12 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
-  scene), `output.list` and `encoder.list` (ordered by ID), each at the current `rev`.
+  scene), `output.list`, `encoder.list` and `video_mix.list` (ordered by ID), each at
+  the current `rev`.
   So it keeps everything an edit sets: the canvas, source names, kinds and settings,
   each item's placement (its transform, or its geometry and the transform view of it),
   crop and visibility, each scene's role and each item's scene after an `item.move`,
-  each output's kind, target and encoder profile, and each profile. `video.snapshot`
+  each output's kind, target, encoder profile and video mix, each profile and each mix. `video.snapshot`
   is not one of those reads: the mock has no compositor and answers it with
   `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
@@ -169,7 +174,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   settings and `duplicated_from`, `item.set_source` back to the item's previous source,
   a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
-  back with its encoder profile, encoder profile edits undo to the profile as it was,
+  back with its encoder profile and video mix, encoder profile and video mix edits undo
+  to the profile or mix as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with
