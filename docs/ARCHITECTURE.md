@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:5f76f4fbe9dfbbae", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: under apps/** only the CLI gains the item.set_source edit form and help line; diagram and host table hold" }
+verified = { hash = "b3:d46a278a46d73d8a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; crate shape unchanged" }
 -->
 
 ```
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:1a30b706dc6e3620", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (#181, #166, #149) into G2 #174: re-read the whole map; main changed no rows since da4d83a, only the stamp; G2's jstream-vcam-windows row (own log sink, L0 + windows) still matches its Cargo.toml" }
+verified = { hash = "b3:e39a8376b6d18fa3", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4 adds only a dev-dependency (assert_no_alloc) to jstream-audio's Cargo.toml; its row (layer 2, summary, unsafe no) is unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:31b9a0f7d0184f3b", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: Built so far now lists item.set_source and duplicated_from (plain link, absent once the original is deleted); removed both from Not yet; model block already had duplicated_from?" }
+verified = { hash = "b3:dfe3957b0f391551", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Built so far says canvas at protocol 0.11; rest holds" }
 -->
 
 ```
@@ -341,8 +341,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 - **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind ID or a nested
   scene, with `settings` checked against the kind's descriptor and stored complete; no
   filters yet), scenes in display order, and items in stacking order with `source_id`,
-  protocol 0.3's 2D transform (top-left corner and scale, which ADR-0022 replaces),
-  `crop` and `visible`. Items refer to sources; they never copy them, and
+  a placement, `crop` and `visible`. The placement is a `geometry` or, until 1.0, a
+  legacy placement (protocol 0.3's 2D transform as written), and the collection has
+  its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Items refer to sources; they never copy them, and
   `item.set_source` retargets one, keeping its id, placement and stacking position.
   A source copied by `source.duplicate` records its original in `duplicated_from`, a
   plain link that reads as absent once the original is deleted. Scene and source
@@ -355,8 +356,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   checked to be absolute and to end in a file name. A stream key is never collection state: it
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
-  `effects[]`, the transition fields, the canvas,
-  `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
+  `effects[]`, the transition fields, 3D
+  geometry, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
   variants and overrides, folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
@@ -506,7 +507,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:c1a7acde2c3f8d9a", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: re-read; no envelope, versioning or error rule changed; new edit is additive per R-API-001" }
+verified = { hash = "b3:415e020d4c5b0d5c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; Edits bullet (canvas.set_size/item.set_geometry at 0.11) and History bullet hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -523,7 +524,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9.
+  0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
+  `item.set_transform`.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -542,7 +545,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0032](adr/0032-live-edits-and-undo.md)).
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
-  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+  ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
+  rather than overwrite another client's later change (protocol 0.10).
 - **Privacy screen** (planned): the action `privacy.set { on }` on the master stage, never
   undoable or batchable and with no `rev` change; every change emits
   `privacy.changed { on }` to every client and goes to the audit log
@@ -558,7 +562,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   encoder refuses a session, `output.start` fails with a stable session-limit error code
   naming the outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
-- **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
+- **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
@@ -607,11 +611,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:43215a1c51f82d9a", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: tools.snap grew to about 87 KB with item.set_source and duplicated_from; updated the size; rest holds" }
+verified = { hash = "b3:f87823856265c90a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: grouped tools list includes canvas and history; tools.snap now about 102 KB, so the text says about 100 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -621,7 +625,7 @@ verified = { hash = "b3:43215a1c51f82d9a", by = "agent:claude@session_01WYFCTjMh
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 87 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 100 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -651,7 +655,7 @@ verified = { hash = "b3:43215a1c51f82d9a", by = "agent:claude@session_01WYFCTjMh
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:d9ef248382cce5c7", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): added the sentence that a nested scene goes through render_image as an on-GPU Rgba16Float image placed in its parent, with the caller bounding depth; plus review N5 rename; steps 1-6, S1 table and output path unchanged" }
+verified = { hash = "b3:c39815529eedb369", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: E3a's capture steps (shared NT-handle textures, fence) from main and B3's one-scene compositor placement forms both present and accurate" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -678,10 +682,12 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
    back and reports it.
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
-one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement is
-that 0.3 evaluation from `jstream-protocol`'s `legacy_quad` (crop in source pixels, scale
-against the current source size, top-left at `position`, clockwise rotation about that
-corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
+is evaluated with `jstream-protocol`'s shared formula in either of ADR-0022's forms: a
+geometry (crop in source pixels, fitted into the box by `stretch`, `fit` or `fill`,
+which is clipped to the box, then rotated about the box centre), or a legacy 0.3
+transform through `legacy_quad` (crop, scale against the current source size,
+top-left at `position`, clockwise rotation about that corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
@@ -689,7 +695,7 @@ when interop is present, and otherwise a device the crate opens with a software 
 first. A nested scene is composited with `render_image` into an `Rgba16Float` image
 that stays on the GPU and is placed in its parent; the caller walks the nesting,
 bounded in depth. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
-fit modes, 3D, effect packs, and the output path below.
+3D, effect packs, and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
 texture blend: during it, the program mix is a synthetic item list whose transforms and
@@ -729,6 +735,73 @@ node per output with a video chain, and a privacy node per output. The privacy s
 comes last, so no output chain can undo it, and it fails closed: if its pass can't run,
 the output gets a black frame. None of this is built yet.
 
+<a id="browser-source"></a>
+## Browser source
+<!-- @section
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native-interop.md"]
+verified = { hash = "b3:cd6c3960b512a104", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review: sandbox is required where supported (bootstrap layout may replace the helper, or a superseding ADR), zip-size estimate marked unchecked and listed as open, pts wording and all three packet counts (2999/3000/2999) re-checked against the run JSON" }
+-->
+
+A browser source is a CEF off-screen browser
+([ADR-0021](adr/0021-browser-source.md)), not built yet. Each `OnAcceleratedPaint`
+hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
+and no fence. CEF takes the texture back into its pool when the callback returns. So the
+callback opens the handle on the wgpu D3D12 device, imports it through hal as in the GPU
+pipeline's step 2, copies it into a texture the source owns, and waits for that copy
+before it returns. The source's audio comes from CEF's audio handler as planar float PCM.
+
+**Choices made by spike S4:**
+- **Bindings:** the `cef` crate (tauri-apps/cef-rs), pinned exactly, with default
+  features off. It is generated from CEF's C API and released for each CEF version. Its
+  sys crate downloads the CEF binary distribution and builds CEF's C++ wrapper with CMake
+  and Ninja, so it needs the lint-deps allowlist entry and governance change that
+  ADR-0021 names.
+- **Helper processes:** a separate small `jstream-browser-helper.exe`, set as CEF's
+  `browser_subprocess_path`, so the engine exe never runs as a Chromium subprocess. Both
+  layouts that ADR-0021 allows measured the same.
+- **Not yet decided:** the sandbox. ADR-0021 requires it where supported. On Windows,
+  CEF sandboxes subprocesses only in its bootstrap layout, where CEF's `bootstrap.exe` is
+  the exe and loads the application as a DLL. S4 ran unsandboxed and didn't test that
+  layout. The browser source must adopt it before it ships, which may replace the helper
+  exe above, or a superseding ADR must accept running unsandboxed.
+
+**S4 result**, on the S1 machine with CEF 154.0.34 (Chromium 154.0.8037.98). Each run
+measured 30 s of the built-in test page, which has a frame counter, alpha probes and a
+440 Hz / 660 Hz stereo tone:
+
+| Run | Paint rate | Intervals over 1.5 frames | Callback p50 / p99 | CPU, all processes | Private memory |
+|---|---|---|---|---|---|
+| 1920x1080, helper is the engine exe | 60.03 fps | 3 of 1799 | 2.6 / 3.9 ms | 22% of one core | 587 MB |
+| 1920x1080, separate helper exe | 60.02 fps | 0 of 1799 | 2.2 / 3.7 ms | 21% of one core | 569 MB |
+| 3840x2160, helper is the engine exe | 60.01 fps | 1 of 1799 | 4.1 / 6.6 ms | 22% of one core | 700 MB |
+
+- **Video:** all 1800 paints per run were accelerated, with no failures. The page's frame
+  counter showed every page frame once, none skipped, repeated or out of order. The
+  alpha probes held on every frame: the page texture is transparent and premultiplied,
+  and blending it over an opaque background gave the expected colours. CEF reused about
+  250 distinct texture handles at 1080p and 430 at 4K.
+- **Audio:** CEF honoured the requested 48 kHz stereo in 480-frame (10 ms) packets. Both
+  tones came through at the right pitch and level on the right channels. The runs
+  received 2999, 3000 and 2999 packets, as expected for 30 s.
+- **Audio timestamps:** contrary to CEF's header, which documents Unix-epoch
+  milliseconds, a packet's `pts` is not. It differed from the wall clock by the same offset to the millisecond in all
+  three runs, which fits milliseconds since boot (Chromium's QPC-based `TimeTicks`).
+  That is inferred, not checked against QPC. If it holds, packets map onto the media
+  clock directly.
+- **Shutdown:** every run reported one audio error, "Socket closed unexpectedly", while
+  the browser closed. The source must treat it as the end of the stream, not a fault.
+- **Codecs:** the page reports no H.264 or AAC support, and VP8, VP9, AV1, Opus, Vorbis,
+  FLAC, MP3 and WAV playable. That is the royalty-free set ADR-0021 expects.
+- **Runtime size:** the CEF runtime is about 400 MB uncompressed, 290 MB of it
+  `libcef.dll`. Its compressed size in the zip wasn't measured, so ADR-0021's estimate
+  of 150–250 MB added to the zip is still unchecked. The runtime includes CEF's
+  `CREDITS.html`.
+
+Still open, before the browser source is built: the CEF runtime's compressed size in
+the zip, other GPU vendors and multi-GPU machines (Chromium must render on the adapter
+the engine imports on), several browsers at once, pages with video, input events, and
+the sandboxed layout.
+
 <a id="persistence"></a>
 ## Persistence, config and secrets
 <!-- @section
@@ -754,13 +827,16 @@ verified = { hash = "b3:fe28871dd73ab140", by = "agent:claude@session_01QBbMRwRu
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:a4757b3070f69873", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0035: the zip gains jstream-plugin-host.exe from M3; portable layout, state location and S2 vcam registration findings unchanged" }
+verified = { hash = "b3:f7c98d9194d6528e", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review B1: folder list now names jstream-browser-helper.exe beside the CEF runtime, matching ARCH#browser-source, with the bootstrap-layout caveat; rest unchanged" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
 `jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
-runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder.
+runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder,
+with `jstream-browser-helper.exe` for CEF's subprocesses
+([ARCH › Browser source](#browser-source); the sandbox decision may replace it with
+CEF's bootstrap layout).
 From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin host
 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). Release builds
 link the C runtime statically and need only OS components (WebView2, Media Foundation,

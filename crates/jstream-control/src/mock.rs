@@ -14,11 +14,11 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, Crop, Edit, EntityKind, Event, Hello,
-    IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
-    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
-    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, Settings, SourceId,
-    SourceInfo, SourceKind, Welcome,
+    Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EntityKind, Event,
+    GeometryError, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId,
+    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
+    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
+    SceneInfo, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -202,6 +202,7 @@ struct State {
 #[derive(Clone, Default)]
 struct Collection {
     rev: Rev,
+    canvas: Canvas,
     /// In display order.
     scenes: Vec<Scene>,
     items: BTreeMap<ItemId, Item>,
@@ -236,7 +237,9 @@ struct Scene {
 struct Item {
     scene_id: SceneId,
     source_id: SourceId,
+    /// The legacy transform, or the view of `geometry` when it is set.
     transform: ItemTransform,
+    geometry: Option<ItemGeometry>,
     crop: Crop,
     visible: bool,
 }
@@ -295,6 +298,7 @@ impl State {
             rev,
             client_id: client_id.clone(),
             request_id: Some(request_id.clone()),
+            cause: None,
         });
         Ok(CallResult::Batch { rev })
     }
@@ -411,6 +415,7 @@ impl State {
             }
             Query::StateGet => QueryResult::StateGet {
                 rev: self.collection.rev,
+                canvas: self.collection.canvas,
                 sources: self.collection.source_infos(),
                 scenes: self
                     .collection
@@ -549,6 +554,7 @@ impl Collection {
                 item_id,
                 source_id,
                 transform,
+                geometry,
             } => {
                 check_id(item_id.as_str(), at, "item_id")?;
                 let index = self.existing_scene(&scene_id)?;
@@ -559,13 +565,25 @@ impl Collection {
                     return Err(already_exists(EntityKind::Item, item_id.as_str()));
                 }
                 self.check_nesting(&scene_id, kind, at)?;
+                let transform = match (transform, geometry) {
+                    (Some(_), Some(_)) => {
+                        return Err(invalid(
+                            at,
+                            "geometry",
+                            "send either `transform` or `geometry`, not both",
+                        ));
+                    }
+                    (None, Some(geometry)) => geometry_view(&geometry, at)?,
+                    (transform, None) => transform.unwrap_or(ItemTransform::IDENTITY),
+                };
                 self.scenes[index].items.push(item_id.clone());
                 self.items.insert(
                     item_id,
                     Item {
                         scene_id,
                         source_id,
-                        transform: transform.unwrap_or(ItemTransform::IDENTITY),
+                        transform,
+                        geometry,
                         crop: Crop::NONE,
                         visible: true,
                     },
@@ -588,7 +606,21 @@ impl Collection {
                 items.insert(to, item_id);
             }
             Edit::ItemSetTransform { item_id, transform } => {
-                self.existing_item(&item_id)?.transform = transform;
+                let item = self.existing_item(&item_id)?;
+                item.transform = transform;
+                item.geometry = None;
+            }
+            Edit::ItemSetGeometry { item_id, geometry } => {
+                self.existing_item(&item_id)?;
+                let view = geometry_view(&geometry, at)?;
+                let item = self.existing_item(&item_id)?;
+                item.transform = view;
+                item.geometry = Some(geometry);
+            }
+            Edit::CanvasSetSize { width, height } => {
+                check_canvas_side(width, at, "width")?;
+                check_canvas_side(height, at, "height")?;
+                self.canvas = Canvas { width, height };
             }
             Edit::ItemSetCrop { item_id, crop } => {
                 self.existing_item(&item_id)?.crop = crop;
@@ -806,7 +838,13 @@ impl Collection {
                 self.items.get(id).map(|item| ItemInfo {
                     item_id: id.clone(),
                     source_id: item.source_id.clone(),
+                    placement: if item.geometry.is_some() {
+                        PlacementForm::Geometry
+                    } else {
+                        PlacementForm::Legacy
+                    },
                     transform: item.transform,
+                    geometry: item.geometry,
                     crop: item.crop,
                     visible: item.visible,
                 })
@@ -867,6 +905,50 @@ impl Collection {
             .get_mut(item_id)
             .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))
     }
+}
+
+/// The largest canvas side the mock accepts, the same as the engine's.
+const MAX_CANVAS_EDGE: u32 = 8192;
+
+fn check_canvas_side(value: u32, at: usize, name: &str) -> Result<(), ProtocolError> {
+    if value == 0 || value > MAX_CANVAS_EDGE {
+        return Err(invalid(
+            at,
+            name,
+            format!("must be from 1 to {MAX_CANVAS_EDGE}"),
+        ));
+    }
+    Ok(())
+}
+
+/// Checks a geometry as the engine does (a positive size and perspective, neutral 3D,
+/// finite corners) and returns the deprecated transform view `ItemInfo` reports.
+fn geometry_view(geometry: &ItemGeometry, at: usize) -> Result<ItemTransform, ProtocolError> {
+    if let Err(err) = geometry.validate() {
+        let name = match err {
+            GeometryError::NonPositiveSize => "geometry.size",
+            GeometryError::NonPositivePerspective => "geometry.perspective_px",
+            _ => "geometry",
+        };
+        return Err(invalid(at, name, err.to_string()));
+    }
+    let non_neutral = [
+        ("geometry.tilt_deg", geometry.tilt_deg.get() != 0.0),
+        ("geometry.turn_deg", geometry.turn_deg.get() != 0.0),
+        ("geometry.depth_px", geometry.depth_px.get() != 0.0),
+        ("geometry.perspective_px", geometry.perspective_px.is_some()),
+    ];
+    if let Some((name, _)) = non_neutral.iter().find(|(_, set)| *set) {
+        return Err(invalid(
+            at,
+            name,
+            "tilt, turn, depth and perspective are not drawn yet, so they must be neutral",
+        ));
+    }
+    geometry
+        .project()
+        .and_then(|_| geometry.transform_view())
+        .map_err(|err| invalid(at, "geometry", err.to_string()))
 }
 
 fn invalid(at: usize, field: &str, reason: impl Into<String>) -> ProtocolError {
@@ -1197,6 +1279,7 @@ mod tests {
             item_id: ItemId::new(item),
             source_id: SourceId::new(source),
             transform: None,
+            geometry: None,
         }
     }
 
@@ -1286,6 +1369,7 @@ mod tests {
                     item_id: ItemId::new("cam"),
                     source_id: SourceId::new("webcam"),
                     transform: None,
+                    geometry: None,
                 },
                 Edit::SceneRename {
                     scene_id: SceneId::new("intro"),
@@ -1312,6 +1396,7 @@ mod tests {
             item_id: ItemId::new("cam"),
             source_id: SourceId::new("webcam"),
             transform: None,
+            geometry: None,
         });
         assert_eq!(batch(&*control, readd), Ok(Rev(3)));
     }
@@ -1496,6 +1581,9 @@ mod tests {
                 Edit::ItemRemove {
                     item_id: ItemId::new("i3"),
                 },
+                Edit::ItemRemove {
+                    item_id: ItemId::new("i4"),
+                },
                 Edit::SourceDelete {
                     source_id: SourceId::new("cam"),
                 },
@@ -1532,6 +1620,7 @@ mod tests {
                     item_id: ItemId::new("ib"),
                     source_id: SourceId::new("cam"),
                     transform: None,
+                    geometry: None,
                 },
             ],
             expected_rev: None,
@@ -1568,8 +1657,11 @@ mod tests {
         ) else {
             panic!("not an item list");
         };
-        assert_eq!(items[0].item_id.as_str(), "ib");
-        assert_eq!(items[0].source_id.as_str(), "a_src");
+        let ib = items
+            .iter()
+            .find(|item| item.item_id.as_str() == "ib")
+            .expect("ib is in b");
+        assert_eq!(ib.source_id.as_str(), "a_src");
     }
 
     /// Every batch the shared parity fixture rejects fails with exactly the error
@@ -1817,6 +1909,7 @@ mod tests {
                 rev: Rev(1),
                 client_id: ClientId::new("mock_2"),
                 request_id: Some(response.id),
+                cause: None,
             },
             changed(OutputState::Starting),
             changed(OutputState::Active),

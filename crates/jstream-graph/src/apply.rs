@@ -6,12 +6,12 @@
 //! edit succeeds does the working copy replace the state.
 
 use crate::deps::{self, Node};
-use crate::model::{Graph, Item, Output, Scene, Source, State};
+use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
 use crate::target::{record_path_problem, rtmp_url_problem};
 use jstream_protocol::{
-    Batch, Crop, Edit, EntityKind, ItemId, ItemTransform, KindDescriptor, Media, OutputId,
-    OutputKind, ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference, Rev,
-    RtmpTarget, SceneId, Settings, SourceId, SourceKind,
+    Batch, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId, ItemTransform,
+    KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
+    RecordContainer, Reference, Rev, RtmpTarget, SceneId, Settings, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -277,6 +277,7 @@ fn apply_edit(
             item_id,
             source_id,
             transform,
+            geometry,
         } => {
             check_id(item_id.as_str(), at, "item_id")?;
             let si = find_scene(state, scene_id)?;
@@ -287,10 +288,26 @@ fn apply_edit(
                 return Err(already_exists(EntityKind::Item, item_id.as_str()));
             }
             check_placement_cycle(state, scene_id, source_id, at)?;
+            let placement = match (transform, geometry) {
+                (Some(_), Some(_)) => {
+                    return Err(invalid(
+                        at,
+                        "geometry",
+                        "send either `transform` or `geometry`, not both",
+                    ));
+                }
+                (None, Some(geometry)) => {
+                    check_geometry(geometry, at)?;
+                    Placement::Geometry(*geometry)
+                }
+                (transform, None) => {
+                    Placement::Legacy(transform.unwrap_or(ItemTransform::IDENTITY))
+                }
+            };
             state.scenes[si].items.push(Item {
                 id: item_id.clone(),
                 source_id: source_id.clone(),
-                transform: transform.unwrap_or(ItemTransform::IDENTITY),
+                placement,
                 crop: Crop::NONE,
                 visible: true,
             });
@@ -318,10 +335,29 @@ fn apply_edit(
         }
         Edit::ItemSetTransform { item_id, transform } => {
             let item = item_mut(state, find_item(state, item_id)?)?;
-            let old = std::mem::replace(&mut item.transform, *transform);
-            Ok(vec![Edit::ItemSetTransform {
-                item_id: item_id.clone(),
-                transform: old,
+            let old = std::mem::replace(&mut item.placement, Placement::Legacy(*transform));
+            Ok(vec![set_placement(item_id, old)])
+        }
+        Edit::ItemSetGeometry { item_id, geometry } => {
+            let at_item = find_item(state, item_id)?;
+            check_geometry(geometry, at)?;
+            let item = item_mut(state, at_item)?;
+            let old = std::mem::replace(&mut item.placement, Placement::Geometry(*geometry));
+            Ok(vec![set_placement(item_id, old)])
+        }
+        Edit::CanvasSetSize { width, height } => {
+            check_canvas_side(*width, at, "width")?;
+            check_canvas_side(*height, at, "height")?;
+            let old = std::mem::replace(
+                &mut state.canvas,
+                Canvas {
+                    width: *width,
+                    height: *height,
+                },
+            );
+            Ok(vec![Edit::CanvasSetSize {
+                width: old.width,
+                height: old.height,
             }])
         }
         Edit::ItemSetSource { item_id, source_id } => {
@@ -551,6 +587,63 @@ fn apply_edit(
     }
 }
 
+/// Checks a geometry an edit stores (ADR-0022): a positive size, a positive perspective
+/// if any, neutral 3D fields, since the compositor doesn't draw them yet, and finite
+/// corners. Errors name `geometry` or `geometry.<field>`.
+fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolError> {
+    if let Err(err) = geometry.validate() {
+        let name = match err {
+            GeometryError::NonPositiveSize => "geometry.size",
+            GeometryError::NonPositivePerspective => "geometry.perspective_px",
+            _ => "geometry",
+        };
+        return Err(invalid(at, name, err.to_string()));
+    }
+    let non_neutral = [
+        ("geometry.tilt_deg", geometry.tilt_deg.get() != 0.0),
+        ("geometry.turn_deg", geometry.turn_deg.get() != 0.0),
+        ("geometry.depth_px", geometry.depth_px.get() != 0.0),
+        ("geometry.perspective_px", geometry.perspective_px.is_some()),
+    ];
+    if let Some((name, _)) = non_neutral.iter().find(|(_, set)| *set) {
+        return Err(invalid(
+            at,
+            name,
+            "tilt, turn, depth and perspective are not drawn yet, so they must be neutral",
+        ));
+    }
+    // Finite fields can still put a corner past f32's range (a centre near f32::MAX).
+    geometry
+        .project()
+        .map(|_| ())
+        .map_err(|err| invalid(at, "geometry", err.to_string()))
+}
+
+fn check_canvas_side(value: u32, at: usize, name: &str) -> Result<(), ProtocolError> {
+    if value == 0 || value > MAX_CANVAS_EDGE {
+        return Err(invalid(
+            at,
+            name,
+            format!("must be from 1 to {MAX_CANVAS_EDGE}"),
+        ));
+    }
+    Ok(())
+}
+
+/// The edit that puts `placement` back on `item_id`, in its own form.
+fn set_placement(item_id: &ItemId, placement: Placement) -> Edit {
+    match placement {
+        Placement::Legacy(transform) => Edit::ItemSetTransform {
+            item_id: item_id.clone(),
+            transform,
+        },
+        Placement::Geometry(geometry) => Edit::ItemSetGeometry {
+            item_id: item_id.clone(),
+            geometry,
+        },
+    }
+}
+
 /// Checks an RTMP target; `name` is its field path within the edit (`kind.target`).
 /// The reason never repeats the URL, which might hold a key.
 fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), ProtocolError> {
@@ -651,11 +744,16 @@ fn restore_item(
     index: usize,
     top: usize,
 ) -> Result<Vec<Edit>, ProtocolError> {
+    let (transform, geometry) = match item.placement {
+        Placement::Legacy(transform) => (Some(transform), None),
+        Placement::Geometry(geometry) => (None, Some(geometry)),
+    };
     let mut edits = vec![Edit::ItemAdd {
         scene_id: scene_id.clone(),
         item_id: item.id.clone(),
         source_id: item.source_id.clone(),
-        transform: Some(item.transform),
+        transform,
+        geometry,
     }];
     if index != top {
         edits.push(Edit::ItemReorder {

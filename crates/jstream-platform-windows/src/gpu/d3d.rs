@@ -27,8 +27,9 @@ use crate::com::OsResult;
 /// The D3D11 device and immediate context, on the same adapter as wgpu's device.
 pub(crate) struct D3D11 {
     pub(crate) device: ID3D11Device5,
-    /// The immediate context, for the D3D11-side fence waits and signals (not yet used).
-    pub(crate) _context: ID3D11DeviceContext4,
+    /// The immediate context, for capture's copies into shared textures and its fence
+    /// signals.
+    pub(crate) context: ID3D11DeviceContext4,
 }
 
 /// Creates a multithread-protected D3D11 device on `adapter` (Media Foundation's DXGI
@@ -70,7 +71,7 @@ pub(crate) fn create_d3d11(adapter: &IDXGIAdapter) -> Result<D3D11, PlatformErro
         device: device
             .cast()
             .os("ID3D11Device5 (shared fences need Windows 10 1703 or later)")?,
-        _context: context.cast().os("ID3D11DeviceContext4")?,
+        context: context.cast().os("ID3D11DeviceContext4")?,
     })
 }
 
@@ -86,8 +87,8 @@ impl Drop for OwnedHandle {
 
 /// A texture allocated by D3D11 with a shared NT handle and opened on D3D12.
 pub(crate) struct SharedTexture {
-    /// The D3D11 side, for capture and the encoders (not yet used).
-    pub(crate) _d3d11: ID3D11Texture2D,
+    /// The D3D11 side, which capture copies into (and the encoders will read).
+    pub(crate) d3d11: ID3D11Texture2D,
     pub(crate) d3d12: ID3D12Resource,
 }
 
@@ -142,7 +143,7 @@ impl SharedTexture {
         unsafe { d3d12.OpenSharedHandle(handle.0, &mut opened) }
             .os("ID3D12Device::OpenSharedHandle (texture)")?;
         Ok(Self {
-            _d3d11: texture,
+            d3d11: texture,
             d3d12: opened.ok_or(PlatformError::Os {
                 call: "ID3D12Device::OpenSharedHandle",
                 code: None,
@@ -152,10 +153,11 @@ impl SharedTexture {
     }
 }
 
-/// One fence shared by D3D11 and D3D12. Its values only ever increase.
+/// One fence shared by D3D11 and D3D12. Its values only ever increase, so only one
+/// queue signals it (see the `gpu` module's fence values).
 pub(crate) struct SharedFence {
-    /// The D3D11 side, for the D3D11-side waits and signals (not yet used).
-    pub(crate) _d3d11: ID3D11Fence,
+    /// The D3D11 side, which capture signals.
+    pub(crate) d3d11: ID3D11Fence,
     pub(crate) d3d12: ID3D12Fence,
 }
 
@@ -181,7 +183,7 @@ impl SharedFence {
         unsafe { d3d12.OpenSharedHandle(handle.0, &mut opened) }
             .os("ID3D12Device::OpenSharedHandle (fence)")?;
         Ok(Self {
-            _d3d11: fence,
+            d3d11: fence,
             d3d12: opened.ok_or(PlatformError::Os {
                 call: "ID3D12Device::OpenSharedHandle",
                 code: None,

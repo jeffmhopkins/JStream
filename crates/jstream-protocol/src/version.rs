@@ -9,7 +9,10 @@ use std::fmt;
 /// It follows semver independently of the app (R-API-001), at 0.x as after 1.0: an
 /// addition bumps `minor` and old clients keep working; removing or renaming anything
 /// bumps `major`, needs an ADR, and needs a minor release that deprecates it first.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion { major: 0, minor: 9 };
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion {
+    major: 0,
+    minor: 11,
+};
 
 /// A protocol version: `major.minor`. Patch releases never change the wire format, so
 /// they are not part of it.

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:14419bda270b5dd1", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: re-read; trait, errors, mock and ws bullets hold; mock gains item.set_source and duplicated_from (Design describes them)" }
+verified = { hash = "b3:03b5a5e95e7b2c05", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; call() now covers history calls (B2) and the mock keeps canvas/geometry (B3); holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:ebc998f77e7022dd", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "B5: mock rules list now has item.set_source in the cycle check and the duplicated_from self-link rejection/plain-link reporting, matching mock.rs and the parity fixture" }
+verified = { hash = "b3:21a987fc74e7a497", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; mock reads bullet (canvas, placement forms, outputs) and B2's history text hold against mock.rs" }
 -->
 
 ### The trait
@@ -56,9 +56,9 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
   keys its undo history and audit-log entries
   ([ADR-0013](../../docs/adr/0013-command-model.md)). A second `hello` returns the same
   identity.
-- `call(Call) -> Response`: one batch, action or query. The implementation chooses the
-  request ID and returns it in the `Response`, so the caller can match the
-  `state.changed` event its batch causes. Before `hello` it fails with
+- `call(Call) -> Response`: one batch, action, query or history call (undo, redo). The
+  implementation chooses the request ID and returns it in the `Response`, so the caller
+  can match the `state.changed` event its batch or history call causes. Before `hello` it fails with
   `handshake_required`.
 - `events() -> EventStream`: an independent subscription to every event emitted after
   the call, buffered until read, in emission order. It ends when the session or the
@@ -108,6 +108,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
   - reorder indices out of range;
+  - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
+    not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or
     either while a source's settings refer to it;
   - nesting cycles from `item.add` and `item.set_source`;
@@ -130,23 +132,13 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
   scene) and `output.list` (ordered by ID), each at the current `rev`. So it keeps
-  everything an edit sets: source names, kinds and settings, each item's transform,
-  crop and visibility, and each output's kind and target. `video.snapshot` is not one
-  of those reads: the mock has no compositor and answers it with `internal`, as it
-  does for any protocol variant it does not implement;
+  everything an edit sets: the canvas, source names, kinds and settings, each item's
+  placement (its transform, or its geometry and the transform view of it), crop and
+  visibility, and each output's kind and target. `video.snapshot` is not one of those
+  reads: the mock has no compositor and answers it with `internal`, as it does for any
+  protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
-  the way `Engine::with_output` does: it can be started, stopped and read with
-  `output.status`, but it is not in the collection, so `output.list` and `state.get`
-  don't report it and `output.set_key` answers `not_found` for it;
-- the stream-key actions with the engine's checks and errors. `output.set_key` answers
-  `not_found` for an output not in the collection, then `invalid_argument` (field
-  `key`) for an empty, over-long or whitespace key; `output.clear_key` always succeeds.
-  The keys live in memory, outside the collection: no `rev`, no event, kept when their
-  output is deleted. `output.status` reports `key_set` from them, and
-  `MockEngine::stream_key` lets a client test check what was stored. Unlike an
-  `Engine` built without `with_key_store`, which answers `action_failed`, the mock
-  always has a store, so clients can test the whole flow;
 - `state.changed` events carrying the request ID, and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;

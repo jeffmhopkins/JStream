@@ -6,17 +6,19 @@
 //! naming and classification checks see every variant.
 
 use crate::{
-    Action, Batch, Call, CallResult, ClientId, ClientMessage, Command, CommandClass, Crop,
-    DropCounts, Edit, EntityKind, ErrorResponse, Event, EventMessage, Finite32, Hello,
-    IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
-    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId,
-    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, ServerMessage,
-    Settings, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    Action, Batch, Call, CallResult, Canvas, ClientId, ClientMessage, Command, CommandClass, Crop,
+    DropCounts, Edit, EntityKind, ErrorResponse, Event, EventMessage, Finite32, FitMode, Hello,
+    IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo,
+    OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
+    RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo,
+    SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
+    Vec2, Welcome, json_schema,
 };
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
+use crate::{HistoryCall, HistoryDirection, HistoryOp};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -38,12 +40,21 @@ pub(crate) fn edits() -> Vec<Edit> {
             item_id: ItemId::new("itm_1"),
             source_id: SourceId::new("src_cam"),
             transform: None,
+            geometry: None,
         },
         Edit::ItemAdd {
             scene_id: SceneId::new("scn_1"),
             item_id: ItemId::new("itm_2"),
             source_id: SourceId::new("src_cam"),
             transform: Some(ItemTransform::IDENTITY),
+            geometry: None,
+        },
+        Edit::ItemAdd {
+            scene_id: SceneId::new("scn_1"),
+            item_id: ItemId::new("itm_3"),
+            source_id: SourceId::new("src_cam"),
+            transform: None,
+            geometry: Some(corner_box()),
         },
         Edit::ItemRemove {
             item_id: ItemId::new("itm_1"),
@@ -55,6 +66,18 @@ pub(crate) fn edits() -> Vec<Edit> {
                 scale: Vec2::new(0.25, f32::MAX).expect("finite"),
                 rotation_deg: Finite32::new(-90.0).expect("finite"),
             },
+        },
+        Edit::ItemSetGeometry {
+            item_id: ItemId::new("itm_2"),
+            geometry: ItemGeometry {
+                fit_mode: FitMode::Fill,
+                rotation_deg: Finite32::new(12.5).expect("finite"),
+                ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+            },
+        },
+        Edit::CanvasSetSize {
+            width: 3840,
+            height: 2160,
         },
         Edit::ItemSetVisible {
             item_id: ItemId::new("itm_2"),
@@ -378,18 +401,34 @@ fn source_infos() -> Vec<SourceInfo> {
     ]
 }
 
+/// A 480×270 box in the bottom-right quarter of a 1920×1080 canvas.
+fn corner_box() -> ItemGeometry {
+    ItemGeometry::try_new(
+        Vec2::new(1600.0, 900.0).expect("finite"),
+        Size::try_new(480.0, 270.0).expect("positive"),
+    )
+    .expect("positive")
+}
+
 fn item_infos() -> Vec<ItemInfo> {
     vec![
         ItemInfo {
             item_id: ItemId::new("itm_1"),
             source_id: SourceId::new("src_intro"),
-            transform: ItemTransform::IDENTITY,
+            placement: PlacementForm::Geometry,
+            transform: corner_box().transform_view().expect("finite"),
+            geometry: Some(ItemGeometry {
+                fit_mode: FitMode::Stretch,
+                ..corner_box()
+            }),
             crop: Crop::NONE,
             visible: true,
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
             source_id: SourceId::new("src_cam"),
+            placement: PlacementForm::Legacy,
+            geometry: None,
             transform: ItemTransform {
                 position: Vec2::new(1280.0, 720.0).expect("finite"),
                 scale: Vec2::new(0.25, 0.25).expect("finite"),
@@ -432,6 +471,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         },
         QueryResult::StateGet {
             rev: Rev(12),
+            canvas: Canvas::DEFAULT,
             sources: source_infos(),
             scenes: vec![
                 SceneInfo {
@@ -489,11 +529,25 @@ pub(crate) fn events() -> Vec<Event> {
             rev: Rev(13),
             client_id: ClientId::new("cli_7"),
             request_id: Some(RequestId::new("r1")),
+            cause: None,
         },
         Event::StateChanged {
             rev: Rev(14),
             client_id: ClientId::new("cli_8"),
             request_id: None,
+            cause: None,
+        },
+        Event::StateChanged {
+            rev: Rev(15),
+            client_id: ClientId::new("cli_7"),
+            request_id: Some(RequestId::new("r30")),
+            cause: Some(HistoryDirection::Undo),
+        },
+        Event::StateChanged {
+            rev: Rev(16),
+            client_id: ClientId::new("cli_7"),
+            request_id: Some(RequestId::new("r31")),
+            cause: Some(HistoryDirection::Redo),
         },
     ];
     for state in [
@@ -542,6 +596,17 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         ProtocolError::InvalidArgument {
             field: "edits.0.name".into(),
             reason: "must not be empty".into(),
+        },
+        ProtocolError::UndoConflict {
+            step_rev: Rev(9),
+            client_id: ClientId::new("cli_8"),
+            rev: Rev(11),
+        },
+        ProtocolError::HistoryEmpty {
+            direction: HistoryDirection::Undo,
+        },
+        ProtocolError::HistoryEmpty {
+            direction: HistoryDirection::Redo,
         },
         ProtocolError::ActionFailed {
             reason: "connection refused".into(),
@@ -603,6 +668,18 @@ pub(crate) fn client_messages() -> Vec<ClientMessage> {
     for (n, query) in queries().into_iter().enumerate() {
         msgs.push(request(20 + n, Call::Query { query }));
     }
+    msgs.push(request(
+        30,
+        Call::History(HistoryCall::new(HistoryOp::Undo)),
+    ));
+    msgs.push(request(
+        31,
+        Call::History(
+            HistoryCall::new(HistoryOp::Redo)
+                .expecting(Rev(15))
+                .with_idempotency_key(IdempotencyKey::new("k-2")),
+        ),
+    ));
     msgs
 }
 
@@ -620,6 +697,15 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         ServerMessage::Response(Response {
             id: RequestId::new("r10"),
             result: CallResult::Action {},
+        }),
+        ServerMessage::Response(Response {
+            id: RequestId::new("r30"),
+            result: CallResult::History {
+                rev: Rev(15),
+                step_rev: Rev(13),
+                undo_depth: 4,
+                redo_depth: 1,
+            },
         }),
         ServerMessage::Error(ErrorResponse {
             id: None,
@@ -695,6 +781,7 @@ pub(crate) fn check_names_are_valid() {
         .into_iter()
         .chain(schema_tags(&schema, "Action", "type"))
         .chain(schema_tags(&schema, "Query", "type"))
+        .chain(schema_tags(&schema, "HistoryOp", "type"))
     {
         assert!(
             is_noun_verb(&name),
@@ -725,6 +812,11 @@ pub(crate) fn check_names_are_valid() {
                 .map(|q| (q.name(), serde_json::to_value(q))),
         )
         .chain(
+            [HistoryOp::Undo, HistoryOp::Redo]
+                .iter()
+                .map(|h| (h.name(), serde_json::to_value(h))),
+        )
+        .chain(
             query_results()
                 .iter()
                 .map(|r| (r.name(), serde_json::to_value(r))),
@@ -747,12 +839,19 @@ pub(crate) fn check_every_command_is_classified() {
         edit_names.is_disjoint(&action_names),
         "a name is both an edit and an action"
     );
-    // The only ways to send a command are a batch of edits or a single action.
+    // The only ways to send a command are a batch of edits or a single action. A
+    // query reads, and a history call (ADR-0032) carries no command.
     let call_kinds = schema_tags(&schema, "Call", "kind");
     assert_eq!(
         call_kinds,
-        BTreeSet::from(["action".into(), "batch".into(), "query".into()])
+        BTreeSet::from([
+            "action".into(),
+            "batch".into(),
+            "history".into(),
+            "query".into()
+        ])
     );
+    check_history_call_carries_no_command(&schema, &edit_names, &action_names);
 
     let mut seen = BTreeSet::new();
     for command in commands() {
@@ -776,6 +875,41 @@ pub(crate) fn check_every_command_is_classified() {
     assert_eq!(
         seen, all,
         "every command in the schema has a classified fixture"
+    );
+}
+
+/// A `history` call's fields are its op, `expected_rev` and `idempotency_key`: no
+/// `edits`, no `action`, and no op that names an edit or an action.
+fn check_history_call_carries_no_command(
+    schema: &Value,
+    edit_names: &BTreeSet<String>,
+    action_names: &BTreeSet<String>,
+) {
+    let history = schema["$defs"]["Call"]["oneOf"]
+        .as_array()
+        .expect("Call has oneOf")
+        .iter()
+        .find(|alt| alt["properties"]["kind"]["const"] == "history")
+        .expect("Call has a history alternative");
+    // The alternative tags `kind` and refers to `HistoryCall` for the rest.
+    let call = history["$ref"]
+        .as_str()
+        .and_then(|r| r.strip_prefix("#/$defs/"))
+        .expect("the history alternative refers to its struct");
+    let fields: BTreeSet<&str> = [&history["properties"], &schema["$defs"][call]["properties"]]
+        .into_iter()
+        .filter_map(Value::as_object)
+        .flat_map(|props| props.keys().map(String::as_str))
+        .collect();
+    assert_eq!(
+        fields,
+        BTreeSet::from(["kind", "op", "expected_rev", "idempotency_key"]),
+        "a history call carries no command"
+    );
+    let ops = schema_tags(schema, "HistoryOp", "type");
+    assert!(
+        ops.is_disjoint(edit_names) && ops.is_disjoint(action_names),
+        "a history op is not a command"
     );
 }
 

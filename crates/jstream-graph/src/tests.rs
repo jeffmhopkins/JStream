@@ -1,10 +1,11 @@
 //! Unit tests for edit application, validation and inverses, and the undo property test.
 
-use crate::Graph;
+use crate::{Graph, Placement};
 use jstream_protocol::{
-    Crop, Edit, EntityKind, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId,
-    OutputInfo, OutputKind, ParamDescriptor, ParamType, ProtocolError, QueryResult,
-    RecordContainer, Rev, RtmpTarget, SceneId, Settings, SourceId, SourceKind, Vec2,
+    Canvas, Crop, Edit, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform,
+    KindCategory, KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor,
+    ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget,
+    SceneId, Settings, Size, SourceId, SourceKind, Vec2,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -134,6 +135,7 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
         item_id: ItemId::new(item),
         source_id: SourceId::new(source),
         transform: None,
+        geometry: None,
     }
 }
 
@@ -978,8 +980,8 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        Crop, Edit, ItemId, ItemTransform, OutputId, Rev, SceneId, Settings, SourceId, SourceKind,
-        Vec2,
+        Crop, Edit, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, OutputId, Rev, SceneId,
+        Settings, Size, SourceId, SourceKind, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1030,7 +1032,26 @@ mod property {
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let index = |rng: &mut Rng| u32::try_from(rng.below(6)).expect("fits");
         let f = |rng: &mut Rng| f32::from(u16::try_from(rng.below(2000)).expect("fits")) - 1000.0;
-        match rng.below(22) {
+        // Mostly valid geometries; one in six has a zero width or a tilt.
+        let geometry = |rng: &mut Rng| {
+            let (width, tilt) = match rng.below(6) {
+                0 => (0.0, 0.0),
+                1 => (64.0, 5.0),
+                _ => (f(rng).abs() + 1.0, 0.0),
+            };
+            ItemGeometry {
+                center: Vec2::new(f(rng), f(rng)).expect("finite"),
+                size: Size {
+                    width: Finite32::new(width).expect("finite"),
+                    height: Finite32::new(f(rng).abs() + 1.0).expect("finite"),
+                },
+                fit_mode: [FitMode::Fit, FitMode::Fill, FitMode::Stretch][rng.below(3)],
+                rotation_deg: Finite32::new(f(rng) / 10.0).expect("finite"),
+                tilt_deg: Finite32::new(tilt).expect("finite"),
+                ..ItemGeometry::covering_canvas(1, 1).expect("positive")
+            }
+        };
+        match rng.below(25) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1111,11 +1132,29 @@ mod property {
                     output_create(&pool(rng, "out"), url(rng))
                 }
             }
-            20 => Edit::ItemSetSource {
+            18 => Edit::OutputSetTarget {
+                output_id: OutputId::new(output(rng)),
+                target: target(url(rng)),
+            },
+            19 => Edit::OutputDelete {
+                output_id: OutputId::new(output(rng)),
+            },
+            20 => Edit::ItemSetGeometry {
+                item_id: ItemId::new(item(rng)),
+                geometry: geometry(rng),
+            },
+            21 => Edit::ItemAdd {
+                scene_id: SceneId::new(scene(rng)),
+                item_id: ItemId::new(pool(rng, "i")),
+                source_id: SourceId::new(source(rng)),
+                transform: None,
+                geometry: Some(geometry(rng)),
+            },
+            22 => Edit::ItemSetSource {
                 item_id: ItemId::new(item(rng)),
                 source_id: SourceId::new(source(rng)),
             },
-            21 => Edit::SourceCreate {
+            23 => Edit::SourceCreate {
                 source_id: SourceId::new(pool(rng, "src")),
                 name: "linked".into(),
                 kind: SourceKind::Builtin {
@@ -1124,12 +1163,9 @@ mod property {
                 settings: Settings::new(),
                 duplicated_from: Some(SourceId::new(source(rng))),
             },
-            18 => Edit::OutputSetTarget {
-                output_id: OutputId::new(output(rng)),
-                target: target(url(rng)),
-            },
-            _ => Edit::OutputDelete {
-                output_id: OutputId::new(output(rng)),
+            _ => Edit::CanvasSetSize {
+                width: u32::try_from(rng.below(3000)).expect("fits"),
+                height: 720,
             },
         }
     }
@@ -1198,6 +1234,7 @@ mod property {
             "item.remove",
             "item.reorder",
             "item.set_transform",
+            "item.set_geometry",
             "item.set_visible",
             "item.set_crop",
             "item.set_source",
@@ -1209,6 +1246,7 @@ mod property {
             "output.create",
             "output.set_target",
             "output.delete",
+            "canvas.set_size",
         ]
         .into();
         assert_eq!(applied_names, all);
@@ -1590,6 +1628,263 @@ fn every_edge_adding_edit_is_cycle_checked() {
     );
 }
 
+/// A 200×100 box centred at (300, 200), rotated 90° clockwise and filled.
+fn boxed() -> ItemGeometry {
+    ItemGeometry {
+        fit_mode: FitMode::Fill,
+        rotation_deg: Finite32::new(90.0).expect("finite"),
+        ..ItemGeometry::try_new(
+            Vec2::new(300.0, 200.0).expect("finite"),
+            Size::try_new(200.0, 100.0).expect("positive"),
+        )
+        .expect("positive")
+    }
+}
+
+fn set_geometry(item: &str, geometry: ItemGeometry) -> Edit {
+    Edit::ItemSetGeometry {
+        item_id: ItemId::new(item),
+        geometry,
+    }
+}
+
+fn placement(graph: &Graph, item: &str) -> Placement {
+    *graph
+        .state()
+        .item(&ItemId::new(item))
+        .expect("item exists")
+        .1
+        .placement()
+}
+
+#[test]
+fn set_geometry_converts_a_legacy_item_and_undo_restores_the_transform() {
+    let mut graph = fixture();
+    let moved = ItemTransform {
+        position: Vec2::new(5.0, 6.0).expect("finite"),
+        ..ItemTransform::IDENTITY
+    };
+    apply_ok(
+        &mut graph,
+        vec![
+            add("a", "i1", "cam"),
+            Edit::ItemSetTransform {
+                item_id: ItemId::new("i1"),
+                transform: moved,
+            },
+        ],
+    );
+    let applied = apply_ok(&mut graph, vec![set_geometry("i1", boxed())]);
+    assert_eq!(placement(&graph, "i1"), Placement::Geometry(boxed()));
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::ItemSetTransform {
+            item_id: ItemId::new("i1"),
+            transform: moved,
+        }]
+    );
+    // Writing a transform back makes it legacy again; its inverse restores the geometry.
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::ItemSetTransform {
+            item_id: ItemId::new("i1"),
+            transform: moved,
+        }],
+    );
+    assert_eq!(placement(&graph, "i1"), Placement::Legacy(moved));
+    assert_eq!(applied.inverse.edits, vec![set_geometry("i1", boxed())]);
+}
+
+#[test]
+fn removing_a_geometry_item_re_adds_it_with_its_geometry() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![Edit::ItemAdd {
+            scene_id: SceneId::new("a"),
+            item_id: ItemId::new("i1"),
+            source_id: SourceId::new("cam"),
+            transform: None,
+            geometry: Some(boxed()),
+        }],
+    );
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::ItemRemove {
+            item_id: ItemId::new("i1"),
+        }],
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::ItemAdd {
+            scene_id: SceneId::new("a"),
+            item_id: ItemId::new("i1"),
+            source_id: SourceId::new("cam"),
+            transform: None,
+            geometry: Some(boxed()),
+        }]
+    );
+}
+
+#[test]
+fn a_geometry_item_reads_its_geometry_and_a_transform_view() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![
+            add("a", "legacy", "cam"),
+            Edit::ItemAdd {
+                scene_id: SceneId::new("a"),
+                item_id: ItemId::new("boxed"),
+                source_id: SourceId::new("cam"),
+                transform: None,
+                geometry: Some(boxed()),
+            },
+        ],
+    );
+    let Some(Ok(QueryResult::ItemList { items, .. })) = graph.query(&Query::ItemList {
+        scene_id: SceneId::new("a"),
+    }) else {
+        panic!("item.list");
+    };
+    assert_eq!(items[0].placement, PlacementForm::Legacy);
+    assert_eq!(items[0].geometry, None);
+    assert_eq!(items[0].transform, ItemTransform::IDENTITY);
+    assert_eq!(items[1].placement, PlacementForm::Geometry);
+    assert_eq!(items[1].geometry, Some(boxed()));
+    // Rotated 90° clockwise about (300, 200), the top-left corner (-100, -50) lands at
+    // (300 + 50, 200 - 100).
+    let view = items[1].transform;
+    assert!((view.position.x.get() - 350.0).abs() < 1e-3, "{view:?}");
+    assert!((view.position.y.get() - 100.0).abs() < 1e-3, "{view:?}");
+    assert_eq!(view.scale, ItemTransform::IDENTITY.scale);
+    assert_eq!(view.rotation_deg, boxed().rotation_deg);
+}
+
+#[test]
+fn invalid_geometries_name_the_field() {
+    let mut graph = fixture();
+    apply_ok(&mut graph, vec![add("a", "i1", "cam")]);
+    let finite = |v: f32| Finite32::new(v).expect("finite");
+    let cases = [
+        (
+            ItemGeometry {
+                size: Size {
+                    width: finite(-1.0),
+                    height: finite(10.0),
+                },
+                ..boxed()
+            },
+            "edits.0.geometry.size",
+        ),
+        (
+            ItemGeometry {
+                perspective_px: Some(finite(0.0)),
+                ..boxed()
+            },
+            "edits.0.geometry.perspective_px",
+        ),
+        (
+            ItemGeometry {
+                tilt_deg: finite(1.0),
+                ..boxed()
+            },
+            "edits.0.geometry.tilt_deg",
+        ),
+        (
+            ItemGeometry {
+                turn_deg: finite(1.0),
+                ..boxed()
+            },
+            "edits.0.geometry.turn_deg",
+        ),
+        (
+            ItemGeometry {
+                depth_px: finite(1.0),
+                ..boxed()
+            },
+            "edits.0.geometry.depth_px",
+        ),
+        (
+            ItemGeometry {
+                perspective_px: Some(finite(800.0)),
+                ..boxed()
+            },
+            "edits.0.geometry.perspective_px",
+        ),
+        (
+            ItemGeometry {
+                center: Vec2::new(f32::MAX, 0.0).expect("finite"),
+                size: Size {
+                    width: finite(f32::MAX),
+                    height: finite(10.0),
+                },
+                rotation_deg: finite(180.0),
+                ..boxed()
+            },
+            "edits.0.geometry",
+        ),
+    ];
+    for (geometry, field) in cases {
+        let (got, _) = invalid_reason(apply_err(&mut graph, vec![set_geometry("i1", geometry)]));
+        assert_eq!(got, field, "{geometry:?}");
+    }
+    let both = Edit::ItemAdd {
+        scene_id: SceneId::new("a"),
+        item_id: ItemId::new("i2"),
+        source_id: SourceId::new("cam"),
+        transform: Some(ItemTransform::IDENTITY),
+        geometry: Some(boxed()),
+    };
+    let (field, _) = invalid_reason(apply_err(&mut graph, vec![both]));
+    assert_eq!(field, "edits.0.geometry");
+}
+
+#[test]
+fn canvas_set_size_is_checked_and_undone() {
+    let mut graph = fixture();
+    assert_eq!(graph.state().canvas(), Canvas::DEFAULT);
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::CanvasSetSize {
+            width: 1080,
+            height: 1920,
+        }],
+    );
+    assert_eq!(
+        graph.state().canvas(),
+        Canvas {
+            width: 1080,
+            height: 1920
+        }
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::CanvasSetSize {
+            width: 1920,
+            height: 1080,
+        }]
+    );
+    for (width, height, field) in [
+        (0, 1080, "edits.0.width"),
+        (1920, 0, "edits.0.height"),
+        (crate::MAX_CANVAS_EDGE + 1, 1080, "edits.0.width"),
+    ] {
+        let (got, _) = invalid_reason(apply_err(
+            &mut graph,
+            vec![Edit::CanvasSetSize { width, height }],
+        ));
+        assert_eq!(got, field);
+    }
+    apply_ok(
+        &mut graph,
+        vec![Edit::CanvasSetSize {
+            width: crate::MAX_CANVAS_EDGE,
+            height: crate::MAX_CANVAS_EDGE,
+        }],
+    );
+}
+
 fn set_source(item: &str, source: &str) -> Edit {
     Edit::ItemSetSource {
         item_id: ItemId::new(item),
@@ -1607,9 +1902,8 @@ fn duplicate(source: &str, copy: &str) -> Edit {
 
 /// The `duplicated_from` that `source.list` reports for `id`.
 fn reported_original(graph: &Graph, id: &str) -> Option<String> {
-    let Some(QueryResult::SourceList { sources, .. }) = graph
-        .query(&jstream_protocol::Query::SourceList)
-        .and_then(Result::ok)
+    let Some(QueryResult::SourceList { sources, .. }) =
+        graph.query(&Query::SourceList).and_then(Result::ok)
     else {
         panic!("source.list answers");
     };
@@ -1658,7 +1952,7 @@ fn set_source_keeps_the_item_and_its_placement() {
     let (scene, item) = g.state().item(&ItemId::new("i1")).expect("i1");
     assert_eq!(scene.id().as_str(), "a");
     assert_eq!(item.source_id().as_str(), "sb");
-    assert_eq!(item.transform(), before.transform());
+    assert_eq!(item.placement(), before.placement());
     assert_eq!(item.crop(), before.crop());
     assert!(!item.visible());
     assert_eq!(ids(&g, "a"), ["i1", "i2", "i3"]);
