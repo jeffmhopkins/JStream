@@ -327,7 +327,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:69a83bcc7bc7abfe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:5cfa3cb55bbe75fa", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
@@ -369,7 +369,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -387,7 +387,7 @@ stamp = { hash = "b3:13f2fa2d982a7e24" }
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
@@ -963,7 +963,7 @@ stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
+stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: re-read; engine/session design does not restate asset-path rules; the protocol Design change only tightens a per-value check" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d638c6ca8019b15d" }
@@ -1491,7 +1491,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: re-read; graph purpose relies on protocol Edits, IDs and errors, unaffected by the tighter absolute asset-path check" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2010,7 +2010,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2067,7 +2067,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -2085,7 +2085,7 @@ stamp = { hash = "b3:13f2fa2d982a7e24" }
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
@@ -2130,7 +2130,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
+stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: kind.rs/settings.rs changes only tighten check_asset_path and its docs; the Kinds and settings contents bullet (pure per-value checks incl. check_asset_path) still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -2148,7 +2148,7 @@ stamp = { hash = "b3:13f2fa2d982a7e24" }
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
+stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: kind.rs/settings.rs changes only tighten check_asset_path and its docs; the Kinds and settings contents bullet (pure per-value checks incl. check_asset_path) still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
