@@ -37,7 +37,7 @@ pub enum FilterOwner {
     Master,
     /// An output's own chains, which run after the master stage for that output only
     /// (ADR-0027 §2). An output with filters on its audio chain gets its own audio
-    /// encode.
+    /// encode from its next start; edits to a chain it started with apply live.
     Output {
         /// The output.
         output_id: OutputId,
@@ -83,7 +83,7 @@ impl FilterChain {
 /// One filter, as `source.list`, `output.list` and `state.get` report it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct FilterInfo {
-    /// Its ID, unique within its source.
+    /// Its ID, unique within its owner's chains.
     pub filter_id: FilterId,
     /// Its kind, as `kind.list` reports it.
     pub kind: String,

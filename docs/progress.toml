@@ -725,7 +725,8 @@ prs = [249]
 id = "D8p"
 milestone = "M2"
 title = "Audio chain protocol fields"
-status = "planned"
+prs = [303]
+status = "review"
 
 [[item]]
 id = "C9"

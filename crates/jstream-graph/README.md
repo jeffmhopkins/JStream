@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:6edb26d3db8b822b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
+verified = { hash = "b3:0a0e675ca8016216", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3 N4: persist tests list now names a file without master or outputs[].filters loading with empty chains (a_file_without_master_or_output_filters_loads); holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -318,7 +318,9 @@ settings refer to a later one must produce exactly the checked-in
 moves on, and a migration has to load it); a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none; a file
 without `sends`, `buses` or source `audio` (as saved before audio existed) keeping
-its audio sources' master sends at 0 dB; a removed master send's round trip; a profile's
+its audio sources' master sends at 0 dB; a file without `master` or any output's
+`filters` (as saved before their chains existed) loading with those chains empty and
+the sources' filters intact; a removed master send's round trip; a profile's
 round trip; a virtual camera's round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an

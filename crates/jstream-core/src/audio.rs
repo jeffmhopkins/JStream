@@ -194,7 +194,8 @@ impl AudioRouting {
             tracing::warn!(reason, "master filter bypassed");
         }
         for (output_id, tap) in &mut attached.taps {
-            // A running output can't be deleted, so its chain is always there.
+            // The output may be gone while its failed pipeline drains; its release
+            // removes the tap.
             let Some(output) = state.output(output_id) else {
                 continue;
             };

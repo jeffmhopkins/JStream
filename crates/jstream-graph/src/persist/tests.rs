@@ -243,6 +243,38 @@ fn a_file_without_encoder_profiles_loads() {
     );
 }
 
+/// A file written before the master stage and outputs had chains (no `master`, no
+/// `outputs[].filters`) loads with those chains empty and the sources' filters intact.
+#[test]
+fn a_file_without_master_or_output_filters_loads() {
+    use jstream_protocol::FilterChain;
+    let file = edit_file(|v| {
+        v.as_object_mut().map(|o| o.remove("master"));
+        for output in v["outputs"].as_array_mut().into_iter().flatten() {
+            output.as_object_mut().map(|o| o.remove("filters"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    let state = graph.state();
+    assert!(state.master().chain(FilterChain::Audio).is_empty());
+    assert!(
+        state
+            .outputs()
+            .all(|o| o.filters().chain(FilterChain::Audio).is_empty())
+    );
+    let Ok(full) = load(&edit_file(|_| {})) else {
+        panic!("the fixture did not load");
+    };
+    for source in full.state().sources() {
+        let Some(loaded) = state.source(source.id()) else {
+            panic!("a source was lost");
+        };
+        assert_eq!(loaded.filters(), source.filters());
+    }
+}
+
 /// A file written before sends existed (no `sends`, `buses` or `audio`): each audio
 /// source keeps the master send its creation gives it, at 0 dB, rather than losing it.
 #[test]

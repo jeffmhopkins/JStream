@@ -1435,7 +1435,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode.",
+                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",
@@ -2648,7 +2648,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode.",
+                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",

@@ -178,11 +178,11 @@ impl Collection {
                 format!("a chain holds at most {MAX_CHAIN_FILTERS} filters"),
             ));
         }
+        check_no_references(&owner, &filter.settings, at, "settings")?;
         let at_index = match index {
             None => filters.len(),
             Some(index) => check_index(index, filters.len() + 1, at, "positions in the chain")?,
         };
-        check_no_references(&owner, &filter.settings, at, "settings")?;
         let filter_id = filter.filter_id.clone();
         let filters = chain_mut(self.chains(&owner)?, chain);
         filters.insert(at_index, filter);

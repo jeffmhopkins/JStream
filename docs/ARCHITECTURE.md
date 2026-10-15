@@ -554,7 +554,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f4d54d8f6d8ac932", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
+verified = { hash = "b3:5ea88d30597cc225", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3: re-read; filter.* on three owners and parity text unchanged by rustdoc and rejection additions; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -694,7 +694,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:02bb9f6721dd23a3", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
+verified = { hash = "b3:3c79ad5575a30a49", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3: tools.snap is 212,398 bytes after the FilterOwner/FilterInfo rustdoc edits, still about 212 KB; 19 tools; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -896,7 +896,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:eb1060eddee727da", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; master/output filters in the file beside buses, sends and audio; holds" }
+verified = { hash = "b3:c361c7ad5022213a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3: re-read; master and output filters in the file, an older file without them loads empty (new persist test); holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

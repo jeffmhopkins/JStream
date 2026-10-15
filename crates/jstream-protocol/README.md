@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:bd46e7325ebdd8c8", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
+verified = { hash = "b3:0bc0ac04f529d65b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3 N6/N1: parity paragraph names the vcam audio-filter and master-reference rejections now in parity::rejected; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -129,8 +129,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   filter each on the master stage's audio chain and on the recording output's, and
   audio: a microphone with its fader, mute and sends, two buses (one deleted again with
   its send), a renamed and faded bus, a duplicated microphone with a send removed, and
-  a disabled nested scene. The rejected batches also cover the bus limit, the master
-  bus, fader ranges, and sources with no audio or no fader of their own.
+  a disabled nested scene. The rejected batches also cover an audio filter on the
+  virtual camera, a reference in a master filter's settings (refused before its
+  index), the bus limit, the master bus, fader ranges, and sources with no audio or no fader of their own.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -146,7 +147,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:69e80597b87001b5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
+verified = { hash = "b3:291f94e55749cd2c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3 N7/N5: an output's own audio encode is from its next start, edits to a chain it started with apply live (matches engine launch); FilterInfo.filter_id unique within its owner's chains; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -392,7 +393,7 @@ The master stage and each output own chains too
 `{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
 master's audio chain runs on every bus that feeds an output, after that bus's own chain;
 an output's runs after it, for that output only, and gives the output its own audio
-encode. Only their audio chains hold filters so far: a video filter is
+encode from its next start (edits to a chain it started with apply live). Only their audio chains hold filters so far: a video filter is
 `invalid_argument` on `edits.N.chain` until video mixes run them, and so is an audio
 filter on an output that carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
 `output`. Their filters can't refer to a scene or source yet (`invalid_argument` on the

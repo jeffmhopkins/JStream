@@ -47,7 +47,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 86% | 30 | 3 | 2 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 30% | 6 | 8 | 6 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 30% | 6 | 9 | 5 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 11% | 1 | 1 | 7 |
 
 75 of 108 items are merged; 7 of those still wait on a run on Windows hardware.
@@ -192,7 +192,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | T1u | Studio-mode UI | ⏳ planned |  |
 | E2 | Video mixes | 🔍 in review | #259 |
 | D8 | Master and output audio chains | ✅ merged | #249 |
-| D8p | Audio chain protocol fields | ⏳ planned |  |
+| D8p | Audio chain protocol fields | 🔍 in review | #303 |
 | C9 | Media file source | 🔍 in review | #245 |
 | W1 | Audio waveform and spectrum sources | ⏳ planned |  |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned |  |

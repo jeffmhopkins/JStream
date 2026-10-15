@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:ed2ad5c00e9f8c68", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
+verified = { hash = "b3:b3ed18a43dbd626d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3 B2: the shared master-bus audio encode is one per encoder profile in use (Program::shared_audio on Encoders, one per EncodeKey), as pipeline.rs:373-401 opens it; checked Runtime bullet, Audio routing output-tap paragraph and runtime threads; N9 comment only; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -85,8 +85,8 @@ state machine. Contents:
   (`runtime/render.rs`) and reads the frame back, and the mixer thread polls the media
   clock. Encode threads live in the encoder sessions: one video session per encoder
   profile in use, shared by the outputs on that profile, one audio session of the
-  master bus shared by the outputs with no audio chain, and one per output with an
-  audio chain. Each output's own thread muxes FLV and
+  master bus per encoder profile in use, shared by its outputs with no audio chain,
+  and one per output with an audio chain. Each output's own thread muxes FLV and
   publishes it, or muxes MP4 and records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
@@ -195,7 +195,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1636721150235197", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7 7c64930 and main dab6b94 (D6): re-read; text is B7's resolution and main's activity-gain text beside D8's master/output chains and output taps; holds" }
+verified = { hash = "b3:f5662c094c39afaa", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3 B2: the shared master-bus audio encode is one per encoder profile in use (Program::shared_audio on Encoders, one per EncodeKey), as pipeline.rs:373-401 opens it; checked Runtime bullet, Audio routing output-tap paragraph and runtime threads; N9 comment only; holds" }
 -->
 
 ### Engine and sessions
@@ -646,8 +646,9 @@ An output whose audio chain holds a filter, even a disabled one
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), gets an output
 tap on the master bus when it starts (`Engine::add_output_tap`), and its own audio
 encode fed from the tap's blocks, stamped earlier by its chain's latency. Its video
-still shares a session as *Encoder profiles* says, and the other outputs share one
-audio encode of the master bus, opened when the first of them starts. The tap is
+still shares a session as *Encoder profiles* says. The other outputs on its encoder
+profile share one audio encode of the master bus, opened when the first of them
+starts; each encoder profile in use has its own. The tap is
 removed when the output stops; a chain added to a running output takes effect at its
 next start, while edits to an existing tap's chain apply live.
 
@@ -1067,7 +1068,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:5dedcf2bba42e4c1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 core half: encode threads paragraph now says shared master-bus audio session vs own session fed from the output tap by the mixer thread; checked against pipeline.rs launch/mixer_loop; holds" }
+verified = { hash = "b3:6ce1c95e4cfb8099", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3 B2: the shared master-bus audio encode is one per encoder profile in use (Program::shared_audio on Encoders, one per EncodeKey), as pipeline.rs:373-401 opens it; checked Runtime bullet, Audio routing output-tap paragraph and runtime threads; N9 comment only; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -1089,8 +1090,8 @@ routing* in Design). Every running output shares that one program stage (capture
 render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same encoder profile share one
-video session, outputs with no audio chain share one audio session of the master bus,
-and an output with an audio chain has an audio session of its own that the mixer thread
+video session, and those of them with no audio chain share one audio session of the
+master bus, and an output with an audio chain has an audio session of its own that the mixer thread
 feeds from the output's tap. The render and mixer threads take a new session's inputs
 from a channel,
 never a lock, and hand a finished session's input to the collector rather than drop

@@ -1068,6 +1068,41 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             },
         ),
         (
+            Batch::single(gain_on(
+                FilterOwner::Output {
+                    output_id: OutputId::new("vcam"),
+                },
+                "g",
+                FilterChain::Audio,
+                0.0,
+            )),
+            invalid(
+                "edits.0.chain",
+                "output `vcam` carries no audio, so it has no audio chain",
+            ),
+        ),
+        // A reference is refused before the index is checked.
+        (
+            Batch::single(Edit::FilterAdd {
+                owner: FilterOwner::Master,
+                chain: FilterChain::Audio,
+                filter_id: FilterId::new("k"),
+                kind: "gain".into(),
+                settings: [(
+                    "key".to_owned(),
+                    serde_json::json!({"type": "source", "source_id": "desk"}),
+                )]
+                .into_iter()
+                .collect(),
+                enabled: None,
+                index: Some(5),
+            }),
+            invalid(
+                "edits.0.settings.key",
+                "a master or output filter can't refer to a scene or source yet",
+            ),
+        ),
+        (
             Batch::single(Edit::BusCreate {
                 bus_id: BusId::master(),
                 name: "Again".into(),
