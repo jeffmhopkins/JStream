@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:fc5913fc41f880c7", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose unchanged; threading bullet still says core drives the Recorder on the output thread, as ARCH#threading says" }
+verified = { hash = "b3:505abc81c7ee1db4", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read Transport bullet against #138: Transport is now a struct (TCP or TLS inside), and set_write_deadline re-cuts the write timeout before every socket write, over TLS via a socket wrapper; Reconnect bullet unchanged" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -60,7 +60,7 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   (rounded to nearest, as the muxer's tag timestamps are), then rejects negative times
   and wraps at 2^32.
 - **Transport** (`transport`): `connect` opens TCP (Nagle off) for `rtmp://` and TLS
-  over TCP for `rtmps://`, returning a `Transport` (`Tcp` or `Tls`) that implements
+  over TCP for `rtmps://`, returning a `Transport` (TCP or TLS inside) that implements
   `Read + Write`. TLS is rustls on the `ring` provider, TLS 1.3 and 1.2, no client
   certificate. The server name (SNI) is the URL's host, and the certificate must match
   it and chain to a root in the operating system's trust store, which
@@ -73,7 +73,12 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   bounds each connection attempt and each handshake read and write. Timeouts on the
   returned transport are set on its TCP socket and apply through TLS: a read that times
   out in the middle of a TLS record keeps the part already read, and the next read
-  resumes it. `Transport::shutdown` sends TLS `close_notify` before closing the socket.
+  resumes it. A write timeout bounds one socket write, and one large message takes
+  many, each restarting it, so a peer that reads a trickle can stretch the message far
+  past it. `Transport::set_write_deadline` bounds them all: before each socket write,
+  over TLS too (rustls's own writes go through a socket wrapper that does this), the
+  timeout is cut to the time left, and past the deadline a write fails with `TimedOut`
+  (#138). `Transport::shutdown` sends TLS `close_notify` before closing the socket.
 - **URLs and keys** (`url`): `rtmp(s)://host[:port]/app[/...]`, with the whole path as the
   application name and the stream key separate. `StreamKey` prints as `***`, and no error
   carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The server's

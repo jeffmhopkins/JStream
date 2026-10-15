@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:7264fb2daaf15212", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#171 B8 audit log) into B2: re-read; Engine bullet lists with_audit and with_history_limit, Audit log bullet now covers undo and redo, tests list adds undo_and_redo_are_audited; Not-yet drops the audit log" }
+verified = { hash = "b3:a39b458bec0abe04", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read against #138: tests list adds the blocked-send stop test and the trickle-reading RTMP peer; Runtime and Drop counts bullets still hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -83,10 +83,11 @@ state machine. Contents:
   `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
-  stage-failure, late-tick, teardown, final-tick, link-loss and stalled-stop tests run
-  without one),
+  stage-failure, late-tick, teardown, final-tick, link-loss, stalled-stop and
+  blocked-send stop tests run without one),
   `connect_rtmp` against a slow fake RTMP server on loopback, one that hangs up
-  and is reconnected to, and one that stops reading while a stop's deadline runs out,
+  and is reconnected to, one that stops reading while a stop's deadline runs out, and
+  one that reads only a trickle of one large tag,
   a publish opener connecting that fake server on every start (start, media, stop,
   twice) and one that cannot connect, a recording output writing MP4 to a temp dir
   (renamed into place on stop, refused when the file exists or the path is not
@@ -113,7 +114,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:78ac639e0515641a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#171 B8) into B2: re-read Audit log subsection; it now says undo and redo are recorded (history.undo/history.redo as the call, replayed for a keyed retry, rev before = own rev minus one) matching audit.rs sink_for/Pending; Undo and redo and Not yet unchanged" }
+verified = { hash = "b3:fa9f534b908875ab", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read the stop and RTMP drain paragraphs against #138: deadline fixed by the stop, wait for a publishing output thread bounded by STOP_DRAIN + OUTPUT_GRACE then detached with its watcher line closed, recordings always joined, RtmpPublish cuts every socket write via Transport::set_write_deadline; rest of Design unchanged" }
 -->
 
 ### Engine and sessions
@@ -431,7 +432,7 @@ the host sets another before retrying (an opener is kept). A second start while 
 while a start is still in flight, fails with `action_failed` and leaves that
 pipeline alone. `output.stop` on an `active` pipeline emits `stopping`, drops it
 outside the lock (its drop sets the stop flag and joins the threads; the output
-thread's drain is bounded, see the RTMP paragraph below), then emits
+thread's drain, and the wait for it, are bounded, see the RTMP paragraph below), then emits
 `stopped`. `output.stop` during the in-flight start cancels that generation, emits
 `stopping`, waits until the start has dropped whatever it opened, then emits
 `stopped`. The start then answers `action_failed` and does not emit `active`. The
@@ -525,19 +526,28 @@ a shorter timeout fails on a slow server), then drops the read timeout to 1 ms s
 `poll` does not block the output thread. Writes keep a 10 s timeout while the output
 runs, so a stalled write takes that long to count as a lost link.
 
-A stop bounds its drain. When the output thread sees the stop flag it gives itself
-2 s (`STOP_DRAIN`) to send what the encoders queued and tells the target that
-deadline (`LivePublish::stop_by`; the default does nothing). Once it passes, or a send
-fails while stopping, the thread drops the packets still queued, counts them in
+A stop bounds its drain. The stop fixes a deadline 2 s (`STOP_DRAIN`) after it
+begins and raises the stop flag; the output thread, once it sees the flag, sends what
+the encoders queued until then and tells the target that deadline
+(`LivePublish::stop_by`; the default does nothing). Once it passes, or a send fails
+while stopping, the thread drops the packets still queued, counts them in
 `output_packets`, and calls `finish`. A failure while stopping is logged, not
-reported: the output is already on its way to `stopped`. `RtmpPublish` honors the
-deadline: each write's timeout is cut to the time left, a lost link is not
+reported: the output is already on its way to `stopped`. The stop does not count on
+the target honoring the deadline (#138): it waits for a publishing output thread
+only until the deadline plus 500 ms (`OUTPUT_GRACE`), then returns without it and
+closes that thread's line to the publish watcher, so a send blocked in a target that
+ignores `stop_by` cannot hold `output.stop` either. The thread is detached and ends
+once that send returns; what it drops after that is not in the final `stats.tick`.
+A recording's output thread is always joined, so its file is renamed into place
+when the stop returns. `RtmpPublish` honors the deadline: every socket write's
+timeout is cut to the time left (`Transport::set_write_deadline`), so a peer that
+reads a trickle cannot stretch one large tag past it, a lost link is not
 reconnected, and past the deadline sends fail and `finish` drops the connection
 without the `FCUnpublish` … `deleteStream` goodbye. So a peer that has stopped
-reading holds `output.stop` for about 2 s, not 10 s per blocked write; a target that
-ignores `stop_by` can still add one blocked send. `connect_rtmp`'s unit tests drive
-fake servers on loopback: a slow one, one that hangs up mid-stream, and one that
-stops reading while the deadline runs out.
+reading holds `output.stop` for about 2 s, not 10 s per blocked write.
+`connect_rtmp`'s unit tests drive fake servers on loopback: a slow one, one that
+hangs up mid-stream, one that stops reading while the deadline runs out, and one
+that reads only a trickle of a 12 MiB tag.
 
 ### Locking
 
