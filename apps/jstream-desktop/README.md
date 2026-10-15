@@ -101,7 +101,7 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:393ee63fefea2752", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "G3d: re-read; global carries vcam with the five values of VcamStatus::as_str; WindowsVcam in the backends unless --no-vcam; vcam_registration read unelevated; build.rs delay-loads mfsensorgroup.dll" }
+verified = { hash = "b3:224941af669931c8", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B1/N2 round: re-read; delay-load note now says WindowsVcam::start probes for MFCreateVirtualCamera first (from #297, merged in), so a Windows 10 start fails with a reason; rest holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
@@ -138,7 +138,9 @@ verified = { hash = "b3:393ee63fefea2752", by = "agent:claude@session_01BL6HM3DJ
   and logs a registration that names another folder. Registering stays the daemon's
   `--register-vcam` for now, and so does the hardware check. The build script also
   delay-loads `mfsensorgroup.dll`, which `WindowsVcam` imports `MFCreateVirtualCamera`
-  from, so a Windows without it still starts the app.
+  from, as the daemon's does, so a Windows without it still starts the app; on a
+  Windows without that export (Windows 10), `WindowsVcam::start` probes for it first,
+  so `output.start` fails with a reason rather than a delay-load exception.
 - **The window stays on the app.** Navigation to anything but the app's scheme is
   refused, and so are new windows, so no other page loads in a webview that runs the
   bootstrap script. The page gets no Tauri IPC: the app defines no commands and grants

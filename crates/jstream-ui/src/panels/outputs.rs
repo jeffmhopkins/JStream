@@ -272,7 +272,7 @@ impl Vcam {
             Vcam::NotRegistered | Vcam::Moved => Some(REGISTER_HINT),
             Vcam::Off => Some("Start JStream without `--no-vcam` to use it."),
             Vcam::Unknown => Some(
-                "If starting it fails because the engine has no virtual camera, it may not be registered: run `jstream-daemon --register-vcam` on the engine's machine.",
+                "The engine checks the camera when it starts: an unregistered one is refused with how to register it.",
             ),
         }
     }
@@ -296,11 +296,22 @@ pub fn start_blocker(row: &OutputRow, vcam: Vcam) -> Option<&'static str> {
     }
 }
 
-/// A failed start, for the panel: a virtual camera refused for want of a camera gets
-/// the registration hint.
+/// What a start refused with "no virtual camera" means: the engine was built or started
+/// without a camera, which registering can't change.
+pub const NO_CAMERA_HINT: &str = "This engine has no virtual camera: it runs on Windows 11 only, and the desktop app has none when started with `--no-vcam`.";
+
+/// A failed virtual camera start, for the panel. The engine's two reasons that need
+/// explaining get a hint: an unregistered camera (the platform's "is not registered",
+/// which names only the flag) gets the full registration command, and an engine with
+/// no camera at all ("no virtual camera") gets why. Other reasons, and other kinds,
+/// are shown as they are.
 pub fn explain_start_failure(kind: &OutputKind, reason: String) -> String {
-    if matches!(kind, OutputKind::VirtualCam) && reason.contains("no virtual camera") {
-        format!("{reason}. It may not be registered: {REGISTER_HINT}")
+    if !matches!(kind, OutputKind::VirtualCam) {
+        reason
+    } else if reason.contains("is not registered") {
+        format!("{reason}. {REGISTER_HINT}")
+    } else if reason.contains("no virtual camera") {
+        format!("{reason}. {NO_CAMERA_HINT}")
     } else {
         reason
     }
@@ -997,9 +1008,9 @@ fn NewOutputForm(panel: Panel) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{
-        Health, NewKind, OutputRow, REGISTER_HINT, Vcam, create_edit, describe_kind,
-        explain_start_failure, go_live_targets, live_outputs, load, next_output_id, start_blocker,
-        start_or_stop_all, status, take_key,
+        Health, NO_CAMERA_HINT, NewKind, OutputRow, REGISTER_HINT, Vcam, create_edit,
+        describe_kind, explain_start_failure, go_live_targets, live_outputs, load, next_output_id,
+        start_blocker, start_or_stop_all, status, take_key,
     };
     use jstream_control::protocol::{
         Action, DropCounts, Edit, OutputId, OutputInfo, OutputKind, OutputState, RtmpTarget,
@@ -1301,7 +1312,8 @@ mod tests {
         assert!(
             Vcam::Unknown
                 .hint()
-                .is_some_and(|hint| hint.contains("--register-vcam"))
+                .is_some_and(|hint| !hint.contains("--register-vcam")),
+            "a browser can't tell whether registering would help"
         );
         assert!(
             Vcam::Off
@@ -1313,14 +1325,23 @@ mod tests {
         assert_eq!(start_blocker(&stream, Vcam::Off), None);
     }
 
-    /// An engine without a camera refuses the start; the panel adds the registration
-    /// hint to that reason, and to no other.
+    /// The engine's reasons, as `jstream-core` and `WindowsVcam::start` word them: an
+    /// unregistered camera gets the registration command; an engine with no camera gets
+    /// why, and no registration advice, which couldn't help (#316 B1).
     #[test]
-    fn a_start_refused_for_want_of_a_camera_gets_the_hint() {
+    fn a_refused_camera_start_gets_the_hint_that_fits() {
+        let unregistered = "action_failed: starting the virtual camera: the virtual camera: its \
+             media source {0B5A3E7C} is not registered (register it with `--register-vcam`)"
+            .to_owned();
+        let explained = explain_start_failure(&OutputKind::VirtualCam, unregistered.clone());
+        assert!(explained.starts_with(&unregistered), "{explained}");
+        assert!(explained.contains(REGISTER_HINT), "{explained}");
+
         let reason = "action_failed: this engine has no virtual camera".to_owned();
         let explained = explain_start_failure(&OutputKind::VirtualCam, reason.clone());
         assert!(explained.starts_with(&reason), "{explained}");
-        assert!(explained.contains(REGISTER_HINT), "{explained}");
+        assert!(explained.contains(NO_CAMERA_HINT), "{explained}");
+        assert!(!explained.contains("register-vcam"), "{explained}");
         let busy = "the virtual camera is in use by another output".to_owned();
         assert_eq!(
             explain_start_failure(&OutputKind::VirtualCam, busy.clone()),

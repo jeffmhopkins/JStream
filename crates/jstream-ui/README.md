@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:b1dc07970289328b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "G3d: re-read; outputs panel covers the virtual camera; host.rs bullet adds desktop_vcam" }
+verified = { hash = "b3:66a9c83732e07fb2", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B1 round: re-read; outputs.rs changed only its start-failure hints; contents list holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -52,7 +52,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:22c64ddf081fe8c4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "G3d: re-read; Outputs bullet: vcam outputs created without target, no key or encoder, outside go-live; registration status from the desktop global, start blocked when not registered or off, hint on a refused start in a browser; matches outputs.rs" }
+verified = { hash = "b3:b61d4a7d4b64ab08", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B1 round: re-read; Outputs bullet now says an unregistered camera's reason gets the registration command and 'no virtual camera' gets why with no registration advice; matches explain_start_failure and Vcam::Unknown's hint" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -100,8 +100,10 @@ verified = { hash = "b3:22c64ddf081fe8c4", by = "agent:claude@session_01BL6HM3DJ
   what the page knows of the camera's registration. Only the desktop app knows (its global's `vcam`,
   read in `host.rs`): there an unregistered camera, or one turned off with `--no-vcam`,
   can't be started, and the card gives the `jstream-daemon --register-vcam` hint. In a
-  browser the page can't tell, so it lets the engine decide, and a start refused for
-  want of a camera ("no virtual camera") gets the same hint. The health line sums `stats.tick`'s drop totals over the last five ticks; a
+  browser the page can't tell, so it lets the engine decide and explains its refusal:
+  an unregistered camera ("is not registered") gets the full registration command, and
+  an engine with no camera at all ("no virtual camera": not Windows 11, or the desktop
+  app's `--no-vcam`) gets that, with no registration advice. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
