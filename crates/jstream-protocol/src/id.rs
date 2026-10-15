@@ -72,6 +72,11 @@ opaque_id!(
     EncoderProfileId
 );
 opaque_id!(
+    /// An audio bus in the collection (ADR-0028). [`BusId::master`] names the master
+    /// bus, which every collection has.
+    BusId
+);
+opaque_id!(
     /// A connected client, assigned by the server in `welcome`. Undo history and the
     /// audit log are keyed by it.
     ClientId
@@ -90,6 +95,22 @@ opaque_id!(
     /// once per client and answers a retry with the original result.
     IdempotencyKey
 );
+
+impl BusId {
+    /// The master bus's ID, `master`: the bus every collection has, which is never
+    /// deleted.
+    pub fn master() -> Self {
+        Self::new(MASTER_BUS)
+    }
+
+    /// Whether this is the master bus's ID.
+    pub fn is_master(&self) -> bool {
+        self.0 == MASTER_BUS
+    }
+}
+
+/// The master bus's ID on the wire.
+const MASTER_BUS: &str = "master";
 
 /// The collection state revision.
 ///

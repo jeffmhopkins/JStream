@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:05c6dbbffa941884", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at e1e2a94 (G3b virtual camera, Q3 e2e harness, #286, #295, #237): cascade; main's e2e harness pointer and this PR's canvas note both hold" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +50,6 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:2ebb56620c8931df", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at e1e2a94 (G3b virtual camera, Q3 e2e harness, #286, #295, #237): cascade; holds; e2e mock daemon batch now sets ends_gesture: None, no doc claim affected" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -118,7 +116,6 @@ verified = { hash = "b3:2ebb56620c8931df", by = "agent:claude@session_01WG1uLVaz
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:00400a551cd594d5", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: re-read; Undoable edits bullet now says live.set exists in the protocol but the canvas doesn't send it yet (model.rs commits one batch with ends_gesture: None)" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
@@ -169,7 +166,6 @@ scene and sends the edits. These three are pure and tested natively against
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:5a04a748741bf41a", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: added the pointer to CI's ui-e2e job and tests/e2e/README.md; trunk build steps unchanged and still what CI runs" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for

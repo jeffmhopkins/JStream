@@ -2,7 +2,8 @@
 //! the engine (`jstream-core`, which clients never depend on). Enabled by the `mock`
 //! feature.
 //!
-//! [`MockEngine`] holds a tiny collection (scenes, items, sources and configured outputs),
+//! [`MockEngine`] holds a tiny collection (scenes, items, sources, configured outputs,
+//! encoder profiles, and the audio buses and sends),
 //! the outputs' runtime state and an in-memory stand-in for the stream-key store, and
 //! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
@@ -26,21 +27,24 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
+    Action, Batch, BusId, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
     EncoderProfileId, EncoderProfileInfo, EntityKind, Event, GeometryError, GestureId, GestureInfo,
     Hello, HistoryCall, HistoryDirection, IdempotencyKey, ItemGeometry, ItemId, ItemInfo,
     ItemTransform, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, OutputId, OutputInfo,
     OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
     RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo,
-    SceneRole, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind, Welcome,
-    is_live_adjustable,
+    SceneRole, SceneSummary, SecretString, Settings, SourceAudio, SourceId, SourceInfo, SourceKind,
+    Welcome, is_live_adjustable,
 };
+use jstream_protocol::{Finite32, KindDescriptor};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::task::{Context, Poll, Waker};
+
+mod audio;
 
 /// Locks `mutex`, ignoring poisoning: the mock's state stays consistent because every
 /// change is computed first and committed without panicking.
@@ -76,6 +80,27 @@ impl MockEngine {
             .outputs
             .entry(output_id)
             .or_insert(OutputState::Stopped);
+        drop(state);
+        self
+    }
+
+    /// Describes builtin source kinds by their descriptors, so their sources get audio
+    /// settings when the kind produces audio, following `always` when it has no video
+    /// and `when_shown` when it has (ADR-0028), as the engine does. The mock checks no
+    /// settings against them. A kind it wasn't told about has no audio.
+    #[must_use]
+    pub fn with_kinds(self, kinds: impl IntoIterator<Item = KindDescriptor>) -> Self {
+        let mut state = lock(&self.shared);
+        for kind in kinds {
+            if kind.audio {
+                state
+                    .collection
+                    .audio_kinds
+                    .insert(kind.kind_id, kind.video);
+            } else {
+                state.collection.audio_kinds.remove(&kind.kind_id);
+            }
+        }
         drop(state);
         self
     }
@@ -414,7 +439,7 @@ impl History {
 }
 
 /// The collection state that `rev` counts. Cloned to apply a batch atomically.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct Collection {
     rev: Rev,
     canvas: Canvas,
@@ -429,6 +454,31 @@ struct Collection {
     output_encoders: BTreeMap<OutputId, EncoderProfileId>,
     /// The encoder profiles, ordered by ID: name and encoding.
     encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
+    /// The buses, ordered by ID, the master among them.
+    buses: BTreeMap<BusId, audio::Bus>,
+    /// Each send's gain in dB, keyed by bus, then by source.
+    sends: BTreeMap<(BusId, SourceId), Finite32>,
+    /// The builtin kinds with audio, and whether each has video too. Not collection
+    /// state: [`MockEngine::with_kinds`] sets it, and no edit changes it.
+    audio_kinds: BTreeMap<String, bool>,
+}
+
+impl Default for Collection {
+    fn default() -> Self {
+        Self {
+            rev: Rev::default(),
+            canvas: Canvas::default(),
+            scenes: Vec::new(),
+            items: BTreeMap::new(),
+            sources: BTreeMap::new(),
+            outputs: BTreeMap::new(),
+            output_encoders: BTreeMap::new(),
+            encoders: BTreeMap::new(),
+            buses: BTreeMap::from([audio::Bus::master()]),
+            sends: BTreeMap::new(),
+            audio_kinds: BTreeMap::new(),
+        }
+    }
 }
 
 /// A source: its name, what it shows, and its settings. The mock describes no kinds, so
@@ -440,6 +490,8 @@ struct Source {
     settings: Settings,
     /// A plain link, which may name a deleted source; reported only while it exists.
     duplicated_from: Option<SourceId>,
+    /// Set exactly for an audio source.
+    audio: Option<SourceAudio>,
 }
 
 #[derive(Clone)]
@@ -721,6 +773,8 @@ impl State {
                 self.keys.remove(&output_id);
                 return Ok(CallResult::Action {});
             }
+            // The mock runs no mixer, so there is no loudness to reset.
+            Action::AudioResetLoudness {} => return Ok(CallResult::Action {}),
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {
@@ -810,6 +864,8 @@ impl State {
                     .collect(),
                 outputs: self.collection.output_infos(),
                 encoders: self.collection.encoder_infos(),
+                buses: self.collection.bus_infos(),
+                sends: self.collection.send_infos(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
@@ -832,6 +888,11 @@ impl State {
                         values: values.values().cloned().collect(),
                     })
                     .collect(),
+            },
+            Query::BusList => QueryResult::BusList {
+                rev: self.collection.rev,
+                buses: self.collection.bus_infos(),
+                sends: self.collection.send_infos(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -1006,6 +1067,9 @@ impl Collection {
         at: usize,
         running: &BTreeSet<OutputId>,
     ) -> Result<Vec<Edit>, ProtocolError> {
+        if let Some(applied) = self.apply_audio(&edit, at) {
+            return applied;
+        }
         let inverse = match edit {
             Edit::SceneCreate {
                 scene_id,
@@ -1304,7 +1368,15 @@ impl Collection {
                 };
                 check_id(new_source_id.as_str(), at, "new_source_id")?;
                 check_name(&name, at)?;
-                self.create_source(new_source_id, name, kind, settings, Some(source_id))?
+                let inverse = self.create_source(
+                    new_source_id.clone(),
+                    name,
+                    kind,
+                    settings,
+                    Some(source_id.clone()),
+                )?;
+                self.audio_copied(&source_id, &new_source_id);
+                inverse
             }
             Edit::SourceDelete { source_id } => {
                 if !self.sources.contains_key(&source_id) {
@@ -1331,13 +1403,16 @@ impl Collection {
                 let Some(source) = self.sources.remove(&source_id) else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
-                vec![Edit::SourceCreate {
+                let restore_audio = self.audio_deleted(&source_id, &source.kind, source.audio);
+                let mut inverse = vec![Edit::SourceCreate {
                     source_id,
                     name: source.name,
                     kind: source.kind,
                     settings: source.settings,
                     duplicated_from: source.duplicated_from,
-                }]
+                }];
+                inverse.extend(restore_audio);
+                inverse
             }
             Edit::OutputCreate { output_id, kind } => {
                 check_id(output_id.as_str(), at, "output_id")?;
@@ -1541,6 +1616,7 @@ impl Collection {
         if self.sources.contains_key(&id) {
             return Err(already_exists(EntityKind::Source, id.as_str()));
         }
+        let audio = self.default_audio(&kind);
         self.sources.insert(
             id.clone(),
             Source {
@@ -1548,8 +1624,10 @@ impl Collection {
                 kind,
                 settings,
                 duplicated_from,
+                audio,
             },
         );
+        self.audio_created(&id);
         Ok(vec![Edit::SourceDelete { source_id: id }])
     }
 
@@ -1579,6 +1657,7 @@ impl Collection {
                     .duplicated_from
                     .clone()
                     .filter(|original| self.sources.contains_key(original)),
+                audio: source.audio,
             })
             .collect()
     }
@@ -2108,11 +2187,12 @@ mod tests {
     use super::MockEngine;
     use crate::{Control, ControlError, EventStream};
     use jstream_protocol::{
-        Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
-        EncoderProfileId, EntityKind, Event, Hello, HistoryCall, HistoryDirection, HistoryOp,
-        IdempotencyKey, ItemId, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
-        PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, Rev, RtmpTarget,
-        SceneId, SceneRole, SecretString, Settings, SourceId, SourceKind, parity,
+        Action, Batch, BusId, BusInfo, Call, CallResult, Canvas, ClientId, Crop, Edit,
+        EncoderProfile, EncoderProfileId, EntityKind, Event, Finite32, Hello, HistoryCall,
+        HistoryDirection, HistoryOp, IdempotencyKey, ItemId, ItemTransform, OutputId, OutputInfo,
+        OutputKind, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query,
+        QueryResult, Rev, RtmpTarget, SceneId, SceneRole, SecretString, Settings, SourceId,
+        SourceKind, parity,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -2427,7 +2507,7 @@ mod tests {
     /// read tests build too. `jstream-graph` can't be called here: it is in the same
     /// layer (R-ARCH-002), even as a dev-dependency.
     fn parity_engine() -> (MockEngine, Box<dyn Control>) {
-        let engine = MockEngine::new();
+        let engine = MockEngine::new().with_kinds(parity::kinds());
         let control = connected(&engine);
         assert_eq!(
             batch(&*control, parity::collection()),
@@ -2469,6 +2549,8 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                buses,
+                sends,
                 ..
             } => QueryResult::StateGet {
                 rev: Rev(0),
@@ -2477,6 +2559,8 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                buses,
+                sends,
             },
             other => panic!("not a state: {other:?}"),
         }
@@ -2486,7 +2570,9 @@ mod tests {
     /// inverse edits `jstream-graph` builds: a removed item comes back at its index with
     /// its placement (in its own form, transform or geometry), crop and visibility, a
     /// deleted scene with its items and its position, a source with its settings and its
-    /// `duplicated_from`, an item's source, an output with its encoder profile, the encoder profiles, and the canvas size. Its
+    /// `duplicated_from`, an item's source, an output with its encoder profile, the encoder profiles, the canvas size,
+    /// a deleted bus with its fader and sends, a source's audio and sends as they were, and
+    /// the faders and sends set since. Its
     /// placement, crop and visibility edits name the item's own scene, and their
     /// inverses do too.
     #[test]
@@ -2560,6 +2646,44 @@ mod tests {
                 Edit::SourceDelete {
                     source_id: SourceId::new("aux"),
                 },
+                // The audio: a bus's name, the master's fader, a send's gain, a source's
+                // audio, a new send, then a bus with its fader and send, and the audio
+                // sources with their audio and sends.
+                Edit::BusRename {
+                    bus_id: BusId::new("vod"),
+                    name: "VOD".into(),
+                },
+                Edit::BusSetFader {
+                    bus_id: BusId::master(),
+                    gain_db: Some(Finite32::ZERO),
+                    muted: None,
+                },
+                Edit::SendSet {
+                    source_id: SourceId::new("mic"),
+                    bus_id: BusId::new("vod"),
+                    gain_db: Finite32::ZERO,
+                },
+                Edit::SourceSetAudio {
+                    source_id: SourceId::new("mic"),
+                    enabled: Some(false),
+                    follow: None,
+                    gain_db: Some(Finite32::ZERO),
+                    muted: None,
+                },
+                Edit::SendSet {
+                    source_id: SourceId::new("mic_copy"),
+                    bus_id: BusId::master(),
+                    gain_db: Finite32::ZERO,
+                },
+                Edit::BusDelete {
+                    bus_id: BusId::new("vod"),
+                },
+                Edit::SourceDelete {
+                    source_id: SourceId::new("mic_copy"),
+                },
+                Edit::SourceDelete {
+                    source_id: SourceId::new("mic"),
+                },
                 Edit::OutputSetEncoder {
                     output_id: OutputId::new("yt"),
                     profile_id: Some(EncoderProfileId::new("hq")),
@@ -2603,6 +2727,13 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                buses: vec![BusInfo {
+                    bus_id: BusId::master(),
+                    name: "Master".into(),
+                    gain_db: Finite32::ZERO,
+                    muted: false,
+                }],
+                sends: vec![],
             }
         );
         drain(&mut events);
@@ -2824,6 +2955,8 @@ mod tests {
                 ("cam", "Camera"),
                 ("cam_2", "Camera 2"),
                 ("cam_copy", "Camera copy"),
+                ("mic", "Microphone"),
+                ("mic_copy", "Microphone copy"),
             ]
         );
         assert_eq!(sources[3].kind, sources[2].kind);
@@ -2851,7 +2984,13 @@ mod tests {
         else {
             panic!("not a source list");
         };
-        assert!(sources.iter().all(|s| s.duplicated_from.is_none()));
+        // `mic_copy` still names `mic`, which wasn't deleted.
+        assert!(
+            sources
+                .iter()
+                .filter(|s| s.source_id.as_str() != "mic_copy")
+                .all(|s| s.duplicated_from.is_none())
+        );
     }
 
     /// Cycle reasons name the cycle path in `jstream-graph`'s words, for `item.add` and

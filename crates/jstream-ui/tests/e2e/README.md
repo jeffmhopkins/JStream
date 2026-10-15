@@ -19,7 +19,6 @@ input on the canvas.
 ## Harness
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests/e2e/*.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:2dbff34c23ee9798", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at e1e2a94: re-read; the mock daemon's seeding batch gained ends_gesture: None to build against this PR's Batch; the harness text names no batch fields; holds" }
 -->
 
 - **The mock daemon** (`mock-daemon/`, the test-only crate `jstream-ui-e2e`) puts
@@ -49,7 +48,6 @@ verified = { hash = "b3:2dbff34c23ee9798", by = "agent:claude@session_01WG1uLVaz
 ## What the tests cover
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/specs/**"]
-verified = { hash = "b3:8c305e610d98ee84", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 -->
 
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
@@ -71,7 +69,6 @@ verified = { hash = "b3:8c305e610d98ee84", by = "agent:claude@session_016cfwAwen
 ## Running them
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/playwright.config.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:dbac1e8d9fa742df", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 -->
 
 ```sh

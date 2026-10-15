@@ -1,5 +1,6 @@
 //! Queries: reads with no effect on state, and their results.
 
+use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
@@ -41,7 +42,8 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
-    /// items, every output and every encoder profile) at one revision: what a client
+    /// items, every output, every encoder profile, and the buses and sends) at one
+    /// revision: what a client
     /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
     /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
@@ -82,6 +84,9 @@ pub enum Query {
     /// state, so the result carries no `rev`.
     #[serde(rename = "live.list")]
     LiveList,
+    /// Lists the collection's audio buses, ordered by ID, and every send into them.
+    #[serde(rename = "bus.list")]
+    BusList,
     /// The batch that deletes a scene or source together with everything that refers to
     /// it, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`
     /// lists those `blockers`). The plan removes the items that place a deleted source,
@@ -130,6 +135,7 @@ impl Query {
             Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
             Query::LiveList => "live.list",
+            Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
         }
     }
@@ -214,6 +220,14 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
+        /// Every audio bus, ordered by ID, the master among them. Missing (from a
+        /// server older than 0.19) parses as empty.
+        #[serde(default)]
+        buses: Vec<BusInfo>,
+        /// Every send, ordered by bus, then by source. Missing (from a server older
+        /// than 0.19) parses as empty.
+        #[serde(default)]
+        sends: Vec<SendInfo>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -271,6 +285,16 @@ pub enum QueryResult {
         /// The open gestures, ordered by client ID, then gesture ID.
         gestures: Vec<GestureInfo>,
     },
+    /// The result of `bus.list`.
+    #[serde(rename = "bus.list")]
+    BusList {
+        /// The revision the list was read at.
+        rev: Rev,
+        /// The buses, ordered by ID, the master among them.
+        buses: Vec<BusInfo>,
+        /// Every send, ordered by bus, then by source.
+        sends: Vec<SendInfo>,
+    },
     /// The result of `delete.plan`.
     #[serde(rename = "delete.plan")]
     DeletePlan {
@@ -301,6 +325,7 @@ impl QueryResult {
             QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
             QueryResult::LiveList { .. } => "live.list",
+            QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
         }
     }
@@ -339,6 +364,10 @@ pub struct SourceInfo {
     /// placing this source can go back to placing the original with `item.set_source`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicated_from: Option<SourceId>,
+    /// Its audio settings, for an audio source: one whose kind produces audio, or a
+    /// `scene` source. Omitted for every other source, and by a server older than 0.19.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio: Option<SourceAudio>,
 }
 
 /// One scene with its items, as `state.get` reports it.

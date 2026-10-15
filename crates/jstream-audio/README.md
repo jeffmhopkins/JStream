@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:46840acde39affed", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: cascade only (this PR doesn't edit the section); re-read earlier this session, and main's changes here are main's verified text; holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -31,9 +30,11 @@ compensates their latency. It also has
 [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)'s audio half: a
 master chain on every bus that feeds an output, output taps with their own chains for
 outputs that encode their own audio, and each bus's output before the master chain for
-monitoring. Activity gains (audio that follows the program), sidechain keys in the mixer
+monitoring. Each input has an activity gain (audio that follows the program) before
+its sends. Sidechain keys in the mixer
 and the monitor devices themselves come later. The true-peak and loudness meters
-([Meters](#meters)) exist as DSP but don't run in the mixer yet.
+([Meters](#meters)) exist as DSP but don't run in the mixer yet; `jstream-core`'s
+mixer thread runs them on the master block the mixer returns.
 
 **Time line.** Engine frame `n` is media time `n / rate` on the media clock
 ([ADR-0014](../../docs/adr/0014-media-clock.md)), with `rate` the engine rate (48 kHz by
@@ -58,10 +59,17 @@ stamped on the clock, and no device is the master.
   `BusControl`; `BusControl::remove` removes it, and `Mixer::bus` is the master's,
   which can't be removed. Like inputs, buses change through the command queue while
   `poll` runs. At most 16 buses, the master included. A bus's `BusId` is never reused,
-  so a send to a removed bus stays inert even after a new bus takes its buffer.
+  so a send to a removed bus stays inert even after a new bus takes its buffer. It is
+  also tagged with its mixer, so an input ignores another mixer's bus,
+  `Mixer::bus_block` answers `None` for one and `add_output_tap` refuses one
+  (`Removed`); `BusId::MASTER` names every mixer's master.
 - `InputControl::set_send` (linear or dB, 0 to +24 dB) sends the input into a bus
   after its fader and mute, or changes that send's gain; `remove_send` stops it. A new
   bus has no sends. A send that starts, stops or changes ramps over one block.
+- `InputControl::set_activity_gain` (linear, 0 to 1) scales every send of the input,
+  after its fader, mute and meter: ADR-0028's activity gain, which `jstream-core` sets
+  from what the Program mix shows. It ramps over one block with the sends, and a new
+  input starts at 1.
 - `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
   filter (`FilterSpec`: gain, noise gate, compressor, limiter or delay, built at the
   engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
@@ -176,7 +184,6 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:dd4705ac655b9be1", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main: cascade only (this PR doesn't edit the section); re-read earlier this session, and main's changes here are main's verified text; holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -184,7 +191,8 @@ Everything that runs on a real-time thread lives in `src/rt/`
 **audio thread** (the platform backend's, one per stream) calls
 `InputProducer::push_packet`. That call downmixes, tracks the device clock, resamples,
 and writes into the input's ring. The **mixer thread** calls `Mixer::poll`, which reads
-every ring for the block's window, applies faders and sends, sums each bus and meters.
+every ring for the block's window, applies faders, activity gains and sends, sums each
+bus and meters.
 Neither allocates,
 locks, blocks or logs after setup ([R-RT-001](../../docs/RULES.md#R-RT-001)). They
 share only the rings and atomics: gains, sends, meters and counters
@@ -273,7 +281,10 @@ is two atomic stores: the gain first, then the target, with release ordering so 
 mixer never applies a stale gain to a new target (a retarget only happens once the old
 bus is gone from the slot). A send counts only while its slot
 holds the bus it names. Bus ids are never reused, so a send to a removed bus stays
-silent even after another bus takes the slot. The mixer remembers which bus each send's
+silent even after another bus takes the slot. Each `ControlPlane` takes a tag from a
+process-wide counter when its mixer is made, and stamps it on its `BusId`s; the
+control handles check it before touching a send or adding an output tap, so another
+mixer's bus id never reaches the matrix or a tap (the master's id carries tag 0, valid for any mixer). The mixer remembers which bus each send's
 ramp was for, and starts again from silence when that changes. Skipping silent sends
 keeps the cost at one pass over the block per active send. Sends are post-fader only,
 as ADR-0028 decides.
@@ -397,7 +408,6 @@ Run it on the target machine with
 <!-- @section
 covers = ["crates/jstream-audio/src/meter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:f77ce7451ac1f6e0", by = "agent:claude@session_01MYuHTvXyZdeQGrKJhs9Htz", note = "New section, checked against src/meter/: filter length, cutoff and measured phase agreement, 100 ms steps and windows, gates, 0.02 LU histogram range and size, rate rule, and the tests listed; ADR-0028 decision (4x true peak, momentary/short-term/integrated, allocation-free, reset action) matches" }
 -->
 
 `src/meter/` holds the broadcast meters
@@ -452,7 +462,6 @@ true-peak cases from files) are not run; they would add binary fixtures.
 <!-- @section
 covers = ["crates/jstream-audio/src/filter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:a5b7e32b71b1656a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1 (N2): re-read; no_alloc sentence now separates the master bus's own chain from the master chain and output tap chain, and Not yet says the kernels' cost is what's measured" }
 -->
 
 `src/filter/` holds the audio filter kernels
@@ -523,7 +532,7 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   thread that calls it, which must catch a panic there, mute the bus and raise the
   error event. `rt_panic_is_reported` lands with that engine thread.
 - **The rest of the audio model** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
-  the activity gain per source, sidechain keys in the mixer's chains (the compressor
+  sidechain keys in the mixer's chains (the compressor
   has one; the mixer needs the key's source processed first), running the true-peak and
   loudness meters in the mixer (for the
   master bus and subscribed buses and sources) with their meter-stream fields and

@@ -18,7 +18,8 @@
 //! everything the earlier ones did: the feed keeps only that one, outside the buffer,
 //! and every read returns it as `stats`. So an agent still sees the drop counts (ADR-0006:
 //! every protocol capability over MCP), and ticks take no sequence number, leave no
-//! gap and evict nothing.
+//! gap and evict nothing. `meters.tick` comes about ten times a second while the mixer
+//! runs and each one is a full reading, so it is kept the same way, as `meters`.
 //!
 //! `live.changed` comes up to 30 times a second per gesture while someone drags
 //! (ADR-0032), so it would do the same. Each carries the newest values of what changed,
@@ -69,6 +70,10 @@ pub(crate) struct Page {
     /// earlier tick. Kept outside the buffer, so ticks never evict other events.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) stats: Option<Event>,
+    /// The newest `meters.tick`, if one has arrived: the audio levels now. Kept outside
+    /// the buffer, like `stats`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) meters: Option<Event>,
 }
 
 /// A cursor past the newest event: it came from another server, or was made up.
@@ -90,6 +95,8 @@ pub(crate) struct Buffer {
     ended: bool,
     /// The newest `stats.tick`.
     stats: Option<Event>,
+    /// The newest `meters.tick`.
+    meters: Option<Event>,
 }
 
 impl Buffer {
@@ -101,16 +108,25 @@ impl Buffer {
             read_up_to: 0,
             ended: false,
             stats: None,
+            meters: None,
         }
     }
 
-    /// Appends `event`, dropping the oldest one if the buffer is full. A `stats.tick`
-    /// replaces the kept one instead and takes no sequence number, and a `live.changed`
-    /// may be merged into an unread one instead ([`Buffer::supersede`]).
+    /// Appends `event`, dropping the oldest one if the buffer is full. A `stats.tick` or
+    /// a `meters.tick` replaces the kept one of its type instead and takes no sequence
+    /// number, and a `live.changed` may be merged into an unread one instead
+    /// ([`Buffer::supersede`]).
     pub(crate) fn push(&mut self, event: Event) {
-        if matches!(event, Event::StatsTick { .. }) {
-            self.stats = Some(event);
-            return;
+        match event {
+            Event::StatsTick { .. } => {
+                self.stats = Some(event);
+                return;
+            }
+            Event::MetersTick { .. } => {
+                self.meters = Some(event);
+                return;
+            }
+            _ => {}
         }
         let Some(event) = self.supersede(event) else {
             return;
@@ -207,6 +223,7 @@ impl Buffer {
             dropped,
             ended: self.ended,
             stats: self.stats.clone(),
+            meters: self.meters.clone(),
         })
     }
 }

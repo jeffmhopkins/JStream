@@ -7,6 +7,7 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::audio::{AudioRouting, MixerHandles};
 use crate::audio_sources::AudioSources;
 use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
@@ -220,6 +221,7 @@ impl Engine {
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
             state.audio.sync(state.graph.state());
+            state.route_audio();
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             *file = Some(opened);
@@ -381,6 +383,53 @@ impl Engine {
                 None
             }
         }
+    }
+
+    /// Routes the collection's audio into the program's mixer, until the returned
+    /// closure is called, when the program stops. The closure holds the collection, not
+    /// the [`MediaHost`], like the ticker.
+    pub(crate) fn attach_mixer(&self, mixer: MixerHandles) -> Box<dyn FnOnce() + Send> {
+        let generation = {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            let inputs = state.audio.inputs();
+            state
+                .routing
+                .attach(mixer, state.graph.state(), state.studio.program(), &inputs)
+        };
+        let shared = Arc::clone(&self.shared);
+        Box::new(move || lock(&shared.state).routing.detach(generation))
+    }
+
+    /// Adds kinds the built-in registry doesn't have: the parity fixture's `mic`, an
+    /// audio kind with no parameters.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_extra_kinds(self, kinds: Vec<jstream_protocol::KindDescriptor>) -> Self {
+        {
+            let mut state = lock(&self.shared.state);
+            let graph = std::mem::take(&mut state.graph);
+            state.graph = graph.with_kinds(kinds);
+        }
+        self
+    }
+
+    /// Emits one `meters.tick` now, if the program mixer runs. The stats ticker calls
+    /// this about ten times a second.
+    #[cfg(test)]
+    pub(crate) fn emit_meters_tick(&self) {
+        let mut wake = Vec::new();
+        lock(&self.shared.state).emit_meters(&mut wake);
+        wake_all(wake);
+    }
+
+    /// Lists `input` as audio source `source_id`'s mixer input, as the program stage
+    /// does when it opens one, and routes it as the collection says.
+    #[cfg(test)]
+    pub(crate) fn set_audio_input(&self, source_id: SourceId, input: jstream_audio::InputControl) {
+        let mut state = lock(&self.shared.state);
+        state.audio.insert_input(source_id, input);
+        state.route_audio();
     }
 
     /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
@@ -1522,7 +1571,8 @@ fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     }
 }
 
-/// Wakes every 100 ms so a stop joins promptly, and emits once those waits add up to a second.
+/// Wakes every 100 ms so a stop joins promptly, emits `meters.tick` on each wake, and
+/// `stats.tick` once those waits add up to a second.
 fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<AtomicBool>) {
     let mut waited_ms = 0u32;
     while !stop.load(Ordering::Relaxed) {
@@ -1530,6 +1580,9 @@ fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<A
         if stop.load(Ordering::Relaxed) {
             break;
         }
+        let mut wake = Vec::new();
+        lock(&shared.state).emit_meters(&mut wake);
+        wake_all(wake);
         waited_ms += 100;
         if waited_ms < 1_000 {
             continue;
@@ -1604,6 +1657,8 @@ struct State {
     ticking: bool,
     /// The engine this state belongs to, for the live ticker.
     shared: Weak<Shared>,
+    /// The program mixer's controls while it runs: it follows the collection's audio.
+    routing: AudioRouting,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
 }
@@ -1795,9 +1850,10 @@ impl State {
         Ok(result)
     }
 
-    /// What follows every applied batch, undo and redo: the outputs follow the
-    /// collection, a deleted source's stored frame goes (unless the same edits made a
-    /// new source under its id), live values on a deleted item go, `state.changed` is
+    /// What follows every applied batch, undo and redo: the outputs, the live sources and
+    /// the program mixer follow the collection, a deleted source's stored frame goes
+    /// (unless the same edits made a new source under its id), live values on a deleted
+    /// item go, `state.changed` is
     /// emitted, and the program scene is reconciled (ADR-0030).
     fn changed(
         &mut self,
@@ -1821,6 +1877,8 @@ impl State {
         // Edits that deleted the program scene, or created the first scene, move
         // program before the mix is planned; that event follows their `state.changed`.
         let moved = self.studio.reconcile(self.graph.state());
+        // After program is reconciled: a scene edit can change what is shown.
+        self.route_audio();
         self.publish_render();
         let state = self.graph.state();
         if self
@@ -1866,10 +1924,18 @@ impl State {
                 );
                 return Ok(CallResult::Action {});
             }
+            // Restarts the master's integrated loudness, if the mixer runs; there is
+            // nothing to restart otherwise, which is no failure.
+            Action::AudioResetLoudness {} => {
+                self.routing.reset_loudness();
+                return Ok(CallResult::Action {});
+            }
             Action::SceneSwitch { scene_id } => {
                 if self.studio.switch(self.graph.state(), &scene_id)? {
                     // The program mix shows the new scene from the next frame: a cut.
+                    // Its `when_shown` audio follows, ramping over one mixer block.
                     self.publish_render();
+                    self.route_audio();
                     self.emit_studio(client_id, request_id, wake);
                 }
                 return Ok(CallResult::Action {});
@@ -2060,6 +2126,29 @@ impl State {
             self.ticking = spawn_live_ticker(self.shared.clone());
         }
         next
+    }
+
+    /// Brings the program mixer in line with the collection's audio, the audio sources'
+    /// inputs included.
+    fn route_audio(&mut self) {
+        let inputs = self.audio.inputs();
+        self.routing
+            .sync(self.graph.state(), self.studio.program(), &inputs);
+    }
+
+    /// Emits a `meters.tick` if the program mixer runs, first routing any audio source
+    /// input the program stage opened since the last one.
+    fn emit_meters(&mut self, wake: &mut Vec<Waker>) {
+        if self.audio.take_inputs_changed() {
+            self.route_audio();
+        }
+        let inputs = self.audio.inputs();
+        let meters = self.routing.meters(self.graph.state(), &inputs);
+        drop(inputs);
+        if let Some((sources, buses)) = meters {
+            self.subscribers
+                .emit(&Event::MetersTick { sources, buses }, wake);
+        }
     }
 
     fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {
