@@ -1,7 +1,7 @@
 [package]
 name = "jstream-platform-windows"
 version = "0.0.0"
-description = "Windows platform backends: the QPC media clock, WASAPI audio I/O, WGC capture, Media Foundation codecs and GPU interop."
+description = "Windows platform backends: the QPC media clock, WASAPI audio I/O, WGC capture, Media Foundation codecs, GPU interop and the Credential Manager store for stream keys."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

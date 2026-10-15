@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:d9af851f83a46168", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the jstream-platform-windows row (and its Cargo.toml summary to match) to add the Credential Manager store for stream keys; layer 2 and unsafe yes unchanged; the only manifest change is the Win32_Security_Credentials feature on the existing windows dep, no new crate edge" }
+verified = { hash = "b3:1866d0ba10ec12ca", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#141 review N1: platform-windows package description now names the Credential Manager store; re-read the crate map: the row (layer 2, unsafe yes, Credential Manager store listed) still matches the manifest summary, no dependency edge changed" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
