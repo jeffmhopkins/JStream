@@ -63,7 +63,7 @@ fn main() -> ExitCode {
                 ("docs for", "what governs a file: <repo-relative path>"),
                 (
                     "docs merge-main",
-                    "merge origin/main; stamp-only conflicts take main's, then list stale sections",
+                    "merge origin/main [--from wave/<name>]; stamp-only conflicts take its side, then list stale sections",
                 ),
                 (
                     "governance",
