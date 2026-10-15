@@ -176,7 +176,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:fc79b7d5b1ec036d", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "Q4: added the benches/mix.rs paragraph (mix_block, input_push at 48 and 44.1 kHz, measured ~200 us per push on the cloud container) beside tests/cost.rs; resampling cost is now measured, Windows hardware still not" }
+verified = { hash = "b3:f41dceb7ac5da4a6", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 B1: input_push now described as one engine block's worth of device frames (1024 at 48 kHz, 940 or 941 at 44.1 kHz), matching frames_before in benches/mix.rs; rest of the Benchmarks paragraph holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -388,8 +388,8 @@ Run it on the target machine with
 `cargo test --release -p jstream-audio --test cost -- --ignored --nocapture`.
 
 **Benchmarks** (`benches/mix.rs`, criterion). `mix_block` times the same three mixer
-scenarios per block, and `input_push` times one 1024-frame device packet through
-`InputProducer::push_packet` (downmix and adaptive resampling) at 48 kHz and 44.1 kHz.
+scenarios per block, and `input_push` times one engine block's worth of device frames (1024 at 48 kHz, 940 or 941
+at 44.1 kHz) through `InputProducer::push_packet` (downmix and adaptive resampling).
 Measured on a cloud container (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux 6.18), release
 build, mean: `input_push` about 200 µs at either rate (0.9% of the block period). The
 `bench` workflow records them on every push to `main`

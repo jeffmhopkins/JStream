@@ -700,7 +700,7 @@ verified = { hash = "b3:55a0e0a9c09649f1", by = "agent:claude@session_01Wfrx1wPt
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c544d32a1529613b", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "Q4: only crates/jstream-render/benches/composite.rs and a criterion dev-dependency were added; the pipeline steps and one-scene compositor text are unchanged and hold" }
+verified = { hash = "b3:e6dc3bde0c45ea24", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 N2/N3: composite bench now panics without an adapter under CI and rotates every item; pipeline and one-scene compositor text unchanged and hold" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

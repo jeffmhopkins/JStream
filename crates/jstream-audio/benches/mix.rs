@@ -13,7 +13,8 @@
 //!   the block outside the timing, for the send matrix and the filter chains (#228 N3).
 //! - `input_push`: one device packet through `InputProducer::push_packet` on the input's
 //!   audio thread (downmix and adaptive resampling onto the engine time line), at the
-//!   engine rate and at 44.1 kHz. The mixer drains the ring outside the timing.
+//!   engine rate and at 44.1 kHz. A packet holds one engine block's worth of time: 1024
+//!   frames at 48 kHz, 940 or 941 at 44.1 kHz. The mixer drains the ring outside the timing.
 
 use std::hint::black_box;
 use std::time::{Duration, Instant};

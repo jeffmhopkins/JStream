@@ -32,7 +32,8 @@ permissions:
 
 concurrency:
   group: bench-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A PR's older run is superseded; every commit on `main` keeps its record.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -63,6 +64,7 @@ jobs:
         run: cargo bench $BENCH_ARGS -- --test
       - name: Benchmarks
         if: github.event_name != 'pull_request'
+        shell: bash   # -eo pipefail: a panicking bench fails the step despite the `tee`
         run: cargo bench $BENCH_ARGS 2>&1 | tee "$RUNNER_TEMP/bench.txt"
       - name: Summary
         if: github.event_name != 'pull_request'

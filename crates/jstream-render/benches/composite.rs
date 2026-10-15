@@ -8,7 +8,7 @@
 //! `OpenOptions::headless()` prefers a software adapter (lavapipe, WARP), as CI has. On
 //! those the numbers are CPU rasterisation, not GPU cost: they track regressions in what
 //! the compositor submits, never a GPU budget. With no adapter at all the benchmarks are
-//! skipped with a line on stderr.
+//! skipped with a line on stderr, except under `CI`, where that panics.
 //!
 //! - `composite_1080p_readback`: a 1920x1080 frame of N 1280x720 items, with the readback
 //!   that `video.snapshot` asks for, so the time includes the GPU finishing the frame.
@@ -43,6 +43,11 @@ fn open() -> Option<Compositor> {
             Some(compositor)
         }
         Err(err) if err.is_no_adapter() => {
+            // As in the crate's tests: a silent skip would leave `bench` green with no
+            // render rows.
+            if std::env::var_os("CI").is_some() {
+                panic!("CI has no wgpu adapter: {err}");
+            }
             let _ = writeln!(
                 std::io::stderr(),
                 "jstream-render: skipping benchmarks, no adapter: {err}"
@@ -96,7 +101,7 @@ fn items(images: &[Image]) -> Vec<Item<'_>> {
                 placement: Placement::Legacy(LegacyTransform {
                     position: [(step * 41.0) % 640.0, (step * 23.0) % 360.0],
                     scale: [0.9 + 0.01 * step, 0.9 + 0.01 * step],
-                    rotation_deg: step * 1.5,
+                    rotation_deg: (step + 1.0) * 1.5,
                 }),
                 crop: Crop::NONE,
                 opacity: 0.8,
