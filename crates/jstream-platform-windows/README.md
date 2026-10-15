@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:19d3b89e942da78d", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: MJPEG bullet now names CaptureStats::frames_undecodable (stream.rs stats); Not yet trimmed to the decode-every-frame gap; Delay-loading bullet lists each backend's DLLs, checked against the windows crate's link attributes (MFEnumDeviceSources mf.dll, MFCreateSourceReaderFromMediaSource mfreadwrite.dll, MFCreateVirtualCamera mfsensorgroup.dll, the rest mfplat.dll; vcam's source reader is test-only); review N8" }
+verified = { hash = "b3:ec7f92cb270bf012", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b cascade from ARCH#threading (Collector row: the mixer's own collector also frees removed buses' state, filter chains and filters): re-read; prose unchanged, Windows backends untouched" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

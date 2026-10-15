@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:bce46b7621561bd5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (D4 no_alloc, F3, ADR-0042) into D2: re-read; D2's bus/send API, limits, errors and test list sit beside main's tests/no_alloc.rs paragraph; no_alloc covers live input changes and the master path, as stated" }
+verified = { hash = "b3:287fe52c7214ec19", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b: re-read against chain.rs, cmd.rs, mixer.rs, handle.rs and tests/no_alloc.rs: routing paragraph now has chains and compensation, add_filter/insert_filter/FilterControl API, limits (8 filters, 100 ms), pts = first frame minus Mixer::latency_frames, new errors, test lists" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -144,7 +144,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:38c62e3436c704c8", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (D4 no_alloc, F3, ADR-0042) into D2: re-read; D2's mixer/bus/send paragraphs unchanged and consistent with main's no-allocation section; Not yet keeps main's CPU-measurement bullet plus D2's protocol line" }
+verified = { hash = "b3:54cc237067fb074e", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b: re-read against chain.rs and mixer.rs: per-block order (chain, comp delay, fader, meter, sends; bus chain, comp, fader), chain reserve and collector hand-off, edit check on control plane, compensation to the longest input/bus chain with pts shift, no_alloc's new bus/send/filter phases; #228 N1 retarget wording" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -364,7 +364,7 @@ true-peak cases from files) are not run; they would add binary fixtures.
 <!-- @section
 covers = ["crates/jstream-audio/src/filter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:cb02503c16657318", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4: dropped the no-allocation test from Not yet and noted tests/no_alloc.rs runs all five kernels (compressor keyed) on the bus under the check; kernel table and tests list unchanged" }
+verified = { hash = "b3:3f4a8a7d7913c85e", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b: re-read; kernels unchanged; now says the mixer runs them in chains with latency compensated and how no_alloc exercises each; Not yet keeps keys, settings and CPU cost" }
 -->
 
 `src/filter/` holds the audio filter kernels

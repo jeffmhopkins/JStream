@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:d971ee7b8e1558a7", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: Backends gains video_devices (fake::backends fills it with FakeVideoDevices); CaptureStats gains frames_undecodable (counted by FakeVideoDevices and MfVideoDevices streams); Injection, Capture and Not yet lines updated to match backends.rs, capture.rs and fake.rs" }
+verified = { hash = "b3:1387e1850f618433", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b cascade from ARCH#threading (Collector row: the mixer's own collector also frees removed buses' state, filter chains and filters): re-read; prose unchanged, platform traits untouched" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
