@@ -9,7 +9,7 @@ tier = "agent"
 # ADR-0054: Run the Windows, macOS and end-to-end CI jobs after review
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -23,21 +23,21 @@ are still in review.
 
 <a id="decision"></a>
 ## Decision
-On a PR, CI runs in two phases:
-- **Every push** (`pull_request`): the Linux jobs only. That covers `fmt`, the Linux legs of
+The CI jobs are split across two workflows, and no check name appears in both:
+- **`ci.yml`** runs the Linux jobs on every PR push and on `main`: `fmt`, the Linux legs of
   `clippy` and `test`, `doc`, `deny`, `wasm`, `docs`, `lint-deps`, `gate-test` and `pr-title`.
-- **After review** (`workflow_dispatch`): when `review-gate` sets `success` on the head SHA,
-  from a pass verdict or a justified override, it dispatches `ci.yml` on the PR's branch.
-  That run has only the Windows legs of `clippy` and `test`, plus `ui-e2e` and `macos`. It
-  dispatches at most once per SHA: if a `test (windows-latest)` check run already exists,
-  it does nothing.
-
-A push to `main` still runs every job.
+- **`after-review.yml`** runs the Windows legs of `clippy` and `test`, `ui-e2e` and `macos`.
+  It runs on `main`, and on a PR when `review-gate` dispatches it. That happens when the gate
+  sets `success` on the head SHA, from a pass verdict or a justified override. The gate
+  dispatches on the PR's branch unless a `test (windows-latest)` run for that SHA is
+  already queued, running or passed. A failed or cancelled one is dispatched again on the
+  next gate event, or re-run by hand.
 
 The required checks are unchanged. Until the after-review run reports, `clippy
-(windows-latest)` and `test (windows-latest)` are missing, so GitHub keeps the PR unmergeable.
-The `clippy` and `test` matrices choose their platforms from the event instead of skipping
-legs with `if:`. A skipped job would report as passed and could let a PR merge untested.
+(windows-latest)` and `test (windows-latest)` are missing, so GitHub keeps the PR
+unmergeable. Each required name comes from exactly one workflow. If one workflow skipped a
+job that the other also defines, it would publish a skipped run under that name on the same
+SHA, and a skipped run counts as passed, so a failed check could read as green.
 
 <a id="consequences"></a>
 ## Consequences
@@ -45,9 +45,13 @@ legs with `if:`. A skipped job would report as passed and could let a PR merge u
 - A PR merges a Windows run (about 10 minutes) after its review passes, rather than at once.
 - A Windows-only failure shows up after review. The fix is a new push, which needs a new
   review round.
+- The after-review run tests the PR branch's tip, not the merge with `main` that the Linux
+  jobs test. If a push lands between the gate run and the dispatch, it tests that newer
+  commit. A new push doesn't cancel an in-flight after-review run for the old SHA; the next
+  dispatch on the branch does.
 - `review-gate` gains `actions: write` and `checks: read`. It still runs from the default
-  branch and never checks out PR code. The dispatched run uses the PR branch's `ci.yml` with
-  `contents: read`, which is no more than a `pull_request` run already gets. Fork PRs are not
-  dispatched.
-- A branch whose `ci.yml` predates this ADR has no `workflow_dispatch` trigger, so the
-  dispatch fails and logs a warning. That PR gets its Windows checks once it merges `main`.
+  branch and never checks out PR code. The dispatched run uses the PR branch's
+  `after-review.yml` with `contents: read`, which is no more than a `pull_request` run
+  already gets. Fork PRs are not dispatched.
+- A branch without `after-review.yml` can't be dispatched, so the gate logs a warning. That
+  PR gets its Windows checks once it merges `main`.

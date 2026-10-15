@@ -20,7 +20,7 @@ permissions:
   contents: read
   pull-requests: read
   statuses: write
-  actions: write   # dispatch ci.yml's after-review jobs (ADR-0054)
+  actions: write   # dispatch after-review.yml (ADR-0054)
   checks: read     # see whether they already ran for the head SHA
 
 concurrency:
@@ -49,22 +49,25 @@ jobs:
               core.info(`${state}: ${description}`);
             };
 
-            // ADR-0054: once review passes, run ci.yml's after-review jobs (Windows, macOS,
-            // ui-e2e) on the PR's branch, once per head SHA. A failed dispatch (e.g. a branch
-            // whose ci.yml predates the trigger) is logged; merging main fixes it.
+            // ADR-0054: once review passes, run after-review.yml (Windows clippy and tests,
+            // ui-e2e, macOS) on the PR's branch. It skips the dispatch if a
+            // `test (windows-latest)` run for the head SHA is queued, running or passed; one that
+            // failed or was cancelled is dispatched again. A failed dispatch (e.g. a branch
+            // without after-review.yml) is logged; merging main fixes it.
             const dispatchAfterReview = async () => {
               const { data: runs } = await github.rest.checks.listForRef({
                 owner, repo, ref: head, check_name: 'test (windows-latest)',
               });
-              if (runs.total_count > 0) return core.info('after-review jobs already ran for this SHA');
+              const live = runs.check_runs.some((r) => r.status !== 'completed' || r.conclusion === 'success');
+              if (live) return core.info('after-review jobs already queued, running or passed for this SHA');
               if (pr.head.repo?.full_name !== `${owner}/${repo}`) {
                 return core.warning('PR branch is in a fork: after-review jobs not dispatched');
               }
               try {
-                await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'ci.yml', ref: pr.head.ref });
-                core.info(`dispatched ci.yml on ${pr.head.ref}`);
+                await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'after-review.yml', ref: pr.head.ref });
+                core.info(`dispatched after-review.yml on ${pr.head.ref}`);
               } catch (e) {
-                core.warning(`could not dispatch ci.yml on ${pr.head.ref}: ${e.message}`);
+                core.warning(`could not dispatch after-review.yml on ${pr.head.ref}: ${e.message}`);
               }
             };
 
