@@ -16,7 +16,6 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:11ac0b0033c320c6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read: says nothing about staging or tests; only tests.rs helpers became pub(crate)" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +112,6 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:28da60325cb2e8b0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read: no code path changed, only a test and test-helper visibility" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +278,6 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:3059f876515a4182", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V3 paragraph now names the shared-hold test (mask.rs a_reference_that_is_the_input_stages_its_hold_once), which fails with 2 stages without the ptr_eq check" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -368,7 +365,6 @@ as both and counts one stage.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:e2e91de571e00f38", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "CountSync and srgb_texture became pub(crate) for the V3 mask test; the FrameSync stage-once line still holds for render" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
