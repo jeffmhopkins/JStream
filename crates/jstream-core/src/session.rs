@@ -153,6 +153,9 @@ impl Drop for InProcessControl {
     fn drop(&mut self) {
         let _entered = self.span.enter();
         tracing::debug!("session closed");
+        if let Some(client_id) = lock(&self.client_id).take() {
+            self.engine.forget_client(&client_id);
+        }
         let mine = std::mem::take(&mut *lock(&self.subscriptions));
         events::close(mine);
     }

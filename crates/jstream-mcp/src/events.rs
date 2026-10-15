@@ -242,6 +242,7 @@ mod tests {
             rev: Rev(rev),
             client_id: ClientId::new("c"),
             request_id: None,
+            cause: None,
         }
     }
 
