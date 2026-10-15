@@ -128,7 +128,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:296e449deaee937f", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (B5 #196 references and clones, D2 #192, #225, #227) into #207: took main's stamp; main changed only the Conflicts bullet (item.set_source) and no runtime code; re-read; #207's stop/drain text and main's both hold" }
+verified = { hash = "b3:296e449deaee937f", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Cascade restamp after merging main (#208, #196, #192) into #207: stale only via core#design's depends_on; re-read every daemon Design bullet (engine and sessions, MCP, listening, token, signals, output, logging, log rotation, data dir, crash reports, argument parsing, dependencies) and the open questions; this PR changes nothing here and all still hold" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
