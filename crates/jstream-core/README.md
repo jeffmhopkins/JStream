@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:a79b434ee8777654", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): Contents merged: D5's audio-input routing text with E2's snapshot/render-thread mix text; tests list has mix and vcam and audio tests" }
+verified = { hash = "b3:f1e3b9e3aa267ab5", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2: tests-only change (half-rate mix test pumps for up to 30 s); tests list and design text still hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -182,7 +182,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:cf41bd046575c196", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): re-read the render snapshot, compose, video mixes and session key paragraphs next to D5's audio sources and routing; both hold" }
+verified = { hash = "b3:2790dbb5527b5f41", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2: tests-only change (half-rate mix test pumps for up to 30 s); tests list and design text still hold" }
 -->
 
 ### Engine and sessions
