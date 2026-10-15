@@ -50,6 +50,7 @@ fn audio_source(id: &str, kind: &str, setting: Option<(&str, &str)>) -> Edit {
                 .into_iter()
                 .collect(),
         ),
+        duplicated_from: None,
     }
 }
 

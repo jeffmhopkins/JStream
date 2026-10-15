@@ -151,7 +151,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:89ad67ae4c1cd3fb", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3 live engine, #193 vcam pacing) into #207: took main's stamp; stale via core#design's depends_on; re-read every Design bullet incl. A3's live engine, publish opener (Weak engine, PublishError::new, connect_rtmp) and MF delay-load; #207 changes no daemon code or opener API; holds" }
+verified = { hash = "b3:0b20f4414511d18a", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#196 B5, #226 A3, #207, #233, #229, #230): stamp-only conflicts, both sides kept; daemon's Live on Windows text names WasapiAudio as the audio backend, which C5's input_format/processes extend without changing the daemon; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

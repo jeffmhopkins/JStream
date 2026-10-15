@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:9594447bffbb367c", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3: PublishError::new public) into #207: took main's stamp; re-read; Runtime, Drop counts and Tests bullets hold with #207's blocked-send and trickle tests" }
+verified = { hash = "b3:e77cd4fd5eccea8a", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#196 B5, #226 A3, #207, #233, #229, #230): stamp-only conflicts, both sides kept; main's test-list additions (blocked-send stop, trickle peer) sit beside C5's audio tests and Audio sources bullet; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -152,7 +152,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a614b642dfb99753", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3: output_kind read by the daemon's opener, PublishError::new sentence) into #207: took main's stamp; re-read the outputs, opener, output.stop and stop-drain paragraphs; main's additions and #207's bounded stop both hold" }
+verified = { hash = "b3:a9a3735f757cb868", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#196 B5, #226 A3, #207, #233, #229, #230): stamp-only conflicts, both sides kept; main's undo touched-set, opener and stop-drain text and C5's Audio sources/Locking/Not yet text don't overlap; a deleted audio source now loses its status at sync, which the text (status only while recording or unavailable) allows; holds" }
 -->
 
 ### Engine and sessions
@@ -877,7 +877,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:b0f8eb4543a20caa", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3: publish.rs PublishError::new made public) into #207: took main's stamp; re-read; shared program stage and per-output thread text unaffected; holds" }
+verified = { hash = "b3:b3aa03c26ec8a3f6", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#196 B5, #226 A3, #207, #233, #229, #230): stamp-only conflicts, both sides kept; runtime text has C5's audio-inputs sentences; main's #207 stop wait is in Design; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
