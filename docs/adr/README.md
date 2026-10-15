@@ -56,5 +56,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0041](0041-youtube-interaction-scope-v3.md) | YouTube interaction scope v3: one sign-in | accepted | maintainer |  |
 | [ADR-0042](0042-narrow-hot-architecture-sections.md) | Narrow the hot architecture sections: manifest views, app entry points, threading model | accepted | maintainer |  |
 | [ADR-0043](0043-narrow-maintainer-tier.md) | Decision tiers v2: the maintainer decides product-level calls only | accepted | maintainer |  |
+| [ADR-0044](0044-pairing-remote-browsers.md) | Pairing remote browsers with a one-time code | accepted | maintainer |  |
 | [ADR-0045](0045-leptos-web-ui.md) | One web UI on Leptos, confirmed for M2 | accepted | agent |  |
 <!-- @generated end adr-index -->

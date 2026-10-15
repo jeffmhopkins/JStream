@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:573804037ce32dde", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; Commands keeps main's set_source/encoder edits plus scene.switch; Queries add studio.get beside delete.plan; version line 0.16 then main's 0.15 to 0.5" }
+verified = { hash = "b3:b0ab2649efe3d49f", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: PROTOCOL_VERSION now 0.17 for scene.create's optional role; version history line names 0.16 for B10's scene.switch/studio" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -86,8 +86,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.16 because of
-  `scene.switch`, `studio.get` and `studio.changed`; 0.15 added `delete.plan` and the
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.17 because of
+  `scene.create`'s optional `role`; 0.16 added `scene.switch`, `studio.get` and
+  `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
@@ -120,7 +121,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:3adf477bdf0f66e2", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; studio.get beside delete.plan in Queries, both Added in 0.16 for studio.get/studio.changed; OQ5 settled" }
+verified = { hash = "b3:f923ef8b515be15c", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r at 0.17: Groups paragraph marks scene.create's role as protocol 0.17; inverse text holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -228,18 +229,18 @@ order with 0 at the bottom.
 ### Groups and placement addressing
 
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
-`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`, and
-`scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
+`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`. `scene.create` takes
+an optional `role` (omitted means `scene`; protocol 0.17), and `scene.set_role { scene_id, role }`
+changes it; the role changes no engine behaviour.
 `scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.11 reader sees
 no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
 to a position in another scene, keeping its ID and every placement property, under the
 same cycle check as `item.add` (field `scene_id`). `index` is the item's position after
 the move: up to the number of items already there for another scene, and below it for
 the item's own scene, where the move is a reorder. Grouping is a client-built batch:
-`scene.create`, `scene.set_role` to `group`, `source.create` of a `scene` source,
+`scene.create` with `role: group`, `source.create` of a `scene` source,
 `item.add` of it with `item.move` to the lowest selected index, then an `item.move` of
-each selected item into the group, bottom first. `scene.create` doesn't take a `role`
-yet.
+each selected item into the group, bottom first.
 
 The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
 `item.set_visible`) take an
@@ -454,9 +455,9 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop` and
-`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
-`scene.reorder` unless it was last, `scene.set_role` for a group, and each item's
-restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`
+with the scene's `role` (omitted for `scene`), `scene.reorder` unless it was last, and
+each item's restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings and its
 `duplicated_from`, undoing `item.set_source` is `item.set_source` back, and undoing

@@ -196,6 +196,7 @@ mod tests {
                 Batch::single(Edit::SceneCreate {
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
+                    role: None,
                 })
                 .expecting(Rev(4)),
             ),

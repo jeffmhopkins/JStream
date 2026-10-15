@@ -499,10 +499,12 @@ mod tests {
             Edit::SceneCreate {
                 scene_id: "a".into(),
                 name: "Main".into(),
+                role: None,
             },
             Edit::SceneCreate {
                 scene_id: "g".into(),
                 name: "Group".into(),
+                role: None,
             },
             Edit::SceneSetRole {
                 scene_id: "g".into(),
@@ -511,6 +513,7 @@ mod tests {
             Edit::SceneCreate {
                 scene_id: "b".into(),
                 name: "Break".into(),
+                role: None,
             },
             Edit::SourceCreate {
                 source_id: "red".into(),

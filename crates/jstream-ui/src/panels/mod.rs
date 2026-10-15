@@ -6,10 +6,12 @@
 //! Docs: crates/jstream-ui/README.md#design
 
 mod confirm;
+pub mod outputs;
 mod properties;
 mod scenes;
 mod sources;
 
+pub use outputs::Outputs;
 pub use properties::Properties;
 pub use scenes::Scenes;
 pub use sources::Sources;

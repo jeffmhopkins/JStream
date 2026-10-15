@@ -74,6 +74,7 @@ pub fn Scenes() -> impl IntoView {
             vec![Edit::SceneCreate {
                 scene_id: scene_id.clone(),
                 name,
+                role: None,
             }],
         );
         studio.select_scene(scene_id);

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:c7ee3fb4d79fb3e4", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:6cbe7266e0595b0d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 241 N2/N6: mock cycle reasons now name the path and apply's rustdoc names item.move; purpose's mock bullet unaffected; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:fe4924343077e36e", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:d5e33f4c65df90a1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 241 N2/N6: Mock list already names nesting cycles from item.add, item.set_source and item.move with graph codes and paths; reason wording isn't described; holds" }
 -->
 
 ### The trait
@@ -242,8 +242,8 @@ pulls `web-sys`.
   credentials, whose password is the control token, carry it instead (when the engine
   served the page behind Basic). A token that isn't an
   HTTP token (RFC 7230 `tchar`s) can't be a subprotocol and fails `connect`; the
-  daemon's tokens are hex. `jstream-server` doesn't accept the subprotocol yet, so a
-  browser connects only to an engine that does. The caller supplies the token (the CLI
+  daemon's tokens are hex. `jstream-server` accepts both
+  ([jstream-server › Design](../jstream-server/README.md#design)). The caller supplies the token (the CLI
   reads it from a token file). The server validates `Host`, and `Origin` when present;
   browsers set `Origin` themselves (`WsConfig::origin` is ignored there), and the
   native client sends the server's own origin (`http://<host>:<port>` of the URL)

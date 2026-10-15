@@ -88,6 +88,14 @@ serde_json = { version = "1", default-features = false, features = ["std"] }
 # because their `ttf-parser` is unmaintained (RUSTSEC-2026-0192). No default features:
 # `autohint_shaping` only serves the autohinter, which is not used.
 skrifa = { version = "0.48", default-features = false, features = ["std"] }
+# The desktop app's window and webview (ADR-0045): WebView2 on Windows through `wry`.
+# No default features: no compression of embedded assets (the app embeds none), no
+# dynamic ACL, and no Linux `x11`/`dbus`; `wry` is the webview runtime, and
+# `common-controls-v6` gives native dialogs the current Windows look.
+tauri = { version = "2.12", default-features = false, features = ["wry", "common-controls-v6"] }
+# Tauri's build script: generates the app context from `tauri.conf.json` and embeds the
+# Windows resources (icon, manifest).
+tauri-build = { version = "2.7", default-features = false, features = ["config-json"] }
 thiserror = { version = "2", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false }
 # No TLS feature: plain `ws://` only, so no `rustls`/`ring` in the tree yet.

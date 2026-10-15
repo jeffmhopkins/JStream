@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:98fe955f3ee621ae", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "U3a: contents list app routing, store.rs (Studio, Collection, Selection, call helpers) and the scenes, sources, properties and confirm panels; re-read against the code, holds" }
+verified = { hash = "b3:03681d80c54c1817", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: outputs.rs gained start_or_stop_all and tests, app.rs connect fields leave the form element; contents list still holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -29,17 +29,26 @@ Contents ([Design](#design) explains the choices):
   session is open, then the shell with its regions, and keeps the shared state current
   from the session's events. It owns the routing: which panel sits in which region, and
   the inspector's pages. `SessionContext` gives components the open session.
+- **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
+  app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there.
 - **Session** (`session.rs`): `Session` (the connection and the engine's `welcome`),
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
   and `engine_url_for_page`, the engine URL the connect form offers.
-- **Store** (`store.rs`): `Studio`, the state every panel shares: the collection as
-  `state.get` last reported it (`Collection`), the program scene, the `Selection`, the
-  source kinds and the kind descriptors read so far, and the last failed call. Also the
-  call helpers (`query`, `apply`, `plan_delete`), `plan_summary` and `fresh_id`.
+- **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
+  share: the collection as `state.get` last reported it (`Collection`), the program
+  scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
+  last failed call. Also the call helpers (`query`, `apply`, `plan_delete`),
+  `plan_summary` and `fresh_id`.
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
-  (`sources.rs`), the properties form (`properties.rs`), and the delete confirmation
-  they share (`confirm.rs`). The mixer is a placeholder for now.
-- **Canvas** (`canvas/`): the preview canvas. A placeholder for now.
+  (`sources.rs`), the properties form (`properties.rs`) and the delete confirmation
+  they share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel, an inspector
+  page (creating, editing and deleting outputs, their stream keys, start and stop,
+  go-live and the pipeline's health), and the calls and logic behind it, tested
+  natively against `MockEngine`. The mixer is a placeholder for now.
+- **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
+  over a placeholder background, edits their geometry with the pointer and the
+  keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
+  hooked up yet.
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
   ([Build](#build)).
@@ -49,7 +58,7 @@ Contents ([Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:47d8eeec8a98d65f", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "U3a: events feed Studio (coalesced state.get, studio.changed), selection fix-up, scene and source panels (scene.switch, delete.plan with expected_rev, canvas-covering geometry), descriptor-generated properties form, inspector_pages routing; re-read against the code and a browser smoke run, holds" }
+verified = { hash = "b3:86b7b86fc572f2c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: Outputs bullet says go live/end stream try every output and report each failure; new bullet: key and token fields opt out of password managers (no form, autocomplete=off, non-credential names); connecting bullet still holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -59,8 +68,13 @@ verified = { hash = "b3:47d8eeec8a98d65f", by = "agent:claude@session_01FnBvDaHW
   console, and the field is a password field. It may be left empty when the daemon
   served the page behind HTTP Basic with the token as the password: the browser's
   cached Basic credentials then carry the token on the upgrade, and no token
-  subprotocol is sent. How the daemon hands the token to a
-  browser (pairing) is not decided yet. A failed connect shows the transport's reason;
+  subprotocol is sent. A remote browser will pair with a one-time code instead
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)); that isn't built yet. In the desktop app the form is skipped: the
+  app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
+  and `App` connects to that engine at once (`host.rs`). That connection carries the
+  token in the subprotocol, which `jstream-server` accepts
+  ([jstream-server › Design](../jstream-server/README.md#design)). After a disconnect the form
+  shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
   a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin
   and an unreachable engine read the same.
 - **The session.** `Session::connect` opens `jstream-control`'s `WsControl` and says
@@ -79,10 +93,11 @@ verified = { hash = "b3:47d8eeec8a98d65f", by = "agent:claude@session_01FnBvDaHW
   form with the reason. The loop reads the session from the context per event and
   holds no handle of its own, so Disconnecting drops the last one, which closes the
   socket.
-- **Selection.** `Selection` is the scene being edited (shown by the sources list, and
-  by the canvas once it draws) and an item in it (edited by the properties form). It
-  is fixed up after every change: a deleted scene falls back to the program scene, then
-  the first listed scene, and an item that left the scene is dropped.
+- **Selection.** `Selection` is the scene being edited (shown by the sources list) and
+  an item in it (edited by the properties form). It is fixed up after every change: a
+  deleted scene falls back to the program scene, then the first listed scene, and an
+  item that left the scene is dropped. The canvas still draws the program scene with a
+  selection of its own; moving it onto `Selection` is a canvas follow-up.
 - **Scenes and sources.** The scene list shows scenes in display order and leaves out
   groups (ADR-0024), marks the program scene, and puts a scene on program with
   `scene.switch`. The sources list shows the selected scene's items with the top of the
@@ -112,18 +127,89 @@ verified = { hash = "b3:47d8eeec8a98d65f", by = "agent:claude@session_01FnBvDaHW
   bottom; narrow windows stack them. Each region is its own component, so the panels
   and the canvas are built separately without touching the shell. Colours follow the
   system's light or dark scheme.
+- **Outputs.** The panel reads the outputs and encoder profiles with `state.get`, then
+  each output's `output.status`, and re-reads them on `state.changed` and
+  `events.dropped`; `output.state_changed` updates one output's state in place. It
+  creates RTMP(S) and recording outputs (IDs `output-N`, the first free one), changes
+  an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
+  output, and starts and stops each. "Go live" starts every stopped or failed RTMP
+  output whose stream key is set, and "End stream" stops the running ones; recordings
+  have only their own buttons. Both try every output, even after one fails, and report
+  each failure. An RTMP output without a key can't be started from the
+  panel. The health line sums `stats.tick`'s drop totals over the last five ticks; a
+  `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
+  over.
+- **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
+  password field is not bound to a signal: the panel reads it only on save, wraps it in
+  a `SecretString` at once (trimming a pasted newline), empties the field and sends
+  `output.set_key`. It never stores, logs or displays the key, and the engine never
+  sends it back: the panel shows only `output.status`'s `key_set`, re-read after it
+  sets or clears a key, since no event reports that. Another client's key change shows
+  on the next re-read.
+- **Browser password managers are out of scope.** The stream key and the control
+  token are secrets for the OS credential store, not for the browser's
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)), so their fields opt out: each is
+  `autocomplete="off"` with a name that doesn't look like a credential, and neither
+  sits in a `<form>`: a button click or Enter saves the key or connects, so there is
+  no form submission for the browser to offer saving. A test checks both fields.
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`, `store.rs`) and in plain functions the panels are built on (the rows,
   what "Add" sends, the form's sections, parsing and checks); only the components
   themselves need a browser.
 
+<a id="canvas"></a>
+## Canvas
+<!-- @section
+covers = ["crates/jstream-ui/src/canvas/**"]
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
+verified = { hash = "b3:50bd20b4a20be791", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Review N1/N2: resize follows pointer movement (no jump), aspect-locked corners scale by the axis that changed more so inward drags shrink, nudges and new drags build on the pending geometry; section's claims re-read, hold" }
+-->
+
+The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
+in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
+handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads the
+scene and sends the edits. These three are pure and tested natively against
+`MockEngine`; `mod.rs` is the component.
+
+- **What it shows.** The scene on program (`studio.get`, or the first non-group scene
+  if none is), re-read on every `state.changed`, `studio.changed` and
+  `events.dropped`. Boxes are outlined with `jstream-protocol`'s placement formula, so
+  the overlay matches what the compositor draws. An item still stored as a 0.3 legacy
+  placement is not drawn: its box depends on the source's runtime size, which the
+  protocol doesn't report yet (ADR-0022's `source.sizes`), and the toolbar counts
+  such items. Hidden items are drawn dashed.
+- **Selecting and dragging.** A press selects the topmost box under the pointer, or
+  clears the selection on empty canvas. Dragging the box moves it. The selected box
+  has eight resize handles and a rotate handle above its top edge. A corner keeps the
+  box's aspect ratio (Shift frees it) and an edge handle changes one side; the
+  opposite corner or edge stays put, in the box's own rotated frame, and a box never
+  gets smaller than 1 pixel or flips. Rotation turns about the centre and snaps to
+  the nearest multiple of 90° within 4°; Shift moves it in 15° steps. Arrow keys
+  nudge the selected box by 1 pixel (Shift: 10). Escape cancels a drag, or clears the
+  selection.
+- **Snapping.** A moved box's edges and centre snap, within 6 screen pixels, to the
+  canvas's edges and centre lines and to the other boxes' edges and centres, using
+  each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
+  upright box's resized edges snap the same way. Alt skips snapping for one drag, and
+  a toolbar toggle turns it off.
+- **Undoable edits.** A drag changes nothing in the engine until it ends: the overlay
+  draws the gesture locally, and on release one batch with one `item.set_geometry`
+  commits it, so each gesture (and each nudge) is one undo step. It carries no
+  `expected_rev`: a drag is last writer wins per field
+  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
+  (`live.set`), which would show the drag on the output while it happens, are not in
+  the protocol yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
+  while the canvas has focus) are `history.undo` and `history.redo`; the buttons grey
+  out when the engine reports nothing left, and an `undo_conflict` is explained.
+- **Styles** are inline, since the shell's stylesheet belongs to the shell.
+
 <a id="build"></a>
 ## Build
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:7fb8f22f98aca2b6", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "U3a: Cargo.toml gains serde_json only; trunk build --locked --offline with the pinned trunk and wasm-bindgen still succeeds; text holds" }
+verified = { hash = "b3:755c311fa103cf2c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: dropped 'until jstream-server accepts the token subprotocol'; trunk-served page still needs an extra origin; holds" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
@@ -149,6 +235,4 @@ CLI downloaded at pinned versions and checked against pinned SHA-256 sums, and r
 clippy for `wasm32` over `jstream-control` (with `ws`) and `jstream-ui`.
 
 A page served by trunk is on a different port from the engine, so the engine refuses
-its `Origin` unless it is configured as an extra origin; and until `jstream-server`
-accepts the token subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)), the
-UI connects only to an engine that does.
+its `Origin` unless it is configured as an extra origin.
