@@ -40,4 +40,5 @@ pub use credential::WindowsCredentials;
 pub use gpu::WindowsGpu;
 #[cfg(windows)]
 pub use vcam::WindowsVcam;
+#[cfg(windows)]
 pub use video_device::{MfMjpegDecoder, MfVideoDevices};

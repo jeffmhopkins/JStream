@@ -128,7 +128,7 @@ MJPEG `Codec` variant, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:c3d24539251a03a3", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: section is main's (WgcCapture::on_gpu delivers GPU frames); B3 changes nothing in platform; holds" }
+verified = { hash = "b3:baa8c99b80fbbd25", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (G3a, B3) into C4b: section text is main's (on_gpu ring; encoders' GPU input next), untouched by C4b; stale only through the merged platform purpose/crate-map; design unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
