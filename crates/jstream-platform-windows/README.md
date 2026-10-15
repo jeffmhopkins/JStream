@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:858e64be3674c9b1", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: stale via platform#purpose and wgc.rs on_context; GPU path bullet still says the engine reaches on_gpu through Capture::on_context; main's text unchanged; holds" }
+verified = { hash = "b3:cbcd93a7ae788a4c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (e1e2a94) into #219: re-read main's WindowsVcam Start text (mfsensorgroup probe then HKLM) beside E3b's on_context sentence in the GPU path bullet; both match sink.rs and capture; holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -280,8 +280,11 @@ The code is ported from spikes S1 to S3. This first cut has:
     other `VcamFormat` is `Unsupported`. Frames are system-memory BGRA
     (`VideoSurface::Cpu`, any stride); GPU frames are `Unsupported` for now (a GPU
     path would copy the engine's texture into the ring on the D3D11 side).
-  - **Start:** the media source must already be registered machine-wide, so `start`
-    checks for its `HKLM` class key first and is `Unsupported` without it (registering
+  - **Start:** `start` first checks that `mfsensorgroup.dll` loads from System32 and
+    exports `MFCreateVirtualCamera` (Windows 11), and is `Unsupported` without it, so a
+    binary that delay-loads the DLL gets an error rather than a delay-load exception on
+    Windows 10 or an N edition. The media source must already be registered
+    machine-wide, so `start` then checks for its `HKLM` class key and is `Unsupported` without it (registering
     is `jstream-daemon --register-vcam`, through `register_vcam` below). It then creates, on a D3D11 device of its own
     on the default hardware adapter, a ring of three shared BGRA textures and a shared
     fence, plus the control block. They are named in **this session's namespace**,

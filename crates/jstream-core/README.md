@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:2967266265a717ec", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets hw test: re-read; purpose's hardware-test text holds" }
+verified = { hash = "b3:e00be6392001ef71", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of #219's branch (main's #295 clock-swap fix and Windows link test, #297, #309, #237, #286): re-read C3's display/window and capture.targets text beside main's; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -177,7 +177,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9a651472c05ae394", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "capture.targets hw test: test list names windows_gpu.rs's capture_targets_name_what_wgc_captures (a display and a window from capture.targets each start a WGC capture)" }
+verified = { hash = "b3:a3996cf1d1c151c4", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of #219's branch (main's #295 clock-swap fix and Windows link test, #297, #309, #237, #286): clock-swap sentence matches main's set_clock (kept verbatim); C3's capture and capture.targets text unchanged; holds" }
 -->
 
 ### Engine and sessions
@@ -485,7 +485,9 @@ the source hands out a different one, so a still image is uploaded once. The pla
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image advances on the clock and a still one is
 never re-planned. Sources run on the media clock of the backends the host injects
-(`with_backends`), else on a monotonic clock of the engine's own. `collection` asset
+(`with_backends`), else on a monotonic clock of the engine's own. A clock swap
+restarts every running source's timing and drops the re-plan timed on the old clock:
+the thread re-plans at once on the new one. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
 for every `app` reference, the asset is unreadable and the source draws nothing.
 

@@ -140,7 +140,7 @@ is filled, with `MfVideoDevices` on Windows and `MfMjpegDecoder` as its
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:bfb820cd3edebbf6", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: stamp-only conflict; re-read the E3b text (render samples capture frames on the context, encoders' GPU input next) against capture.rs and gpu.rs; holds" }
+verified = { hash = "b3:bc44d05921dc4829", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: stale via ARCH#crate-map only (main added the jstream-ui-e2e row); GPU frame design untouched; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
