@@ -1,5 +1,6 @@
 //! Events: what the server pushes to every connected client after the handshake.
 
+use crate::audio::{BusMeter, SourceMeter};
 use crate::history::HistoryDirection;
 use crate::id::{ClientId, OutputId, RequestId, Rev, SceneId};
 use schemars::JsonSchema;
@@ -79,6 +80,19 @@ pub enum Event {
         /// Running drop totals.
         drops: DropCounts,
     },
+    /// The mixer's levels (ADR-0028): sent about ten times a second while the mixer runs
+    /// (an output is running), and never while it doesn't. Runtime state: a client that
+    /// misses one just shows the next. Until event subscriptions exist, every client
+    /// receives it.
+    #[serde(rename = "meters.tick")]
+    MetersTick {
+        /// Each audio source with a mixer channel, ordered by ID.
+        #[serde(default)]
+        sources: Vec<SourceMeter>,
+        /// Each bus, ordered by ID, the master among them.
+        #[serde(default)]
+        buses: Vec<BusMeter>,
+    },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -94,6 +108,7 @@ impl Event {
             Event::OutputStateChanged { .. } => Some("output.state_changed"),
             Event::EventsDropped { .. } => Some("events.dropped"),
             Event::StatsTick { .. } => Some("stats.tick"),
+            Event::MetersTick { .. } => Some("meters.tick"),
             Event::StudioChanged { .. } => Some("studio.changed"),
             Event::Unknown => None,
         }
