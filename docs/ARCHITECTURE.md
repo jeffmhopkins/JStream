@@ -845,7 +845,7 @@ verified = { hash = "b3:d1beab0a225fcf85", by = "agent:claude@session_01Fuozqmqh
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:f7c98d9194d6528e", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review B1: folder list now names jstream-browser-helper.exe beside the CEF runtime, matching ARCH#browser-source, with the bootstrap-layout caveat; rest unchanged" }
+verified = { hash = "b3:435cdce080086191", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main: #190's browser-helper wording and this PR's hardware-run bullet both kept; no conflict in meaning" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -882,3 +882,11 @@ Direct3D 12).
   - **Shared-object names:** a non-elevated engine can't create `Global\` objects (access
     denied). So the hand-off uses the engine's session namespace, and the DLL opens it as
     `Session\<id>\…`.
+  - **`jstream-vcam-windows` on hardware** (Windows 11, AMD Radeon 780M, with the
+    `vcam_smoke` producer): registered with `regsvr32` from a folder outside any user
+    profile, the DLL was loaded by Frame Server (session 0, `svchost`, LOCAL SERVICE) and
+    served only the producer's frames, with **no** LOCAL SERVICE grant on the file. So the
+    grant matters only for a DLL inside a user profile, which is inferred from S2 rather
+    than isolated. Frame Server requested about four samples per producer frame, because
+    the stream doesn't pace `RequestSample` yet
+    (#193).
