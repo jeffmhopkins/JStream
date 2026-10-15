@@ -24,7 +24,7 @@ mod settings;
 mod version;
 
 pub use command::{
-    Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SourceKind, Vec2,
+    Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole, SourceKind, Vec2,
 };
 pub use envelope::{
     Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request, Response,

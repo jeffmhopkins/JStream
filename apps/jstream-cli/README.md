@@ -98,7 +98,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `source.create` with settings, need a JSON argument form the CLI doesn't have yet, so
   a source it creates gets its kind's defaults. Protocol 0.7's output edits
   (`output.create`, `output.set_target`, `output.delete`), `output.list` and the
-  stream-key actions are not in the CLI yet. Several edits on one line go as **one atomic batch**: one new
+  stream-key actions are not in the CLI yet, nor are protocol 0.9's `scene.set_role`,
+  `item.move` and the placement edits' optional `scene_id`. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches

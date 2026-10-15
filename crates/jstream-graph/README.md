@@ -34,7 +34,8 @@ codes, so the engine passes them to clients unchanged.
   so one source can sit in many scenes, or several times in one, and is still one
   capture. `source.duplicate` makes a separate copy under a new ID. Removing an item
   never deletes its source.
-- `Scene`: a name and its items in stacking order, bottom first.
+- `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
+  here) and its items in stacking order, bottom first.
 - `Item`: the source it places, a `transform`, a `crop` and `visible`.
 - `Output`: an ID and an `OutputKind` (so far only RTMP to a generic URL). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
@@ -52,7 +53,7 @@ goes up by exactly one, and the result carries the **inverse batch**.
   Undo design requires: removing an item is undone by `item.add`, then `item.reorder`,
   `item.set_crop` and `item.set_visible` only where the item differed from what
   `item.add` produces, and deleting a scene by `scene.create`, `scene.reorder` and each
-  item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
+  item's restore (with `scene.set_role` for a group). The inverse carries no `expected_rev`: the engine's per-client undo
   history (in `jstream-core`) chooses it.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   `source.create` of a `builtin` source needs a kind the graph describes, checks each
@@ -75,10 +76,20 @@ goes up by exactly one, and the result carries the **inverse batch**.
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
   with `invalid_argument`, in edit order.
+- **Groups and moves** ([ADR-0024](../../docs/adr/0024-scene-structure.md) §1):
+  `scene.set_role` changes a scene's role and is undone by the previous role.
+  `item.move` moves an item to an index in another scene (up to one past its top) or
+  within its own (a reorder), keeping the whole item, and is undone by `item.move`
+  back. The placement edits (`item.set_transform`, `item.set_crop`, `item.set_visible`)
+  take an optional `scene_id`: absent or the item's own scene changes the item, another
+  scene is `invalid_argument` until keyframe scenes exist, and the inverse keeps the
+  addressing. No keyframe overrides exist yet, so no edit drops any
+  ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
+  §1 applies once they do).
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
   scenes and sources its settings refer to. Asset references are not edges. Every edit
-  that adds an edge runs the cycle check: `item.add`, `source.create` and
+  that adds an edge runs the cycle check: `item.add`, `item.move`, `source.create` and
   `source.set_settings`; `source.duplicate` copies outgoing edges onto a source nothing
   depends on, so it can't close one. A cycle is `invalid_argument` naming it
   (for example scene `a` -> source `sa` -> scene `a`).
@@ -95,13 +106,14 @@ display order, items bottom first, outputs ordered by ID; `Source::to_info`,
 **Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
 edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds, and through
 settings references, one case per edge-adding edit), settings checks and defaults,
-delete rejection by references, output URL checks and the refused delete of a running
+delete rejection by references, roles, moves and the grouping and ungrouping batches,
+`scene_id` addressing, output URL checks and the refused delete of a running
 output, exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
-batches. After each successful one, applying its
+batches of every edit, including moves, role changes and addressed placement edits. After each successful one, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged.
 
@@ -125,4 +137,10 @@ Planned, and kept possible by the private fields of the model types:
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md), replacing the protocol's
   2D `ItemTransform`, which an item keeps as a legacy placement until 1.0 unless an
   `item.set_geometry` replaces it; and blend modes.
+- Keyframe scenes (`variant_of`, per-item `overrides`, `item.clear_override`) and the
+  rest of ADR-0024: placement edits addressed to a variant will write its override, and
+  the edits ADR-0040 lists will drop orphaned overrides and restore them in their
+  inverses. `scene.create`'s optional `role` comes with a change to the daemon, which
+  builds that edit; until then a batch of `scene.create` and `scene.set_role` makes a
+  group.
 - Item lookup is a linear scan over scenes. An ID index can come once collections grow.

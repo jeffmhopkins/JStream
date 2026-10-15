@@ -404,7 +404,30 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+          "description": "Changes what a scene is for (ADR-0024 §1): a `scene`, or a `group` placed in\nother scenes through a `scene` source. The role changes no engine behaviour: a\ngroup renders, nests and can be placed more than once like any scene, and clients\nhide groups from the scene list. Inverse: `scene.set_role` with the previous role.",
+          "properties": {
+            "role": {
+              "$ref": "#/$defs/SceneRole",
+              "description": "Its new role."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to change."
+            },
+            "type": {
+              "const": "scene.set_role",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "role"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -479,11 +502,52 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\ntransform, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle) or if the index is out of range. Inverse:\n`item.move` back to its previous scene and index.",
+          "properties": {
+            "index": {
+              "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to move."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to move it to. Its own scene is allowed, and then the move is an\n`item.reorder`."
+            },
+            "type": {
+              "const": "item.move",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id",
+            "scene_id",
+            "index"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Replaces an item's transform. Inverse: `item.set_transform` with the previous one.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
               "description": "The item to move."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
             },
             "transform": {
               "$ref": "#/$defs/ItemTransform",
@@ -507,6 +571,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             "item_id": {
               "$ref": "#/$defs/ItemId",
               "description": "The item to show or hide."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.\nAny other scene is `invalid_argument` until keyframe scenes exist, when naming\na keyframe scene of the item's scene will write that scene's override."
             },
             "type": {
               "const": "item.set_visible",
@@ -559,6 +634,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             "item_id": {
               "$ref": "#/$defs/ItemId",
               "description": "The item to crop."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
             },
             "type": {
               "const": "item.set_crop",
@@ -2045,6 +2131,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Its display name.",
           "type": "string"
         },
+        "role": {
+          "$ref": "#/$defs/SceneRole",
+          "description": "What it is for: a `group` that clients hide from the scene list, or a `scene`.\nOmitted for a `scene`."
+        },
         "scene_id": {
           "$ref": "#/$defs/SceneId",
           "description": "The scene's ID."
@@ -2056,6 +2146,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         "items"
       ],
       "type": "object"
+    },
+    "SceneRole": {
+      "description": "What a scene is for (ADR-0024 §1). It changes no engine behaviour; it tells clients,\nagents and switchers how to show the scene.",
+      "oneOf": [
+        {
+          "const": "scene",
+          "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+          "type": "string"
+        },
+        {
+          "const": "group",
+          "description": "A group: a scene placed in other scenes to hold items together. Clients hide it\nfrom the scene list and show it under the items that place it.",
+          "type": "string"
+        }
+      ]
     },
     "SceneSummary": {
       "description": "One scene in a `scene.list` result.",
@@ -2069,6 +2174,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         "name": {
           "description": "Its display name.",
           "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/SceneRole",
+          "description": "What it is for: a `group` that clients hide from the scene list, or a `scene`.\nOmitted for a `scene`."
         },
         "scene_id": {
           "$ref": "#/$defs/SceneId",
@@ -2503,5 +2612,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.8"
+  "title": "JStream protocol 0.9"
 }

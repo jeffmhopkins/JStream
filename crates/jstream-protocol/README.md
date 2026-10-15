@@ -29,10 +29,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`.
   `ClientMessage::parse` maps every parse failure to `malformed`.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
-  `scene.reorder`, `item.add`, `item.remove`, `item.reorder`, `item.set_transform`,
+  `scene.reorder`, `scene.set_role`, `item.add`, `item.remove`, `item.reorder`,
+  `item.move`, `item.set_transform`,
   `item.set_crop`, `item.set_visible`, `source.create`, `source.rename`,
   `source.set_settings`, `source.duplicate`, `source.delete`, `output.create`,
-  `output.set_target`, `output.delete`), with `ItemTransform`, `Crop` and `SourceKind`;
+  `output.set_target`, `output.delete`), with `ItemTransform`, `Crop`, `SourceKind` and
+  `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
@@ -68,8 +70,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
   transform. A negative scale is not refused: `from_legacy` returns the drawn outline
   and flags the reflection, which geometry cannot store. These types are not
-  messages. `PROTOCOL_VERSION` is 0.8 because of the kind queries and settings;
-  0.7 added the output edits, `output.list`, the key actions and `key_set`,
+  messages. `PROTOCOL_VERSION` is 0.9 because of groups (`scene.set_role`,
+  `item.move`, a scene's `role` and the placement edits' `scene_id`); 0.8 added the kind
+  queries and settings, 0.7 added the output edits, `output.list`, the key actions and `key_set`,
   `stats.tick` is the 0.6 addition and `video.snapshot` the 0.5 one, and the geometry
   wire surface ships as a later minor. `ItemTransform`'s schema description names
   `ItemGeometry` as the replacement (`protocol.snap` and the MCP `tools.snap`).
@@ -182,6 +185,28 @@ renames one. A `SourceKind` is `builtin` (a kind the engine describes) or `scene
 nests another scene. Positions are indexes: scenes in display order, items in stacking
 order with 0 at the bottom.
 
+### Groups and placement addressing
+
+[ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
+`role: group` (protocol 0.9). `SceneRole` is `scene` or `group`, and
+`scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
+`scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.8 reader sees
+no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
+to a position in another scene, keeping its ID and every placement property, under the
+same cycle check as `item.add` (field `scene_id`). `index` is the item's position after
+the move: up to the number of items already there for another scene, and below it for
+the item's own scene, where the move is a reorder. Grouping is a client-built batch:
+`scene.create`, `scene.set_role` to `group`, `source.create` of a `scene` source,
+`item.add` of it with `item.move` to the lowest selected index, then an `item.move` of
+each selected item into the group, bottom first. `scene.create` doesn't take a `role`
+yet.
+
+The placement edits (`item.set_transform`, `item.set_crop`, `item.set_visible`) take an
+optional `scene_id`, fixed now so that keyframe scenes can arrive additively (ADR-0024
+§2). Absent, or the item's own scene, changes the item. Until keyframe scenes exist,
+any other existing scene is `invalid_argument` on `edits.N.scene_id`, and a missing one
+`not_found`. An inverse keeps the addressing of the edit it undoes.
+
 ### Kinds and settings
 
 [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) decides the shape. A
@@ -221,7 +246,8 @@ never a type per kind.
   letter or leading `/`; an asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
-  edit that would close a cycle (`item.add`, `source.create`, `source.set_settings`) is
+  edit that would close a cycle (`item.add`, `item.move`, `source.create`,
+  `source.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
   scene `a`). `scene.delete` and `source.delete` are rejected while a setting refers to the
   target, naming each `<source>.settings.<param>`. Asset references are not edges.
@@ -282,7 +308,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   display order with its items, and every output (`outputs`, ordered by ID; missing
   from a pre-0.7 server, it parses as empty). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
-- `scene.list`: the scenes in display order, each with its name and item count.
+- `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
+  `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
   its name, `SourceKind` and settings.
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
@@ -330,7 +357,9 @@ that sets it: `scene.reorder` and `item.reorder` restore positions, and
 `item.set_visible` and `item.set_crop` restore what `item.add` doesn't take. So undoing
 `item.remove` is `item.add` plus whichever of `item.reorder`, `item.set_crop` and
 `item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
-`scene.reorder` unless it was last, and each item's restore, bottom to top. Undoing
+`scene.reorder` unless it was last, `scene.set_role` for a group, and each item's
+restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings, and undoing
 `source.set_settings` is a patch of the old values. Deleting a source that items still
 place or a setting refers to, or a scene that a `scene` source shows or a setting refers
@@ -462,8 +491,8 @@ function in this crate so the compositor and the UI share one implementation.
   reflected quad.
 
 These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.8 because of the
-kind queries and settings; the outputs are 0.7, `stats.tick` the 0.6 addition and
+`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.9 because of groups;
+the kind queries and settings are 0.8, the outputs 0.7, `stats.tick` the 0.6 addition and
 `video.snapshot` the 0.5 one. ADR-0022
 names the geometry additions as 0.4, which already shipped with `events.dropped`;
 the geometry wire surface ships as a later minor, under

@@ -101,13 +101,15 @@ protocol's rules for them:
   retry with a known key answers first; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but the output ones, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but the output ones and protocol 0.9's `scene.set_role` and
+  `item.move` (which answer `internal`), with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
   - reorder indices out of range;
+  - a placement edit's `scene_id` naming a scene other than the item's own;
   - deleting a source that an item places, or a scene that a scene source shows, or
     either while a source's settings refer to it;
   - nesting cycles.

@@ -23,8 +23,8 @@
 //! `effects[]`, the full 3D transform) don't break callers.
 
 use jstream_protocol::{
-    Crop, ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind, Rev, SceneId, Settings,
-    SourceId, SourceKind,
+    Crop, ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind, Rev, SceneId, SceneRole,
+    Settings, SourceId, SourceKind,
 };
 use std::collections::BTreeMap;
 
@@ -175,11 +175,12 @@ impl Source {
     }
 }
 
-/// A scene: a stack of items.
+/// A scene: a stack of items. A group is a scene too, with the role `group`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
     pub(crate) id: SceneId,
     pub(crate) name: String,
+    pub(crate) role: SceneRole,
     pub(crate) items: Vec<Item>,
 }
 
@@ -192,6 +193,11 @@ impl Scene {
     /// Its display name.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// What it is for. The role changes no engine behaviour.
+    pub fn role(&self) -> SceneRole {
+        self.role
     }
 
     /// Its items in stacking order: the first is at the bottom.

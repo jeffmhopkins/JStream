@@ -388,6 +388,7 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         },
         ("item.set_visible", [id, visible]) => Edit::ItemSetVisible {
             item_id: ItemId::new(*id),
+            scene_id: None,
             visible: match *visible {
                 "true" => true,
                 "false" => false,
@@ -400,6 +401,7 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         },
         ("item.set_crop", [id, left, top, right, bottom]) => Edit::ItemSetCrop {
             item_id: ItemId::new(*id),
+            scene_id: None,
             crop: Crop {
                 left: number(left, "left")?,
                 top: number(top, "top")?,
@@ -409,6 +411,7 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         },
         ("item.set_transform", [id, x, y, sx, sy, rot]) => Edit::ItemSetTransform {
             item_id: ItemId::new(*id),
+            scene_id: None,
             transform: ItemTransform {
                 position: vec2(x, y)?,
                 scale: vec2(sx, sy)?,
@@ -630,10 +633,12 @@ mod tests {
                     },
                     Edit::ItemSetVisible {
                         item_id: ItemId::new("i1"),
+                        scene_id: None,
                         visible: false,
                     },
                     Edit::ItemSetCrop {
                         item_id: ItemId::new("i1"),
+                        scene_id: None,
                         crop: Crop {
                             left: 1,
                             top: 2,

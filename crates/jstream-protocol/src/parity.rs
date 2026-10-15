@@ -11,8 +11,8 @@
 
 use crate::{
     Batch, Crop, Edit, EntityKind, Finite32, ItemId, ItemInfo, ItemTransform, KindCategory,
-    KindDescriptor, ProtocolError, Query, QueryResult, Rev, SceneId, SceneInfo, SceneSummary,
-    SourceId, SourceInfo, SourceKind, Vec2,
+    KindDescriptor, ProtocolError, Query, QueryResult, Rev, SceneId, SceneInfo, SceneRole,
+    SceneSummary, SourceId, SourceInfo, SourceKind, Vec2,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -71,14 +71,17 @@ pub fn collection() -> Batch {
             add("i3", "cam"),
             Edit::ItemSetTransform {
                 item_id: ItemId::new("i3"),
+                scene_id: None,
                 transform: MOVED,
             },
             Edit::ItemSetCrop {
                 item_id: ItemId::new("i3"),
+                scene_id: None,
                 crop: CROP,
             },
             Edit::ItemSetVisible {
                 item_id: ItemId::new("i3"),
+                scene_id: None,
                 visible: false,
             },
             Edit::ItemReorder {
@@ -109,11 +112,13 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     SceneSummary {
                         scene_id: scene("b"),
                         name: "B".into(),
+                        role: SceneRole::Scene,
                         item_count: 0,
                     },
                     SceneSummary {
                         scene_id: scene("a"),
                         name: "A".into(),
+                        role: SceneRole::Scene,
                         item_count: 3,
                     },
                 ],
@@ -165,11 +170,13 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     SceneInfo {
                         scene_id: scene("b"),
                         name: "B".into(),
+                        role: SceneRole::Scene,
                         items: vec![],
                     },
                     SceneInfo {
                         scene_id: scene("a"),
                         name: "A".into(),
+                        role: SceneRole::Scene,
                         items: items_of_a(),
                     },
                 ],

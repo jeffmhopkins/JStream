@@ -1,6 +1,6 @@
 //! Queries: reads with no effect on state, and their results.
 
-use crate::command::{Crop, ItemTransform, SourceKind};
+use crate::command::{Crop, ItemTransform, SceneRole, SourceKind};
 use crate::event::OutputState;
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
@@ -203,6 +203,10 @@ pub struct SceneSummary {
     pub scene_id: SceneId,
     /// Its display name.
     pub name: String,
+    /// What it is for: a `group` that clients hide from the scene list, or a `scene`.
+    /// Omitted for a `scene`.
+    #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
+    pub role: SceneRole,
     /// How many items it has.
     pub item_count: u32,
 }
@@ -229,6 +233,10 @@ pub struct SceneInfo {
     pub scene_id: SceneId,
     /// Its display name.
     pub name: String,
+    /// What it is for: a `group` that clients hide from the scene list, or a `scene`.
+    /// Omitted for a `scene`.
+    #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
+    pub role: SceneRole,
     /// Its items, in stacking order: the first is at the bottom.
     pub items: Vec<ItemInfo>,
 }

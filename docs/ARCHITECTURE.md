@@ -341,7 +341,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   scene, with `settings` checked against the kind's descriptor and stored complete; no
   filters yet), scenes in display order, and items in stacking order with `source_id`,
   protocol 0.3's 2D transform (top-left corner and scale, which ADR-0022 replaces),
-  `crop` and `visible`. Items refer to sources; they never copy them. Scene and source
+  `crop` and `visible`. Scenes have a `role` (`scene` or `group`, set by
+  `scene.set_role`), and `item.move` moves an item to another scene keeping its id,
+  under the same cycle check. The placement edits take an optional `scene_id`, accepted
+  only when it names the item's own scene until variants exist. Items refer to sources;
+  they never copy them. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
@@ -351,8 +355,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
-  `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
-  variants and overrides, folders, labels, favourites and other organisation metadata,
+  `geometry`, `scene.create`'s optional `role`, variants and overrides (so no edit drops
+  any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
   `YouTube`, `Record` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
   and `outputs`. Nothing is persisted yet.
@@ -509,8 +513,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
-  id, and placement edits take an optional `scene_id` so they can write a keyframe
-  scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
+  id, `scene.set_role` marks a scene as a group, and placement edits take an optional
+  `scene_id` so they can write a keyframe scene's override
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.9). Until keyframe scenes are
+  built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
@@ -610,7 +616,7 @@ verified = { hash = "b3:90489d48b902b02d", by = "agent:claude@session_017CbEsAJT
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 80 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 90 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

@@ -11,7 +11,7 @@ use crate::target::rtmp_url_problem;
 use jstream_protocol::{
     Batch, Crop, Edit, EntityKind, ItemId, ItemTransform, KindDescriptor, Media, OutputId,
     OutputKind, ParamDescriptor, ParamType, ProtocolError, Reference, Rev, RtmpTarget, SceneId,
-    Settings, SourceId, SourceKind,
+    SceneRole, Settings, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -182,6 +182,75 @@ fn item_mut(state: &mut State, (si, ii): (usize, usize)) -> Result<&mut Item, Pr
         })
 }
 
+/// The item a placement edit changes. `scene_id` is the edit's optional addressing
+/// (ADR-0024 §2): absent or the item's own scene is the item itself. Keyframe scenes,
+/// whose overrides another scene would write, aren't built yet, so any other existing
+/// scene is `invalid_argument` and a missing one `not_found`.
+fn placement_mut<'a>(
+    state: &'a mut State,
+    item_id: &ItemId,
+    scene_id: Option<&SceneId>,
+    at: usize,
+) -> Result<&'a mut Item, ProtocolError> {
+    let (si, ii) = find_item(state, item_id)?;
+    if let Some(scene_id) = scene_id
+        && scene_id != &state.scenes[si].id
+    {
+        find_scene(state, scene_id)?;
+        return Err(invalid(
+            at,
+            "scene_id",
+            format!(
+                "item `{item_id}` is in scene `{}`, and only its own scene can be named \
+                 until keyframe scenes exist",
+                state.scenes[si].id
+            ),
+        ));
+    }
+    item_mut(state, (si, ii))
+}
+
+/// Applies `item.move` and returns its inverse: `item.move` back.
+fn move_item(
+    state: &mut State,
+    item_id: &ItemId,
+    scene_id: &SceneId,
+    index: u32,
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    let (from_scene, from_index) = find_item(state, item_id)?;
+    let to_scene = find_scene(state, scene_id)?;
+    let old_scene_id = state.scenes[from_scene].id.clone();
+    // The item's final position: one past the top is allowed in another scene.
+    let slots = state.scenes[to_scene].items.len() + usize::from(to_scene != from_scene);
+    let to_index = check_index(index, slots, at, "positions in the scene")?;
+    let source_id = state.scenes[from_scene].items[from_index].source_id.clone();
+    // The scene -> source edge already exists from the old scene; it points into the
+    // source, so it can't be part of a path from the source back to the new scene.
+    if let Some(cycle) = deps::cycle(
+        state,
+        &Node::Scene(scene_id.clone()),
+        &Node::Source(source_id.clone()),
+    ) {
+        return Err(invalid(
+            at,
+            "scene_id",
+            format!(
+                "moving item `{item_id}` (source `{source_id}`) into scene `{scene_id}` \
+                 would create a cycle: {cycle}"
+            ),
+        ));
+    }
+    // No keyframe overrides exist yet, so a move can't orphan any (ADR-0040 §1).
+    let item = state.scenes[from_scene].items.remove(from_index);
+    state.scenes[to_scene].items.insert(to_index, item);
+    Ok(vec![Edit::ItemMove {
+        item_id: item_id.clone(),
+        scene_id: old_scene_id,
+        index: wire_index(from_index)?,
+    }])
+}
+
 /// Applies one edit to `state` and returns the edits that undo it.
 fn apply_edit(
     state: &mut State,
@@ -200,10 +269,21 @@ fn apply_edit(
             state.scenes.push(Scene {
                 id: scene_id.clone(),
                 name: name.clone(),
+                role: SceneRole::Scene,
                 items: Vec::new(),
             });
             Ok(vec![Edit::SceneDelete {
                 scene_id: scene_id.clone(),
+            }])
+        }
+        Edit::SceneSetRole { scene_id, role } => {
+            let si = find_scene(state, scene_id)?;
+            // No keyframe overrides exist yet, so a role change can't orphan any
+            // (ADR-0040 §1); once they do, this edit drops and its inverse restores them.
+            let old = std::mem::replace(&mut state.scenes[si].role, *role);
+            Ok(vec![Edit::SceneSetRole {
+                scene_id: scene_id.clone(),
+                role: old,
             }])
         }
         Edit::SceneRename { scene_id, name } => {
@@ -254,6 +334,12 @@ fn apply_edit(
                 inverse.push(Edit::SceneReorder {
                     scene_id: scene.id.clone(),
                     index: wire_index(si)?,
+                });
+            }
+            if scene.role != SceneRole::Scene {
+                inverse.push(Edit::SceneSetRole {
+                    scene_id: scene.id.clone(),
+                    role: scene.role,
                 });
             }
             // Re-adding bottom to top puts each item back at its own index.
@@ -328,27 +414,47 @@ fn apply_edit(
                 index: wire_index(from)?,
             }])
         }
-        Edit::ItemSetTransform { item_id, transform } => {
-            let item = item_mut(state, find_item(state, item_id)?)?;
+        Edit::ItemMove {
+            item_id,
+            scene_id,
+            index,
+        } => move_item(state, item_id, scene_id, *index, at),
+        Edit::ItemSetTransform {
+            item_id,
+            scene_id,
+            transform,
+        } => {
+            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
             let old = std::mem::replace(&mut item.transform, *transform);
             Ok(vec![Edit::ItemSetTransform {
                 item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
                 transform: old,
             }])
         }
-        Edit::ItemSetCrop { item_id, crop } => {
-            let item = item_mut(state, find_item(state, item_id)?)?;
+        Edit::ItemSetCrop {
+            item_id,
+            scene_id,
+            crop,
+        } => {
+            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
             let old = std::mem::replace(&mut item.crop, *crop);
             Ok(vec![Edit::ItemSetCrop {
                 item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
                 crop: old,
             }])
         }
-        Edit::ItemSetVisible { item_id, visible } => {
-            let item = item_mut(state, find_item(state, item_id)?)?;
+        Edit::ItemSetVisible {
+            item_id,
+            scene_id,
+            visible,
+        } => {
+            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
             let old = std::mem::replace(&mut item.visible, *visible);
             Ok(vec![Edit::ItemSetVisible {
                 item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
                 visible: old,
             }])
         }
@@ -580,12 +686,14 @@ fn restore_item(
     if item.crop != Crop::NONE {
         edits.push(Edit::ItemSetCrop {
             item_id: item.id.clone(),
+            scene_id: None,
             crop: item.crop,
         });
     }
     if !item.visible {
         edits.push(Edit::ItemSetVisible {
             item_id: item.id.clone(),
+            scene_id: None,
             visible: false,
         });
     }

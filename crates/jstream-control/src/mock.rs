@@ -15,7 +15,7 @@ use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, Crop, Edit, EntityKind, Event, Hello,
     IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputState, PROTOCOL_VERSION,
     ProtocolError, Query, QueryResult, Reference, RequestId, Response, Rev, SceneId, SceneInfo,
-    SceneSummary, Settings, SourceId, SourceInfo, SourceKind, Welcome,
+    SceneRole, SceneSummary, Settings, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use std::collections::{BTreeMap, VecDeque};
 use std::future;
@@ -313,6 +313,7 @@ impl State {
                     .map(|scene| SceneSummary {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
+                        role: SceneRole::Scene,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                     })
                     .collect(),
@@ -350,6 +351,7 @@ impl State {
                     .map(|scene| SceneInfo {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
+                        role: SceneRole::Scene,
                         items: self.collection.item_infos(scene),
                     })
                     .collect(),
@@ -518,14 +520,26 @@ impl Collection {
                 items.retain(|id| *id != item_id);
                 items.insert(to, item_id);
             }
-            Edit::ItemSetTransform { item_id, transform } => {
-                self.existing_item(&item_id)?.transform = transform;
+            Edit::ItemSetTransform {
+                item_id,
+                scene_id,
+                transform,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?.transform = transform;
             }
-            Edit::ItemSetCrop { item_id, crop } => {
-                self.existing_item(&item_id)?.crop = crop;
+            Edit::ItemSetCrop {
+                item_id,
+                scene_id,
+                crop,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?.crop = crop;
             }
-            Edit::ItemSetVisible { item_id, visible } => {
-                self.existing_item(&item_id)?.visible = visible;
+            Edit::ItemSetVisible {
+                item_id,
+                scene_id,
+                visible,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?.visible = visible;
             }
             Edit::SourceCreate {
                 source_id,
@@ -703,6 +717,31 @@ impl Collection {
         self.items
             .get_mut(item_id)
             .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))
+    }
+
+    /// The item a placement edit changes, with its optional `scene_id` checked as
+    /// `jstream-graph` checks it: only the item's own scene, until keyframe scenes exist.
+    fn placement(
+        &mut self,
+        item_id: &ItemId,
+        scene_id: Option<&SceneId>,
+        at: usize,
+    ) -> Result<&mut Item, ProtocolError> {
+        let own = self.existing_item(item_id)?.scene_id.clone();
+        if let Some(scene_id) = scene_id
+            && *scene_id != own
+        {
+            self.existing_scene(scene_id)?;
+            return Err(invalid(
+                at,
+                "scene_id",
+                format!(
+                    "item `{item_id}` is in scene `{own}`, and only its own scene can be named \
+                     until keyframe scenes exist"
+                ),
+            ));
+        }
+        self.existing_item(item_id)
     }
 }
 
@@ -1007,6 +1046,7 @@ mod tests {
                 add("a", "i2", "nested_b"),
                 Edit::ItemSetVisible {
                     item_id: ItemId::new("i1"),
+                    scene_id: None,
                     visible: false,
                 },
                 Edit::ItemReorder {
