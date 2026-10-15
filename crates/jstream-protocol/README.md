@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:7087dc44ec771c09", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: version line says 0.15 for delete.plan and blockers, 0.14 references and clones; Queries bullet keeps encoder.list and adds delete.plan/DeleteTarget; Errors bullet names Blocker" }
+verified = { hash = "b3:d1050365147242a8", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of B9: PROTOCOL_VERSION 0.16 for audio, 0.15 delete.plan and blockers; Queries list has bus.list and delete.plan; Errors names Blocker; IDs bullet keeps BusId::master" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -132,7 +132,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:6b59c1521d465bbf", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; envelope example at 0.15; Deletes bullet, delete.plan in Queries, blockers row and OQ12 hold beside main's groups, encoder and references text; blockers doc says older than 0.15" }
+verified = { hash = "b3:59f3a6df747d9c85", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of B9: re-read; envelope example now at 0.16; Audio subsection and meters.tick say 0.16; delete.plan, blockers and OQ12 from main kept; examples.snap and protocol.snap regenerated at 0.16" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -152,8 +152,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":15},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":15},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":16},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":16},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}

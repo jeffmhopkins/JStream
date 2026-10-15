@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:9b8119ee0c3297c6", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; contents list holds; mock.rs only swaps InvalidArgument literals for the constructor, including #203's running-output undo test" }
+verified = { hash = "b3:721033099d11cc6d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merges (#203 undo, B9): re-read; mock keeps buses and sends; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:55afc10914989afb", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; #203's undo and redo bullet and B9's delete.plan internal / no blockers note both hold" }
+verified = { hash = "b3:1628144a27d3e793", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of #203 undo: mock audio edits now return jstream-graph's inverses; undo bullet names deleted bus with fader and sends, a deleted source's audio and sends, audio edits back to old values; parity undo test tears down audio" }
 -->
 
 ### The trait

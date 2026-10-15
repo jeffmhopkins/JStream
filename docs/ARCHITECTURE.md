@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:7021d11fa3e50d0d", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221 C2 text): Built so far now lists color, image and text as built and keeps C5's audio-only sentence; re-read, holds" }
+verified = { hash = "b3:c8c318d215b73e93", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merges (B9, C5): re-read; audio-only kinds now recorded as routed mixer inputs; Audio (protocol 0.16) paragraph holds" }
 -->
 
 ```
@@ -361,7 +361,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   whose kind is built (`color`, `image` and `text`), rebuilt when its settings change,
   and the program mix shows its frames, animations advancing on the media clock. The
   audio-only kinds (`audio_input`, `desktop_audio`, `app_audio`) have no `Source`:
-  while an output runs, the engine records each as a mixer input sent to master.
+  while an output runs, the engine records each as a mixer input, routed as its audio
+  and sends say.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
   container: mp4 }`, the path checked to be absolute and to end in a file name. A stream
@@ -527,7 +528,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:160cce3c32ad09ff", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; delete.plan and blockers at 0.15 beside main's 0.14 text; #203 changes no wire shape" }
+verified = { hash = "b3:c059dee4b946134b", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: cascade from protocol design's envelope example moving to 0.16; re-read, nothing here names the example's version; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -649,7 +650,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; tool list includes delete and encoder; tools.snap 146 KB, text says about 145 KB" }
+verified = { hash = "b3:ef001f7cf7abee58", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of B9: tool nouns add delete beside audio, bus and send; tools.snap measured 173074 bytes, text says about 175 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -851,7 +852,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:e8da9a7e3807bb8c", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9 CI fix: LoadError::Invalid now boxes its ProtocolError, a type-size change only; re-read, the Collections bullet (checks a loaded collection as it checks edits) holds" }
+verified = { hash = "b3:3eee05563461dd3c", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of B9: took main's stamp (LoadError boxing), re-read; Collections bullet holds with buses, sends and source audio optional at schema 1" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

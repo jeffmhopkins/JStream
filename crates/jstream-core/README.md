@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:159b653a7aae7653", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#197 B9 delete.plan): re-read; B9 changed no core README text; C5's Audio sources bullet and src/tests/audio.rs list hold beside main's; delete.plan is a query, not a mutation path" }
+verified = { hash = "b3:b50dccc6da6920f7", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merges (B9, C5): re-read; Audio sources bullet now says inputs are routed (fader, mute, sends) and only the defaults go to master at unity; tests list adds audio_routing.rs and the C5-side meter check; Not here yet drops C5" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -60,10 +60,11 @@ state machine. Contents:
   on the render thread (see *Live sources* and *Snapshots* in [Design](#design)).
   Audio-only kinds make no frames and have no live source.
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
-  input, sent to master at unity, for each `audio_input`, `desktop_audio` and
-  `app_audio` source, added when the source is created and removed when it is deleted;
-  while there is none, the default microphone and desktop audio (see *Audio sources*
-  in [Design](#design)).
+  input for each `audio_input`, `desktop_audio` and `app_audio` source, added when the
+  source is created and removed when it is deleted, and listed for the audio routing,
+  which sets its fader, mute and sends; while there is none, the default microphone
+  and desktop audio, sent to master at unity (see *Audio sources* in
+  [Design](#design)).
 - **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -83,8 +84,7 @@ state machine. Contents:
   muted and unmetered while its audio is off;
   `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
-  `audio.reset_loudness` restarts its integrated loudness. No source opens a mixer
-  input yet: that comes with C5's audio kinds, so only tests route one.
+  `audio.reset_loudness` restarts its integrated loudness.
 - **History** (`history.rs`): per-client undo and redo
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
   stacks, built from the inverse batches `Graph::apply` returns, and the log of what
@@ -106,8 +106,8 @@ state machine. Contents:
   drain abandons) and the publish link's, and a sampler thread
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
-- **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/audio.rs`, `tests/mcp.rs`,
-  `tests/scenarios.rs`):
+- **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/audio.rs`,
+  `src/tests/audio_routing.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
   end), the shared parity fixture, a differential run against
@@ -148,12 +148,14 @@ state machine. Contents:
   as they were, a failed save that the next change recovers, and concurrent sessions
   leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process. The audio routing (`audio.rs` and
-  `src/tests/audio.rs`): a mixer's buses, faders, mutes and sends following batches and
-  undo, `meters.tick` while a mixer is attached and none after, `audio.reset_loudness`,
-  and the master's true peak and loudness. The parity tests add the fixture's `mic`
-  kind to the engine until the built-in kinds have one.
+  `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
+  batches and undo, `meters.tick` while a mixer is attached and none after,
+  `audio.reset_loudness`, and the master's true peak and loudness; `src/tests/audio.rs`
+  also checks that a recording audio source is metered and drops out of
+  `meters.tick` when its audio is off. The parity tests add the
+  fixture's `mic` kind, which no built-in kind matches.
 
-Not here yet: live values, audio sources' mixer inputs (C5), `when_shown`'s activity
+Not here yet: live values, `when_shown`'s activity
 gain (D6), the audio and outputs snapshots, a GPU encode target, and
 the platform's Windows devices. See
 [Design › Not yet](#design).
@@ -167,7 +169,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0b6a236efa7b9362", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#197 B9 delete.plan): re-read with protocol #design's blockers text; B9 changed no core design text; audio.sync still beside both live.sync calls (delete.plan mutates nothing); holds" }
+verified = { hash = "b3:29b33b3e47412f8b", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: cascade from protocol design's envelope example moving to 0.16; re-read, nothing here names the example's version; holds" }
 -->
 
 ### Engine and sessions
@@ -407,8 +409,10 @@ is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 `jstream_sources::AudioTarget` of every audio-only source; `sync` runs beside the live
 sources' and wakes the program stage's thread when that set changes. When the program
 stage starts, its `AudioInputs` opens one mixer input per audio source through
-`MixerControl` (D1's live API), sent to the master bus at unity as every new input
-is; gain, mute and routing come with D5. Each input is opened by asking the platform
+`MixerControl` (D1's live API). A source's input opens muted and is listed in
+`audio_sources::Routed`, where the audio routing finds it (see *Audio routing*) and
+sets it up as the collection says; the default microphone and desktop inputs send to
+the master bus at unity, as every new input does. Each input is opened by asking the platform
 for the format the device delivers (`AudioIo::input_format`), adding the mixer input
 in that format, and opening the stream with the input's producer as its handler; a
 stream that opens in another format is closed and tried again. An `audio_input`
@@ -554,13 +558,14 @@ brings the mixer in line with the collection under the collection lock:
 - for each source with a mixer input, its fader and a send into each mixer bus as the
   collection's sends say, removing the others. A `muted` source keeps its sends at
   silence, so its post-fader meter still reads, as ADR-0028's mute requires; a source
-  whose audio is off is muted in the mixer and has no meter in `meters.tick`. An input
-  whose source is gone, or has no audio now, is removed, retried like a bus.
-  Every control is a few atomics, so a sync never waits on the mixer thread
-  ([R-RT-003](../../docs/RULES.md#R-RT-003)). No source opens an input yet: C5's audio
-  kinds will, through the seam tests use now (`AudioRouting::set_input`); the
-  program stage's microphone and desktop inputs are not sources and keep sending to the
-  master at unity.
+  whose audio is off is muted in the mixer and has no meter in `meters.tick`. The
+  inputs are the ones the program stage's audio sources thread lists in `Routed` as it
+  opens and closes them (see *Audio sources*); it removes them from the mixer itself.
+  An input it opened since the last sync is routed on the next `meters.tick` at the
+  latest, and stays muted until then. Every control is a few atomics, so a sync never
+  waits on the mixer thread ([R-RT-003](../../docs/RULES.md#R-RT-003)), and the
+  `Routed` lock is the last one taken. The program stage's microphone and desktop
+  inputs are not sources and keep sending to the master at unity.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
 reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
@@ -931,7 +936,7 @@ history and idempotency keys are not saved.
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
-- Audio sources' mixer inputs (C5's kinds), `when_shown`'s activity gain (D6), filter
+- `when_shown`'s activity gain (D6), filter
   chains in the protocol (after D7b), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
@@ -944,7 +949,7 @@ history and idempotency keys are not saved.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:b3aa03c26ec8a3f6", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#196 B5, #226 A3, #207, #233, #229, #230): stamp-only conflicts, both sides kept; runtime text has C5's audio-inputs sentences; main's #207 stop wait is in Design; holds" }
+verified = { hash = "b3:6aa693fabe5328ff", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of C5: re-read; program stage paragraph merges C5's audio-source inputs with D5's metering and routing; Not yet drops C5's inputs" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

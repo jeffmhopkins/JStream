@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:9b0ece85473d1a65", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; step 7's exit 0 after Ctrl-C unaffected; holds" }
+verified = { hash = "b3:3fb30dc6063d9c32", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read main's new runbook; step 4 now says meters.tick lines come about ten a second while the program runs; other steps unaffected" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -100,7 +100,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:398610ab5da52a07", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; script steps and exit codes unaffected; holds" }
+verified = { hash = "b3:61b3e755995991bc", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read with scripts/smoke.ps1; it filters events by type, so meters.tick lines don't change its stats.tick or state checks; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

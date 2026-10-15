@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:d305302e89ac48f5", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; B9 only swaps a test's error constructor in exit.rs; #203's text holds" }
+verified = { hash = "b3:dba40b0e8cd0b27b", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merges of main (B9, C5): re-read; CLI purpose text unchanged by both sides, audio still not in the CLI beyond --json; holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:b528a9cd7c52ba57", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; No undo or redo command bullet and Edits text hold; B9 adds no CLI command" }
+verified = { hash = "b3:0bd372b5914d0e5f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merges of main: re-read; 0.21 placeholder now 0.16 for the audio edits the CLI lacks; meters.tick prints as JSON; holds" }
 -->
 
 ```sh
@@ -227,7 +227,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:96f8118049fee449", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; exit-code table still maps invalid_argument to 17; blockers ride in its detail" }
+verified = { hash = "b3:b1b0b262fac5eb0e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merges of main: re-read; goldens now carry audio, buses and sends; delete.plan text from main kept; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
