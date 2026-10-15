@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:3f1ff0d78b67fa09", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b: Seams Registry bullet matches the engine's jstream-sources thread calling create/frame/next_change; Assets paragraph now says the Windows walk refuses only name-surrogate reparse points (file_type().is_symlink()), so OneDrive placeholders and dedup files are read (#217 N4)" }
+verified = { hash = "b3:03c7f285c58c489f", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#222 C1b) into png 0.18: kept main's C1b seams text; png 0.18 maps a usize-overflowing frame size to a decode error, not described here; holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
