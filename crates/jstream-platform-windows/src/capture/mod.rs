@@ -12,8 +12,9 @@
 mod convert;
 #[cfg(any(windows, test))]
 mod id;
+// Shared with `video_device`, whose capture streams publish to the same mailbox.
 #[cfg(any(windows, test))]
-mod mailbox;
+pub(crate) mod mailbox;
 #[cfg(any(windows, test))]
 pub(crate) mod ring;
 #[cfg(windows)]
