@@ -746,6 +746,13 @@ milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
 status = "planned"
 
+[[item]]
+id = "K2"
+milestone = "M2"
+title = "Keyframe scenes: model and evaluator"
+status = "review"
+prs = [350]
+
 # M3
 
 [[item]]
