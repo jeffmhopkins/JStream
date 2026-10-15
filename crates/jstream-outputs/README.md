@@ -137,14 +137,19 @@ path builds its FLV tags from) and writes fragmented MP4 with `jstream-mux`'s
 `Fmp4Muxer`, which starts a fragment at every video keyframe (every second for
 audio-only).
 
-- **Temporary name, renamed on finish:** a recording to `show.mp4` is written to
-  `show.mp4.part` in the same directory (so the rename stays on one file system), and
-  `finish` writes the last fragment, syncs, closes the file and renames it. A file at
-  the destination is therefore always a finished recording. Nothing is overwritten: an
+- **Temporary name, moved on finish:** a recording to `show.mp4` is written to
+  `show.mp4.part` in the same directory (so the move stays on one file system), and
+  `finish` writes the last fragment, syncs, closes the file and moves it there. A file at
+  the destination is therefore a finished recording (or, after a crash during the
+  fallback below, an empty placeholder). Nothing is overwritten: an
   existing destination or `.part` file (a recording a crash left behind) is
-  `RecordError::Exists`, checked on create and again just before the rename. That
-  second check can still race a file created in between, since `std` has no
-  rename-without-replace.
+  `RecordError::Exists`, checked on create and enforced atomically on finish. `std`
+  has no rename-without-replace, so `finish` hard links the `.part` file to the
+  destination (which fails if anything is there, however late it appeared) and then
+  removes the `.part` name. On a file system without hard links (FAT, exFAT) it
+  instead creates the destination exclusively as an empty placeholder and renames over
+  that; a crash between the two steps leaves an empty destination beside the complete
+  `.part` file.
 - **Crash safety:** each fragment is written as one buffer and then synced
   (`sync_data`), so a crash or power loss loses at most the fragment being built, and
   the `.part` file is readable up to its last complete fragment. Dropping a recorder
@@ -211,9 +216,12 @@ in `jstream-mux`. Recorder tests write to a directory under the system temp dir:
 the finished file matches `Fmp4Writer`'s output byte for byte, with the AVC
 configuration given or taken from the stream; after every packet the `.part` file is
 exactly the segments completed so far, and stays so when the recorder is dropped; an
-existing destination or `.part` file is refused, also at finish; a rejected packet
-leaves the recording going. A writer that fails on demand checks that a full disk is
-`DiskFull` and other write or sync failures `Write`, that each ends the recording, and
+existing destination or `.part` file is refused, also at finish, where both the
+hard-link move and its placeholder fallback leave a destination created just before
+them untouched (on Unix, a dangling symlink at the destination, which an existence
+check misses, stands in for a file that appears after the check, so the race is
+tested deterministically); a rejected packet leaves the recording going. A writer
+that fails on demand checks that a full disk is `DiskFull` and other write or sync failures `Write`, that each ends the recording, and
 that every fragment is synced.
 
 <a id="open-questions"></a>
