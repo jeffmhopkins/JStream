@@ -195,3 +195,6 @@ clippy for `wasm32` over `jstream-control` (with `ws`) and `jstream-ui`.
 
 A page served by trunk is on a different port from the engine, so the engine refuses
 its `Origin` unless it is configured as an extra origin.
+
+The built page is tested in a browser by CI's `ui-e2e` job: Playwright against a mock
+daemon ([end-to-end tests](tests/e2e/README.md)).
