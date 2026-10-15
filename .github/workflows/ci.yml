@@ -10,6 +10,8 @@ name: ci
 
 # Linux only. The Windows legs of `clippy` and `test`, `ui-e2e` and `macos` are in
 # after-review.yml, which runs on main and, on a PR, once review passes (ADR-0054).
+# A PR into a `wave/*` branch runs only the quick jobs (fmt, Linux clippy, docs,
+# lint-deps, gate-test, pr-title); the wave's own PR into main runs everything (ADR-0055).
 on:
   pull_request:
     # ready_for_review: draft PRs skip every job below, so CI runs when a draft is marked ready.
@@ -51,7 +53,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   test:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     strategy:
       fail-fast: false
       matrix:
@@ -79,7 +81,7 @@ jobs:
         run: cargo test --workspace --locked
 
   doc:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -D warnings
@@ -90,7 +92,7 @@ jobs:
       - run: cargo doc --workspace --no-deps --locked
 
   deny:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -104,7 +106,7 @@ jobs:
   # and checked against pinned SHA-256 sums; the wasm-bindgen CLI must match Cargo.lock.
   # `ui-e2e` and `dist-ui` in after-review.yml pin the same versions: change them together.
   wasm:
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     runs-on: ubuntu-latest
     env:
       TRUNK_VERSION: 0.21.14

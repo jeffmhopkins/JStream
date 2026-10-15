@@ -3,6 +3,9 @@
 # to main run it too. The job names match the required checks in docs/RULES.md#R-GIT-003,
 # and none of them is defined in ci.yml, so neither workflow reports a skipped run under
 # the other's names.
+# A dispatched run's checks aren't linked to the PR, so they don't count as its required
+# checks or show on it. Each job therefore also reports itself as a commit status under its
+# check name (pending, then its result): that is what the PR's merge box and the ruleset see.
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
@@ -22,6 +25,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write   # the commit statuses above; nothing else is written
 
 concurrency:
   group: after-review-${{ github.ref }}
@@ -39,12 +43,28 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report pending to the PR
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: clippy (${{ matrix.os }})
+          RESULT: pending
+        run: bash .github/after-review-status.sh
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # Platform tests (`hw-tests`) only run on real hardware, but they must still compile:
       # type-check them on the platform they target.
       - run: cargo clippy -p jstream-platform-windows --all-targets --features hw-tests --locked -- -D warnings
+      - name: Report the result to the PR
+        if: always() && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: clippy (${{ matrix.os }})
+          RESULT: ${{ job.status }}
+        run: bash .github/after-review-status.sh
 
   test:
     strategy:
@@ -53,10 +73,26 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report pending to the PR
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: test (${{ matrix.os }})
+          RESULT: pending
+        run: bash .github/after-review-status.sh
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Test
         run: cargo test --workspace --locked
+      - name: Report the result to the PR
+        if: always() && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: test (${{ matrix.os }})
+          RESULT: ${{ job.status }}
+        run: bash .github/after-review-status.sh
 
   # The web UI end to end (crates/jstream-ui/tests/e2e/README.md): Playwright drives the
   # trunk build in the runner's Google Chrome against the mock daemon. trunk and the
@@ -71,6 +107,14 @@ jobs:
       WASM_BINDGEN_SHA256: 82d12bb940e2d4e72e0d5605387fc1b8ca179044e012b620f0ce4e7440e8320e
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report pending to the PR
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: ui-e2e
+          RESULT: pending
+        run: bash .github/after-review-status.sh
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install trunk and the wasm-bindgen CLI
@@ -104,6 +148,14 @@ jobs:
           JSTREAM_E2E_CHROMIUM="$(command -v google-chrome)"
           export JSTREAM_E2E_CHROMIUM
           npx --no-install playwright test
+      - name: Report the result to the PR
+        if: always() && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: ui-e2e
+          RESULT: ${{ job.status }}
+        run: bash .github/after-review-status.sh
 
   # The portable Windows zip (ADR-0020). `dist-ui` builds the web UI for release, with
   # trunk, the wasm-bindgen CLI and binaryen (the `wasm-opt` a release build runs) pinned
@@ -185,6 +237,22 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report pending to the PR
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: macos
+          RESULT: pending
+        run: bash .github/after-review-status.sh
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo test --workspace --locked
+      - name: Report the result to the PR
+        if: always() && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: macos
+          RESULT: ${{ job.status }}
+        run: bash .github/after-review-status.sh
