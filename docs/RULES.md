@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:743b474a5ba032ef", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the section and R-RT-001..006 against the edited ARCH#threading paragraph: the rules still bind audio, render and encode threads; the pipeline now catches render and mixer panics as R-RT-006 asks and counts skipped render ticks in stats.tick per R-RT-004. No rule text changed." }
+verified = { hash = "b3:2fe95b1d54d6f074", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-RT-001..006 against the ARCH#threading handover addition: the stopped marker is one atomic store on the RT thread and the control side polls it, so no allocation, lock or wait on the control plane; R-RT-003's snapshots/parameter channels unchanged. No rule text changed" }
 -->
 
 <a id="R-RT-001"></a>
