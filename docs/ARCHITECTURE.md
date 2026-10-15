@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:bcf5d3053a8f0044", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: Hosts table desktop row adds the first cut (Windows, WebView2, fresh in-memory token handed to the page) with a README link; diagram and the new apps/jstream-desktop/src/main.rs (a thin entry point) fit the shape" }
+verified = { hash = "b3:2b244546dfef74f8", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Crate-map daemon row (N3) now says the daemon registers and publishes the virtual camera via a virtual_cam output, matching serve.rs windows_backends" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:bcf5d3053a8f0044", by = "agent:claude@session_01D6iWjpMk
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:7ec820e5b13ec327", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:2a0d214b4ec6124b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; core -> youtube edge and main's ui-e2e row both present; holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -155,6 +155,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
+| 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
@@ -166,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:4bdb39f3da90046c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: kind YouTube { broadcast_id }; depends_on takes main's ADR-0030" }
+verified = { hash = "b3:2d80bbed6d71cb80", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; kind line has YouTube { broadcast_id } and VirtualCam; holds" }
 -->
 
 ```
@@ -363,25 +364,35 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   whose kind is built (`color`, `image` and `text`), rebuilt when its settings change,
   and the program mix shows its frames, animations advancing on the media clock. The
   audio-only kinds (`audio_input`, `desktop_audio`, `app_audio`) have no `Source`:
-  while an output runs, the engine records each as a mixer input sent to master.
+  while an output runs, the engine records each as a mixer input, routed as its audio
+  and sends say.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
-  container: mp4 }`, the path checked to be absolute and to end in a file name. A stream
+  container: mp4 }`, the path checked to be absolute and to end in a file name, or
+  `VirtualCam`, which has no settings and ignores its profile. A stream
   key is never collection state: it lives in the OS credential store
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
   H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. The mix is always
   `Program` until video mixes exist, so outputs share a session by profile alone.
+  Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
+  mute; a nested scene source has no fader or mute), the master bus and up to 15
+  others with their faders, and the post-fader sends, a new channel source sending to
+  the master at 0 dB. A send always runs from a source to a bus; with no filters there
+  are no keys yet, so no edit can close an audio cycle. The engine routes these into
+  the program stage's mixer while it runs.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), filters, source audio settings, `opacity`, `blend`, the reserved
+  version is refused on load), filters (audio ones and keys included), bus monitors,
+  `opacity`, `blend`, the reserved
   `effects[]`, the transition fields, 3D
   geometry, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
-  `background`, hotkeys, an output's mix, buses and chains, the
-  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
-  `outputs` and `encoders`. The collection file saves everything built so
-  far, encoder profiles, each output's profile and `duplicated_from` included
+  `background`, hotkeys, an output's mix, audio buses and chains, the
+  `YouTube` kind, and everything outside `sources`, `scenes`,
+  `outputs`, `encoders` and `audio`. The collection file saves everything built so
+  far, encoder profiles, each output's profile, `duplicated_from`, buses, sends and
+  source audio included
   ([Persistence](#persistence)).
   The program scene is built in `jstream-core` as runtime state, so the file doesn't
   hold it (no preview scene yet).
@@ -527,7 +538,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:4c5f86faf8db5da9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at bcb6766 (#275, #284, #264, #277, #285, #270, #269, #282, #276, #272); stamp-only conflicts, main still 0.17 so Y3 stays 0.18: re-read the merged text; Y3's YouTube text and main's additions (fuzz targets, number parsing, subprotocol constants, CLAP filter contract, daemon e2e test) hold side by side" }
+verified = { hash = "b3:feda8e47422ad55f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; YouTube bullet says since protocol 0.20 beside the 0.19 audio text; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -536,7 +547,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Envelope:** JSON messages tagged by `type`. A `hello`/`welcome` handshake exchanges
   the protocol version, then each `request` (with a client-chosen `id`) gets exactly one
   `response` or `error`, and `event`s arrive at any time.
-- **Edits** (`scene.create`, `item.set_transform`, `audio.set_send`, …): typed, undoable,
+- **Edits** (`scene.create`, `item.set_transform`, `send.set`, …): typed, undoable,
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
@@ -546,11 +557,16 @@ The wire format, versioning, error codes and compatibility policy are designed i
   built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
+  `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
+  `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
+  `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
+  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19); filters join them once they are
+  in the protocol (the mixer has had filter chains since D7b).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -599,12 +615,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source with everything that refers to it, and the `rev`
-  it was planned at; later `audio.levels`).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, …).
+  it was planned at; `bus.list` (protocol 0.19) → the buses and sends; audio levels are
+  the `meters.tick` event, not a query).
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
-  ([R-RT-004](RULES.md#R-RT-004)); the fields are in
+  ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.19, about ten a second
+  while the mixer runs) every source's and bus's levels and the master's loudness,
+  which `audio.reset_loudness` restarts; the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).
-- **YouTube** ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)): since protocol 0.18
+- **YouTube** ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)): since protocol 0.20
   the actions `youtube.sign_in` (returns Google's consent URL; the loopback redirect
   finishes the sign-in in the engine, and no token ever crosses the protocol),
   `youtube.sign_out`, `youtube.create_broadcast`, `youtube.bind_broadcast` and
@@ -612,7 +631,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   and `youtube.list_streams` (never a stream key); the events `youtube.status_changed`
   and `youtube.health_changed` (a running YouTube output's stream health); and the RTMP
   target `youtube { broadcast_id }`, which `output.start` resolves to the bound stream's
-  `rtmps://` ingest and key through the Live API. Planned for M3:
+  `rtmps://` ingest and key through the Live API. All of these need a Google OAuth
+  client the user configured themselves (JStream embeds none); without one
+  `youtube.status` reports `unavailable`, the rest fail with `action_failed`, and
+  clients hide them. Streaming to YouTube with a stream key needs none of this. Planned
+  for M3:
   the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
   the channel and goes to the audit log, and `youtube.chat.feature { message_id }`, which
   sets or clears the featured message (runtime state, reported by an event) that the chat
@@ -661,21 +684,22 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:801a5ca4daece7b9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: nouns add delete, studio and youtube; tools.snap measured 164260 bytes, text says about 165 KB" }
+verified = { hash = "b3:b58873c633f72613", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; noun list has audio, bus, send and youtube when configured; tools.snap is 192,482 bytes, about 192 KB; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio`, `video` and `youtube` so far; `audio`
+  (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
   apart: each read returns the newest tick as `stats` (running totals), so it can't
-  evict the state and output events and its drop counts stay visible.
+  evict the state and output events and its drop counts stay visible. `meters.tick`,
+  about ten a second while the mixer runs, is kept the same way, as `meters`.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 165 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 192 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -862,7 +886,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:042c342d215b5bc4", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: rebuild passes the role on scene.create; Collections bullet holds" }
+verified = { hash = "b3:e9fce11408a54542", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): collections bullet (schema_version, forward migrations, checks as edits) holds; the sends fix needs no migration since schema 1 files load as before" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

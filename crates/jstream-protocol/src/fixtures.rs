@@ -21,6 +21,7 @@ use crate::{
     IssueSeverity, RateControl, StreamHealth, StreamInfo, StreamStatus, VideoCodec, VideoEncoding,
     YoutubeAuth,
 };
+use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
@@ -224,6 +225,10 @@ pub(crate) fn edits() -> Vec<Edit> {
                 },
             },
         },
+        Edit::OutputCreate {
+            output_id: OutputId::new("out_cam"),
+            kind: OutputKind::VirtualCam,
+        },
         Edit::EncoderCreate {
             profile_id: EncoderProfileId::new("enc_rec"),
             name: "Recording".into(),
@@ -246,6 +251,82 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::EncoderDelete {
             profile_id: EncoderProfileId::new("enc_old"),
+        },
+        Edit::SourceSetAudio {
+            source_id: SourceId::new("src_mic"),
+            enabled: Some(true),
+            follow: Some(AudioFollow::Always),
+            gain_db: Some(db(-6.0)),
+            muted: Some(false),
+        },
+        Edit::SourceSetAudio {
+            source_id: SourceId::new("src_intro"),
+            enabled: None,
+            follow: Some(AudioFollow::WhenShown),
+            gain_db: None,
+            muted: None,
+        },
+        Edit::BusCreate {
+            bus_id: BusId::new("bus_vod"),
+            name: "VOD".into(),
+        },
+        Edit::BusRename {
+            bus_id: BusId::new("bus_vod"),
+            name: "VOD track".into(),
+        },
+        Edit::BusSetFader {
+            bus_id: BusId::master(),
+            gain_db: Some(db(-3.0)),
+            muted: Some(false),
+        },
+        Edit::SendSet {
+            source_id: SourceId::new("src_mic"),
+            bus_id: BusId::new("bus_vod"),
+            gain_db: db(0.0),
+        },
+        Edit::SendRemove {
+            source_id: SourceId::new("src_music"),
+            bus_id: BusId::new("bus_vod"),
+        },
+        Edit::BusDelete {
+            bus_id: BusId::new("bus_old"),
+        },
+    ]
+}
+
+/// A finite gain in dB, or a finite level.
+fn db(value: f32) -> Finite32 {
+    Finite32::new(value).expect("finite")
+}
+
+fn bus_infos() -> Vec<BusInfo> {
+    vec![
+        BusInfo {
+            bus_id: BusId::new("bus_vod"),
+            name: "VOD track".into(),
+            gain_db: db(0.0),
+            muted: false,
+        },
+        BusInfo {
+            bus_id: BusId::master(),
+            name: "Master".into(),
+            gain_db: db(-3.0),
+            muted: false,
+        },
+    ]
+}
+
+fn send_infos() -> Vec<SendInfo> {
+    vec![
+        SendInfo {
+            source_id: SourceId::new("src_mic"),
+            bus_id: BusId::new("bus_vod"),
+            gain_db: db(0.0),
+        },
+        SendInfo {
+            source_id: SourceId::new("src_mic"),
+            bus_id: BusId::master(),
+            gain_db: db(-6.0),
         },
     ]
 }
@@ -353,6 +434,7 @@ pub(crate) fn actions() -> Vec<Action> {
             broadcast_id: "dQw4w9WgXcQ".into(),
             to: BroadcastTransition::Complete,
         },
+        Action::AudioResetLoudness {},
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
         },
@@ -402,6 +484,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::YoutubeListStreams {
             page_token: Some("CAEQAA".into()),
         },
+        Query::BusList,
         Query::DeletePlan {
             target: DeleteTarget::Scene {
                 scene_id: SceneId::new("scn_mask"),
@@ -583,6 +666,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: color_settings(),
             duplicated_from: None,
+            audio: None,
         },
         SourceInfo {
             source_id: SourceId::new("src_cam"),
@@ -592,6 +676,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: None,
+            audio: None,
         },
         SourceInfo {
             source_id: SourceId::new("src_cam_2"),
@@ -601,6 +686,10 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: Some(SourceId::new("src_cam")),
+            audio: Some(SourceAudio {
+                enabled: false,
+                ..SourceAudio::new(AudioFollow::WhenShown)
+            }),
         },
         SourceInfo {
             source_id: SourceId::new("src_intro"),
@@ -610,6 +699,21 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: None,
+            audio: Some(SourceAudio::new(AudioFollow::WhenShown)),
+        },
+        SourceInfo {
+            source_id: SourceId::new("src_mic"),
+            name: "Microphone".into(),
+            kind: SourceKind::Builtin {
+                kind: "audio_input".into(),
+            },
+            settings: Settings::new(),
+            duplicated_from: None,
+            audio: Some(SourceAudio {
+                gain_db: db(-6.0),
+                muted: true,
+                ..SourceAudio::new(AudioFollow::Always)
+            }),
         },
     ]
 }
@@ -710,6 +814,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             ],
             outputs: output_infos(),
             encoders: encoder_infos(),
+            buses: bus_infos(),
+            sends: send_infos(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -780,6 +886,11 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             })
             .collect(),
             next_page_token: None,
+        },
+        QueryResult::BusList {
+            rev: Rev(12),
+            buses: bus_infos(),
+            sends: send_infos(),
         },
         QueryResult::DeletePlan {
             rev: Rev(12),
@@ -894,6 +1005,33 @@ pub(crate) fn events() -> Vec<Event> {
         })
         .collect(),
     });
+    events.push(Event::MetersTick {
+        sources: vec![SourceMeter {
+            source_id: SourceId::new("src_mic"),
+            peak: [db(0.5), db(0.25)],
+            rms: [db(0.125), db(0.0625)],
+        }],
+        buses: vec![
+            BusMeter {
+                bus_id: BusId::new("bus_vod"),
+                peak: [db(0.5), db(0.25)],
+                rms: [db(0.125), db(0.0625)],
+                true_peak: None,
+                loudness: None,
+            },
+            BusMeter {
+                bus_id: BusId::master(),
+                peak: [db(0.5), db(0.25)],
+                rms: [db(0.125), db(0.0625)],
+                true_peak: Some([db(0.53125), db(0.25)]),
+                loudness: Some(Loudness {
+                    momentary: Some(db(-18.5)),
+                    short_term: Some(db(-20.0)),
+                    integrated: None,
+                }),
+            },
+        ],
+    });
     events
 }
 
@@ -956,6 +1094,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Source,
         EntityKind::Output,
         EntityKind::Encoder,
+        EntityKind::Bus,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,

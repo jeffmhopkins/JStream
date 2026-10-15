@@ -423,7 +423,7 @@ tags (`@v4`) and branches are not allowed. Dependabot keeps the pins current
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/**"]
+applies_to = ["crates/**", "apps/**"]
 -->
 Every bug fix includes a test that fails without the fix.
 
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:469fc571f78f1a44", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: stale through ARCH#protocol; R-API-001..004 hold" }
+verified = { hash = "b3:1ac01640b55e77b5", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; stamp only, R-API-001..004 unchanged; holds" }
 -->
 
 <a id="R-API-001"></a>
@@ -619,6 +619,7 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `pr-title` | Conventional Commit title | yes | M0 |
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
+| `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
 

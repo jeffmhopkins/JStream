@@ -20,8 +20,9 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum YoutubeAuth {
-    /// The engine has no YouTube client configured: the YouTube actions and queries
-    /// fail with `action_failed`.
+    /// No Google OAuth client is configured, so YouTube's API features are off (JStream
+    /// ships none; the user brings their own). Clients hide YouTube's sign-in and
+    /// broadcast controls; the YouTube actions and queries fail with `action_failed`.
     Unavailable,
     /// Not signed in. `youtube.sign_in` starts a sign-in.
     #[default]

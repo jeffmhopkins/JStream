@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:5436a26ce422b73b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#363 round 1 B1/B2/N5: re-read the chat_message bullet; stack now counts its output plus its blocks and composites in place, frame never fails (an undrawable message shows the transparent pixel), and the preset sentence that needs #375 is gone; holds" }
+verified = { hash = "b3:bbb1d3b0db84a731", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "merge of the #223 branch (main at 94fb25d, #224 asset walk): re-read; main's text and the chat_message bullet with the round 1 fixes sit side by side; holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -180,7 +180,12 @@ features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmainta
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
-distance transform and reading an audio target from settings. `tests/sources.rs` checks
+distance transform and reading an audio target from settings, and in `source.rs` the
+asset checks refuse a file swapped in from outside the root (Unix) and a junction or
+symbolic link inside the root that leads outside it (Windows, both when the path is
+resolved and in the walk on its own, as a link swapped in after resolving would meet
+it; a symbolic link is skipped, with a note, where the test may not create one).
+`tests/sources.rs` checks
 the registry and runs the colour and image kinds through the public API on files in a
 temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as

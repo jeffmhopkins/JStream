@@ -19,6 +19,9 @@ use jstream_protocol::{
     YoutubeAuth,
 };
 use jstream_youtube::fake::FakeTransport;
+use jstream_youtube::http::{HttpRequest, HttpResponse};
+use jstream_youtube::{HttpTransport, YoutubeError};
+use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex, mpsc};
@@ -41,6 +44,15 @@ const EXCHANGE: &str = r#"{
   "access_token": "ya29.a0AfH6SMfixture-access-1",
   "expires_in": 3599,
   "refresh_token": "1//0gfixture-signed-in-refresh",
+  "scope": "https://www.googleapis.com/auth/youtube",
+  "token_type": "Bearer"
+}"#;
+
+/// A refresh that rotates the refresh token, as Google may.
+const ROTATED: &str = r#"{
+  "access_token": "ya29.a0AfH6SMfixture-access-2",
+  "expires_in": 3599,
+  "refresh_token": "1//0gfixture-rotated-refresh",
   "scope": "https://www.googleapis.com/auth/youtube",
   "token_type": "Bearer"
 }"#;
@@ -333,6 +345,125 @@ fn sign_out_forgets_and_revokes_the_token() {
     assert_eq!(transport.requests().len(), 1);
     // Signing out again succeeds.
     assert_eq!(action(&control, Action::YoutubeSignOut), Ok(None));
+}
+
+/// Holds the first request until the test lets it through, so a call can be caught in
+/// flight.
+struct Gated {
+    inner: FakeTransport,
+    entered: Mutex<Option<mpsc::Sender<()>>>,
+    release: Mutex<Option<mpsc::Receiver<()>>>,
+}
+
+impl HttpTransport for Gated {
+    fn send(&self, request: HttpRequest<'_>) -> Result<HttpResponse, YoutubeError> {
+        let entered = self.entered.lock().expect("lock").take();
+        if let Some(entered) = entered {
+            let _ = entered.send(());
+            let release = self.release.lock().expect("lock").take();
+            if let Some(release) = release {
+                let _ = release.recv();
+            }
+        }
+        self.inner.send(request)
+    }
+}
+
+/// A sign-out sent while a call refreshes and rotates the refresh token waits for the
+/// call, then clears and revokes the rotated token, so none is left in the store
+/// (review B5 on #223).
+#[test]
+fn a_sign_out_during_a_call_clears_the_token_the_call_rotates() {
+    let fake = FakeTransport::new();
+    fake.respond(200, ROTATED)
+        .respond(200, BROADCASTS)
+        .respond(200, "");
+    let (entered_tx, entered) = mpsc::channel();
+    let (release, release_rx) = mpsc::channel();
+    let gated = Gated {
+        inner: fake.clone(),
+        entered: Mutex::new(Some(entered_tx)),
+        release: Mutex::new(Some(release_rx)),
+    };
+    let tokens = signed_in_store();
+    let engine = Engine::new().with_youtube(YoutubeSetup::new(
+        "1234-fixture.apps.googleusercontent.com",
+        None,
+        Arc::new(gated),
+        Arc::new(tokens.clone()),
+    ));
+    let lister = {
+        let engine = engine.clone();
+        std::thread::spawn(move || query(&connected(&engine), list_all()).is_ok())
+    };
+    entered
+        .recv_timeout(Duration::from_secs(5))
+        .expect("the refresh is in flight");
+    let signer = {
+        let engine = engine.clone();
+        std::thread::spawn(move || action(&connected(&engine), Action::YoutubeSignOut))
+    };
+    // Long enough for the sign-out to reach the client's mutex.
+    std::thread::sleep(Duration::from_millis(200));
+    release.send(()).expect("releases");
+    assert!(lister.join().expect("list thread"));
+    assert_eq!(signer.join().expect("sign-out thread"), Ok(None));
+
+    assert!(tokens.is_empty(), "a token outlived the sign-out");
+    let revoke = fake.requests().pop().expect("revoke");
+    assert_eq!(revoke.endpoint, "revoke");
+    assert_eq!(
+        revoke.form("token").as_deref(),
+        Some("1//0gfixture-rotated-refresh")
+    );
+}
+
+/// Signing in again replaces the account and revokes the replaced account's token
+/// (review N8 on #223).
+#[test]
+fn a_new_sign_in_revokes_the_replaced_accounts_token() {
+    let transport = FakeTransport::new();
+    transport.respond(200, EXCHANGE).respond(200, "");
+    let tokens = signed_in_store();
+    let engine = Engine::new().with_youtube(setup(&transport, &tokens));
+    let control = connected(&engine);
+    let mut events = control.events();
+    let Some(ActionResult::YoutubeSignIn { url }) =
+        action(&control, Action::YoutubeSignIn).expect("signs in")
+    else {
+        panic!("no consent URL");
+    };
+    let redirect_uri = param(&url, "redirect_uri").expect("redirect_uri");
+    let state = param(&url, "state").expect("state");
+    assert_eq!(statuses(&mut events), vec![YoutubeAuth::SigningIn]);
+    redirect(
+        &redirect_uri,
+        &format!("state={state}&code=4%2Ffixture-code"),
+    );
+    let mut seen = Vec::new();
+    assert_eq!(
+        wait_for_status(&mut events, &mut seen),
+        YoutubeAuth::SignedIn
+    );
+    assert_eq!(
+        tokens
+            .get(TOKEN_ACCOUNT)
+            .expect("reads")
+            .as_ref()
+            .map(Secret::expose),
+        Some("1//0gfixture-signed-in-refresh")
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while transport.requests().len() < 2 {
+        assert!(
+            Instant::now() < deadline,
+            "the replaced token was not revoked"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let revoke = transport.requests().pop().expect("revoke");
+    assert_eq!(revoke.endpoint, "revoke");
+    assert_eq!(revoke.form("token").as_deref(), Some(STORED));
 }
 
 #[test]
@@ -637,6 +768,102 @@ fn a_youtube_output_publishes_to_its_broadcasts_ingest() {
         requests[2].query("id").as_deref(),
         Some("UCfixturechannel000000000fixturestream1")
     );
+}
+
+/// Answers by endpoint, so polls from several outputs can interleave in any order, and
+/// records which threads read health.
+#[derive(Default)]
+struct Routed {
+    health_readers: Mutex<BTreeSet<String>>,
+}
+
+impl HttpTransport for Routed {
+    fn send(&self, request: HttpRequest<'_>) -> Result<HttpResponse, YoutubeError> {
+        let health =
+            request.url.contains("part=id%2Cstatus") || request.url.contains("part=id,status");
+        let body = match request.endpoint {
+            "token" => REFRESH,
+            "liveBroadcasts.list" => BROADCASTS,
+            "liveStreams.list" if health => {
+                let reader = format!("{:?}", std::thread::current().id());
+                self.health_readers.lock().expect("lock").insert(reader);
+                HEALTH
+            }
+            "liveStreams.list" => STREAMS,
+            other => panic!("unexpected request to {other}"),
+        };
+        Ok(HttpResponse::new(200, body.into()))
+    }
+}
+
+fn named_youtube_output(output_id: &str) -> Edit {
+    Edit::OutputCreate {
+        output_id: OutputId::new(output_id),
+        kind: OutputKind::Rtmp {
+            target: RtmpTarget::YouTube {
+                broadcast_id: "dQw4w9WgXcQ".into(),
+            },
+        },
+    }
+}
+
+/// Each running `youtube` output keeps its own health poll: starting a second one
+/// doesn't end the first one's (review B6 on #223).
+#[test]
+fn every_running_youtube_output_keeps_its_health_poll() {
+    let routed = Arc::new(Routed::default());
+    let engine = Engine::new()
+        .with_backends(backends())
+        .with_draw(cpu_draw())
+        .with_youtube(
+            YoutubeSetup::new(
+                "1234-fixture.apps.googleusercontent.com",
+                None,
+                Arc::clone(&routed) as Arc<dyn HttpTransport>,
+                Arc::new(signed_in_store()),
+            )
+            .with_health_interval(Duration::from_millis(20)),
+        );
+    let publish = RecordingPublish::new();
+    engine
+        .youtube()
+        .expect("youtube")
+        .set_connect(Arc::new(move |_: &str, _: &Secret| {
+            Ok(Box::new(publish.clone()) as Box<dyn LivePublish>)
+        }));
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            named_youtube_output("first"),
+            named_youtube_output("second"),
+        ]),
+    )
+    .expect("creates");
+    block_on(control.call(output_call("first", true))).expect("starts first");
+    block_on(control.call(output_call("second", true))).expect("starts second");
+
+    // From here on, two different poll threads read health.
+    routed.health_readers.lock().expect("lock").clear();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while routed.health_readers.lock().expect("lock").len() < 2 {
+        assert!(
+            Instant::now() < deadline,
+            "only one output's health is polled"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    // Stopping one leaves the other's poll running.
+    block_on(control.call(output_call("first", false))).expect("stops first");
+    std::thread::sleep(Duration::from_millis(100));
+    routed.health_readers.lock().expect("lock").clear();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while routed.health_readers.lock().expect("lock").is_empty() {
+        assert!(Instant::now() < deadline, "the second output's poll ended");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    block_on(control.call(output_call("second", false))).expect("stops second");
 }
 
 /// `output.start` on a `youtube` output waits for a YouTube call in flight without

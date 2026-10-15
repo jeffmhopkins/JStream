@@ -30,6 +30,7 @@ use jstream_youtube::live::{
 use jstream_youtube::{
     HttpTransport, LiveClient, LoopbackRedirect, MAX_REMOTE_TEXT, OAuthClient, Scope, YoutubeError,
 };
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
@@ -54,8 +55,13 @@ pub(crate) type ConnectRtmp =
 /// Emits an event to every subscriber, if the engine is still there.
 pub(crate) type Emit = Arc<dyn Fn(Event) + Send + Sync>;
 
-/// What the host gives the engine for YouTube: the app's OAuth client, the HTTPS
-/// transport, and where the refresh token is kept.
+/// Why a YouTube call fails when the engine has no YouTube setup.
+pub const NO_YOUTUBE_CLIENT: &str =
+    "YouTube's API features are off: no Google OAuth client is configured";
+
+/// What the host gives the engine for YouTube: the user's own Google OAuth client, the
+/// HTTPS transport, and where the refresh token is kept. JStream ships no client, so a
+/// host builds this only from a client the user configured.
 pub struct YoutubeSetup {
     client_id: String,
     client_secret: Option<Secret>,
@@ -77,7 +83,7 @@ impl fmt::Debug for YoutubeSetup {
 }
 
 impl YoutubeSetup {
-    /// The app's Google OAuth client (`client_id`, and its secret if it has one; an
+    /// The user's Google OAuth client (`client_id`, and its secret if it has one; an
     /// installed app's can't really be kept secret, but it never prints), the transport
     /// every Google call goes through (`jstream_youtube::HttpsTransport` in the app),
     /// and the store that keeps the refresh token.
@@ -141,7 +147,6 @@ struct PendingSignIn {
 
 /// A running output's health poll. Dropping it ends the poll.
 struct HealthWatch {
-    output_id: OutputId,
     _stop: Sender<()>,
 }
 
@@ -159,7 +164,8 @@ pub(crate) struct Youtube {
     client: Mutex<Option<LiveClient>>,
     emit: Emit,
     connect: Mutex<ConnectRtmp>,
-    health: Mutex<Option<HealthWatch>>,
+    /// One poll per running `youtube` output.
+    health: Mutex<BTreeMap<OutputId, HealthWatch>>,
 }
 
 impl Youtube {
@@ -191,7 +197,7 @@ impl Youtube {
                 connect_rtmp(url, key.expose())
                     .map(|publish| Box::new(publish) as Box<dyn LivePublish>)
             })),
-            health: Mutex::new(None),
+            health: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -298,10 +304,18 @@ impl Youtube {
         }
         auth.pending = None;
         let mut client = lock(&self.client);
+        // The account this sign-in replaces, if any: its token is revoked below.
+        let mut replaced = None;
         // Logged once the locks are released.
         let failure = match outcome {
-            Ok(grant) => match self.setup.tokens.set(TOKEN_ACCOUNT, &grant.refresh) {
-                Ok(()) => {
+            Ok(grant) => match self.setup.tokens.get(TOKEN_ACCOUNT).and_then(|old| {
+                self.setup
+                    .tokens
+                    .set(TOKEN_ACCOUNT, &grant.refresh)
+                    .map(|()| old)
+            }) {
+                Ok(old) => {
+                    replaced = old.filter(|old| old.expose() != grant.refresh.expose());
                     *client = Some(LiveClient::from_grant(
                         Arc::clone(&self.setup.transport),
                         self.setup.oauth(),
@@ -329,13 +343,20 @@ impl Youtube {
             Some(reason) => tracing::warn!(error = %reason, "YouTube sign-in did not finish"),
         }
         (self.emit)(Event::YoutubeStatusChanged { auth: state });
+        if let Some(old) = replaced
+            && let Err(err) = self.setup.oauth().revoke(&*self.setup.transport, &old)
+        {
+            tracing::warn!(error = %err, "revoking the replaced YouTube account's token");
+        }
     }
 
     /// `youtube.sign_out`: forgets the client and the stored token, abandons a waiting
-    /// sign-in, then revokes the token at Google (best effort).
+    /// sign-in, then revokes the token at Google (best effort). Waits for a call in
+    /// flight, so a refresh token it rotates is the one cleared and revoked.
     pub(crate) fn sign_out(&self) -> Result<(), ProtocolError> {
         let token = {
             let mut auth = lock(&self.auth);
+            let mut client = lock(&self.client);
             let token = self
                 .setup
                 .tokens
@@ -344,10 +365,10 @@ impl Youtube {
                 .map_err(|err| ProtocolError::ActionFailed {
                     reason: format!("the credential store did not remove the YouTube token: {err}"),
                 })?;
+            *client = None;
             auth.pending = None;
             auth.generation += 1;
             auth.state = YoutubeAuth::SignedOut;
-            *lock(&self.client) = None;
             token
         };
         (self.emit)(Event::YoutubeStatusChanged {
@@ -386,7 +407,9 @@ impl Youtube {
         &self,
         call: impl FnOnce(&mut LiveClient) -> Result<T, YoutubeError>,
     ) -> Result<T, ProtocolError> {
-        let (outcome, rotated) = {
+        // The rotated token is stored before the client is released, so a sign-out or a
+        // new sign-in waiting for the client always has the last word in the store.
+        let (outcome, kept) = {
             let mut client = lock(&self.client);
             let Some(client) = client.as_mut() else {
                 return Err(ProtocolError::ActionFailed {
@@ -394,11 +417,12 @@ impl Youtube {
                 });
             };
             let outcome = call(client);
-            (outcome, client.take_rotated_refresh_token())
+            let kept = client
+                .take_rotated_refresh_token()
+                .map(|token| self.setup.tokens.set(TOKEN_ACCOUNT, &token));
+            (outcome, kept)
         };
-        if let Some(token) = rotated
-            && let Err(err) = self.setup.tokens.set(TOKEN_ACCOUNT, &token)
-        {
+        if let Some(Err(err)) = kept {
             tracing::error!(error = %err, "the credential store did not keep the rotated YouTube token");
         }
         match outcome {
@@ -572,7 +596,7 @@ impl Youtube {
 
     /// Starts reading the health of `stream_id` every interval while `alive` says
     /// `output_id` still runs, emitting `youtube.health_changed` when it changes. A poll
-    /// already running for another output ends.
+    /// already running for `output_id` ends; other outputs' polls keep running.
     pub(crate) fn watch_health(
         self: &Arc<Self>,
         output_id: OutputId,
@@ -619,10 +643,7 @@ impl Youtube {
             });
         match spawned {
             Ok(_) => {
-                *lock(&self.health) = Some(HealthWatch {
-                    output_id,
-                    _stop: stop,
-                });
+                lock(&self.health).insert(output_id, HealthWatch { _stop: stop });
             }
             Err(err) => {
                 tracing::error!(output_id = %output_id, error = %err, "starting the YouTube health poll");
@@ -633,13 +654,7 @@ impl Youtube {
     /// Ends the health poll of `output_id`, if one runs. The thread notices at once,
     /// unless a read is in flight, and is not waited for.
     pub(crate) fn unwatch_health(&self, output_id: &OutputId) {
-        let mut health = lock(&self.health);
-        if health
-            .as_ref()
-            .is_some_and(|watch| &watch.output_id == output_id)
-        {
-            *health = None;
-        }
+        lock(&self.health).remove(output_id);
     }
 }
 
