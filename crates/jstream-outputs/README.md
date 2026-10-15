@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:1851d03558773cf6", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (#213, #292 and others) into #237: took main's stamp; stale only via ARCH#threading, whose CLAP-host paragraph now says the shared block and mixer side are built; this section names no CLAP hosts; re-read; Transport shutdown text (#209, #236) and main's text hold" }
+verified = { hash = "b3:9286291f1d8541bb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against #355 fix: recorder bullet now describes the hard-link no-replace move and the exclusive-placeholder fallback for FAT/exFAT, the crash-leaves-empty-placeholder case, and the new regression test; error list (Exists/Rename keep .part) and dependency list (thiserror, tracing, no new deps) still hold" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -134,12 +134,17 @@ audio-only).
 
 - **Temporary name, renamed on finish:** a recording to `show.mp4` is written to
   `show.mp4.part` in the same directory (so the rename stays on one file system), and
-  `finish` writes the last fragment, syncs, closes the file and renames it. A file at
-  the destination is therefore always a finished recording. Nothing is overwritten: an
+  `finish` writes the last fragment, syncs, closes the file and moves it there. A file at
+  the destination is therefore a finished recording (or, after a crash during the
+  fallback below, an empty placeholder). Nothing is overwritten: an
   existing destination or `.part` file (a recording a crash left behind) is
-  `RecordError::Exists`, checked on create and again just before the rename. That
-  second check can still race a file created in between, since `std` has no
-  rename-without-replace.
+  `RecordError::Exists`, checked on create and enforced atomically on finish. `std`
+  has no rename-without-replace, so `finish` hard links the `.part` file to the
+  destination (which fails if anything is there, however late it appeared) and then
+  removes the `.part` name. On a file system without hard links (FAT, exFAT) it
+  instead creates the destination exclusively as an empty placeholder and renames over
+  that; a crash between the two steps leaves an empty destination beside the complete
+  `.part` file.
 - **Crash safety:** each fragment is written as one buffer and then synced
   (`sync_data`), so a crash or power loss loses at most the fragment being built, and
   the `.part` file is readable up to its last complete fragment. Dropping a recorder
@@ -206,7 +211,9 @@ in `jstream-mux`. Recorder tests write to a directory under the system temp dir:
 the finished file matches `Fmp4Writer`'s output byte for byte, with the AVC
 configuration given or taken from the stream; after every packet the `.part` file is
 exactly the segments completed so far, and stays so when the recorder is dropped; an
-existing destination or `.part` file is refused, also at finish; a rejected packet
+existing destination or `.part` file is refused, also at finish, where both the
+hard-link move and its placeholder fallback leave a destination created just before
+them untouched; a rejected packet
 leaves the recording going. A writer that fails on demand checks that a full disk is
 `DiskFull` and other write or sync failures `Write`, that each ends the recording, and
 that every fragment is synced.
