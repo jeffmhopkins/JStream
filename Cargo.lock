@@ -39,6 +39,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "arc-swap"
+version = "1.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c049c0be4daef0b145cb3555416b3b8ef5b7888a38aea1a3a155801fe7b0810b"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -795,6 +804,7 @@ dependencies = [
 name = "jstream-core"
 version = "0.0.0"
 dependencies = [
+ "arc-swap",
  "futures-core",
  "jstream-audio",
  "jstream-control",
@@ -843,7 +853,9 @@ name = "jstream-graph"
 version = "0.0.0"
 dependencies = [
  "jstream-protocol",
+ "serde",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -963,6 +975,21 @@ dependencies = [
  "jstream-vcam-proto",
  "windows",
  "windows-core",
+]
+
+[[package]]
+name = "jstream-youtube"
+version = "0.0.0"
+dependencies = [
+ "jstream-platform",
+ "rcgen",
+ "ring",
+ "rustls",
+ "rustls-native-certs",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]

@@ -1,0 +1,27 @@
+{
+  "kind": "youtube#liveBroadcast",
+  "etag": "fixture-etag-new",
+  "id": "jNQXAC9IVRw",
+  "snippet": {
+    "publishedAt": "2026-10-15T01:20:00Z",
+    "channelId": "UCfixturechannel000000000",
+    "title": "JStream go-live test",
+    "description": "",
+    "scheduledStartTime": "2026-10-15T02:00:00Z",
+    "liveChatId": "KicKGFVDZml4dHVyZWNoYW5uZWwwMDAwMDAwMDB"
+  },
+  "status": {
+    "lifeCycleStatus": "created",
+    "privacyStatus": "private",
+    "recordingStatus": "notRecording",
+    "selfDeclaredMadeForKids": false
+  },
+  "contentDetails": {
+    "monitorStream": { "enableMonitorStream": true, "broadcastStreamDelayMs": 0 },
+    "enableEmbed": true,
+    "enableDvr": true,
+    "recordFromStart": true,
+    "enableAutoStart": false,
+    "enableAutoStop": false
+  }
+}

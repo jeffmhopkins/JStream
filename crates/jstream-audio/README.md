@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:5b29b7cb116a3c8c", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#199, test-only ring torn-frame change) into ADR-0042: no prose describes that test's timing; ARCH#threading roster it relies on unchanged; holds" }
+verified = { hash = "b3:b4c9c153cc982dba", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: audio purpose text is main's; E1 touches no audio" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -114,7 +114,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:d9abb08463a8444d", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#199, ring torn-frame test checks frames before the writer finishes) into ADR-0042: the ring/seqlock prose still describes ring.rs; test-only change; holds" }
+verified = { hash = "b3:566226986e8c3ba1", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: audio's realtime section is main's (mixer and audio threads as built); E1 touches no audio" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

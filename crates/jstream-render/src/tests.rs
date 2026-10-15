@@ -10,7 +10,7 @@ use jstream_platform::{FrameSync, GpuFrame, PlatformError};
 
 use crate::{
     Color, Compositor, Crop, Image, Item, LegacyTransform, OpenOptions, Placement, RenderError,
-    Scene, Snapshot,
+    ResourceCache, Scene, Snapshot,
 };
 
 /// A compositor whose device drops before the WARP lock.
@@ -637,6 +637,205 @@ fn linear_to_srgb(c: f32) -> f32 {
     } else {
         1.055 * c.powf(1.0 / 2.4) - 0.055
     }
+}
+
+/// A layer drawn into again keeps its texture and shows only the newest composite.
+#[test]
+fn a_layer_is_redrawn_in_place() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = solid(&opened.compositor, 2, 2, [255, 0, 0, 255]);
+    let blue = solid(&opened.compositor, 1, 1, [0, 0, 255, 255]);
+    let target = opened.compositor.layer(2, 2).expect("layer");
+    let canvas = FrameSize::new(2, 2).expect("invariant: non-zero");
+    let first = [item(&red, Placement::IDENTITY, Crop::NONE, 1.0)];
+    opened
+        .compositor
+        .render_into(
+            &Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &first,
+            },
+            &target,
+        )
+        .expect("first composite");
+    let placed = [item(&target, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &placed);
+    near(&snapshot, 1, 1, [255, 0, 0, 255], 0);
+
+    // The second composite clears the layer: red must not show through.
+    let second = [item(&blue, Placement::IDENTITY, Crop::NONE, 1.0)];
+    opened
+        .compositor
+        .render_into(
+            &Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &second,
+            },
+            &target,
+        )
+        .expect("second composite");
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &placed);
+    near(&snapshot, 0, 0, [0, 0, 255, 255], 0);
+    near(&snapshot, 1, 1, [0, 0, 0, 255], 0);
+}
+
+/// A layer refuses to be drawn into while the scene places it, at another size, or
+/// when it is not a layer at all.
+#[test]
+fn render_into_refuses_a_bad_target() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let target = opened.compositor.layer(2, 2).expect("layer");
+    let upload = solid(&opened.compositor, 2, 2, [255, 0, 0, 255]);
+    let canvas = FrameSize::new(2, 2).expect("invariant: non-zero");
+    let itself = [item(&target, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let cases: [(&[Item<'_>], FrameSize, &Image); 3] = [
+        (&itself, canvas, &target),
+        (
+            &[],
+            FrameSize::new(3, 2).expect("invariant: non-zero"),
+            &target,
+        ),
+        (&[], canvas, &upload),
+    ];
+    for (items, canvas, target) in cases {
+        let scene = Scene {
+            canvas,
+            background: Color::TRANSPARENT,
+            items,
+        };
+        assert!(matches!(
+            opened.compositor.render_into(&scene, target),
+            Err(RenderError::Invalid { what: "layer", .. })
+        ));
+    }
+    assert!(matches!(
+        opened.compositor.layer(0, 2),
+        Err(RenderError::Invalid { what: "layer", .. })
+    ));
+}
+
+/// Rewriting an upload keeps its texture and changes what it shows; a layer is refused.
+#[test]
+fn an_upload_is_rewritten_in_place() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let image = solid(&opened.compositor, 1, 1, [255, 0, 0, 255]);
+    let before = image.texture().clone();
+    opened
+        .compositor
+        .rewrite_rgba8(&image, &[0, 255, 0, 255])
+        .expect("rewrite");
+    assert!(image.texture() == &before);
+    let placed = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 1, 1, Color::BLACK, &placed);
+    near(&snapshot, 0, 0, [0, 255, 0, 255], 0);
+
+    assert!(matches!(
+        opened.compositor.rewrite_rgba8(&image, &[0, 0, 0]),
+        Err(RenderError::ImageBytes { .. })
+    ));
+    let target = opened.compositor.layer(1, 1).expect("layer");
+    assert!(matches!(
+        opened.compositor.rewrite_rgba8(&target, &[0, 0, 0, 255]),
+        Err(RenderError::Invalid { what: "image", .. })
+    ));
+}
+
+/// The cache reuses a texture while the key's size holds, rewrites it for a new
+/// version, and replaces it for a new size.
+#[test]
+fn the_cache_reuses_textures_by_key() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let compositor = &opened.compositor;
+    let mut cache: ResourceCache<&str> = ResourceCache::new();
+    cache.begin_frame();
+    let first = cache
+        .upload(compositor, &"a", 1, 1, 1, &[255, 0, 0, 255])
+        .expect("upload")
+        .texture()
+        .clone();
+    let layer = cache
+        .layer(compositor, &"layer", 2, 2)
+        .expect("layer")
+        .texture()
+        .clone();
+    drop(cache.end_frame(compositor));
+
+    cache.begin_frame();
+    let same = cache
+        .upload(compositor, &"a", 1, 1, 1, &[0, 0, 0, 0])
+        .expect("same version")
+        .texture()
+        .clone();
+    let rewritten = cache
+        .upload(compositor, &"a", 2, 1, 1, &[0, 255, 0, 255])
+        .expect("new version")
+        .texture()
+        .clone();
+    let same_layer = cache
+        .layer(compositor, &"layer", 2, 2)
+        .expect("layer")
+        .texture()
+        .clone();
+    assert!(same == first && rewritten == first && same_layer == layer);
+    assert_eq!(cache.pending(), 0);
+
+    let resized = cache
+        .upload(compositor, &"a", 3, 2, 1, &[0; 8])
+        .expect("new size")
+        .texture()
+        .clone();
+    assert!(resized != first);
+    assert_eq!((cache.live(), cache.pending()), (2, 1));
+}
+
+/// An entry no frame uses is retired, and is handed back only once the GPU has
+/// finished the last frame that used it.
+#[test]
+fn the_cache_frees_after_the_frame_fence() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let compositor = &opened.compositor;
+    let mut cache: ResourceCache<&str> = ResourceCache::new();
+    let frame = cache.begin_frame();
+    let _ = cache
+        .upload(compositor, &"kept", 1, 1, 1, &[255, 0, 0, 255])
+        .expect("upload");
+    let _ = cache
+        .upload(compositor, &"swapped", 1, 1, 1, &[255, 0, 0, 255])
+        .expect("upload");
+    // Replaced in the frame that used it: its fence is this frame's, not yet armed.
+    let _ = cache
+        .upload(compositor, &"swapped", 2, 2, 1, &[0; 8])
+        .expect("resize");
+    assert_eq!(cache.pending(), 1);
+    assert!(cache.reclaim().is_none(), "frame {frame} has not ended");
+    drop(cache.end_frame(compositor));
+
+    // The next frame uses only "kept": "swapped" retires after this frame's fence.
+    cache.begin_frame();
+    let _ = cache
+        .upload(compositor, &"kept", 1, 1, 1, &[255, 0, 0, 255])
+        .expect("reuse");
+    let early = cache.end_frame(compositor).map_or(0, |freed| freed.len());
+    compositor
+        .device()
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    let late = cache.reclaim().map_or(0, |freed| freed.len());
+    assert_eq!(early + late, 2, "both retired textures come back");
+    assert_eq!((cache.live(), cache.pending()), (1, 0));
+    assert_eq!(cache.drain().len(), 1);
 }
 
 /// An image of equal-width vertical bands, one colour each, `height` rows tall.
