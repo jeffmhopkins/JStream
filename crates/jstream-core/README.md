@@ -141,7 +141,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6f7fefa8a0dd6e01", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#207 bounded stop drain) into B9 at 0.15: took main's stamp, re-read; STOP_DRAIN/OUTPUT_GRACE/set_write_deadline paragraph and the stream-key invalid_argument text hold; B9 changes no core behavior" }
+verified = { hash = "b3:c574df6cfca51ffe", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#207 bounded output.stop) into B2-f3: re-read; #207's stop/STOP_DRAIN/OUTPUT_GRACE prose from main kept; mock references (differential script, internal) hold against the control Mock undo bullet" }
 -->
 
 ### Engine and sessions
