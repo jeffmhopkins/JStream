@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:fe49fcc72d07a32d", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (G3a) into ADR-0042: the view changed because jstream-platform-windows gained a jstream-vcam-proto dependency (L2 -> L0, allowed by R-ARCH-002); its row (vcam sink side) still holds and no row text changed" }
+verified = { hash = "b3:5b48abe79d036210", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (#182 ADR-0042: covers now the manifests' jstream-meta view) into Y1: took main's stamp, re-read the map; the view changes only by jstream-youtube's manifest (layer 2, unsafe no, summary equal to its row, only JStream dependency jstream-platform L1, strictly lower); main's rows untouched" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

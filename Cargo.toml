@@ -41,11 +41,15 @@ jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }
 jstream-vcam-proto = { path = "crates/jstream-vcam-proto" }
+jstream-youtube = { path = "crates/jstream-youtube" }
 # PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.
 png = { version = "0.17", default-features = false }
 pulldown-cmark = { version = "0.13", default-features = false }
+# SHA-256 and the OS random source for OAuth PKCE (`jstream-youtube`). Already in the tree
+# as rustls' crypto provider (R-DEP-006), so this adds no crate; no default features.
+ring = { version = "0.17", default-features = false }
 # Test-only certificates for the RTMPS tests; `ring` instead of the default aws-lc-rs (R-DEP-006).
 rcgen = { version = "0.14", default-features = false, features = ["ring"] }
 # TLS (R-DEP-006): rustls with the `ring` provider. No default features, so no aws-lc-rs
