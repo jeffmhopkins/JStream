@@ -10,8 +10,10 @@ mod hash;
 mod history;
 mod merge;
 pub(crate) mod parse;
+mod progress;
 
 use std::collections::BTreeMap;
+use std::io::Write as _;
 use std::path::Path;
 use std::process::Command;
 
@@ -109,6 +111,7 @@ pub(crate) fn check_repo(root: &Path) -> Result<Vec<Diag>> {
     diags.extend(check::check(&repo));
     diags.extend(backrefs::check(&repo));
     diags.extend(generate::check(&l.docs));
+    diags.extend(progress::check(root, &l.docs));
     diags.sort();
     diags.dedup();
     Ok(diags)
@@ -419,7 +422,11 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                 bail!("usage: cargo xtask docs generate");
             };
             let l = load(root)?;
-            let g = generate::generate(&l.docs);
+            let mut g = generate::generate(&l.docs);
+            let (readme, problems) = progress::generate(root, &l.docs);
+            g.files
+                .extend(readme.map(|(path, line, text)| (path, Some(line), text)));
+            g.problems.extend(problems);
             for d in &g.problems {
                 eprintln!("{}:{}: {}", d.path, d.line, d.msg);
             }
@@ -570,8 +577,19 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             }
             Ok(true)
         }
+        Some("progress") => {
+            let [_] = args else {
+                bail!("usage: cargo xtask docs progress");
+            };
+            let report = progress::report(root)?;
+            std::io::stdout()
+                .lock()
+                .write_all(report.as_bytes())
+                .context("writing the report")?;
+            Ok(true)
+        }
         _ => bail!(
-            "usage: cargo xtask docs check | generate | verify <DOC#anchor> --by <who> --note <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | merge-main | rehash"
+            "usage: cargo xtask docs check | generate | progress | verify <DOC#anchor> --by <who> --note <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | merge-main | rehash"
         ),
     }
 }
