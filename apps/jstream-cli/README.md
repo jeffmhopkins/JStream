@@ -13,6 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
+verified = { hash = "b3:8fa41caa46aeb9e0", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's, the CLI's commands are unchanged by D5; holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -46,6 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
+verified = { hash = "b3:a19ccef4a41905d4", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; D5 note now says protocol 0.19 audio is not in the CLI; holds" }
 -->
 
 ```sh
@@ -118,7 +120,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   grouping is one batch that creates a scene as a group, places it through a `scene:`
   source, and moves the items into it. The placement edits'
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
-  the item's own scene, which omitting it already means.
+  the item's own scene, which omitting it already means. Protocol 0.19's audio edits
+  (`source.set_audio`, `bus.*`, `send.*`), `bus.list` and `audio.reset_loudness` are not
+  in the CLI either.
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
@@ -160,7 +164,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
   server URL, as `output.create` takes it). `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
-  (<name>):` by its role, then the outputs. `output status` prints
+  (<name>):` by its role, then the outputs; only `--json` shows the sources' audio, the
+  buses and the sends. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
@@ -177,6 +182,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   When the server dropped events because the CLI read too slowly, it prints
   `events.dropped <count>`. A pipeline drop sample prints
   `stats.tick seq <n> capture_frames <n> audio_frames <n> render_ticks <n> encode_frames <n> encode_blocks <n> output_packets <n>`.
+  Any other event, `meters.tick` among them, prints as its JSON.
 
 **MCP.** `jstream-cli mcp` is the stdio MCP proxy for an agent's MCP client to launch,
 for example:
@@ -233,6 +239,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
+verified = { hash = "b3:6dbfcb9a75652418", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

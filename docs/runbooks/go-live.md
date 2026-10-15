@@ -35,6 +35,7 @@ depends_on = ["apps/jstream-daemon/README.md#usage"]
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
+verified = { hash = "b3:336b7adb18bc9d53", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -74,7 +75,8 @@ $cli = 'target\release\jstream-cli.exe'
    `& $cli --url ws://127.0.0.1:4460 events`. While the output runs, a `stats.tick` line
    comes about once a second. Its counters are running totals of dropped frames and
    packets since the daemon started, so all zeros is healthy. A counter that keeps
-   climbing is worth an issue.
+   climbing is worth an issue. While the program runs, `meters.tick` lines, the audio
+   levels, come about ten a second as well.
 5. **Go live:** the `output` tool with `{"op": {"type": "output.start", "output_id":
    "live"}}`, or `& $cli --url ws://127.0.0.1:4460 output start live`.
    Check: the events show `output.state_changed` going `starting`, then `active`, and
@@ -97,6 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
+verified = { hash = "b3:e5ef4614b0ffbc23", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
