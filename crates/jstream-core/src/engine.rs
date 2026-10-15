@@ -848,8 +848,8 @@ impl Engine {
         // One start at a time: a second waits here until the first has settled, so
         // only one ever opens the program stage. A stop never takes this lock.
         let _starting = lock(&host.starts);
-        // A `youtube` output needs a signed-in client. Checked before `starting`, and
-        // without the collection lock, since it waits for a YouTube call in flight: the
+        // A `youtube` output needs a signed-in client. Checked under the start lock,
+        // before the output goes `starting`, and without the collection lock, since it waits for a YouTube call in flight: the
         // guard is dropped at the end of this statement, before the match below.
         let broadcast = youtube_broadcast(&lock(&self.shared.state).graph, &output_id);
         let youtube = match broadcast {

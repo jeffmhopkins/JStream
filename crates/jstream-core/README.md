@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:c67561b93957b007", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14) into A3: purpose text is main's plus nothing from A3 beyond PublishError::new being public, which the runtime bullet doesn't name; holds" }
+verified = { hash = "b3:b47ec8270650c293", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (A3 #226 daemon, #229, #230), protocol 0.15 still one past main's 0.14: re-read; A3's opener wording beside the YouTube bullet holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -156,7 +156,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5248ce9c9c185f8d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14, item.set_source history) into A3: Outputs paragraph keeps A3's daemon opener line and main's Record sentence; Pipeline keeps the PublishError::new line; history paragraph is main's" }
+verified = { hash = "b3:bd6680c0af8dfef0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (A3 #226 daemon, #229, #230), protocol 0.15 still one past main's 0.14: re-read; YouTube start still bypasses the host's publish target and opener, which A3 now wires on Windows; lock note holds" }
 -->
 
 ### Engine and sessions

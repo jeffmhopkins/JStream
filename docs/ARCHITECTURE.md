@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:a80da1a5d3a45874", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (C4b follow-up N7: platform summary row) into A3 (apps row: desktop and daemon link their OS platform crate); both rows match manifests, lint-deps passes" }
+verified = { hash = "b3:95c74b68659bf99f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (A3 #226 daemon, #229, #230), protocol 0.15 still one past main's 0.14: re-read; A3's daemon rows and core -> jstream-youtube both hold" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
