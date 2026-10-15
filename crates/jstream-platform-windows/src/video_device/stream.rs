@@ -20,9 +20,9 @@ use windows::Win32::Media::MediaFoundation::{
 };
 
 use super::convert::Layout;
-use super::mailbox::Mailbox;
 use super::source::{MfStarted, Opened, VIDEO_STREAM, start_error, with_bytes};
 use crate::QpcClock;
+use crate::capture::mailbox::Mailbox;
 use crate::com::{Com, os_error};
 
 /// How long `open` waits for the device's first read, which is where a device held by
