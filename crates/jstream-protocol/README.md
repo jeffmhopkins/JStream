@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:0c1aa5fa3efb4d56", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
+verified = { hash = "b3:8db8f9e6473d29d7", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -133,7 +133,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:eab367ee041ab28d", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
+verified = { hash = "b3:64961e3f3b4db815", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -379,7 +379,7 @@ the model (0.19). A transition preset is collection state:
 kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
 `settings` are checked against its descriptor as a source's are (`unmatched`, the
 effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
-stacking order, for `fade` and `move`; [ADR-0049](../../docs/adr/0049-transition-mechanics-and-studio-preview.md)).
+stacking order, for `fade` and `move`; [ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md)).
 
 - `transition.create` adds a preset, `transition.update` changes its fields or patches
   its settings (a new `kind` resets the settings to that kind's defaults, overlaid by

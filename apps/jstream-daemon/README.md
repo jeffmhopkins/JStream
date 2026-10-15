@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:654411f5838cac79", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
+verified = { hash = "b3:1bf85bdda0aa3e41", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

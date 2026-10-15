@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0049"
+id = "ADR-0052"
 title = "Transition mechanics as built, and the studio's preview scene"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0049: Transition mechanics as built, and the studio's preview scene
+# ADR-0052: Transition mechanics as built, and the studio's preview scene
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

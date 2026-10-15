@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:5ea2781bf87650af", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
+verified = { hash = "b3:29ba21d9f2f4a1cd", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

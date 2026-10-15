@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:fc3b982f3ee0e6af", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: B1: None effect waits for the item's delay (Timing::step, Track::end_ms at the delay); README says so" }
+verified = { hash = "b3:325443fbb552b4fa", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
 -->
 
 One scene, composited on the GPU with wgpu

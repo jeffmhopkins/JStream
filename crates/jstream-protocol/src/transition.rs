@@ -167,7 +167,7 @@ impl TransitionEffect {
 pub struct ItemTransition {
     /// Milliseconds before the item starts moving. An item of the scene being switched
     /// to also waits the preset's `stagger_ms` × its stacking index; a leaving item
-    /// waits only its own delay (ADR-0049). At most 60000.
+    /// waits only its own delay (ADR-0052). At most 60000.
     #[serde(default)]
     pub delay_ms: u32,
     /// Its easing, or the preset's.

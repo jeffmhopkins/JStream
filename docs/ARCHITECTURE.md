@@ -535,7 +535,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:a499d0df88b3d0d1", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
+verified = { hash = "b3:e4cdca4161ae6abe", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -670,7 +670,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:d9bc5fb65afa5961", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
+verified = { hash = "b3:b9aff1763669c96c", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -714,7 +714,7 @@ verified = { hash = "b3:d9bc5fb65afa5961", by = "agent:claude@session_01StfvJc4T
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c7df4056dabfb8a3", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: B2: Transitions paragraph cites ADR-0049 for the stateless render thread and control-thread retarget sampling; text matches code" }
+verified = { hash = "b3:f0ef502dad639f32", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -762,7 +762,7 @@ thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect pac
 the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
-[ADR-0049](adr/0049-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
+[ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
 during it, the program mix is a synthetic item list whose transforms and opacity come
 from the transition state, drawn over both scenes' source images. The control thread
 pairs the items when the switch starts and publishes the plan in the shot, one

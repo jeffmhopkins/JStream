@@ -168,7 +168,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3359a3ca3f83c45a", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
+verified = { hash = "b3:474b7a3d9b0ce504", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: renumbered ADR-0049 to ADR-0052 (0049 to 0051 are taken by K2, 3D transforms and YouTube PRs); diff is the number only; re-read the citing lines; holds" }
 -->
 
 ### Engine and sessions
@@ -340,7 +340,7 @@ Program is not saved in the collection file, so an engine that loads one (a rest
 with its first scene on program. The program mix, on the render thread and in
 `video.snapshot`, draws the program scene, and a switch re-plans it.
 
-**Preview** ([ADR-0049](../../docs/adr/0049-transition-mechanics-and-studio-preview.md))
+**Preview** ([ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md))
 follows the same rules: `studio.set_preview` sets it (`not_found` for a
 missing scene; setting the scene already there emits nothing), the first scene goes on
 preview when it is created, and a deleted preview scene gives way to the first scene
@@ -362,7 +362,7 @@ the transition has ended and lets it go; from that frame the program scene is dr
 alone. A switch while a transition runs samples it at the switch time
 (`snapshot::on_screen`, the function the render thread draws with) and starts the new
 one from those items, so nothing jumps
-([ADR-0049](../../docs/adr/0049-transition-mechanics-and-studio-preview.md) §1). A switch to the scene already on program, even
+([ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md) §1). A switch to the scene already on program, even
 mid-transition, does nothing. An edit that moves program drops the transition.
 
 Pairing and its inputs: each visible item that has a frame becomes a `Visual`, its
@@ -370,7 +370,7 @@ placement converted to a geometry (a legacy placement through `ItemGeometry::fro
 at its frame size; a reflection is not kept mid-transition). `move` pairs by source as
 the protocol says; a nested scene's items are flattened into its parent only when its
 item covers the canvas exactly (an identity placement, no crop, not rotated), so a
-scene shown at another size moves as one image (ADR-0049 §2). Stagger delays only
+scene shown at another size moves as one image (ADR-0052 §2). Stagger delays only
 the incoming items (§3). Audio does not follow a transition
 yet (D29).
 
