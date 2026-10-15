@@ -391,7 +391,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:5062054110900026", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b (#228 N5): re-read; Collector row now says the mixer's own collector also frees removed buses' state, filter chains and filters (retire.rs Retired::Bus/Chain/Kernel); mixer row (filters with keys, latency compensation) still the model; rest unchanged" }
+verified = { hash = "b3:4fed165b737c2267", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (#231 D7b): kept #231's mixer-collector wording (removed buses' state, filter chains, filters); only diff from main is the render-snapshot paragraph, still matching Engine::video_snapshot and RenderReader::adopt" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -468,12 +468,13 @@ lock-free parameter channels. On the wire they are live values, committed by one
 at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
-The **render snapshot** is built. After every applied batch and every stored source
-frame, the control side re-plans the program mix under the collection lock: the
+The **render snapshot** is built. After every applied batch, undo and redo, every
+stored source frame and a collection file's load, the control side re-plans the program mix under the collection lock: the
 reachable scenes, the frames they show and the passes that draw them. It publishes
 that as the next render generation only when it draws something new, so a batch that
-touches nothing on program publishes nothing. The render thread and `video.snapshot`'s
-thread load it without the lock, and the render thread draws through a `jstream-render`
+touches nothing on program publishes nothing. The render thread loads it without the
+lock. `video.snapshot` reads it together with `rev` under the lock on the control path,
+and its thread only receives the snapshot. The render thread draws through a `jstream-render`
 resource cache keyed by source and by nested scene and depth. A frame that shows what
 the last one showed allocates no texture: an unchanged frame is not uploaded again and
 each nested scene is redrawn into the layer it had. An image no frame references is
@@ -524,7 +525,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:3b7f00f9d527dec0", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: virtual_cam kind is 0.18; holds" }
+verified = { hash = "b3:e3759c009695f67a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through server design; transport bullet (UI, Basic, subprotocol) unchanged; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -625,8 +626,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   (`InProcessControl`, [jstream-core › Design](../crates/jstream-core/README.md#design))
   and over WebSocket by `jstream-control` (`WsControl`, feature `ws`), natively and in
   the browser, where the token travels as a subprotocol because a page can't set
-  `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)); `jstream-server` doesn't accept
-  that yet. `jstream-server`
+  `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)). `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
   default, with the token required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
@@ -634,7 +634,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   because the token is the gate, while an `Origin` that is present must be on the allow
   list. The same server
   serves MCP's streamable-HTTP transport at `/mcp` on the control port, behind the same
-  checks, when the host turns it on ([MCP](#mcp)).
+  checks, when the host turns it on ([MCP](#mcp)), and the web UI's files at every other
+  path, behind the same checks too, when the host names a UI directory. A browser
+  presents the token as the password of HTTP `Basic` credentials, which it then sends
+  on the UI's WebSocket upgrade as well; a browser client can instead offer it as the
+  subprotocol `jstream.token.<token>`.
 - **Slow clients:** each connection gets a bounded event buffer, and the server keeps
   draining the engine's events while a client is slow to read. When the buffer
   overflows, the server drops the queued events and sends one `events.dropped {count}`
@@ -648,7 +652,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:9693f8610e4055f3", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: re-read; tools.snap regenerated, output tool schema gains virtual_cam; grouped-tool text holds" }
+verified = { hash = "b3:b7e9fc969c2bf475", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: re-read; Origin/preflight reasoning from round 1 intact, main unchanged here; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -681,8 +685,8 @@ verified = { hash = "b3:9693f8610e4055f3", by = "agent:claude@session_01Wfrx1wPt
   `Origin`, as the
   [MCP transport spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
   requires. Like the WebSocket API it lets a request without `Origin` through to the
-  token check: browsers send `Origin` on a cross-origin `fetch`, and the bearer token
-  forces a preflight, so only native clients send none
+  token check: browsers send `Origin` on a cross-origin `fetch`, and the required
+  `Content-Type: application/json` forces a preflight, so only native clients send none
   ([jstream-server › Design](../crates/jstream-server/README.md#design)).
 - Every agent action goes to the audit log with the client's name. Undo is per client,
   so an agent can never undo the user's work.

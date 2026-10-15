@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:af9b851c7b8b42db", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of main (U3b outputs panel, U4 canvas) into U5: kept main's Panels and Canvas bullets and U5's Host detection bullet; re-read against panels/, canvas/, host.rs; holds" }
+verified = { hash = "b3:03681d80c54c1817", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: outputs.rs gained start_or_stop_all and tests, app.rs connect fields leave the form element; contents list still holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e421987c584208b8", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b round 2 after merging main (U4/U5): re-read; main's canvas and desktop host text unaffected; outputs panel still treats virtual_cam as newer than the page (outputs.rs start_blocker/describe_kind); holds" }
+verified = { hash = "b3:86b7b86fc572f2c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: Outputs bullet says go live/end stream try every output and report each failure; new bullet: key and token fields opt out of password managers (no form, autocomplete=off, non-credential names); connecting bullet still holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -61,12 +61,12 @@ verified = { hash = "b3:e421987c584208b8", by = "agent:claude@session_01Wfrx1wPt
   console, and the field is a password field. It may be left empty when the daemon
   served the page behind HTTP Basic with the token as the password: the browser's
   cached Basic credentials then carry the token on the upgrade, and no token
-  subprotocol is sent. How the daemon hands the token to a
-  browser (pairing) is not decided yet. In the desktop app the form is skipped: the
+  subprotocol is sent. A remote browser will pair with a one-time code instead
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)); that isn't built yet. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). That connection carries the
-  token in the subprotocol, so it succeeds only once `jstream-server` accepts it
-  (#246); until then it fails like any refused connect. After a disconnect the form
+  token in the subprotocol, which `jstream-server` accepts
+  ([jstream-server › Design](../jstream-server/README.md#design)). After a disconnect the form
   shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
   a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin
   and an unreachable engine read the same.
@@ -91,7 +91,8 @@ verified = { hash = "b3:e421987c584208b8", by = "agent:claude@session_01Wfrx1wPt
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
   output, and starts and stops each. "Go live" starts every stopped or failed RTMP
   output whose stream key is set, and "End stream" stops the running ones; recordings
-  have only their own buttons. An RTMP output without a key can't be started from the
+  have only their own buttons. Both try every output, even after one fails, and report
+  each failure. An RTMP output without a key can't be started from the
   panel. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
@@ -102,6 +103,12 @@ verified = { hash = "b3:e421987c584208b8", by = "agent:claude@session_01Wfrx1wPt
   sends it back: the panel shows only `output.status`'s `key_set`, re-read after it
   sets or clears a key, since no event reports that. Another client's key change shows
   on the next re-read.
+- **Browser password managers are out of scope.** The stream key and the control
+  token are secrets for the OS credential store, not for the browser's
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)), so their fields opt out: each is
+  `autocomplete="off"` with a name that doesn't look like a credential, and neither
+  sits in a `<form>`: a button click or Enter saves the key or connects, so there is
+  no form submission for the browser to offer saving. A test checks both fields.
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`); only `start()` needs a browser.
@@ -157,7 +164,7 @@ scene and sends the edits. These three are pure and tested natively against
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:1ea0cbddc4084706", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: new section; trunk commands, wasm-bindgen CLI matching Cargo.lock, create_nonce placeholder and the CI wasm job (pinned, checksummed trunk and wasm-bindgen, clippy wasm32) match Trunk.toml, index.html and ci.yml" }
+verified = { hash = "b3:755c311fa103cf2c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: dropped 'until jstream-server accepts the token subprotocol'; trunk-served page still needs an extra origin; holds" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
@@ -183,6 +190,4 @@ CLI downloaded at pinned versions and checked against pinned SHA-256 sums, and r
 clippy for `wasm32` over `jstream-control` (with `ws`) and `jstream-ui`.
 
 A page served by trunk is on a different port from the engine, so the engine refuses
-its `Origin` unless it is configured as an extra origin; and until `jstream-server`
-accepts the token subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)), the
-UI connects only to an engine that does.
+its `Origin` unless it is configured as an extra origin.
