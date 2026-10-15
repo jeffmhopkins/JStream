@@ -3,6 +3,8 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod history;
+
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
@@ -87,6 +89,7 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
         item_id: ItemId::new(item),
         source_id: SourceId::new(source),
         transform: None,
+        geometry: None,
     }
 }
 
@@ -490,11 +493,13 @@ fn events_reach_every_subscriber_in_order() {
             rev: Rev(1),
             client_id: agent.client_id().expect("agent"),
             request_id: Some(by_agent.id),
+            cause: None,
         },
         Event::StateChanged {
             rev: Rev(2),
             client_id: user.client_id().expect("user"),
             request_id: Some(by_user.id),
+            cause: None,
         },
         changed(OutputState::Starting),
         changed(OutputState::Active),
@@ -700,6 +705,7 @@ fn the_engine_answers_like_the_mock() {
                 rev,
                 client_id: ClientId::new("client"),
                 request_id,
+                cause: None,
             },
             other => other,
         }
@@ -1567,6 +1573,86 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
     let (_, width, rgba) = image(&shot);
     assert_eq!(at(&rgba, width, 100, 100), [0, 255, 0, 255]);
     assert_eq!(at(&rgba, width, 1100, 600), [0, 255, 0, 255]);
+}
+
+/// `video.snapshot` draws at the collection's canvas size and places a geometry item by
+/// the shared formula: a 16:9 red frame fitted into a 320×360 box on a 640×360 canvas is
+/// letterboxed, and nothing is drawn outside the box.
+#[test]
+fn video_snapshot_draws_a_geometry_on_the_collection_canvas() {
+    let _gpu = one_gpu_test_at_a_time();
+    use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
+    use jstream_protocol::{FitMode, ItemGeometry, Size, Vec2};
+
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let geometry = ItemGeometry {
+        fit_mode: FitMode::Fit,
+        ..ItemGeometry::try_new(
+            Vec2::new(160.0, 180.0).expect("finite"),
+            Size::try_new(320.0, 360.0).expect("positive"),
+        )
+        .expect("positive")
+    };
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                Edit::CanvasSetSize {
+                    width: 640,
+                    height: 360,
+                },
+                create("main"),
+                webcam(),
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("boxed"),
+                    source_id: SourceId::new("webcam"),
+                    transform: None,
+                    geometry: Some(geometry),
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        },
+    )
+    .expect("scene");
+    let red: Vec<u8> = std::iter::repeat_n([255, 0, 0, 255], 1920 * 1080)
+        .flatten()
+        .collect();
+    engine
+        .set_source_frame(&SourceId::new("webcam"), 1920, 1080, &red)
+        .expect("frame");
+    let shot = match query(&control, Query::VideoSnapshot) {
+        Ok(shot) => shot,
+        Err(error) if error.protocol().is_some_and(is_no_adapter) => {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "CI has no wgpu adapter: {error}"
+            );
+            return;
+        }
+        Err(error) => panic!("video.snapshot failed: {error}"),
+    };
+    let QueryResult::VideoSnapshot {
+        width, height, png, ..
+    } = shot
+    else {
+        panic!("not a snapshot: {shot:?}");
+    };
+    assert_eq!((width, height), (640, 360), "the canvas, not 1920×1080");
+    let (_, _, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+    let at = |x: usize, y: usize| {
+        let i = (y * 640 + x) * 4;
+        [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+    };
+    // The fitted frame is 320×180, centred in the box: rows 90 to 270.
+    assert_eq!(at(160, 180), [255, 0, 0, 255]);
+    assert_eq!(at(10, 100), [255, 0, 0, 255]);
+    // Letterbox above and below it, and the rest of the canvas, stay clear.
+    assert_eq!(at(160, 40), [0, 0, 0, 255]);
+    assert_eq!(at(160, 320), [0, 0, 0, 255]);
+    assert_eq!(at(480, 180), [0, 0, 0, 255]);
 }
 
 #[test]
@@ -3304,8 +3390,8 @@ fn stream_key_actions_report_without_naming_the_key() {
 }
 
 /// R-SEC-001: a stream key set through the protocol reaches the credential store and
-/// nothing else: not the reply, an event, `state.get`, `output.list`, `output.status`
-/// or the engine's log lines.
+/// nothing else: not the reply, an event, `state.get`, `output.list`, `output.status`,
+/// the engine's log lines or its audit log.
 pub(crate) fn check_secrets_are_redacted() {
     use jstream_platform::StreamKeyStore;
     use jstream_platform::fake::MemoryKeyStore;
@@ -3364,7 +3450,10 @@ pub(crate) fn check_secrets_are_redacted() {
     const KEY: &str = "live_REDACT-ME-9c41";
     let logs = Logs::default();
     let store = MemoryKeyStore::new();
-    let engine = Engine::new().with_key_store(Arc::new(store.clone()));
+    let audit = Arc::new(crate::AuditMemory::new());
+    let engine = Engine::new()
+        .with_key_store(Arc::new(store.clone()))
+        .with_audit(audit.clone());
     let control = connected(&engine);
     let mut events = control.events();
 
@@ -3402,9 +3491,175 @@ pub(crate) fn check_secrets_are_redacted() {
         .join("\n");
     assert!(!logged.is_empty(), "the engine logged the calls");
     seen.push(logged);
+    let audited: Vec<String> = audit.entries().iter().map(|e| e.to_json_line()).collect();
+    assert!(
+        audited
+            .iter()
+            .any(|line| line.contains("\"output.set_key\"")),
+        "the key action was audited: {audited:?}"
+    );
+    seen.extend(audited);
     for text in &seen {
         assert!(!text.contains("REDACT-ME"), "the key leaked: {text}");
     }
     let stored = store.get("out_yt").expect("get").expect("stored");
     assert_eq!(stored.expose(), KEY, "the key reached the store");
+}
+
+/// The audit log gets one entry per batch and action, with the client and its latest
+/// `hello` name, the request, the
+/// call, the edits by name, the `rev` before and after and the result code; queries are
+/// not recorded, and an idempotent retry is marked as replayed.
+#[test]
+fn batches_and_actions_are_audited() {
+    let audit = Arc::new(crate::AuditMemory::new());
+    let engine = Engine::new()
+        .with_output(OutputId::new("out_1"))
+        .with_audit(audit.clone());
+    let control = connected(&engine);
+    let other = engine.connect();
+    let named = |client_name: &str| Hello {
+        protocol: PROTOCOL_VERSION,
+        client_name: client_name.into(),
+    };
+    block_on(other.hello(named("claude-code"))).expect("handshake");
+    // A second `hello` keeps the client ID and renames the client in the log.
+    block_on(other.hello(named("claude-desktop"))).expect("again");
+
+    batch(&control, Batch::single(create("a"))).expect("first");
+    batch(
+        &other,
+        edits(vec![create("b"), webcam(), add("b", "cam", "webcam")]),
+    )
+    .expect("second");
+    let error = batch(&control, Batch::single(create("a"))).expect_err("duplicate");
+    assert_eq!(code(&error), Some("already_exists"));
+    query(&control, Query::SceneList).expect("scene.list");
+    let mut keyed = Batch::single(create("c"));
+    keyed.idempotency_key = Some(IdempotencyKey::new("k1"));
+    batch(&control, keyed.clone()).expect("keyed");
+    batch(&control, keyed).expect("retry");
+    block_on(control.call(output_call("out_1", true))).expect("start");
+    block_on(control.call(output_call("nope", true))).expect_err("unknown output");
+
+    let entries = audit.entries();
+    let names: Vec<_> = entries.iter().map(|e| e.client_name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "test",
+            "claude-desktop",
+            "test",
+            "test",
+            "test",
+            "test",
+            "test"
+        ]
+    );
+    let summary: Vec<_> = entries
+        .iter()
+        .map(|e| {
+            (
+                e.client_id.as_str(),
+                e.request_id.as_str(),
+                e.call,
+                e.edits.clone(),
+                e.output_id.as_ref().map(OutputId::as_str),
+                (e.rev_before.0, e.rev_after.0),
+                e.error,
+                e.replayed,
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (
+                "client_1",
+                "req_1",
+                "batch",
+                vec!["scene.create"],
+                None,
+                (0, 1),
+                None,
+                false
+            ),
+            (
+                "client_2",
+                "req_1",
+                "batch",
+                vec!["scene.create", "source.create", "item.add"],
+                None,
+                (1, 2),
+                None,
+                false
+            ),
+            (
+                "client_1",
+                "req_2",
+                "batch",
+                vec!["scene.create"],
+                None,
+                (2, 2),
+                Some("already_exists"),
+                false
+            ),
+            (
+                "client_1",
+                "req_4",
+                "batch",
+                vec!["scene.create"],
+                None,
+                (2, 3),
+                None,
+                false
+            ),
+            (
+                "client_1",
+                "req_5",
+                "batch",
+                vec!["scene.create"],
+                None,
+                (3, 3),
+                None,
+                true
+            ),
+            (
+                "client_1",
+                "req_6",
+                "output.start",
+                vec![],
+                Some("out_1"),
+                (3, 3),
+                None,
+                false
+            ),
+            (
+                "client_1",
+                "req_7",
+                "output.start",
+                vec![],
+                Some("nope"),
+                (3, 3),
+                Some("not_found"),
+                false
+            ),
+        ]
+    );
+    let line = entries[1].to_json_line();
+    assert!(
+        line.starts_with("{\"time\":\"")
+            && line.contains(
+                "\"client_id\":\"client_2\",\"client_name\":\"claude-desktop\",\
+             \"request_id\":\"req_1\",\"call\":\"batch\",\
+             \"edits\":[\"scene.create\",\"source.create\",\"item.add\"],\
+             \"rev_before\":1,\"rev_after\":2,\"result\":\"ok\"}"
+            ),
+        "{line}"
+    );
+    // Arguments never reach the log: not the scene's name nor the source's.
+    assert!(
+        !line.contains("Webcam") && !line.contains("\"B\""),
+        "{line}"
+    );
 }

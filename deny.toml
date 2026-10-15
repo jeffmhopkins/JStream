@@ -22,6 +22,13 @@ allow = [
     "MPL-2.0",
     "CC0-1.0",
 ]
+# BSD-1-Clause is BSD-2-Clause without the binary-redistribution clause, so it is
+# permissive (R-DEP-001). Allowed for this one test-only crate, which R-RT-001 names.
+# cargo-deny filters workspace dev-dependencies out of its graph today, so it reports
+# this entry as not encountered; it records the decision for when that changes.
+exceptions = [
+    { crate = "assert_no_alloc", allow = ["BSD-1-Clause"] },
+]
 
 [bans]
 multiple-versions = "deny"   # R-DEP-005: every duplicate needs a `skip` entry below
