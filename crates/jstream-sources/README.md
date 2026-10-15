@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:9b407fe0a2451c6e", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "#188: Assets paragraph now describes AssetRoots::read checking the opened file (Unix dev/inode against the re-resolved path; Windows walk holding each folder without delete sharing, refusing reparse points), matching source.rs open_inside/check_opened; Seams and Limits unchanged" }
+verified = { hash = "b3:090f00774c2e20dd", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#crate-map/jstream-sources, whose only change on this branch is the YouTube chat message ADR link (0034 -> 0041, same source kind restated in ADR-0041 §2); C1a's color and image text holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
