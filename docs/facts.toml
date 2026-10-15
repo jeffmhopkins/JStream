@@ -1,8 +1,8 @@
 # Pinned facts. See docs/DOCS.md#facts.
 # In prose, write the value immediately followed by its marker: 1.97.0<!--fact:rust-toolchain-->
 # check = "file"   → verified on every PR against `source.file` / `source.key`
-# check = "ext"    → weekly sweep fetches the external page and checks `value` still appears
-# check = "manual" → listed in the sweep issue when the external's review is due
+# check = "ext"    → weekly sweep fetches the external page and checks `value` still appears (not built yet, docs/DOCS.md#ttl)
+# check = "manual" → listed in the sweep issue when the external's review is due (not built yet, docs/DOCS.md#ttl)
 
 [[fact]]
 id = "rust-toolchain"

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:4a0ec5b672b9d8d0", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Commands and Queries list the 0.7 output edits, key actions and output.list; new Outputs (output.rs) bullet; PROTOCOL_VERSION 0.7 with stats.tick as 0.6; checked against command.rs, query.rs, output.rs, version.rs" }
+verified = { hash = "b3:b5cf903a5f2b3dcd", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Commands list both source.rename/set_settings and output edits/key actions; Queries list output.list and kind.list/describe; Outputs and Kinds-and-settings bullets; PROTOCOL_VERSION 0.8 for kinds, 0.7 outputs (version.rs)" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -30,19 +30,28 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `ClientMessage::parse` maps every parse failure to `malformed`.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
   `scene.reorder`, `item.add`, `item.remove`, `item.reorder`, `item.set_transform`,
-  `item.set_crop`, `item.set_visible`, `source.create`, `source.duplicate`,
-  `source.delete`, `output.create`, `output.set_target`, `output.delete`), with
-  `ItemTransform`, `Crop` and `SourceKind`; `Action` (`output.start`, `output.stop`,
-  `output.set_key`, `output.clear_key`); `Batch`; and the `Command`/`CommandClass`
+  `item.set_crop`, `item.set_visible`, `source.create`, `source.rename`,
+  `source.set_settings`, `source.duplicate`, `source.delete`, `output.create`,
+  `output.set_target`, `output.delete`), with `ItemTransform`, `Crop` and `SourceKind`;
+  `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
+  `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (only `rtmp` so far), `RtmpTarget` (only a
   generic `url`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status` and `video.snapshot`, with `QueryResult` and the `SceneSummary`,
-  `SceneInfo`, `SourceInfo` and `ItemInfo` shapes the collection reads report.
-  `video.snapshot` returns the program mix as a PNG.
+  `output.list`, `output.status`, `video.snapshot`, `kind.list` and `kind.describe`,
+  with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo` and `ItemInfo`
+  shapes the collection reads report. `video.snapshot` returns the program mix as a PNG.
+- **Kinds and settings** (`kind.rs`, `settings.rs`,
+  [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)): `KindDescriptor`,
+  `ParamDescriptor` and `ParamType`, the shapes that describe a source or filter kind's
+  parameters, and `Settings`, a map from parameter ID to a JSON value, whose `scene`,
+  `source` and `asset` references are tagged objects (`Reference`). The per-value checks
+  (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
+  (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
+  shares them. No kind is defined here.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `events.dropped` and
   `stats.tick`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
@@ -59,9 +68,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
   transform. A negative scale is not refused: `from_legacy` returns the drawn outline
   and flags the reflection, which geometry cannot store. These types are not
-  messages. `PROTOCOL_VERSION` is 0.7 because of the output edits, `output.list`,
-  the key actions and `key_set`; `stats.tick` is the 0.6 addition, `video.snapshot`
-  the 0.5 one, and the geometry wire surface ships as a later minor. `ItemTransform`'s schema description names
+  messages. `PROTOCOL_VERSION` is 0.8 because of the kind queries and settings;
+  0.7 added the output edits, `output.list`, the key actions and `key_set`,
+  `stats.tick` is the 0.6 addition and `video.snapshot` the 0.5 one, and the geometry
+  wire surface ships as a later minor. `ItemTransform`'s schema description names
   `ItemGeometry` as the replacement (`protocol.snap` and the MCP `tools.snap`).
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
@@ -71,7 +81,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   to every collection read of it, and the exact error for batches rejected against it.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
-  the feature in dev-dependencies only and are held to these answers. It changes no
+  the feature in dev-dependencies only and are held to these answers. `kinds()` names
+  the kinds an implementation must describe for the batch to apply (`webcam`, with no
+  parameters, so every implementation reports the same empty settings). It changes no
   message, so it never changes `PROTOCOL_VERSION`.
 
 <a id="design"></a>
@@ -79,7 +91,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:e6e59bc369fcff37", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: handshake example at 0.7; actions include storing a stream key; new outputs paragraph (create/set_target/delete, URL checks from graph target.rs, write-only key, key outlives delete, clear_key on a deleted output); state.get outputs, output.list, key_set with pre-0.7 defaults; geometry paragraph says 0.7" }
+verified = { hash = "b3:4e06cd0fe67b2407", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): handshake example updated to 0.8; SourceInfo settings note says 0.7 readers; Queries list has output.list, key_set and the kind queries; outputs and settings paragraphs both hold; geometry paragraph names 0.8/0.7/0.6/0.5" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -99,8 +111,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":7},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":7},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":8},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":8},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -165,11 +177,57 @@ and an undo can re-create a deleted object under its old ID. IDs are opaque stri
 Sources are shared instances, independent of scenes. `source.create` adds one, and
 `item.add` places an existing source by reference, so one source can appear in many
 scenes, or several times in one, as the same capture. `source.duplicate` makes a
-separate copy under a new ID. A `SourceKind` is `builtin` (a kind named by the engine;
-its settings come with `jstream-sources`) or `scene`, which nests another scene. An
-`item.add` that would make a scene contain itself, at any depth, is rejected with
-`invalid_argument` naming the cycle. Positions are indexes: scenes in display order,
-items in stacking order with 0 at the bottom.
+separate copy under a new ID, with the same kind and settings, and `source.rename`
+renames one. A `SourceKind` is `builtin` (a kind the engine describes) or `scene`, which
+nests another scene. Positions are indexes: scenes in display order, items in stacking
+order with 0 at the bottom.
+
+### Kinds and settings
+
+[ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) decides the shape. A
+`builtin` source's `kind` is a kind ID, and its settings travel beside it, as a
+`Settings` map on the source. The protocol defines the descriptor and value shapes once,
+never a type per kind.
+
+- `kind.list` returns a `KindSummary` per kind (ID, category, name, version), ordered by
+  ID. `kind.describe { kind_id }` returns the `KindDescriptor` and a JSON Schema of its
+  settings generated from it (`settings_schema`), or `invalid_argument` on `kind_id` for
+  a kind the engine doesn't have. Kinds are not collection state, so neither result
+  carries `rev`.
+- A `ParamDescriptor` has an `id`, a `type` with its constraints flattened into the same
+  object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
+  `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
+  `accept`; `scene`; `source` with an optional `media`), a `default`, a `label`, an
+  optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
+  An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
+  `step`, `multiline` and the hints never affect validation.
+- Values are plain JSON. Colours are `#rrggbb`, or `#rrggbbaa` when `alpha` is set.
+  References are tagged objects: `{"type":"scene","scene_id":…}`,
+  `{"type":"source","source_id":…}` and `{"type":"asset","root":…,"path":…}`, with
+  `root` one of `collection`, `app` and `absolute`. A reference parameter also accepts
+  `null`. `Settings::references` finds every reference in a map without the descriptor.
+- `source.create` takes optional `settings`. The engine checks each entry against the
+  descriptor, fills every parameter left out (or sent as `null`, outside reference
+  parameters) with its default, and stores the complete map. `source.set_settings
+  { source_id, patch }` replaces the patched parameters, and `null` resets one to its
+  default. Its inverse is the patch of the old values. A `scene` source has no settings.
+- Rejections: an unknown kind (`edits.N.kind.kind`), an unknown parameter, a wrong
+  type, a number out of range, an unknown enum option, a bad colour, an over-long
+  string, or a bad asset path are `invalid_argument` with `field =
+  edits.N.settings.<id>` (or `edits.N.patch.<id>`). Values are never clamped. A
+  reference to a missing scene or source is `not_found`. A `source` reference that
+  requires `media` rejects a source whose kind doesn't produce it. Asset paths under
+  `collection` and `app` are relative, with `/` separators and no `..` segment, drive
+  letter or leading `/`; an asset that doesn't exist yet is accepted.
+- **References are dependency edges.** Items placing sources, `scene` sources showing
+  scenes, and scene and source references in settings form one dependency graph. An
+  edit that would close a cycle (`item.add`, `source.create`, `source.set_settings`) is
+  rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
+  scene `a`). `scene.delete` and `source.delete` are rejected while a setting refers to the
+  target, naming each `<source>.settings.<param>`. Asset references are not edges.
+
+`SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
+parameters), so a reader of 0.7 messages sees no change for those.
 
 Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`) is a `Finite32`:
 an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde
@@ -226,7 +284,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
-  its name and `SourceKind`.
+  its name, `SourceKind` and settings.
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
 - `output.list`: the outputs, ordered by ID (outputs have no display order), each with
@@ -234,6 +292,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the
   credential store holds its key (missing from a pre-0.7 server, it parses as
   `false`). Neither is collection state, so it carries no `rev`.
+- `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
+  Not collection state, so no `rev`.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
@@ -249,9 +309,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   accept an answer of that size: `jstream-control`'s WebSocket client keeps
   tungstenite's default limits, which are well above it.
 
-An item is reported with its `source_id`, `transform`, `crop` and `visible`: every
-property an edit sets, so a client can compute any edit, or its inverse, from what it
-read. The shapes (`SourceInfo`, `SceneInfo`, `ItemInfo`) mirror `jstream-graph`'s model,
+An item is reported with its `source_id`, `transform`, `crop` and `visible`, and a
+source with its name, kind and settings: every property an edit sets, so a client can
+compute any edit, or its inverse, from what it read. The shapes (`SourceInfo`, `SceneInfo`, `ItemInfo`) mirror `jstream-graph`'s model,
 which produces them (`Graph::query`). As the model grows (settings, filters, effects)
 they gain fields, which older clients ignore.
 
@@ -270,9 +330,11 @@ that sets it: `scene.reorder` and `item.reorder` restore positions, and
 `item.set_visible` and `item.set_crop` restore what `item.add` doesn't take. So undoing
 `item.remove` is `item.add` plus whichever of `item.reorder`, `item.set_crop` and
 `item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
-`scene.reorder` unless it was last, and each item's restore, bottom to top. Deleting a
-source that items still place, or a scene that a `scene` source still shows, is
-rejected, so no edit removes more than the object it names. `jstream-graph`'s property
+`scene.reorder` unless it was last, and each item's restore, bottom to top. Undoing
+`source.delete` is `source.create` with the complete stored settings, and undoing
+`source.set_settings` is a patch of the old values. Deleting a source that items still
+place or a setting refers to, or a scene that a `scene` source shows or a setting refers
+to, is rejected, so no edit removes more than the object it names. `jstream-graph`'s property
 test checks that applying a random batch and then its inverse restores the state
 exactly. A new edit that can't state its inverse in edits needs new edits first. Undo
 and redo requests (`history.undo`, `history.redo`), and the `undo_conflict` error for an
@@ -400,9 +462,9 @@ function in this crate so the compositor and the UI share one implementation.
   reflected quad.
 
 These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.7 because the
-outputs are that minor. `stats.tick` remains the 0.6 addition and `video.snapshot` the
-0.5 one. ADR-0022
+`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.8 because of the
+kind queries and settings; the outputs are 0.7, `stats.tick` the 0.6 addition and
+`video.snapshot` the 0.5 one. ADR-0022
 names the geometry additions as 0.4, which already shipped with `events.dropped`;
 the geometry wire surface ships as a later minor, under
 [R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited
@@ -470,12 +532,16 @@ described above.
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an
     ADR ([R-ARCH-004](../../docs/RULES.md#R-ARCH-004)) once they are settled?
 11. **Source kinds.** Settled by
-    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md): `builtin` stays,
-    its `kind` names a kind the engine describes (`kind.list`, `kind.describe`), and
-    settings travel beside it as a map validated against that kind's descriptor. No new
-    `SourceKind` variants. Not built yet: the first cut has no settings.
+    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) and built in 0.7:
+    `builtin` stays, its `kind` names a kind the engine describes (`kind.list`,
+    `kind.describe`), and settings travel beside it as a map validated against that
+    kind's descriptor ([Kinds and settings](#design)). No new `SourceKind` variants. Not
+    built yet: the `kind.changed` event, filter settings, `asset.list`, storing an
+    absolute path under a known root in relative form, and kind versions on stored
+    settings, which come with persistence.
 12. **Deleting referenced objects.** Settled by
     [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md): rejection stays
-    the only delete, with no cascading edit. The error will list every blocker, and a
-    `delete.plan` query will return the batch that removes the target and its blockers.
-    Not built yet: today the client removes the blockers itself, as described above.
+    the only delete, with no cascading edit. The error will list every blocker as a
+    structured detail, and a `delete.plan` query will return the batch that removes the
+    target and its blockers. Not built yet: today the error's `reason` names the
+    blockers, and the client removes them itself.

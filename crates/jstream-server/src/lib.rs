@@ -4,7 +4,9 @@
 //! upgrade request must carry the control token and pass the `Origin` and `Host` checks,
 //! and it listens on `127.0.0.1` unless told otherwise (R-SEC-002, ADR-0006). It bounds
 //! how many connections are open at once and how long a connection has to send its
-//! upgrade request and complete its handshake. Layer 4.
+//! upgrade request and complete its handshake. When the host turns it on
+//! (`ServerConfig::mcp`), it also serves MCP's streamable-HTTP transport at [`MCP_PATH`],
+//! behind the same checks, with one MCP session per `initialize`. Layer 4.
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-server/README.md#purpose, crates/jstream-server/README.md#design, docs/adr/0006-mcp-full-access.md
 
@@ -14,6 +16,7 @@ mod config;
 mod error;
 mod gate;
 mod listener;
+mod mcp;
 mod session;
 #[cfg(test)]
 mod tests;
@@ -21,17 +24,19 @@ mod tests;
 pub use config::{ServerConfig, Token};
 pub use error::ServerError;
 pub use jstream_control::WS_PATH;
+pub use mcp::MCP_PATH;
 
 use axum::Router;
 use axum::extract::ws::{WebSocketUpgrade, rejection::WebSocketUpgradeRejection};
 use axum::extract::{ConnectInfo, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{any, get};
 use gate::Gate;
 use gate::Refusal;
 use jstream_control::Control;
 use listener::{Accepted, Limited};
+use mcp::Mcp;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -68,6 +73,8 @@ struct App {
     slots: Arc<Semaphore>,
     /// `ServerConfig::handshake_timeout`.
     handshake_timeout: Duration,
+    /// The MCP sessions, when `ServerConfig::mcp` is on.
+    mcp: Option<Mcp>,
 }
 
 impl Server {
@@ -84,6 +91,9 @@ impl Server {
         let listener = TcpListener::bind(config.bind).await.map_err(bind_error)?;
         let local_addr = listener.local_addr().map_err(bind_error)?;
         let (shutdown, stopping) = watch::channel(false);
+        let mcp = config
+            .mcp
+            .then(|| Mcp::new(&config, Arc::clone(&connector)));
         let app = Arc::new(App {
             connector,
             gate: Gate::new(&config, local_addr),
@@ -93,6 +103,7 @@ impl Server {
                 config.max_connections.min(Semaphore::MAX_PERMITS),
             )),
             handshake_timeout: config.handshake_timeout,
+            mcp,
         });
         Ok(Server {
             listener,
@@ -111,6 +122,15 @@ impl Server {
     /// The WebSocket API's URL on this server, e.g. `ws://127.0.0.1:4455/api/v1/ws`.
     pub fn ws_url(&self) -> String {
         format!("ws://{}{WS_PATH}", self.local_addr)
+    }
+
+    /// The MCP endpoint's URL on this server, e.g. `http://127.0.0.1:4455/mcp`, when
+    /// [`ServerConfig::mcp`] is on.
+    pub fn mcp_url(&self) -> Option<String> {
+        self.app
+            .mcp
+            .as_ref()
+            .map(|_| format!("http://{}{MCP_PATH}", self.local_addr))
     }
 
     /// Serves until the listener fails.
@@ -132,7 +152,11 @@ impl Server {
             shutdown,
             ..
         } = self;
-        let router = Router::new().route(WS_PATH, get(upgrade)).with_state(app);
+        let mut router = Router::new().route(WS_PATH, get(upgrade));
+        if app.mcp.is_some() {
+            router = router.route(MCP_PATH, any(mcp::handle));
+        }
+        let router = router.with_state(app);
         let signal = async move {
             signal.await;
             shutdown.send_replace(true);
@@ -202,18 +226,20 @@ async fn upgrade(
 // (R-SEC-002): `jstream_server::rejects_missing_token` and
 // `jstream_server::rejects_foreign_origin`.
 
-/// R-SEC-002: an upgrade without the control token, or with a wrong one, is refused with
-/// HTTP 401 and no session is opened.
+/// R-SEC-002: an upgrade or an MCP request without the control token, or with a wrong
+/// one, is refused with HTTP 401 and no session is opened.
 #[cfg(test)]
 #[test]
 fn rejects_missing_token() {
     tests::check_rejects_missing_token();
+    tests::check_mcp_rejects_missing_token();
 }
 
-/// R-SEC-002: an upgrade from a foreign `Origin` (or with a foreign `Host`) is refused
-/// with HTTP 403 even with the right token.
+/// R-SEC-002: an upgrade or an MCP request from a foreign `Origin` (or with a foreign
+/// `Host`) is refused with HTTP 403 even with the right token.
 #[cfg(test)]
 #[test]
 fn rejects_foreign_origin() {
     tests::check_rejects_foreign_origin();
+    tests::check_mcp_rejects_foreign_origin();
 }

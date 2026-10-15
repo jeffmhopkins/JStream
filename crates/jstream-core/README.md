@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:3d58be54767ea943", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#142 outputs and stream keys) into C6 #147: main's Engine/Outputs bullets (with_key_store, output_kind, collection outputs) kept; C6's nested-scene scheduling and pixel tests in the Tests bullet; Snapshot bullet still matches snapshot.rs" }
+verified = { hash = "b3:5ca589e8ea016a80", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#155 B4 kinds, #133, #153, #156-#160) into C6 #147: main's Kinds bullet and Engine/Outputs text kept; C6's nested-scene tests in the Tests bullet; Snapshot bullet still matches snapshot.rs, which main did not touch" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -39,6 +39,11 @@ state machine. Contents:
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys and the
   subscribers behind one lock, and the drop ledger behind another, and executes
   batches, actions and queries. The pipeline threads do not take the collection lock.
+- **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
+  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
+  They are stubs: `color`, `image`, `media` and `text` take a first set of parameters,
+  and `display`, `webcam` and `window` none. Nothing renders from them yet; frames
+  still come from `set_source_frame`. `jstream-sources` replaces them.
 - **Snapshot** (`snapshot.rs`): `video.snapshot`, the program mix read back as a PNG
   on the engine's own snapshot thread, which owns the snapshot compositor.
 - **Runtime** (`runtime/`): the `output.start` pipeline. The render thread reads the
@@ -80,7 +85,7 @@ state machine. Contents:
   which captures the engine's traces), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
-Not here yet: per-client undo, the audit log, persistence, settings, arc-swap
+Not here yet: per-client undo, the audit log, persistence, real source kinds, arc-swap
 snapshots, a GPU encode target, and the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -93,7 +98,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:53a273e990767c82", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#142) into C6 #147: main's Queries/Actions/Outputs text for collection outputs and keys and C6's Snapshots nested-scene paragraph (render_image passes, transparent nested scenes, depth bound 8 with debug log, width unbounded, cycle draws nothing) coexist; snapshot.rs untouched by main" }
+verified = { hash = "b3:691a514cddc6ee9b", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#155 kinds/protocol 0.8, #153 MCP over HTTP) into C6 #147: main's Queries/kinds text and C6's Snapshots nested-scene paragraph coexist; a scene source is still SourceKind::Scene, which snapshot.rs walks; the depth bound, transparency and cycle text still hold" }
 -->
 
 ### Engine and sessions
@@ -133,13 +138,14 @@ the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its d
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV), `jstream-outputs` (the reconnecting RTMP publisher), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
-[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
+[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `serde_json`
+(settings values in the built-in kind descriptors), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
 `tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
-`tests/scenarios.rs`), `jstream-mcp` and `serde_json` (`tests/mcp.rs`). All of them
+`tests/scenarios.rs`) and `jstream-mcp` (`tests/mcp.rs`). All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
@@ -173,8 +179,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   moved on (the key check comes first) and without an event. Only applied batches
   are remembered, so a retry of a failed batch is applied. Keys are kept for the
   engine's lifetime ([protocol open question 6](../jstream-protocol/README.md#open-questions)).
-- **Queries** that read the collection go to `Graph::query`, `output.list` and the
-  `outputs` of `state.get` included; `output.status` reads the outputs' runtime state
+- **Queries** that read the collection, and the kind queries, go to `Graph::query`,
+  `output.list` and the `outputs` of `state.get` included; the graph holds the built-in
+  kinds the engine gave it (`kinds.rs`). `output.status` reads the outputs' runtime state
   (`not_found` for an unknown one) and fills `key_set` from the key store after the
   collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
@@ -501,7 +508,8 @@ revisions and error codes are logged, never a call's arguments
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- The audit log, persistence (the collection file) and settings.
+- The audit log, persistence (the collection file), and real source kinds with
+  settings that change what renders (`jstream-sources`).
 - Arc-swap snapshots, the collector thread, live-value handover, and a GPU encode
   target. `output.start` is the first cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): one scene, a CPU readback

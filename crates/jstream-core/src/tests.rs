@@ -77,6 +77,7 @@ fn webcam() -> Edit {
         kind: SourceKind::Builtin {
             kind: "webcam".into(),
         },
+        settings: Default::default(),
     }
 }
 
@@ -332,6 +333,55 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
         ),
         Ok(Rev(2))
     );
+}
+
+/// The engine describes its built-in kinds, and validates and completes settings against
+/// them (ADR-0025).
+#[test]
+fn kinds_are_described_and_settings_checked() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let Ok(QueryResult::KindList { kinds }) = query(&control, Query::KindList) else {
+        panic!("kind.list");
+    };
+    let ids: Vec<&str> = kinds.iter().map(|k| k.kind_id.as_str()).collect();
+    assert!(ids.contains(&"color") && ids.contains(&"webcam"), "{ids:?}");
+    let Ok(QueryResult::KindDescribe { kind, .. }) = query(
+        &control,
+        Query::KindDescribe {
+            kind_id: "color".into(),
+        },
+    ) else {
+        panic!("kind.describe");
+    };
+    assert!(kind.param("color").is_some());
+
+    let color = |settings: serde_json::Value| {
+        Batch::single(Edit::SourceCreate {
+            source_id: SourceId::new("bg"),
+            name: "Background".into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: serde_json::from_value(settings).expect("a settings map"),
+        })
+    };
+    let error =
+        batch(&control, color(serde_json::json!({"color": "red"}))).expect_err("bad colour");
+    assert!(
+        matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.settings.color"),
+        "{error:?}"
+    );
+    assert_eq!(
+        batch(&control, color(serde_json::json!({"color": "#ff0000"}))),
+        Ok(Rev(1))
+    );
+    let Ok(QueryResult::SourceList { sources, .. }) = query(&control, Query::SourceList) else {
+        panic!("source.list");
+    };
+    let settings = &sources[0].settings;
+    assert_eq!(settings.get("color"), Some(&serde_json::json!("#ff0000")));
+    assert_eq!(settings.get("width"), Some(&serde_json::json!(1920)));
 }
 
 /// The engine answers every read of the shared parity collection exactly as the fixture
@@ -1496,6 +1546,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
                     kind: SourceKind::Scene {
                         scene_id: SceneId::new("inner"),
                     },
+                    settings: Default::default(),
                 },
                 add("program", "nest", "inner_src"),
             ],
