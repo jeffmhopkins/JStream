@@ -957,7 +957,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
+stamp = { hash = "b3:55b973c853aa617c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: Live sources says giving a backend rebuilds the sources that open through it (browser and its youtube_chat preset, jstream_sources::opens_browser), matching live.rs's set_browser and the new test in tests/audio.rs; the rest is the wave's C8 text; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
@@ -996,7 +996,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:f49d5448404f02f8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
+stamp = { hash = "b3:64dbc89c15b98eba", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: Live sources says giving a backend rebuilds the sources that open through it (browser and its youtube_chat preset, jstream_sources::opens_browser), matching live.rs's set_browser and the new test in tests/audio.rs; the rest is the wave's C8 text; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1011,7 +1011,7 @@ stamp = { hash = "b3:29301fe6ecd05436" }
 stamp = { hash = "b3:06fe384b67b62cfe" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
-stamp = { hash = "b3:95f2767a189e8f2f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
+stamp = { hash = "b3:5ca839944dbeae17", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: Live sources says giving a backend rebuilds the sources that open through it (browser and its youtube_chat preset, jstream_sources::opens_browser), matching live.rs's set_browser and the new test in tests/audio.rs; the rest is the wave's C8 text; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
@@ -1047,7 +1047,7 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:c7afb7b2bff7299a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only tests.rs's cpu_pipeline poll helpers changed: pump_until and wait_until wait up to a 30 s HANG_BOUND instead of 5 s (#392). Design describes engine behaviour (start's 10 s compositor-open bound, RenderHub::caught_up polled by tests) and states no test-helper deadline; no engine code changed, so it holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
+stamp = { hash = "b3:f5d5a514fa347fa7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: Live sources says giving a backend rebuilds the sources that open through it (browser and its youtube_chat preset, jstream_sources::opens_browser), matching live.rs's set_browser and the new test in tests/audio.rs; the rest is the wave's C8 text; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:732249ad50d11c2c" }
@@ -1062,7 +1062,7 @@ stamp = { hash = "b3:c9688aabcb558c82" }
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:3bb09282dddfc00c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
+stamp = { hash = "b3:029102140a840221", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: with_browser's description names the youtube_chat preset beside browser; engine.rs's doc says the same; live.rs's set_browser now rebuilds every kind opens_browser names, which tests/audio.rs's browser_presets_open_once_the_backend_arrives covers; the rest is the wave's C8 text; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1086,7 +1086,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:f49d5448404f02f8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
+stamp = { hash = "b3:64dbc89c15b98eba", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: with_browser's description names the youtube_chat preset beside browser; engine.rs's doc says the same; live.rs's set_browser now rebuilds every kind opens_browser names, which tests/audio.rs's browser_presets_open_once_the_backend_arrives covers; the rest is the wave's C8 text; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1101,7 +1101,7 @@ stamp = { hash = "b3:29301fe6ecd05436" }
 stamp = { hash = "b3:06fe384b67b62cfe" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
-stamp = { hash = "b3:95f2767a189e8f2f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
+stamp = { hash = "b3:5ca839944dbeae17", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: with_browser's description names the youtube_chat preset beside browser; engine.rs's doc says the same; live.rs's set_browser now rebuilds every kind opens_browser names, which tests/audio.rs's browser_presets_open_once_the_backend_arrives covers; the rest is the wave's C8 text; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
@@ -1137,7 +1137,7 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:c7afb7b2bff7299a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only tests.rs's cpu_pipeline poll helpers changed: pump_until and wait_until share a 30 s HANG_BOUND instead of 5 s (#392). The Tests list (render and mixer panics reported as failed on the CPU stand-in, the stage-failure, late-tick, teardown tests) names no deadline and still holds; no engine code changed" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
+stamp = { hash = "b3:f5d5a514fa347fa7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: with_browser's description names the youtube_chat preset beside browser; engine.rs's doc says the same; live.rs's set_browser now rebuilds every kind opens_browser names, which tests/audio.rs's browser_presets_open_once_the_backend_arrives covers; the rest is the wave's C8 text; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:732249ad50d11c2c" }
@@ -1188,7 +1188,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via core#design, which now describes Engine::with_browser and a browser page's own audio (Recorded::Own); the daemon wires no with_browser and its Design names no audio sources or page audio; holds" }
+stamp = { hash = "b3:55b973c853aa617c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: stale only via core#design, which now names the youtube_chat preset among the sources a browser backend rebuilds; the daemon gives no backend yet, so nothing it says changes; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
@@ -2355,7 +2355,7 @@ stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:76a0bd9be3b1d5ce", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+stamp = { hash = "b3:cc164f6be5fa1bb1", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: adds the youtube_chat bullet (a browser preset on YouTube's popout chat page; video takes an ID or watch, live, live_chat or youtu.be link, scheme and host in any case, ID limited to letters, digits, - and _; default CSS hides all but messages), says only browser and youtube_chat have gpu_frame and audio (opens_browser names them), Context's backend line names both, and Tests lists the video_id unit test and tests/youtube_chat.rs; matches youtube_chat.rs, browser.rs, lib.rs and registry.rs on the wave's C8; holds" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:dfba6103702005f0" }
@@ -2370,7 +2370,7 @@ stamp = { hash = "b3:04b853b872d31424" }
 stamp = { hash = "b3:234830343d1d1b94" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/browser.rs"]
-stamp = { hash = "b3:1bf858d2952869b0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+stamp = { hash = "b3:f595cbf891131a40", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: adds the youtube_chat bullet (a browser preset on YouTube's popout chat page; video takes an ID or watch, live, live_chat or youtu.be link, scheme and host in any case, ID limited to letters, digits, - and _; default CSS hides all but messages), says only browser and youtube_chat have gpu_frame and audio (opens_browser names them), Context's backend line names both, and Tests lists the video_id unit test and tests/youtube_chat.rs; matches youtube_chat.rs, browser.rs, lib.rs and registry.rs on the wave's C8; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/color.rs"]
 stamp = { hash = "b3:52ebcec35599e793", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
@@ -2388,10 +2388,10 @@ stamp = { hash = "b3:6ae3f673fe0d6d0b" }
 stamp = { hash = "b3:c4299f8d4d3cdecb" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/lib.rs"]
-stamp = { hash = "b3:fba46fd30ae6b5fa", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+stamp = { hash = "b3:9cd4e219ac12e892", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: adds the youtube_chat bullet (a browser preset on YouTube's popout chat page; video takes an ID or watch, live, live_chat or youtu.be link, scheme and host in any case, ID limited to letters, digits, - and _; default CSS hides all but messages), says only browser and youtube_chat have gpu_frame and audio (opens_browser names them), Context's backend line names both, and Tests lists the video_id unit test and tests/youtube_chat.rs; matches youtube_chat.rs, browser.rs, lib.rs and registry.rs on the wave's C8; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/registry.rs"]
-stamp = { hash = "b3:56d6987ba076744f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+stamp = { hash = "b3:91a5d8dd02149521", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: adds the youtube_chat bullet (a browser preset on YouTube's popout chat page; video takes an ID or watch, live, live_chat or youtu.be link, scheme and host in any case, ID limited to letters, digits, - and _; default CSS hides all but messages), says only browser and youtube_chat have gpu_frame and audio (opens_browser names them), Context's backend line names both, and Tests lists the video_id unit test and tests/youtube_chat.rs; matches youtube_chat.rs, browser.rs, lib.rs and registry.rs on the wave's C8; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/source.rs"]
 stamp = { hash = "b3:ef5b0035cfbd689e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
@@ -2401,6 +2401,9 @@ stamp = { hash = "b3:34314ba6e93e9e21" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/raster.rs"]
 stamp = { hash = "b3:c3408e030cf73654" }
+
+["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/youtube_chat.rs"]
+stamp = { hash = "b3:03c7bff1d1b97d06", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: adds the youtube_chat bullet (a browser preset on YouTube's popout chat page; video takes an ID or watch, live, live_chat or youtu.be link, scheme and host in any case, ID limited to letters, digits, - and _; default CSS hides all but messages), says only browser and youtube_chat have gpu_frame and audio (opens_browser names them), Context's backend line names both, and Tests lists the video_id unit test and tests/youtube_chat.rs; matches youtube_chat.rs, browser.rs, lib.rs and registry.rs on the wave's C8; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/browser.rs"]
 stamp = { hash = "b3:a886220b5abd4b1e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
@@ -2421,10 +2424,13 @@ stamp = { hash = "b3:dbb67160c5d2f421" }
 stamp = { hash = "b3:fc3b1214b3ce4e96" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/sources.rs"]
-stamp = { hash = "b3:7a6860ce7e1ce8ac", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+stamp = { hash = "b3:cf99369f281491cd", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: adds the youtube_chat bullet (a browser preset on YouTube's popout chat page; video takes an ID or watch, live, live_chat or youtu.be link, scheme and host in any case, ID limited to letters, digits, - and _; default CSS hides all but messages), says only browser and youtube_chat have gpu_frame and audio (opens_browser names them), Context's backend line names both, and Tests lists the video_id unit test and tests/youtube_chat.rs; matches youtube_chat.rs, browser.rs, lib.rs and registry.rs on the wave's C8; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/text.rs"]
 stamp = { hash = "b3:df9bfd5ccf0cf15b", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+
+["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/youtube_chat.rs"]
+stamp = { hash = "b3:7e28fd61a98e25eb", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: adds the youtube_chat bullet (a browser preset on YouTube's popout chat page; video takes an ID or watch, live, live_chat or youtu.be link, scheme and host in any case, ID limited to letters, digits, - and _; default CSS hides all but messages), says only browser and youtube_chat have gpu_frame and audio (opens_browser names them), Context's backend line names both, and Tests lists the video_id unit test and tests/youtube_chat.rs; matches youtube_chat.rs, browser.rs, lib.rs and registry.rs on the wave's C8; holds" }
 
 ["CRATE-jstream-types#purpose"."body"]
 stamp = { hash = "b3:f826effbf89b6964", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-types row is unchanged and this Purpose still matches it" }
