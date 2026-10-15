@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:f8fec75ecf0af180", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:b01b13df96d22998", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding aspect_ratio under filter/aspect; filters are still described only by reference to #filters; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c17ddc66af14c910", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:d3c74e4d3d974241", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding aspect_ratio; it adds no thread, I/O or steady-path allocation beyond the harness's documented per-draw ones; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:70c4b4131cfd19bb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Group modules (pack, aspect, multipass, assets) and the descriptor test described as built" }
+verified = { hash = "b3:f0929fcbb3cd1d54", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Replaced the V1a placeholder with aspect_ratio: settings, the output_size rule, 1:1 crop/pad, stretch kernels; harness text unchanged and still true" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -322,7 +322,21 @@ kinds.
 
 The single-pass pack (V1): not yet.
 
-Aspect ratio (V1a): not yet.
+Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
+Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
+`custom_width` and `custom_height` from 1 to 10000 shown only for `custom`), `mode`
+(`crop`, the default, `pad` or `stretch`), `anchor` (`center`, an edge or a corner;
+crop and pad only), `pad_color` (with alpha, default opaque black; pad only) and
+`resampling` (`bilinear`, `bicubic`, the default, or `lanczos`; stretch only). Its
+`output_size` is the rule the source's reported size follows: crop keeps one input
+dimension and shrinks the other, pad keeps one and grows the other, and stretch keeps
+the input's larger dimension as the output's larger one (1920x1080 stretched to 9:16 is
+1080x1920). A derived dimension is rounded to the nearest pixel and never 0, and the
+math saturates instead of overflowing, so a size past the adapter's limit fails as
+`TooLarge` when the layer is made. Crop and pad copy input pixels 1:1 with an offset
+(no scaling); only stretch resamples, as bilinear, Catmull-Rom bicubic (4x4 texel loads)
+or Lanczos-3 (6x6 texel loads), normalised and clamped to a valid premultiplied colour.
+The kernels are not widened for a downscale, so a large shrink along one axis can alias.
 
 The multi-pass filters (V2): not yet.
 
