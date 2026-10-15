@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:22adc13bf8a5eb42", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only: the daemon registers until the desktop app has --register-vcam): the Registration bullet's jstream-daemon --register-vcam still holds; rest unchanged" }
+verified = { hash = "b3:18ae317be15aa296", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via R-UNSAFE-001 (adds jstream-browser) and the crate map; vcam text unaffected" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the

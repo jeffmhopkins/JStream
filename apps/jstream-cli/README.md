@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f2f2278743d2e4c4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed: the item.move cycle golden now expects the mock's cycle path; error format (error: <message> (<code>)) and exit code 17 unchanged" }
+verified = { hash = "b3:3ae2c886b0075e0a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 after merging main: stale via crate-map only (plugin-proto row, browser rows); CLI text unaffected" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
