@@ -116,8 +116,8 @@ impl OAuthClient {
     /// finish it with. `redirect_uri` is the loopback listener's
     /// ([`LoopbackRedirect::redirect_uri`](crate::LoopbackRedirect::redirect_uri)).
     ///
-    /// Google doesn't support incremental authorization for installed apps, so to add
-    /// [`Scope::Manage`] later, sign in again asking for every scope wanted.
+    /// JStream asks for [`Scope::Manage`] once (ADR-0041 §4); Google has no incremental
+    /// authorization for installed apps, so a later scope means a new sign-in.
     ///
     /// # Errors
     /// [`YoutubeError::InvalidArgument`] when `scopes` is empty;

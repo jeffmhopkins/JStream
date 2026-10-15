@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:7804c34645e05b0c", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ADR-0041, whose only change is text (review N2): the Context bullet is rewrapped and the follow-on list names jstream-media and ARCH's protocol section; the decision is unchanged, so this section holds" }
+verified = { hash = "b3:a3aadf552505069e", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Covered src/oauth.rs changed: OAuthClient::authorize's rustdoc now says JStream asks for Scope::Manage once (ADR-0041 §4), matching the Scopes bullet (review N3); no behavior change" }
 -->
 
 Layer-2 client for Google sign-in and the
