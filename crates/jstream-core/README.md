@@ -141,7 +141,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:7283b1c58d558176", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#207 bounded output.stop) into A6: took main's stamp; re-read; #207's STOP_DRAIN/OUTPUT_GRACE stop prose kept, A6's audit-log and collection-file lines (daemon injects AuditFile in its log dir, --collection turns the file on) and Not yet (app asset folder only) hold" }
+verified = { hash = "b3:926608b7f1ec6c6d", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (A6 #232 daemon --collection and audit file) into B9 at 0.15: took main's stamp, re-read; A6's audit-log and collection-file lines hold, B9 changes no core behavior" }
 -->
 
 ### Engine and sessions
