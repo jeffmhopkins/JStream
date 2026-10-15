@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:0bf7d4ccf2380899", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: re-read; run.rs gains the encoder suffix on output status; contents bullets hold" }
+verified = { hash = "b3:a3db2c72a9fa1c29", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: re-read; contents hold" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:c20de662638bfbf9", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: edit forms now say encoder edits need a JSON form the CLI lacks; output status line documents the own/shared encoder suffix, matching run.rs and its goldens" }
+verified = { hash = "b3:0ec9d9e6a5f7f132", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: Edits bullet now names both 0.11/0.12 edits and encoder edits as not in the CLI; output status line keeps the encoder suffix after main's geometry text" }
 -->
 
 ```sh
@@ -105,7 +105,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
   and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
-  default encoder (MCP and the WebSocket API take them). Several edits on one line go as **one atomic batch**: one new
+  default encoder (MCP and the WebSocket API take them). Protocol 0.11's `canvas.set_size`,
+  `item.set_geometry` and `item.add`'s `geometry`
+  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
+  yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
+  the placement edits' optional `scene_id` are not in the CLI either. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -126,7 +130,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
-  the `state.changed` event it causes. With `--json`, each result is one line of JSON
+  the `state.changed` event it causes; an event an undo or redo caused ends with
+  `undo` or `redo`. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
   protocol version doesn't know are skipped, as the protocol asks.
@@ -134,9 +139,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   sources with their kind in the `source.create` spelling (`builtin:webcam`,
   `scene:main`); items bottom first, with `VISIBLE`, `POSITION` (`x,y`), `SCALE`,
   `ROTATION` and `CROP` (`left,top,right,bottom`) in the argument order of the edits
-  that set them; outputs with their `KIND` (`rtmp`) and `TARGET` (the server URL, as
-  `output.create` takes it). `state get` prints the sources, then each scene in display
-  order with its items, then the outputs. `output status` prints
+  that set them; for an item placed with a geometry, those columns show the
+  protocol's deprecated transform view of it, and only `--json` shows its `geometry`
+  and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
+  server URL, as `output.create` takes it). `state get` prints the sources, then each
+  scene in display order with its items, then the outputs. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
@@ -202,14 +209,14 @@ for example:
 | 17 | `invalid_argument` |
 | 18 | `action_failed` |
 | 19 | `internal` |
-| 20 | an error code this CLI doesn't know (from a newer engine) |
+| 20 | an error code this CLI doesn't know (from a newer engine), and `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send |
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:24a606109aba5223", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: re-read; parser, connector, mock and MCP proxy design unchanged; control design change is mock encoder checks only" }
+verified = { hash = "b3:cb1dabf06c3c3056", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: re-read; design bullets hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

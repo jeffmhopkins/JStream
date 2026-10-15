@@ -521,10 +521,14 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
             rev,
             client_id,
             request_id,
+            cause,
         } => {
             write!(out, "state.changed rev {rev} by {client_id}")?;
             if let Some(request_id) = request_id {
                 write!(out, " ({request_id})")?;
+            }
+            if let Some(cause) = cause {
+                write!(out, " {cause}")?;
             }
             writeln!(out)?;
         }

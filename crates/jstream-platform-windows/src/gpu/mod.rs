@@ -3,15 +3,21 @@
 //! targets shared between them, and the shared fence that orders their use. Ported from
 //! spike S1, which proved each piece on real hardware.
 //!
-//! Fence values: every [`FrameSync::stage`] (and, once the encoders and virtual camera
-//! take GPU frames, every D3D11-side release) takes the next value of one counter per
-//! device, so values only increase. A shared texture remembers the value that last
-//! released it to the GPU (`released`) and the value the GPU's last write signals
-//! (`written`).
+//! Fence values: a fence has one signalling queue, so its values only increase. (Two
+//! queues signalling one counter's values could complete out of order and move the fence
+//! back, letting a wait for a value pass before its work is done.)
+//! - The context's fence is signalled only by the wgpu queue: every [`FrameSync::stage`]
+//!   signals the next value of one counter per device. A shared texture remembers the
+//!   value that last released it to the GPU (`released`) and the value the GPU's last use
+//!   signals (`written`, or `released` for a capture slot).
+//! - Each capture stream has its own fence, which D3D11 signals after each copy into a
+//!   slot (`capture`). The encoders and virtual camera, once they take GPU frames, will
+//!   signal their releases on fences of their own in the same way.
 //!
-//! Not yet: the D3D11 consumers. Capture and the encoders need the context's D3D11 device,
-//! and how they get it is a trait-shape decision (see the crate README's open questions).
+//! Capture reaches the context through `WgcCapture::on_gpu`; the trait shapes stay as
+//! they are (the crate README's open questions). Not yet: the encoders' D3D11 side.
 
+mod capture;
 mod d3d;
 
 use std::fmt;
@@ -32,6 +38,7 @@ use windows::Win32::Graphics::Dxgi::{IDXGIAdapter, IDXGIAdapter1};
 use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTOPRIMARY, MonitorFromPoint};
 use windows::core::Interface;
 
+pub(crate) use self::capture::{CaptureGpu, CaptureRing};
 pub(crate) use self::d3d::adapter_drives_monitor;
 use self::d3d::{D3D11, SharedFence, SharedTexture};
 use crate::com::OsResult;
@@ -65,8 +72,9 @@ pub(crate) struct Shared {
     /// `wgpu::Queue`s doesn't work: wgpu-core ids restart in every `Instance`, so the
     /// first queue of two instances compares equal.)
     raw_queue: ID3D12CommandQueue,
-    /// Held, not used: keeps the driver loaded until the fields above are released.
-    _device: wgpu::Device,
+    /// Keeps the driver loaded until the fields above are released, and wraps capture's
+    /// shared textures.
+    device: wgpu::Device,
 }
 
 // SAFETY: the D3D12 device and fence are free-threaded. The D3D11 device is created
@@ -80,6 +88,56 @@ impl Shared {
     /// The next fence value. Values only increase, from 1.
     fn next_value(&self) -> u64 {
         self.last_value.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    /// Wraps `texture`'s D3D12 side as a `wgpu::Texture` on this device. `format` must
+    /// be the texture's own format and `size` its size; it has one mip and one sample.
+    fn import(
+        &self,
+        texture: &SharedTexture,
+        format: wgpu::TextureFormat,
+        (width, height): (u32, u32),
+        usage: wgpu::TextureUsages,
+        label: &str,
+    ) -> wgpu::Texture {
+        let extent = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        // SAFETY: the resource is a live 2D texture with one mip and one sample, of
+        // exactly this size and format (the callers' contract), created on the D3D11
+        // side and opened on this device's own ID3D12Device.
+        let hal_texture = unsafe {
+            wgpu::hal::dx12::Device::texture_from_raw(
+                texture.d3d12.clone(),
+                format,
+                wgpu::TextureDimension::D2,
+                extent,
+                1,
+                1,
+            )
+        };
+        // SAFETY: the hal texture matches the descriptor below, belongs to this device,
+        // and is in COMMON state, which wgpu calls `PRESENT` on D3D12. Its contents are
+        // undefined until written: render writes an encode target before reading it, and
+        // capture copies a frame into its slot before handing it out.
+        unsafe {
+            self.device.create_texture_from_hal::<Dx12>(
+                hal_texture,
+                &wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: extent,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage,
+                    view_formats: &[],
+                },
+                wgpu::TextureUses::PRESENT,
+            )
+        }
     }
 }
 
@@ -195,7 +253,7 @@ impl GpuInterop for WindowsGpu {
             d3d12,
             last_value: AtomicU64::new(0),
             raw_queue,
-            _device: device.clone(),
+            device: device.clone(),
         });
         Ok(GpuContext::new(
             adapter,
@@ -230,45 +288,15 @@ impl GpuInterop for WindowsGpu {
             DXGI_FORMAT_NV12,
             D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE,
         )?;
-        let extent = wgpu::Extent3d {
-            width: w,
-            height: h,
-            depth_or_array_layers: 1,
-        };
-        // SAFETY: the resource is a live 2D NV12 texture with one mip and one sample, of
-        // exactly this size, created on the D3D11 side and opened on this device's own
-        // ID3D12Device.
-        let hal_texture = unsafe {
-            wgpu::hal::dx12::Device::texture_from_raw(
-                texture.d3d12.clone(),
-                wgpu::TextureFormat::NV12,
-                wgpu::TextureDimension::D2,
-                extent,
-                1,
-                1,
-            )
-        };
-        // SAFETY: the hal texture matches the descriptor below, belongs to this device,
-        // and is in COMMON state, which wgpu calls `PRESENT` on D3D12. Its contents are
-        // undefined until the engine writes them, which it does before any read.
-        let wgpu_texture = unsafe {
-            context.device().create_texture_from_hal::<Dx12>(
-                hal_texture,
-                &wgpu::TextureDescriptor {
-                    label: Some("jstream encode target (NV12, shared)"),
-                    size: extent,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::NV12,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::COPY_SRC,
-                    view_formats: &[],
-                },
-                wgpu::TextureUses::PRESENT,
-            )
-        };
+        let wgpu_texture = shared.import(
+            &texture,
+            wgpu::TextureFormat::NV12,
+            (w, h),
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
+            "jstream encode target (NV12, shared)",
+        );
         let info = VideoFrameInfo {
             size,
             format: PixelFormat::Nv12,
@@ -288,7 +316,8 @@ impl GpuInterop for WindowsGpu {
 /// The fence bookkeeping for one shared texture. The GPU side ([`FrameSync::stage`])
 /// waits for `released` and signals a new `written`. The D3D11 side (the encoders and
 /// virtual camera, when they take GPU frames) will wait for `written` and signal a new
-/// `released`.
+/// `released` on a fence of its own, which `stage` then waits on (module docs, fence
+/// values).
 pub(crate) struct SlotSync {
     // The texture's raw objects drop before `shared`, which holds the wgpu device clone.
     // Held so the D3D11 side can read the texture, and so the share stays open.

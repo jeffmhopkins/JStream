@@ -1,7 +1,7 @@
-//! The collection state: sources, scenes and the items that place sources in scenes, the
-//! outputs, and the encoder profiles they use.
+//! The collection state: the canvas, sources, scenes and the items that place sources in
+//! scenes, the outputs, and the encoder profiles they use.
 //!
-//! Docs: docs/ARCHITECTURE.md#data-model
+//! Docs: docs/ARCHITECTURE.md#data-model, docs/adr/0022-item-transform-and-canvas.md
 //!
 //! Everything here is read-only from outside the crate. The only way to change it is
 //! [`Graph::apply`](crate::Graph::apply), which keeps the invariants below:
@@ -15,6 +15,10 @@
 //! - Every scene and source that a settings value refers to exists.
 //! - The dependency edges (items placing sources, `scene` sources showing scenes, and
 //!   scene and source references in settings) have no cycle.
+//! - The canvas is at least 1×1 and at most [`MAX_CANVAS_EDGE`] on each side.
+//! - Every item's placement is a legacy transform or a valid geometry: positive size, a
+//!   positive perspective if any, and (until the compositor draws 3D) neutral tilt, turn,
+//!   depth and perspective.
 //! - Every RTMP output's URL is a valid `rtmp://` or `rtmps://` server URL that carries
 //!   no credential. Stream keys are never here (R-SEC-001): they live in the OS
 //!   credential store, outside the collection.
@@ -25,8 +29,9 @@
 //! `effects[]`, the full 3D transform) don't break callers.
 
 use jstream_protocol::{
-    Crop, EncoderProfile, EncoderProfileId, ItemId, ItemTransform, KindDescriptor, OutputId,
-    OutputKind, Rev, SceneId, Settings, SourceId, SourceKind,
+    Canvas, Crop, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
+    KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole, Settings,
+    SourceId, SourceKind,
 };
 use std::collections::BTreeMap;
 
@@ -79,9 +84,14 @@ impl Graph {
     }
 }
 
+/// The largest canvas side this engine accepts, in pixels. ADR-0022 asks for at least
+/// 7680×4320; each side may be up to this, in either orientation.
+pub const MAX_CANVAS_EDGE: u32 = 8192;
+
 /// The collection state without its revision: what undo restores exactly.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct State {
+    pub(crate) canvas: Canvas,
     pub(crate) sources: BTreeMap<SourceId, Source>,
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
@@ -89,6 +99,11 @@ pub struct State {
 }
 
 impl State {
+    /// The canvas every scene is laid out on.
+    pub fn canvas(&self) -> Canvas {
+        self.canvas
+    }
+
     /// Every source, ordered by ID. Sources have no display order of their own.
     pub fn sources(&self) -> impl ExactSizeIterator<Item = &Source> {
         self.sources.values()
@@ -198,11 +213,12 @@ impl Source {
     }
 }
 
-/// A scene: a stack of items.
+/// A scene: a stack of items. A group is a scene too, with the role `group`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
     pub(crate) id: SceneId,
     pub(crate) name: String,
+    pub(crate) role: SceneRole,
     pub(crate) items: Vec<Item>,
 }
 
@@ -217,9 +233,35 @@ impl Scene {
         &self.name
     }
 
+    /// What it is for. The role changes no engine behaviour.
+    pub fn role(&self) -> SceneRole {
+        self.role
+    }
+
     /// Its items in stacking order: the first is at the bottom.
     pub fn items(&self) -> &[Item] {
         &self.items
+    }
+}
+
+/// Where an item sits, in one of ADR-0022's two forms. Only an edit changes the form.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum Placement {
+    /// A protocol 0.3 transform exactly as written, evaluated against the source's
+    /// current size whenever it is drawn.
+    Legacy(ItemTransform),
+    /// A box on the canvas, which needs no source size.
+    Geometry(ItemGeometry),
+}
+
+impl Placement {
+    /// Which form this is, as `ItemInfo.placement` reports it.
+    pub fn form(&self) -> PlacementForm {
+        match self {
+            Placement::Legacy(_) => PlacementForm::Legacy,
+            Placement::Geometry(_) => PlacementForm::Geometry,
+        }
     }
 }
 
@@ -228,7 +270,7 @@ impl Scene {
 pub struct Item {
     pub(crate) id: ItemId,
     pub(crate) source_id: SourceId,
-    pub(crate) transform: ItemTransform,
+    pub(crate) placement: Placement,
     pub(crate) crop: Crop,
     pub(crate) visible: bool,
 }
@@ -244,9 +286,9 @@ impl Item {
         &self.source_id
     }
 
-    /// Where it sits in its scene.
-    pub fn transform(&self) -> &ItemTransform {
-        &self.transform
+    /// Where it sits in its scene, in its stored form.
+    pub fn placement(&self) -> &Placement {
+        &self.placement
     }
 
     /// How much of the source it cuts off.

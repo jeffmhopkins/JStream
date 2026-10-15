@@ -5,7 +5,7 @@
 //! Reads never change the graph. Each collection result carries the revision it was
 //! read at; kinds are not collection state, so their results carry none.
 
-use crate::model::{Encoder, Graph, Item, Output, Scene, Source};
+use crate::model::{Encoder, Graph, Item, Output, Placement, Scene, Source};
 use jstream_protocol::{
     EncoderProfileInfo, EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query,
     QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
@@ -65,6 +65,7 @@ impl Graph {
                 .map(|scene| SceneSummary {
                     scene_id: scene.id.clone(),
                     name: scene.name.clone(),
+                    role: scene.role,
                     item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                 })
                 .collect(),
@@ -112,11 +113,12 @@ impl Graph {
         }
     }
 
-    /// The `state.get` result: every source by ID, every scene with its items in
-    /// display order, and every output and encoder profile by ID.
+    /// The `state.get` result: the canvas, every source by ID, every scene with its items
+    /// in display order, and every output and encoder profile by ID.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
+            canvas: self.state.canvas(),
             sources: self.state.sources().map(Source::to_info).collect(),
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
@@ -165,6 +167,7 @@ impl Scene {
         SceneInfo {
             scene_id: self.id.clone(),
             name: self.name.clone(),
+            role: self.role,
             items: self.items.iter().map(Item::to_info).collect(),
         }
     }
@@ -172,14 +175,39 @@ impl Scene {
 
 impl Item {
     /// This item as query results report it.
+    ///
+    /// A geometry item's deprecated `transform` is the view computed from its geometry
+    /// alone (ADR-0022), so it changes only with an edit.
     pub fn to_info(&self) -> ItemInfo {
+        let (transform, geometry) = match self.placement {
+            Placement::Legacy(transform) => (transform, None),
+            Placement::Geometry(geometry) => (
+                // `item.add` and `item.set_geometry` reject a geometry whose corners are
+                // not finite, so the fallback is never taken.
+                geometry
+                    .transform_view()
+                    .unwrap_or_else(|_| centre_view(geometry)),
+                Some(geometry),
+            ),
+        };
         ItemInfo {
             item_id: self.id.clone(),
             source_id: self.source_id.clone(),
-            transform: self.transform,
+            placement: self.placement.form(),
+            transform,
+            geometry,
             crop: self.crop,
             visible: self.visible,
         }
+    }
+}
+
+/// A view at the box's centre, for a geometry whose corner is not finite.
+fn centre_view(geometry: jstream_protocol::ItemGeometry) -> jstream_protocol::ItemTransform {
+    jstream_protocol::ItemTransform {
+        position: geometry.center,
+        rotation_deg: geometry.rotation_deg,
+        ..jstream_protocol::ItemTransform::IDENTITY
     }
 }
 
@@ -241,6 +269,7 @@ mod tests {
             graph.state_get(),
             QueryResult::StateGet {
                 rev: Rev(0),
+                canvas: jstream_protocol::Canvas::DEFAULT,
                 sources: vec![],
                 scenes: vec![],
                 outputs: vec![],

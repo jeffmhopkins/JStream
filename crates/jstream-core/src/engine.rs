@@ -7,8 +7,10 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::audit::{self, Audit, AuditSink};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
+use crate::history::{History, Touched};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
@@ -21,10 +23,11 @@ use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
-    EncoderSessionInfo, EntityKind, Event, IdempotencyKey, OutputId, OutputKind, OutputState,
-    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, SecretString, SourceId,
+    EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
+    OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    SecretString, SourceId,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
@@ -68,6 +71,8 @@ struct Shared {
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
     /// only to clone the handle: the store is never called under the collection lock.
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
+    /// Where each executed batch, undo, redo and action is recorded, if the host gave a sink.
+    audit: Audit,
 }
 
 impl Default for Engine {
@@ -81,6 +86,7 @@ impl Default for Engine {
                 }),
                 snapshots: SnapshotWorker::default(),
                 keys: Mutex::new(None),
+                audit: Audit::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -139,6 +145,15 @@ impl Engine {
     #[must_use]
     pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
         *lock(&self.shared.keys) = Some(store);
+        self
+    }
+
+    /// Records every batch, undo, redo and action this engine executes in `sink`, after
+    /// the call and with no engine lock held (see [`AuditSink`]). Without a sink nothing
+    /// is recorded. Every clone of the engine shares it.
+    #[must_use]
+    pub fn with_audit(self, sink: Arc<dyn AuditSink>) -> Self {
+        self.shared.audit.set(sink);
         self
     }
 
@@ -318,12 +333,57 @@ impl Engine {
         lock(&self.shared.state).graph.rev()
     }
 
-    /// Assigns the next client ID and returns it with the current `rev`.
-    pub(crate) fn register_client(&self) -> (ClientId, Rev) {
+    /// Sets how many undo steps each client keeps (100 by default). The oldest steps
+    /// are dropped first, and 0 keeps none.
+    #[must_use]
+    pub fn with_history_limit(self, limit: usize) -> Self {
+        lock(&self.shared.state).history.set_limit(limit);
+        self
+    }
+
+    /// Drops `client_id`'s undo and redo history: its session ended (ADR-0032).
+    pub(crate) fn forget_client(&self, client_id: &ClientId) {
+        lock(&self.shared.state).history.forget(client_id);
+    }
+
+    /// How many steps `client_id` can undo and redo.
+    #[cfg(test)]
+    pub(crate) fn history_depths(&self, client_id: &ClientId) -> (u32, u32) {
+        lock(&self.shared.state).history.depths(client_id)
+    }
+
+    /// Assigns the next client ID, records `client_name` for it (the name the audit log
+    /// shows), and returns the ID with the current `rev`.
+    pub(crate) fn register_client(&self, client_name: &str) -> (ClientId, Rev) {
         let mut state = lock(&self.shared.state);
         state.clients += 1;
         let client_id = ClientId::new(format!("client_{}", state.clients));
+        state
+            .client_names
+            .insert(client_id.clone(), audit::client_name(client_name));
         (client_id, state.graph.rev())
+    }
+
+    /// Records `client_name` as the name of `client_id`, which sent `hello` again, and
+    /// returns the current `rev`.
+    pub(crate) fn rename_client(&self, client_id: &ClientId, client_name: &str) -> Rev {
+        let mut state = lock(&self.shared.state);
+        state
+            .client_names
+            .insert(client_id.clone(), audit::client_name(client_name));
+        state.graph.rev()
+    }
+
+    /// What an audit entry needs before its call runs: the current `rev` and the
+    /// client's name from its latest `hello`.
+    fn audit_context(&self, client_id: &ClientId) -> (Rev, String) {
+        let state = lock(&self.shared.state);
+        let name = state
+            .client_names
+            .get(client_id)
+            .cloned()
+            .unwrap_or_default();
+        (state.graph.rev(), name)
     }
 
     /// Opens an event subscription: the stream, and the weak handle its session keeps
@@ -365,6 +425,10 @@ impl Engine {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
         }
+        let audit = self.shared.audit.sink_for(&call).map(|sink| {
+            let (rev, client_name) = self.audit_context(client_id);
+            (sink, audit::Pending::new(&call, rev, client_name))
+        });
         let output = match &call {
             Call::Action {
                 action:
@@ -399,6 +463,9 @@ impl Engine {
         };
         match (&result, output) {
             (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
+            (Ok(CallResult::History { rev, step_rev, .. }), _) => {
+                tracing::debug!(rev = %rev, step_rev = %step_rev, "history step applied");
+            }
             (Ok(_), Some(output_id)) => {
                 tracing::info!(output_id = %output_id, "output action done");
             }
@@ -407,6 +474,9 @@ impl Engine {
                 tracing::info!(output_id = %output_id, code = error.code(), "output action failed");
             }
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
+        }
+        if let Some((sink, pending)) = audit {
+            sink.record(pending.finish(client_id, request_id, &result));
         }
         Executed::Ready(result)
     }
@@ -1217,6 +1287,7 @@ fn command_name(call: &Call) -> &'static str {
         Call::Batch(_) => "batch",
         Call::Action { action } => action.name(),
         Call::Query { query } => query.name(),
+        Call::History(history) => history.op.name(),
         _ => "unknown",
     }
 }
@@ -1227,12 +1298,17 @@ struct State {
     /// The collection and its `rev`. Only `Graph::apply` changes it.
     graph: Graph,
     outputs: Outputs,
-    /// The `rev` each batch applied with an idempotency key produced, per client.
-    /// Kept for the engine's lifetime: how long to remember keys is protocol open
-    /// question 6.
-    applied: BTreeMap<(ClientId, IdempotencyKey), Rev>,
+    /// The result of each batch, undo or redo applied with an idempotency key, per
+    /// client: batches and history calls share a client's keys (ADR-0032). Kept for the
+    /// engine's lifetime: how long to remember keys is protocol open question 6.
+    applied: BTreeMap<(ClientId, IdempotencyKey), CallResult>,
+    /// Every client's undo and redo stacks.
+    history: History,
     /// How many sessions have completed `hello`; numbers the client IDs.
     clients: u64,
+    /// Each client's name from its latest `hello`, for the audit log. Kept for the
+    /// engine's lifetime, like the client IDs.
+    client_names: BTreeMap<ClientId, String>,
     subscribers: Subscribers,
     /// The latest CPU frame of each source, keyed by id. Runtime state: not part of
     /// `rev`. A snapshot draws an item from this when the source is not itself a scene.
@@ -1254,17 +1330,19 @@ impl State {
             Call::Batch(batch) => self.batch(client_id, request_id, &batch, wake),
             Call::Action { action } => self.action(action, wake),
             Call::Query { query } => self.query(&query),
+            Call::History(history) => self.history(client_id, request_id, &history, wake),
             _ => Err(not_implemented("this kind of call")),
         }
     }
 
-    /// Applies `batch` atomically through `Graph::apply_batch`, which checks
+    /// Applies `batch` atomically through `Graph::apply_with_running`, which checks
     /// `expected_rev` (before rejecting an empty batch), applies every edit or none, and
-    /// bumps `rev` by exactly one.
+    /// bumps `rev` by exactly one. The batch becomes one step of the client's undo
+    /// history, holding the inverse the graph returned, and clears what it could redo.
     ///
     /// A batch whose idempotency key this client already used is not applied again: it
-    /// gets the `rev` it produced the first time, and emits nothing. That check comes
-    /// first, so a retry succeeds even after `rev` moved on.
+    /// gets the result of the first call with that key, and emits nothing. That check
+    /// comes first, so a retry succeeds even after `rev` moved on.
     fn batch(
         &mut self,
         client_id: &ClientId,
@@ -1276,23 +1354,148 @@ impl State {
             .idempotency_key
             .as_ref()
             .map(|key| (client_id.clone(), key.clone()));
-        if let Some(rev) = keyed.as_ref().and_then(|keyed| self.applied.get(keyed)) {
-            return Ok(CallResult::Batch { rev: *rev });
+        if let Some(result) = keyed.as_ref().and_then(|keyed| self.applied.get(keyed)) {
+            return Ok(result.clone());
         }
-        // The inverse is dropped: per-client undo needs undo requests in the protocol
-        // first (protocol open question 4). A running output can't be deleted.
+        // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
             &batch.edits,
             batch.expected_rev,
             &self.outputs.running(),
         )?;
-        self.outputs.sync(self.graph.state());
+        self.history
+            .record_batch(client_id, applied.rev, &batch.edits, applied.inverse.edits);
+        let result = CallResult::Batch { rev: applied.rev };
         if let Some(keyed) = keyed {
-            self.applied.insert(keyed, applied.rev);
+            self.applied.insert(keyed, result.clone());
         }
-        // A deleted source's stored frame goes with it, unless the same batch made a
-        // new source under that id.
-        for edit in &batch.edits {
+        self.changed(client_id, request_id, &batch.edits, applied.rev, None, wake);
+        Ok(result)
+    }
+
+    /// Undoes or redoes one of the client's own steps (ADR-0032): applies the edits its
+    /// history holds as one batch, which bumps `rev` by one, and moves the step to the
+    /// other stack. No new step is made.
+    ///
+    /// In order: a used idempotency key gets its first result; a stale `expected_rev`
+    /// fails with `rev_conflict`; an empty stack fails with `history_empty`. A step
+    /// whose edits, applied now, would touch what another client's later batch touched
+    /// (a scene's undone `scene.create` touches the items the scene holds now), or whose
+    /// edits no longer apply after one,
+    /// fails with `undo_conflict` and is dropped, so the next undo reaches the step
+    /// before it. Edits that fail only because an output is running (an output the step
+    /// would delete) fail with the graph's error, and the step stays: stop the output
+    /// and retry.
+    fn history(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        call: &HistoryCall,
+        wake: &mut Vec<Waker>,
+    ) -> Result<CallResult, ProtocolError> {
+        let keyed = call
+            .idempotency_key
+            .as_ref()
+            .map(|key| (client_id.clone(), key.clone()));
+        if let Some(result) = keyed.as_ref().and_then(|keyed| self.applied.get(keyed)) {
+            return Ok(result.clone());
+        }
+        let current = self.graph.rev();
+        if let Some(expected) = call.expected_rev
+            && expected != current
+        {
+            return Err(ProtocolError::RevConflict { expected, current });
+        }
+        let direction = call.op.direction();
+        let step = self
+            .history
+            .take(client_id, direction)
+            .ok_or(ProtocolError::HistoryEmpty { direction })?;
+        let step_rev = step.step_rev;
+        let conflict = move |(client_id, rev)| ProtocolError::UndoConflict {
+            step_rev,
+            client_id,
+            rev,
+        };
+        // Applied to a copy first: what the edits touch now decides the conflict, and
+        // the state changes only once there is none.
+        let running = self.outputs.running();
+        let mut next = self.graph.clone();
+        let applied = match next.apply_with_running(&step.edits, None, &running) {
+            Ok(applied) => applied,
+            Err(error) => {
+                // Only a running output in the way: keep the step for a retry.
+                let blocked_by_output = !running.is_empty()
+                    && self
+                        .graph
+                        .clone()
+                        .apply_with_running(&step.edits, None, &BTreeSet::new())
+                        .is_ok();
+                let found = self
+                    .history
+                    .conflict(client_id, &step, None)
+                    .or_else(|| self.history.latest_other(client_id, &step));
+                let error = match found {
+                    Some(found) if !blocked_by_output => conflict(found),
+                    _ => {
+                        self.history.put_back(client_id, direction, step);
+                        return Err(error);
+                    }
+                };
+                self.history.dropped();
+                return Err(error);
+            }
+        };
+        let now = Touched::of(&step.edits, &applied.inverse.edits);
+        if let Some(found) = self.history.conflict(client_id, &step, Some(&now)) {
+            let error = conflict(found);
+            self.history.dropped();
+            return Err(error);
+        }
+        self.graph = next;
+        let edits = step.edits.clone();
+        self.history.moved(
+            client_id,
+            direction,
+            step,
+            applied.rev,
+            applied.inverse.edits,
+        );
+        let (undo_depth, redo_depth) = self.history.depths(client_id);
+        let result = CallResult::History {
+            rev: applied.rev,
+            step_rev,
+            undo_depth,
+            redo_depth,
+        };
+        if let Some(keyed) = keyed {
+            self.applied.insert(keyed, result.clone());
+        }
+        self.changed(
+            client_id,
+            request_id,
+            &edits,
+            applied.rev,
+            Some(direction),
+            wake,
+        );
+        Ok(result)
+    }
+
+    /// What follows every applied batch, undo and redo: the outputs follow the
+    /// collection, a deleted source's stored frame goes (unless the same edits made a
+    /// new source under its id), and `state.changed` is emitted.
+    fn changed(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        edits: &[Edit],
+        rev: Rev,
+        cause: Option<HistoryDirection>,
+        wake: &mut Vec<Waker>,
+    ) {
+        self.outputs.sync(self.graph.state());
+        for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
             {
@@ -1301,13 +1504,13 @@ impl State {
         }
         self.subscribers.emit(
             &Event::StateChanged {
-                rev: applied.rev,
+                rev,
                 client_id: client_id.clone(),
                 request_id: Some(request_id.clone()),
+                cause,
             },
             wake,
         );
-        Ok(CallResult::Batch { rev: applied.rev })
     }
 
     fn action(

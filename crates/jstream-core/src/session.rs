@@ -64,9 +64,12 @@ impl Control for InProcessControl {
         let result = if PROTOCOL_VERSION.can_serve(hello.protocol) {
             let mut session = lock(&self.client_id);
             let (client_id, rev) = match &*session {
-                Some(client_id) => (client_id.clone(), self.engine.rev()),
+                Some(client_id) => (
+                    client_id.clone(),
+                    self.engine.rename_client(client_id, &hello.client_name),
+                ),
                 None => {
-                    let (client_id, rev) = self.engine.register_client();
+                    let (client_id, rev) = self.engine.register_client(&hello.client_name);
                     *session = Some(client_id.clone());
                     (client_id, rev)
                 }
@@ -150,6 +153,9 @@ impl Drop for InProcessControl {
     fn drop(&mut self) {
         let _entered = self.span.enter();
         tracing::debug!("session closed");
+        if let Some(client_id) = lock(&self.client_id).take() {
+            self.engine.forget_client(&client_id);
+        }
         let mine = std::mem::take(&mut *lock(&self.subscriptions));
         events::close(mine);
     }

@@ -98,7 +98,7 @@ pub struct OutputInfo {
     /// What it is and where it sends.
     pub kind: OutputKind,
     /// The encoder profile it uses (`output.set_encoder`). Absent means the engine's
-    /// default, as from a server older than 0.10.
+    /// default, as from a server older than 0.13.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encoder_profile: Option<EncoderProfileId>,
 }

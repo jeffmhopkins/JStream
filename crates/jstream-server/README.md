@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:d3afc9942048b8ef", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1 CI fix (macOS broken pipe in the 413 test): mcp.rs now refuses a body declared over 4 MiB from Content-Length; contents list unchanged" }
+verified = { hash = "b3:ae9bd9719a916622", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; server forwards history calls opaquely over WS and /mcp" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:42e97a749c23051a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: re-read; ARCH#protocol change adds encoder messages only, transport/admission/session design holds" }
+verified = { hash = "b3:a23fd156dad987eb", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: prose is main's; transport unchanged" }
 -->
 
 ### Listening and admission
