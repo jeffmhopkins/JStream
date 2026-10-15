@@ -37,6 +37,9 @@ impl Finite32 {
     }
 }
 
+// Never NaN, so equality is reflexive.
+impl Eq for Finite32 {}
+
 impl Default for Finite32 {
     fn default() -> Self {
         Finite32::ZERO
