@@ -42,7 +42,6 @@ advisory unless they ask not to be.
 ## What JStream promises
 <!-- @section
 depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002", "docs/RULES.md#R-SEC-003", "docs/RULES.md#R-SEC-004"]
-verified = { hash = "b3:ff6ba893ff824b19", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (e1e2a94) into pairing: main took protocol 0.18 for virtual_cam, so pairing ships as 0.19; re-read main's text beside this PR's pairing text and checked every pairing version mention says 0.19 and virtual_cam's stays 0.18; holds" }
 -->
 
 A report is in scope when it breaks one of these. The rules they cite are the authority.

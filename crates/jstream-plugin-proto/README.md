@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-plugin-proto/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-plugin-proto", "docs/adr/0035-clap-plugins-out-of-process.md#decision"]
-verified = { hash = "b3:f6958bb28f08c947", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: new crate; re-read every bullet against lib.rs, status.rs, ring.rs, params.rs and shared.rs: field list and writers, init/config/publish_ready/ready_latency, slot seqlock, SLOTS 8, MAX_BLOCK_FRAMES 2048, MAX_DEPTH 6, DEFAULT_DEPTH 2, first_useful, 256-event param rings with corrupt counts, trust checks, tests list" }
 -->
 
 Layer-0 contract between the engine's mixer and the out-of-process CLAP plugin host
