@@ -74,17 +74,19 @@ fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) ->
             silent: Arc::clone(silent),
         })
     });
-    serve(connector, configure, sessions, open, taken)
+    serve(connector, configure, sessions, open, taken, silent)
 }
 
 /// A server opening its sessions with `connector`, counting them in `sessions`,
-/// `open` and `taken` (see [`Harness`]).
+/// `open` and `taken`, with `silent` as its [`Harness`]'s flag (see [`Harness`]). The
+/// connector's sessions honour `silent` only if they are [`Tracked`].
 fn serve(
     connector: Connector,
     configure: impl FnOnce(&mut ServerConfig),
     sessions: Arc<AtomicUsize>,
     open: Arc<AtomicUsize>,
     taken: Arc<AtomicUsize>,
+    silent: Arc<AtomicBool>,
 ) -> Harness {
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -1878,7 +1880,8 @@ fn preview_frames_go_out_as_binary_messages() {
         })
     });
     let counter = || Arc::new(AtomicUsize::new(0));
-    let harness = serve(connector, |_| {}, counter(), counter(), counter());
+    let silent = Arc::new(AtomicBool::new(false));
+    let harness = serve(connector, |_| {}, counter(), counter(), counter(), silent);
     let (control, _) = harness.session();
     let mut frames = control.binary();
     // The server opened the session's channel when the handshake succeeded.

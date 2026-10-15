@@ -216,7 +216,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:3556c783961d4f89", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: MCP section names no timeout constants; still accurate after the hello bound" }
+stamp = { hash = "b3:028b0382eca63259", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: still 19 tools incl. preview (tests.rs:413), tools.snap 183139 bytes; #296 hello bound text is the wave's; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
 stamp = { hash = "b3:99ac70785f202198", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool list incl. preview matches tools.rs/tests (19 tools); tools.snap is 183139 bytes so 'about 183 KB' holds; preview.subscribe fails with action_failed over MCP" }
@@ -240,7 +240,7 @@ stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:e57559ad7b2a4fbc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: MCP section names no timeout constants; still accurate after the hello bound" }
+stamp = { hash = "b3:ecbeed415296fc75", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: still 19 tools incl. preview (tests.rs:413), tools.snap 183139 bytes; #296 hello bound text is the wave's; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -327,7 +327,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:11383ebdefba1cd2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Summary of envelope/edits/actions holds; asset-path rule detail lives in protocol README Design, unchanged here by #403" }
+stamp = { hash = "b3:6d25c1b9613fc1a7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: Binary streams bullet holds at 0.20 (wave still 0.19); #296's hello race leaves the frame path alone (binary() still opened only on Some(Ok(welcome)))" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:3cc940ee388748ab", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
@@ -399,7 +399,7 @@ stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:cd49bc260e000934", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: hello/welcome envelope text unaffected by the server-side deadline race" }
+stamp = { hash = "b3:c45a8315f65c47e0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: Binary streams bullet holds at 0.20 (wave still 0.19); #296's hello race leaves the frame path alone (binary() still opened only on Some(Ok(welcome)))" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
 stamp = { hash = "b3:c93c7afdc52f6566", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-server config/error/lib changes (zero-limit refusal): section summarises the wire protocol and doesn't state server limits; holds" }
@@ -423,10 +423,10 @@ stamp = { hash = "b3:05057d7979293830" }
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:e7d6a868ffe2691c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: hello/welcome envelope text unaffected by the server-side deadline race" }
+stamp = { hash = "b3:a9fff0d2d3f6ed96", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: Binary streams bullet holds at 0.20 (wave still 0.19); #296's hello race leaves the frame path alone (binary() still opened only on Some(Ok(welcome)))" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:57ef1003003326da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: hello/welcome envelope text unaffected by the server-side deadline race" }
+stamp = { hash = "b3:3c2fca618c361391", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: tests.rs passes the wave's silent flag through serve(), the harness helper the preview test uses; test-only, no behaviour the section describes changes; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -438,7 +438,7 @@ stamp = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDH
 stamp = { hash = "b3:0c6fb015c0446730", by = "agent:claude", note = "xtask/src/main.rs only changed the merge-main help line; the layout and the xtask command list still hold." }
 
 ["ARCH#shape"."body"]
-stamp = { hash = "b3:eeb5559c6d7f196e", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:db1313d94973cb92", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: diagram's 'binary frames: preview' holds; new desktop cef and browser-helper rows are the wave's" }
 
 ["ARCH#shape"."dep:docs/adr/0001-library-first-engine.md"]
 stamp = { hash = "b3:7a1c016d1f87fdaf" }
@@ -963,13 +963,13 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
+stamp = { hash = "b3:6788b6856ce10e8d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: wave's browser and live-audio text merged; Preview streams text unchanged and matches preview/mod.rs and engine.rs:2006; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): stale via control/protocol design and tests.rs; Preview streams text unchanged and matches preview/mod.rs; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:e7ba7a11964cf62d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Engine/session design does not state asset-path rules; #403's protocol Design change does not affect it" }
+stamp = { hash = "b3:1c5eb6a35e752860", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: wave's browser and live-audio text merged; Preview streams text unchanged and matches preview/mod.rs and engine.rs:2006; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
@@ -981,7 +981,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
-stamp = { hash = "b3:fd4246515e332976", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
+stamp = { hash = "b3:ff63f2bbd6a73180", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: wave's browser and live-audio text merged; Preview streams text unchanged and matches preview/mod.rs and engine.rs:2006; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:5e06b48ac662790f" }
@@ -1002,7 +1002,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:f49d5448404f02f8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
+stamp = { hash = "b3:d94c0be86ccbfc61", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: wave's browser and live-audio text merged; Preview streams text unchanged and matches preview/mod.rs and engine.rs:2006; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1077,7 +1077,7 @@ stamp = { hash = "b3:4d9a8a091c6dcdcc", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:3bb09282dddfc00c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
+stamp = { hash = "b3:624548dd5a3a2eb2", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: engine.rs gains with_browser and audio.sync(live.audio()); PreviewSource for Shared unchanged; Preview bullet holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1101,7 +1101,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:f49d5448404f02f8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
+stamp = { hash = "b3:d94c0be86ccbfc61", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: engine.rs gains with_browser and audio.sync(live.audio()); PreviewSource for Shared unchanged; Preview bullet holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1212,10 +1212,10 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:c11413c8c26df128", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via core#design, which now describes Engine::with_browser and a browser page's own audio (Recorded::Own); the daemon wires no with_browser and its Design names no audio sources or page audio; holds" }
+stamp = { hash = "b3:6788b6856ce10e8d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: stale via core/server design; daemon text is the wave's; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: daemon design does not describe handshake timing; dep change in server Design doesn't affect it" }
+stamp = { hash = "b3:06af0b68f544ac32", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: stale via core/server design; daemon text is the wave's; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:7ab4accbf98f6662" }
@@ -1521,7 +1521,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:e7ba7a11964cf62d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Graph purpose does not state asset-path rules; #403's protocol Design change does not affect it" }
+stamp = { hash = "b3:1c5eb6a35e752860", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: stale via protocol design (asset paths); graph text is the wave's; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1572,7 +1572,7 @@ stamp = { hash = "b3:534ac6c88886c8f2" }
 stamp = { hash = "b3:943bb9518712a4b5" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:314c5701cc782d41", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: 3 s hello bound for initialize and tool-call hello matches HELLO_TIMEOUT in server.rs; error-table row matches the disconnected retry message" }
+stamp = { hash = "b3:dbf1bed20626b135", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: tool table's preview row holds beside the wave's 3 s hello rows" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
 stamp = { hash = "b3:df852e7f05dbe37d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool table lists preview and says it only fails over MCP; matches tests.rs" }
@@ -1608,7 +1608,7 @@ stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:e57559ad7b2a4fbc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: 3 s hello bound for initialize and tool-call hello matches HELLO_TIMEOUT in server.rs; error-table row matches the disconnected retry message" }
+stamp = { hash = "b3:ecbeed415296fc75", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: tool table's preview row holds beside the wave's 3 s hello rows" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1638,7 +1638,7 @@ stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:e57559ad7b2a4fbc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: contents list still matches server.rs/tests.rs; HELLO_TIMEOUT rename adds no item" }
+stamp = { hash = "b3:ecbeed415296fc75", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: tests.rs adds #296's hello tests; preview tool and 19-tool count hold" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -2040,7 +2040,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:e7ba7a11964cf62d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Rejections bullet updated for #403: DOS device names refused as the last component under every root (relative CON.png, media/nul); rest of Design unaffected" }
+stamp = { hash = "b3:1c5eb6a35e752860", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: wave's DOS device name asset-path text merged beside the unchanged Binary streams section; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2307,7 +2307,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: Sessions bullet matches session.rs handshake() racing the engine's hello answer against handshake_timeout, closing 1008 no handshake in time" }
+stamp = { hash = "b3:06af0b68f544ac32", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: #296 races the engine's hello against the deadline; events and binary() are still opened only after Some(Ok(welcome)) (session.rs:184-186); Preview frames bullet holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): run drops events and binary before finish, which sends only the JSON outbox, then main's close handshake reads and drops what the client sends (binary included); Preview frames bullet and main's close text agree" }
@@ -2346,10 +2346,10 @@ stamp = { hash = "b3:05057d7979293830" }
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:e7d6a868ffe2691c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: Sessions bullet matches session.rs handshake() racing the engine's hello answer against handshake_timeout, closing 1008 no handshake in time" }
+stamp = { hash = "b3:a9fff0d2d3f6ed96", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: #296 races the engine's hello against the deadline; events and binary() are still opened only after Some(Ok(welcome)) (session.rs:184-186); Preview frames bullet holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:57ef1003003326da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: Sessions bullet matches session.rs handshake() racing the engine's hello answer against handshake_timeout, closing 1008 no handshake in time" }
+stamp = { hash = "b3:3c2fca618c361391", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: tests.rs passes the wave's silent flag through serve(), the harness helper the preview test uses; test-only, no behaviour the section describes changes; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2382,10 +2382,10 @@ stamp = { hash = "b3:05057d7979293830" }
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:e7d6a868ffe2691c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: purpose unchanged by the handshake() race in session.rs" }
+stamp = { hash = "b3:a9fff0d2d3f6ed96", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: session.rs gains handshake(); Preview frames bullet holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:57ef1003003326da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: purpose unchanged by the handshake() race in session.rs" }
+stamp = { hash = "b3:3c2fca618c361391", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: tests.rs passes the wave's silent flag through serve(), the harness helper the preview test uses; test-only, no behaviour the section describes changes; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -3063,7 +3063,7 @@ stamp = { hash = "b3:6dc625770a5edc67" }
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: go-live steps don't depend on the hello deadline wording" }
+stamp = { hash = "b3:06af0b68f544ac32", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: stale via server design; go-live steps use no preview; holds" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:c40bfcab7de124d7", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }
