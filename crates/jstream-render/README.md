@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:b01b13df96d22998", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding aspect_ratio under filter/aspect; filters are still described only by reference to #filters; holds" }
+verified = { hash = "b3:053ac98672bbf6f2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1a: re-read Purpose; the merge only moves FrameSync staging and narrows an allow in filter/; Purpose still points filters at #filters and the chain runtime at V0; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:d3c74e4d3d974241", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding aspect_ratio; it adds no thread, I/O or steady-path allocation beyond the harness's documented per-draw ones; holds" }
+verified = { hash = "b3:3f30ac3a78313d15", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1a: re-read Design against compositor.rs apply_filter (staging now after encode) and aspect_ratio; no new thread, I/O or steady-path allocation; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:f0929fcbb3cd1d54", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Replaced the V1a placeholder with aspect_ratio: settings, the output_size rule, 1:1 crop/pad, stretch kernels; harness text unchanged and still true" }
+verified = { hash = "b3:1950a37251dc34dd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1a: harness bullets now say FrameSync staged after recording and frame.time wraps daily, matching compositor.rs and prelude.wgsl; aspect_ratio text (settings, output_size, crop/pad 1:1, stretch kernels) unchanged and matches filter/aspect; holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -304,7 +304,10 @@ kinds.
   so a filter can change the source's reported size (aspect ratio, padding).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
-  that move or hold frames. An imported input's `FrameSync` is staged before the submit.
+  that move or hold frames. An imported input's `FrameSync` is staged once the pass has
+  recorded, right before the submit. The prelude's `frame.time` is that time wrapped
+  to a day (better than 10 ms in an `f32`) and jumps back once a day, so a kind that
+  moves with time computes its phase on the CPU in `f64` and passes it in its `Params`.
 - A pass records fullscreen draws through `Ctx::draw`. Every filter shader is appended
   to one prelude (`prelude.wgsl`) that defines the fullscreen triangle, the bindings
   (input, a linear clamp sampler, a `Frame` uniform with the input, output and aux
