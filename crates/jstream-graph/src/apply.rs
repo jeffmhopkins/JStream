@@ -8,11 +8,12 @@
 use crate::deps::{self, Node};
 use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
 use crate::target::{record_path_problem, rtmp_url_problem};
+use crate::touched::Touched;
 use jstream_protocol::{
-    Batch, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId, ItemTransform,
-    KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
-    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneRole, Settings, SourceId,
-    SourceKind,
+    Batch, Blocker, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId,
+    ItemTransform, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
+    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneRole, Settings,
+    SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -30,6 +31,9 @@ pub struct Applied {
     /// batch exactly. The caller (the engine's undo history) decides which `expected_rev`
     /// to send it with.
     pub inverse: Batch,
+    /// What the batch touched, from its edits and the inverse's: what the engine's undo
+    /// history checks other clients' later batches against (ADR-0032).
+    pub touched: Touched,
 }
 
 impl Graph {
@@ -85,10 +89,12 @@ impl Graph {
         }
         self.state = work;
         self.rev = rev;
+        let inverse: Vec<Edit> = undo.into_iter().rev().flatten().collect();
         Ok(Applied {
             rev,
+            touched: Touched::of(edits, &inverse),
             inverse: Batch {
-                edits: undo.into_iter().rev().flatten().collect(),
+                edits: inverse,
                 expected_rev: None,
                 idempotency_key: None,
             },
@@ -108,9 +114,23 @@ fn field(at: usize, name: &str) -> String {
 }
 
 pub(crate) fn invalid(at: usize, name: &str, reason: impl Into<String>) -> ProtocolError {
+    ProtocolError::invalid_argument(field(at, name), reason)
+}
+
+/// The `invalid_argument` that refuses deleting `target` while `blockers` refer to it.
+fn blocked(at: usize, name: &str, target: &Node, blockers: Vec<Blocker>) -> ProtocolError {
+    let list: Vec<String> = blockers
+        .iter()
+        .map(|b| format!("{} `{}` ({})", b.entity, b.id, b.field))
+        .collect();
     ProtocolError::InvalidArgument {
         field: field(at, name),
-        reason: reason.into(),
+        reason: format!(
+            "{target} is still referred to by {}; remove those references first, or send \
+             the batch `delete.plan` returns",
+            list.join(", ")
+        ),
+        blockers,
     }
 }
 
@@ -302,31 +322,10 @@ fn apply_edit(
         }
         Edit::SceneDelete { scene_id } => {
             let si = find_scene(state, scene_id)?;
-            let shown_by: Vec<&str> = state
-                .sources()
-                .filter(|s| matches!(&s.kind, SourceKind::Scene { scene_id: t } if t == scene_id))
-                .map(|s| s.id.as_str())
-                .collect();
-            if !shown_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "scene_id",
-                    format!(
-                        "scene `{scene_id}` is shown by scene sources {}; delete them first",
-                        shown_by.join(", ")
-                    ),
-                ));
-            }
-            let referred_by = deps::referrers(state, &Node::Scene(scene_id.clone()));
-            if !referred_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "scene_id",
-                    format!(
-                        "scene `{scene_id}` is referred to by {}; clear those settings first",
-                        referred_by.join(", ")
-                    ),
-                ));
+            let target = Node::Scene(scene_id.clone());
+            let blockers = deps::blockers(state, &target);
+            if !blockers.is_empty() {
+                return Err(blocked(at, "scene_id", &target, blockers));
             }
             let scene = state.scenes.remove(si);
             let mut inverse = vec![Edit::SceneCreate {
@@ -599,27 +598,10 @@ fn apply_edit(
             if state.source(source_id).is_none() {
                 return Err(not_found(EntityKind::Source, source_id.as_str()));
             }
-            let used_by: Vec<&str> = state.placements(source_id).map(|i| i.id.as_str()).collect();
-            if !used_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "source_id",
-                    format!(
-                        "source `{source_id}` is placed by items {}; remove them first",
-                        used_by.join(", ")
-                    ),
-                ));
-            }
-            let referred_by = deps::referrers(state, &Node::Source(source_id.clone()));
-            if !referred_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "source_id",
-                    format!(
-                        "source `{source_id}` is referred to by {}; clear those settings first",
-                        referred_by.join(", ")
-                    ),
-                ));
+            let target = Node::Source(source_id.clone());
+            let blockers = deps::blockers(state, &target);
+            if !blockers.is_empty() {
+                return Err(blocked(at, "source_id", &target, blockers));
             }
             let source = state
                 .sources

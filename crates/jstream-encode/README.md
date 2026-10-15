@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:b75cacc3281101ee", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: cascade; re-read, encode text is main's (F3 sessions), no source claims" }
+verified = { hash = "b3:090c72e341ddb35f", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221, G3c): re-read; no text change from either side, stale only through the cascade; holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

@@ -3,6 +3,7 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod audio;
 mod collection;
 mod history;
 mod sources;
@@ -720,10 +721,9 @@ fn the_engine_answers_like_the_mock() {
     /// Error messages may differ between implementations; codes and fields may not.
     fn comparable(result: Result<CallResult, ControlError>) -> Result<CallResult, ProtocolError> {
         result.map_err(|error| match error.protocol() {
-            Some(ProtocolError::InvalidArgument { field, .. }) => ProtocolError::InvalidArgument {
-                field: field.clone(),
-                reason: String::new(),
-            },
+            Some(ProtocolError::InvalidArgument { field, .. }) => {
+                ProtocolError::invalid_argument(field.clone(), String::new())
+            }
             Some(ProtocolError::ActionFailed { .. }) => ProtocolError::ActionFailed {
                 reason: String::new(),
             },
@@ -1215,6 +1215,17 @@ fn output_start_returns_after_a_panicking_teardown() {
     impl AudioIo for PanicAudio {
         fn devices(&self) -> Result<Vec<jstream_platform::AudioDeviceInfo>, PlatformError> {
             self.inner.devices()
+        }
+
+        fn processes(&self) -> Result<Vec<jstream_platform::AudioProcess>, PlatformError> {
+            self.inner.processes()
+        }
+
+        fn input_format(
+            &self,
+            target: &AudioInputTarget,
+        ) -> Result<jstream_media::AudioFormat, PlatformError> {
+            self.inner.input_format(target)
         }
 
         fn open_input(
@@ -2565,6 +2576,17 @@ mod cpu_pipeline {
             self.inner.devices()
         }
 
+        fn processes(&self) -> Result<Vec<jstream_platform::AudioProcess>, PlatformError> {
+            self.inner.processes()
+        }
+
+        fn input_format(
+            &self,
+            target: &AudioInputTarget,
+        ) -> Result<jstream_media::AudioFormat, PlatformError> {
+            self.inner.input_format(target)
+        }
+
         fn open_input(
             &self,
             target: &AudioInputTarget,
@@ -2707,6 +2729,17 @@ mod cpu_pipeline {
     impl AudioIo for PanicOnDropAudio {
         fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
             self.inner.devices()
+        }
+
+        fn processes(&self) -> Result<Vec<jstream_platform::AudioProcess>, PlatformError> {
+            self.inner.processes()
+        }
+
+        fn input_format(
+            &self,
+            target: &AudioInputTarget,
+        ) -> Result<jstream_media::AudioFormat, PlatformError> {
+            self.inner.input_format(target)
         }
 
         fn open_input(
@@ -3776,10 +3809,7 @@ fn stream_key_actions_report_without_naming_the_key() {
         let error = block_on(control.call(set_key("out_yt", key))).expect_err("bad key");
         assert_eq!(
             error.protocol(),
-            Some(&ProtocolError::InvalidArgument {
-                field: "key".into(),
-                reason: reason.into()
-            })
+            Some(&ProtocolError::invalid_argument("key", reason))
         );
         assert!(!leaks(&error), "{error:?}");
     }

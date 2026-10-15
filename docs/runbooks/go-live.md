@@ -17,7 +17,7 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:02c4c09d0297240c", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (A4 #234) into A6: re-read; prerequisites (exit 3, token file created then reused, key off the command line) unchanged by --collection and the audit log; holds" }
+verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +36,7 @@ verified = { hash = "b3:02c4c09d0297240c", by = "agent:claude@session_01YKRrREb5
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:48c2a10ffe3f2922", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#232 A6 --collection and audit) into B6-f: kept main's --collection clean-up note; steps use only output commands, unchanged here" }
+verified = { hash = "b3:9b0ece85473d1a65", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; step 7's exit 0 after Ctrl-C unaffected; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:5cd5539fa43114c5", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#232 A6 --collection and audit) into B6-f: re-read; smoke.ps1 uses output/status/events commands, unchanged here" }
+verified = { hash = "b3:398610ab5da52a07", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; script steps and exit codes unaffected; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

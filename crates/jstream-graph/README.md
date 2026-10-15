@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:5de498de12175cfb", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Model list has Source's duplicated_from, Item's set_source and F3's Encoder/Output; collection-file paragraph lists duplicated_from and encoders; tests paragraph names both fixtures' additions and both round-trip tests" }
+verified = { hash = "b3:d6dbf011986bad16", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#197 B9): re-read; B9's blockers and delete_plan text is main's, untouched by C5; only the stamp differs from main; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -58,7 +58,8 @@ checks `expected_rev` (`rev_conflict`) and rejects an empty batch (`empty_batch`
 applies the edits in order to a working copy of the state. The first edit that fails
 aborts the batch with `not_found`, `already_exists` or `invalid_argument` (field
 `edits.<n>.<field>`), and nothing changes. On success the copy replaces the state, `rev`
-goes up by exactly one, and the result carries the **inverse batch**.
+goes up by exactly one, and the result (`Applied`) carries the **inverse batch** and what
+the batch **touched**.
 
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
@@ -67,6 +68,18 @@ goes up by exactly one, and the result carries the **inverse batch**.
   `item.add` produces, and deleting a scene by `scene.create`, `scene.reorder` and each
   item's restore (with `scene.set_role` for a group). The inverse carries no `expected_rev`: the engine's per-client undo
   history (in `jstream-core`) chooses it.
+- **Touched sets** (`touched.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
+  `Touched::of(edits, inverse)` names, from a batch's edits and its inverse's (so a
+  delete also names what it removed), the objects created or deleted, the objects used
+  (an item's scene and source, both sources of an `item.set_source`, a `scene`
+  source's scene, a duplicate's original, the scene an `item.move` names, the profile
+  an `output.set_encoder` names), the properties set (names, a scene's role, an item's
+  placement, crop, visibility, index and source, each settings parameter, an output's
+  target and encoder choice, a profile's encoding), and whether the scenes' order or
+  the canvas size was set. An edit it doesn't know marks the set as conflicting with
+  everything. `conflicts_with` is the undo rule the engine's history applies to other
+  clients' later batches: one set creates or deletes an object the other touches, both
+  set the same property, both set the scenes' order, or both set the canvas size.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   `source.create` of a `builtin` source needs a kind the graph describes, checks each
   given value with the protocol's `ParamDescriptor::check`, and stores the complete map
@@ -78,10 +91,12 @@ goes up by exactly one, and the result carries the **inverse batch**.
   a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
   places the source or a setting refers to it, and `scene.delete` while a `scene`
-  source shows the scene or a setting refers to it. The error names the blockers (a
-  setting as `<source>.settings.<param>`), and the client removes them first, in the
-  same batch if it likes. Rejecting rather than cascading keeps each edit's effect, and
-  its inverse, limited to the object it names.
+  source shows the scene or a setting refers to it. The `invalid_argument` lists every
+  blocker in `blockers` (`deps::blockers`, the reverse of the cycle check's edges): the
+  item (`source_id`), the `scene` source (`kind.scene_id`) or the setting
+  (`settings.<param>`). The client removes them first, in the same batch if it likes,
+  or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
+  edit's effect, and its inverse, limited to the object it names.
 - **Canvas and geometry** ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)):
   `canvas.set_size` accepts each side from 1 to `MAX_CANVAS_EDGE` (8192) and moves no
   item. `item.add` stores its `geometry`, or else its `transform` (the identity when
@@ -137,8 +152,14 @@ collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list`
 `encoder.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
-unknown kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
-`not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
+unknown kind), and `delete.plan` (`plan.rs`,
+[ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
+`not_found` for an `item.list` of a missing scene or a `delete.plan` of a missing
+target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
+check uses: a scene's plan also deletes the `scene` sources that show it, the items
+placing any deleted source are removed, settings references to anything deleted are set
+to `null` (one `source.set_settings` per source), and the target's own delete comes
+last. Sources come ordered by ID, scenes in
 display order, items bottom first, outputs and encoder profiles ordered by ID.
 `state.get` carries the
 canvas. A geometry item reads its `geometry`, and the deprecated `transform` view the
@@ -172,7 +193,8 @@ the engine's; this crate does no I/O.
   and visibility, then encoder profiles, then outputs with their profiles. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
-  (`` item `i1` ``) and the protocol error; nothing is partly loaded. Then `rev` is set
+  (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
+  `LoadError` stay small); nothing is partly loaded. Then `rev` is set
   to the file's, so revisions keep increasing across restarts. A source whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
@@ -180,7 +202,8 @@ the engine's; this crate does no I/O.
   own messages quote the offending value, so a parse error keeps only a missing field's
   name, a fixed reason, and the line and column of a syntax error.
 
-**Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
+**Tests** (`tests.rs`; the reads' own in `read.rs`, the touched sets' conflict rule in
+`touched.rs`): validation and error codes per
 edit, shared sources, references and clones (`item.set_source` keeping the item, the
 `duplicated_from` link through deletes and undo, and both conversions as one batch),
 cycles (self, 2- and 3-cycles, legal diamonds, and through settings references, one
@@ -196,7 +219,10 @@ feature) must get exactly the fixture's answers, the same ones the mock is held 
 property test: a seeded generator applies 6000 random
 batches of every edit, including moves, role changes, source switches and addressed placement edits. After each successful one, the state must hold no cycle, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
-restore the batch's result. After each failed one, the graph must be unchanged.
+restore the batch's result. After each failed one, the graph must be unchanged. And
+after every batch, for each scene and source: a plain delete is refused exactly when
+it has blockers, the error lists them, and the `delete.plan` batch applies at the
+planned `rev`, removes the target, and undoes exactly.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
 scene `b` made a group, a clone and a `duplicated_from` naming a missing source) plus a source whose

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:fae0aa72746fc6c9", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#203 B2-f3 mock undo, #196 B5, #208 F3 encoders) into B6-f: re-read; contents list holds" }
+verified = { hash = "b3:d305302e89ac48f5", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; B9 only swaps a test's error constructor in exit.rs; #203's text holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:6bdd6aba26f2bb23", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#203 B2-f3 mock undo, #196 B5, #208 F3 encoders) into B6-f: resolved Edits bullet keeps main's encoder/duplicated_from exclusions and item.set_source, and this branch's set_geometry/canvas/set_role/item.move text; Reads keeps ROLE column, group headings and main's encoder status" }
+verified = { hash = "b3:b528a9cd7c52ba57", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; No undo or redo command bullet and Edits text hold; B9 adds no CLI command" }
 -->
 
 ```sh
@@ -232,7 +232,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3105e0db189bc923", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#203 B2-f3 mock undo, #196 B5, #208 F3 encoders) into B6-f: re-read; parsing and writers hold" }
+verified = { hash = "b3:96f8118049fee449", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; exit-code table still maps invalid_argument to 17; blockers ride in its detail" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

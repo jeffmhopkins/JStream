@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:170f881cf4c1da4e", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#203 B2-f3 mock undo, #196 B5, #208 F3 encoders) into B6-f: re-read; contents list holds" }
+verified = { hash = "b3:9b8119ee0c3297c6", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; contents list holds; mock.rs only swaps InvalidArgument literals for the constructor, including #203's running-output undo test" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:a7abf7257102cb93", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#203 B2-f3 mock undo, #196 B5, #208 F3 encoders) into B6-f: resolved Mock bullets: cycles from item.add, item.set_source and item.move; reads keep roles plus encoders; undo bullet now names item.move, scene.set_role and a deleted group's role, matching mock.rs and jstream-graph's inverses" }
+verified = { hash = "b3:55afc10914989afb", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; #203's undo and redo bullet and B9's delete.plan internal / no blockers note both hold" }
 -->
 
 ### The trait
@@ -132,7 +132,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   kinds, so it accepts any non-empty builtin kind, stores settings as sent without
   checking them or filling in defaults (a `null` in a `source.set_settings` patch
   removes the entry), and doesn't follow settings references when it looks for cycles.
-  `kind.list` and `kind.describe` answer `internal`;
+  `kind.list`, `kind.describe` and `delete.plan` answer `internal`, and its refused
+  deletes carry no `blockers`;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing

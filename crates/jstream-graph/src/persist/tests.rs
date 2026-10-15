@@ -280,8 +280,9 @@ fn a_collection_an_edit_would_refuse_is_refused() {
     assert!(
         matches!(
             load(&dangling),
-            Err(LoadError::Invalid { ref object, error: ProtocolError::NotFound { .. } })
+            Err(LoadError::Invalid { ref object, ref error })
                 if object.starts_with("item `")
+                    && matches!(**error, ProtocolError::NotFound { .. })
         ),
         "{:?}",
         load(&dangling)

@@ -7,11 +7,12 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::audio_sources::AudioSources;
 use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
-use crate::history::{History, Touched};
+use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
@@ -180,9 +181,9 @@ impl Engine {
     /// that can't be written fails here rather than at the first change.
     ///
     /// Every applied batch, undo and redo then replaces the file atomically before its
-    /// call returns, so a client that has its `rev` knows the file holds it. A failed
-    /// save is logged at `error` and leaves the call's result as it is: the change is
-    /// applied, and the next change saves again. The `rev` is saved too, so revisions
+    /// call returns, so the client whose call it was knows the file holds its `rev`. A
+    /// failed save is logged at `error` and leaves the call's result as it is: the change
+    /// is applied, and the next change saves again. The `rev` is saved too, so revisions
     /// keep increasing across restarts and an `expected_rev` from before one can't
     /// match a different state. Undo history and idempotency keys are not saved.
     ///
@@ -208,6 +209,7 @@ impl Engine {
                 .live
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
+            state.audio.sync(state.graph.state());
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             *file = Some(opened);
@@ -787,6 +789,7 @@ impl Engine {
                     Arc::clone(&lock(&host.draw)),
                     *lock(&host.open_timeout),
                     Arc::clone(&state.render),
+                    state.audio.wanted(),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1065,6 +1068,15 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
         Arc::clone(&lock(&self.shared.state).render)
+    }
+
+    /// How the program stage fares with audio source `source_id`, for tests.
+    #[cfg(test)]
+    pub(crate) fn audio_status(
+        &self,
+        source_id: &SourceId,
+    ) -> Option<crate::audio_sources::AudioStatus> {
+        lock(&self.shared.state).audio.status(source_id)
     }
 
     /// Waits until the live sources have built everything asked of them, for tests.
@@ -1443,6 +1455,8 @@ struct State {
     /// A running `jstream-sources` source for each source whose kind produces frames
     /// (C1b). An item shows its source's stored frame if it has one, else this.
     live: LiveSources,
+    /// The audio-only sources the program stage records, one mixer input each (C5).
+    audio: AudioSources,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -1496,8 +1510,12 @@ impl State {
             batch.expected_rev,
             &self.outputs.running(),
         )?;
-        self.history
-            .record_batch(client_id, applied.rev, &batch.edits, applied.inverse.edits);
+        self.history.record_batch(
+            client_id,
+            applied.rev,
+            applied.touched,
+            applied.inverse.edits,
+        );
         let result = CallResult::Batch { rev: applied.rev };
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, result.clone());
@@ -1579,8 +1597,10 @@ impl State {
                 return Err(error);
             }
         };
-        let now = Touched::of(&step.edits, &applied.inverse.edits);
-        if let Some(found) = self.history.conflict(client_id, &step, Some(&now)) {
+        if let Some(found) = self
+            .history
+            .conflict(client_id, &step, Some(&applied.touched))
+        {
             let error = conflict(found);
             self.history.dropped();
             return Err(error);
@@ -1593,6 +1613,7 @@ impl State {
             step,
             applied.rev,
             applied.inverse.edits,
+            applied.touched,
         );
         let (undo_depth, redo_depth) = self.history.depths(client_id);
         let result = CallResult::History {
@@ -1629,6 +1650,7 @@ impl State {
     ) {
         self.outputs.sync(self.graph.state());
         self.live.sync(self.graph.state());
+        self.audio.sync(self.graph.state());
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -1759,10 +1781,7 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
     } else {
         return Ok(());
     };
-    Err(ProtocolError::InvalidArgument {
-        field: "key".into(),
-        reason: reason.into(),
-    })
+    Err(ProtocolError::invalid_argument("key", reason))
 }
 
 fn no_key_store() -> ProtocolError {
