@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:12b54b02cf178440", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via ARCH#data-model (audio-only kinds recorded as mixer inputs); graph stores and validates them like any built-in kind; holds" }
+verified = { hash = "b3:c82b796ce9dd438a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2: re-read; Applying edits says Applied carries the touched set; new Touched sets bullet matches touched.rs (objects incl. encoders, props incl. role/source/encoder choice/encoding, scene order, canvas size, unknown; conflicts_with); Tests names touched.rs; model and encoder prose unaffected" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -58,7 +58,8 @@ checks `expected_rev` (`rev_conflict`) and rejects an empty batch (`empty_batch`
 applies the edits in order to a working copy of the state. The first edit that fails
 aborts the batch with `not_found`, `already_exists` or `invalid_argument` (field
 `edits.<n>.<field>`), and nothing changes. On success the copy replaces the state, `rev`
-goes up by exactly one, and the result carries the **inverse batch**.
+goes up by exactly one, and the result (`Applied`) carries the **inverse batch** and what
+the batch **touched**.
 
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
@@ -67,6 +68,18 @@ goes up by exactly one, and the result carries the **inverse batch**.
   `item.add` produces, and deleting a scene by `scene.create`, `scene.reorder` and each
   item's restore (with `scene.set_role` for a group). The inverse carries no `expected_rev`: the engine's per-client undo
   history (in `jstream-core`) chooses it.
+- **Touched sets** (`touched.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
+  `Touched::of(edits, inverse)` names, from a batch's edits and its inverse's (so a
+  delete also names what it removed), the objects created or deleted, the objects used
+  (an item's scene and source, both sources of an `item.set_source`, a `scene`
+  source's scene, a duplicate's original, the scene an `item.move` names, the profile
+  an `output.set_encoder` names), the properties set (names, a scene's role, an item's
+  placement, crop, visibility, index and source, each settings parameter, an output's
+  target and encoder choice, a profile's encoding), and whether the scenes' order or
+  the canvas size was set. An edit it doesn't know marks the set as conflicting with
+  everything. `conflicts_with` is the undo rule the engine's history applies to other
+  clients' later batches: one set creates or deletes an object the other touches, both
+  set the same property, both set the scenes' order, or both set the canvas size.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   `source.create` of a `builtin` source needs a kind the graph describes, checks each
   given value with the protocol's `ParamDescriptor::check`, and stores the complete map
@@ -180,7 +193,8 @@ the engine's; this crate does no I/O.
   own messages quote the offending value, so a parse error keeps only a missing field's
   name, a fixed reason, and the line and column of a syntax error.
 
-**Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
+**Tests** (`tests.rs`; the reads' own in `read.rs`, the touched sets' conflict rule in
+`touched.rs`): validation and error codes per
 edit, shared sources, references and clones (`item.set_source` keeping the item, the
 `duplicated_from` link through deletes and undo, and both conversions as one batch),
 cycles (self, 2- and 3-cycles, legal diamonds, and through settings references, one

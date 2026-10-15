@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:001996cca97cf534", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review round 1, merge of main (#203 B2-f3, #234 A4, A6 collection/audit): main's audit/daemon lines and C5's Audio sources bullet and tests both kept; holds" }
+verified = { hash = "b3:07769a38a8b6a334", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2 and #212: re-read; History bullet (log of what each change touched) and Tests list hold; the Touched unit tests moved to jstream-graph" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -152,7 +152,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:dfeb2f7b55ba3436", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review round 1, merge of main (#203 B2-f3, #234 A4, A6 collection/audit): re-read against #203 (control mock undo, no core text change) and A6 (daemon injects AuditFile, --collection wired; with_collection_file calls audio.sync so loaded audio sources are recorded); Not yet merged: main's app-asset line plus C5's status/listing bullet and new N4 bullet on the default mic/desktop fallback vs ADR-0028; AudioInputs::close now clears statuses before closing streams (N2), text unaffected" }
+verified = { hash = "b3:c7f7481cca172259", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2 merge of main (#232 A6, #234 A4): re-read; A6's audit sink wording from main kept; Conflicts (graph's Touched set, encoder objects/props) and #212's collection-file wording hold" }
 -->
 
 ### Engine and sessions
@@ -276,13 +276,16 @@ collection lock:
   shared with batches and store the whole result); then `expected_rev`
   (`rev_conflict`); then an empty stack (`history_empty`). None of these drops a step.
 - **Conflicts.** Each applied batch, undo and redo is logged with what it *touched*,
-  computed in core from its edits and the inverse's (so a delete also names what it
+  the `Touched` set `jstream-graph` returns with it, from its edits and the inverse's
+  (so a delete also names what it
   removed): objects created or deleted, objects used (an item's scene and source, both
   sources of an `item.set_source`, a `scene` source's scene, a duplicate's original,
-  the scenes an `item.move` and its inverse name), properties set (names, a scene's
+  the scenes an `item.move` and its inverse name, the profile an `output.set_encoder`
+  names), properties set (names, a scene's
   role, an item's placement, whether set as a transform or a geometry, crop,
   visibility, an item's index, which `item.move` also sets, which source an item
-  places, each settings parameter, an output's target), the scenes'
+  places, each settings parameter, an output's target and encoder choice, a profile's
+  encoding), the scenes'
   order, and the canvas size. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
   `scene.create` also deletes the items the scene holds now, even ones whose own step
@@ -839,7 +842,7 @@ contents) and left as it is. It is configured before `connect`, like the other
 builders.
 
 After each applied batch, undo or redo, `Engine::execute` saves the collection before
-the call returns, so a client that has its `rev` knows the file holds it. The save
+the call returns, so the client whose call it was knows the file holds its `rev`. The save
 takes the collection file's mutex, then the collection lock only long enough to
 serialize the graph, and writes with only the file's mutex held: saves happen one at a
 time, never under the collection lock, and one whose `rev` the file already has (or
