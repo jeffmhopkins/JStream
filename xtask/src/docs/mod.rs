@@ -702,6 +702,54 @@ mod tests {
         assert_eq!(f.diags("is stale").len(), 1);
     }
 
+    /// ADR-0042: a `#jstream-meta` cover stays fresh through manifest edits outside the
+    /// jstream view, goes stale on edits inside it, and a file also covered plainly is
+    /// hashed whole. An unknown view fails `docs check`.
+    #[test]
+    fn jstream_meta_covers_hash_the_manifest_view() {
+        let manifest = "[package]\nname = \"jstream-x\"\n\n[package.metadata.jstream]\nlayer = 1\n\n[dependencies]\njstream-types.workspace = true\n";
+        let view = doc("V", "active", "v", "crates/*/Cargo.toml#jstream-meta");
+        let both = "<!-- @doc\nid = \"W\"\n-->\n<a id=\"w\"></a>\n## W\n<!-- @section\ncovers = [\"crates/*/Cargo.toml#jstream-meta\", \"crates/x/**\"]\n-->\nWhole.\n";
+        let mut files = REGISTRIES.to_vec();
+        files.extend([
+            ("V.md", view.as_str()),
+            ("W.md", both),
+            ("crates/x/Cargo.toml", manifest),
+        ]);
+        let f = Fixture::new("jstream-meta", &files);
+        verify(&f.0, "V#v", "agent:test", NOTE).expect("V#v verifies");
+        verify(&f.0, "W#w", "agent:test", NOTE).expect("W#w verifies");
+        assert_eq!(f.diags("is stale"), Vec::<String>::new());
+        let stale_anchors = || -> Vec<String> {
+            f.diags("is stale")
+                .iter()
+                .map(|d| d.split('`').nth(1).unwrap_or_default().to_owned())
+                .collect()
+        };
+        // A third-party dependency and a comment: only the plain cover sees them.
+        f.write(
+            "crates/x/Cargo.toml",
+            &format!("# Note.\n{manifest}serde.workspace = true\n"),
+        );
+        assert_eq!(stale_anchors(), vec!["w"]);
+        // The layer: both go stale.
+        f.write(
+            "crates/x/Cargo.toml",
+            &manifest.replace("layer = 1", "layer = 2"),
+        );
+        assert_eq!(stale_anchors(), vec!["v", "w"]);
+        f.write(
+            "Y.md",
+            &doc("Y", "active", "y", "crates/*/Cargo.toml#other"),
+        );
+        f.git(&["add", "Y.md"]);
+        let bad = f.diags("`#` is reserved");
+        assert!(
+            !bad.is_empty() && bad.iter().all(|d| d.starts_with("Y.md")),
+            "{bad:?}"
+        );
+    }
+
     /// ADR-0039: re-verifying section A, in a file that section B covers, leaves B fresh;
     /// a content edit to that file still stales B.
     #[test]

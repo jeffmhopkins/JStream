@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:7dc6c0927cf3fe60", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B6 groups/item.move, G3a WindowsVcam, #199, ADR-0043) into E1: module bullets of both sides hold" }
+verified = { hash = "b3:11dbda8459431a1f", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: only main's lib.rs Docs: line and E1's module bullets; both hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -123,7 +123,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f03692d30753d265", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B6 groups/item.move, G3a WindowsVcam, #199, ADR-0043) into E1: B6's history text (item.move, scene role) is main's; groups render like any scene, and item.move is a batch, after which the engine re-plans and publishes like any edit; E1's render snapshot, compose and collector text hold" }
+verified = { hash = "b3:91391fadf5dee9af", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: Not-yet bullet keeps E1's wording (program mix, no arc-swap or collector item since both are built); render snapshot, compose and collector text unchanged and hold" }
 -->
 
 ### Engine and sessions
@@ -692,3 +692,45 @@ item.
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one
   captured display, a CPU readback into the encoder, and the platform fakes in the
   test. Other sources show frames the host injects with `set_source_frame`.
+
+<a id="runtime"></a>
+## Runtime
+<!-- @section
+covers = ["crates/jstream-core/src/runtime/**"]
+depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
+verified = { hash = "b3:87fed6ac34327e35", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: carried E1's output-pipeline paragraph over (program mix from the render snapshot, capture fallback, render collector) with main's recording and stats text; matches pipeline.rs and runtime/render.rs" }
+-->
+
+The output pipeline (`src/runtime/`) is the part of
+[ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading) that is built.
+`output.start`, once the host has injected platform backends and a publish target
+(a recording output needs none), starts it and emits `output.state_changed` from the
+control thread. The render thread calls the platform capture mailbox and, on each
+1/30 s tick, composites the program mix from the render snapshot (see *Snapshots* in
+Design) at the encoder size: the program scene and the scenes it nests, with every
+`display` source that has no stored frame showing the captured display. With no scene
+it draws the capture filling the frame. It repeats the last capture when the mailbox
+is empty, and reads the frame back. This cut encodes that CPU readback, and the
+readback is counted. The mixer thread polls the media clock and pushes 48 kHz stereo
+blocks from the microphone and the desktop loopback. Encode threads are the ones
+inside the encoder sessions. The output thread muxes FLV and sends tags to the
+publish target, or, for a recording output, muxes fragmented MP4 and writes it to the
+file, syncing each fragment (writes may block on the disk; the encoder queues absorb
+that and drop when full). `output.start` also starts `jstream-stats`, which is not a
+real-time thread: it emits `stats.tick` about once a second from the stage counters,
+and once more when the pipeline stops. The render loop publishes capture mailbox
+skips, and a tick that falls a whole period behind the clock skips to the current
+tick and counts the skipped ones in `render_ticks`. None of those threads lock the
+collection: the render thread reads the render snapshot, and what it lets go of goes
+to the output's `jstream-collector` thread. `output.stop` during `starting` cancels
+that start and emits `stopped` only after the start has dropped its threads. The
+render and mixer threads catch a panic at their boundary
+([R-RT-006](../../docs/RULES.md#R-RT-006)); a capture error or a missing frame repeats
+the last one, and a render panic repeats the last frame until teardown. A fatal error
+on the render, mixer or output thread (a publish or recording write failure, an
+encoder stream that ends before stop, a render or mixer panic) is a channel message
+to a watcher the control thread started; the watcher emits `failed` and stops the
+pipeline. Frame hand-off is the encoder session queues. The audio and outputs
+snapshots and a GPU encode target are still rows of the ARCH thread table, not this
+cut. The mixer has its own collector so far, which frees only input rings and their
+counters.
