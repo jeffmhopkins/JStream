@@ -25,7 +25,7 @@ pub(crate) const PATH: &str = "docs/verified.toml";
 const HEADER: &str = "\
 # Verification stamps: one entry per section input (docs/DOCS.md#verification, ADR-0053).
 # Written by `cargo xtask docs verify`; never edit by hand. One header, one line and a
-# blank line per entry let parallel PRs that re-verify different inputs merge cleanly.
+# blank line per entry let parallel PRs that re-verify different inputs usually merge.
 ";
 
 /// One input's stamp: its hash when last verified, and who verified it and why, when this
@@ -332,8 +332,9 @@ mod tests {
     }
 
     /// The layout's promise, checked with git itself: on one section, two branches that
-    /// change, add or remove *different* inputs (including an input next to one the other
-    /// branch changes) merge cleanly; two that change the same input conflict.
+    /// change different inputs, or add or remove one next to an input the other changes,
+    /// merge cleanly. Two that change the same input conflict, and so can two that add or
+    /// remove inputs at the same spot (ADR-0053 item 4).
     #[test]
     fn parallel_changes_to_different_inputs_merge_cleanly_in_git() {
         type Entries = Vec<(&'static str, &'static str)>;
@@ -416,10 +417,17 @@ mod tests {
         ] {
             assert!(merges(&a, &b), "{what} must merge cleanly");
         }
-        assert!(
-            !merges(&change("file:a"), &with(&|e: &mut Entries| e[1].1 = "b3:7")),
-            "changing the same input must conflict"
-        );
+        for (what, a, b) in [
+            (
+                "change a twice",
+                change("file:a"),
+                with(&|e: &mut Entries| e[1].1 = "b3:7"),
+            ),
+            ("add ba, add bb", add("file:ba"), add("file:bb")),
+            ("remove c, add d", remove("file:c"), add("file:d")),
+        ] {
+            assert!(!merges(&a, &b), "{what} is expected to conflict");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

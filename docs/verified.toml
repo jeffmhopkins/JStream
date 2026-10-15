@@ -1,6 +1,6 @@
 # Verification stamps: one entry per section input (docs/DOCS.md#verification, ADR-0053).
 # Written by `cargo xtask docs verify`; never edit by hand. One header, one line and a
-# blank line per entry let parallel PRs that re-verify different inputs merge cleanly.
+# blank line per entry let parallel PRs that re-verify different inputs usually merge.
 
 ["ARCH#browser-source"."body"]
 stamp = { hash = "b3:3a9719585d49403b", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review: sandbox is required where supported (bootstrap layout may replace the helper, or a superseding ADR), zip-size estimate marked unchecked and listed as open, pts wording and all three packet counts (2999/3000/2999) re-checked against the run JSON" }
@@ -465,10 +465,10 @@ stamp = { hash = "b3:56b6301e2e6a132b" }
 stamp = { hash = "b3:7444919d28801154", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 in this section and DOCS#verification; the ledger, migrate and merge-main bullets are otherwise unchanged and still hold" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#notes"]
-stamp = { hash = "b3:65b1231de3f1603c", by = "agent:claude", note = "DOCS#notes now says a later verify replaces notes only on inputs changed since the previous verify, and DOCS#verification adds the trailing blank line; docs-duty's verify, generate, migrate and merge-main duties are unchanged and still hold" }
+stamp = { hash = "b3:1442171a482630fc", by = "agent:claude", note = "Whole #376 change to DOCS#verification and #notes re-read: per-input ledger stamps, which parallel changes merge and which conflict and go stale, and that a later verify replaces notes on re-changed inputs so the last must cover the PR. docs-duty's verify, generate, migrate, merge-main and never-edit-the-ledger duties still hold" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:1ac1c2c05d216a56", by = "agent:claude", note = "DOCS#verification now says every entry, the last included, ends with a blank line and that adding an input right next to one the other PR removes can conflict; DOCS#notes says a later verify replaces notes only on inputs changed since the previous verify. docs-duty's verify, generate, migrate and merge-main duties still hold" }
+stamp = { hash = "b3:4734c4ac66a5f5e4", by = "agent:claude", note = "Whole #376 change to DOCS#verification and #notes re-read: per-input ledger stamps, which parallel changes merge and which conflict and go stale, and that a later verify replaces notes on re-changed inputs so the last must cover the PR. docs-duty's verify, generate, migrate, merge-main and never-edit-the-ledger duties still hold" }
 
 ["CLAUDE#pr-loop"."body"]
 stamp = { hash = "b3:d756a751285910f0", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read the PR loop against ADR-0043: item 7 now lists the narrowed maintainer tier and says everything else is agent tier, proxy format cited from ADR-0043" }
@@ -2661,7 +2661,7 @@ stamp = { hash = "b3:954859db5a28872d", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:e9526047eb0b1865", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/ledger.rs"]
-stamp = { hash = "b3:86a6a90a5911294c", by = "agent:claude", note = "ledger.rs render now ends every entry, the last included, with a blank line (#376 B2); the bootstrap bullet's one-entry-per-input ledger and migrate description still hold" }
+stamp = { hash = "b3:2033cfb4ced26f1f", by = "agent:claude", note = "Whole #376 change re-read (ADR-0053): new ledger.rs stores one stamp per input (body, file:, dep:) in docs/verified.toml as a header, a stamp line and a trailing blank line, canonical and sorted; check reports changed inputs and inline stamps; verify restamps only changed inputs; migrate replaces rehash; merge-main takes main's ledger side and migrates; log reads ledger history; fixture test merges ledgers with git, including the same-gap add conflict. The bootstrap bullets still hold" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/merge.rs"]
 stamp = { hash = "b3:2bf6bf429340ee0a", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }

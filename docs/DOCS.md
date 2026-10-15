@@ -280,19 +280,22 @@ That means:
 - **Propagation is exactly one hop.** A dependent's `dep:` entry hashes its target's
   text, but not the target's covered files. A verify changes only the ledger, which no
   section can cover, so it never makes another section stale.
-- **Parallel PRs conflict on an input both changed.** `docs verify` rewrites only the
-  entries whose input changed (they take its `by` and `note`; the others keep theirs).
-  Every entry is a `["DOC-ID#anchor"."<input>"]` header, which never changes while the
-  input exists, then one `stamp` line and a blank line, the last entry's included. The
-  headers and blank lines anchor git's diff, so
-  PRs that change, add or remove different inputs of a section (a new file next to one
-  the other PR edited included) merge cleanly, with the section fresh. Two PRs that change
-  the same input conflict on its `stamp` line: neither re-read the combination, so the
-  section has to be re-read after merging `main`. Structural changes right next to each
-  other can conflict too: one PR adding an input right next to one the other removes, or
-  both removing neighbouring inputs. Every such conflict is resolved the same way
-  (`docs merge-main` below), and leaves the section stale, never falsely fresh. A re-read
-  with no input changed records its `by` and `note` on the `body` entry.
+- **Parallel PRs usually merge; a conflict leaves the section stale.** `docs verify`
+  rewrites only the entries whose input changed (they take its `by` and `note`; the
+  others keep theirs). Every entry is a `["DOC-ID#anchor"."<input>"]` header, which
+  doesn't change while the input exists, then one `stamp` line and a blank line, the last
+  entry's included. The headers and blank lines anchor git's diff:
+  - PRs that change different existing inputs merge with the section fresh, and so does
+    a PR adding or removing an input next to one the other PR only changed.
+  - PRs that change the same input conflict on its `stamp` line: neither re-read the
+    combination.
+  - PRs that both add or remove inputs at the same spot can conflict: both adding inputs
+    between the same two neighbours, one adding an input next to one the other removes,
+    or both removing neighbouring inputs. Two PRs adding modules to one crate often do.
+
+  Any ledger conflict is resolved the same way (`docs merge-main` below): the section is
+  left stale, to be re-read after merging `main`, and never falsely fresh. A re-read with
+  no input changed records its `by` and `note` on the `body` entry.
 - **The ledger is generated.** Only `docs verify` (and `docs migrate`) writes it, in
   sorted, canonical form; `docs check` fails on any other form, and on an inline
   `verified` key in an `@section` block. A stamp for a section that no longer needs one
@@ -410,8 +413,9 @@ holds**. The note says what was checked and why it still holds, e.g.:
 - A false verification is a bug, and gets fixed and noted like one.
 - A later `docs verify` of the same section in the same PR replaces the `by` and `note`
   of every entry whose input changed since the previous verify (only `body`'s when none
-  did). Entries unchanged since then keep the earlier note, so the reviewer reads every
-  note the PR wrote, and each must cover what changed in its inputs before it was written.
+  did). An earlier note on such an entry survives only in git history (`docs log`), so the
+  last note on each entry must cover the PR's whole change to that input: it is the one
+  the reviewer reads.
 - The sweep is to report each section's verify-to-edit ratio from git (not built yet,
   see [Time-based review](#ttl)). A section that gets
   re-verified far more often than it is edited has `covers` that are too broad, so
