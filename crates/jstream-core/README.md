@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:6b00b92fe44d07dc", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
+verified = { hash = "b3:2a3c84ae047a0400", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#202 RTMP reconnect test, #200 vcam) into B6: #202 changes only publish.rs's test and stamps; re-read, contents and History bullet hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:35252def9891785f", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
+verified = { hash = "b3:11feed9980e3ac36", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#202, #200) into B6: re-read; Conflicts bullet (B3 placement/canvas, B6 role/item.move) and runtime text hold with #202's test-only change" }
 -->
 
 ### Engine and sessions
