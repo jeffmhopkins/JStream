@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:dae93cb7cb71d666", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#170 F2b recording, #174, #178, #187) into B8 #171: re-read; F2b's recording intro and Tests text and B8's Audit log bullet and audit tests coexist; nothing contradicts" }
+verified = { hash = "b3:48912b589433bfcc", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#171 B8 audit log) into B9: took main's text and stamp, re-read; B9 changes only engine.rs check_key's constructor, and Graph::query covers delete.plan; B8's audit text holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -106,7 +106,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:83863f512d002b05", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#170 F2b) into B8 #171: F2b's Recording paragraph and B8's Audit log subsection coexist; a record output's path travels only in output.create, which the audit log records by name only, and output.start on it is audited like any action; Locking unchanged" }
+verified = { hash = "b3:363cf60d19c0ecd5", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#171 B8 audit log) into B9: took main's text and stamp, re-read; B9 changes only engine.rs check_key's constructor, and Graph::query covers delete.plan; B8's audit text holds" }
 -->
 
 ### Engine and sessions
