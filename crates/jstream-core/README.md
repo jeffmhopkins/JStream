@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:604745f66fe90610", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (C4b follow-up, tests-only Backends.video_devices) into A3 (PublishError::new public): Engine and runtime bullets unchanged by either and hold" }
+verified = { hash = "b3:c67561b93957b007", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14) into A3: purpose text is main's plus nothing from A3 beyond PublishError::new being public, which the runtime bullet doesn't name; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:00032306febee3d3", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (C4b follow-up) into A3: Outputs paragraph names the daemon's opener on Windows plus main's Record sentence; Pipeline paragraph's PublishError::new line holds; drops table unchanged" }
+verified = { hash = "b3:5248ce9c9c185f8d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14, item.set_source history) into A3: Outputs paragraph keeps A3's daemon opener line and main's Record sentence; Pipeline keeps the PublishError::new line; history paragraph is main's" }
 -->
 
 ### Engine and sessions
@@ -265,11 +265,12 @@ collection lock:
   (`rev_conflict`); then an empty stack (`history_empty`). None of these drops a step.
 - **Conflicts.** Each applied batch, undo and redo is logged with what it *touched*,
   computed in core from its edits and the inverse's (so a delete also names what it
-  removed): objects created or deleted, objects used (an item's scene and source, a
-  `scene` source's scene, a duplicate's original, the scenes an `item.move` and its
-  inverse name), properties set (names, a scene's role, an item's placement, whether
-  set as a transform or a geometry, crop, visibility, an item's index, which
-  `item.move` also sets, each settings parameter, an output's target), the scenes'
+  removed): objects created or deleted, objects used (an item's scene and source, both
+  sources of an `item.set_source`, a `scene` source's scene, a duplicate's original,
+  the scenes an `item.move` and its inverse name), properties set (names, a scene's
+  role, an item's placement, whether set as a transform or a geometry, crop,
+  visibility, an item's index, which `item.move` also sets, which source an item
+  places, each settings parameter, an output's target), the scenes'
   order, and the canvas size. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
   `scene.create` also deletes the items the scene holds now, even ones whose own step

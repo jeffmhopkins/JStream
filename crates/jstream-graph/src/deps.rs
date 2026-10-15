@@ -86,6 +86,20 @@ pub(crate) fn cycle(state: &State, from: &Node, to: &Node) -> Option<String> {
     Some(text)
 }
 
+/// A cycle anywhere in `state`, as [`cycle`] names it, or `None`. Every edit that adds an
+/// edge checks it before it applies, so `None` is an invariant of every graph; the
+/// property test asserts it after each batch.
+#[cfg(test)]
+pub(crate) fn any_cycle(state: &State) -> Option<String> {
+    let scenes = state.scenes().iter().map(|s| Node::Scene(s.id.clone()));
+    let sources = state.sources().map(|s| Node::Source(s.id.clone()));
+    scenes.chain(sources).find_map(|node| {
+        edges(state, &node)
+            .iter()
+            .find_map(|next| cycle(state, &node, next))
+    })
+}
+
 /// Pushes the chain from `at` to `target` onto `path` if there is one.
 fn dfs(
     state: &State,

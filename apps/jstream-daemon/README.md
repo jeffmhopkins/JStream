@@ -151,7 +151,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:e60a24013bdbad86", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#225) into A3: Live on Windows lists MfVideoDevices; delay-load bullet names mfplat, mf, mfreadwrite (what MfCodecs and MfVideoDevices import) and why mfsensorgroup waits for the vcam (LNK4199); matches build.rs and delay_load.rs" }
+verified = { hash = "b3:db823ec3144334a1", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14, #185) into A3: design text is A3's (live engine, opener, MF+AAC check, mfplat/mf/mfreadwrite delay-load); main changed no daemon code; daemon tests pass on the merge" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
