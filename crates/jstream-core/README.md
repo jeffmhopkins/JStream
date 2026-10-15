@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:c1d96d3cc8f29544", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 merge of main: text unchanged by the merge; stale via dependencies only; browser GPU frames and use_device wording re-read; holds" }
+verified = { hash = "b3:a22d50e28c8a970e", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 N1: only moved two doc comments (use_gpu/stats_emitter, linear_to_srgb/frame_at) back onto their items; no behaviour change; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -176,7 +176,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:980c582b9eb133bb", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 merge of main: main's clock-swap sentence and C8b5's browser GPU frame import both present and consistent; holds" }
+verified = { hash = "b3:fb06e0dc165835c7", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 N1: doc-comment placement only in engine.rs and snapshot.rs tests; Live sources and GpuKey text unchanged and still accurate; holds" }
 -->
 
 ### Engine and sessions

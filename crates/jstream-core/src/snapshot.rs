@@ -1447,7 +1447,6 @@ pub(crate) mod tests {
         }
     }
 
-    /// One frame of `shot` at `size`, read back, as the render thread draws it.
     /// IEC 61966-2-1 encode, as the output applies it.
     fn linear_to_srgb(c: f32) -> f32 {
         if c <= 0.003_130_8 {
@@ -1457,6 +1456,7 @@ pub(crate) mod tests {
         }
     }
 
+    /// One frame of `shot` at `size`, read back, as the render thread draws it.
     fn frame_at(
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
