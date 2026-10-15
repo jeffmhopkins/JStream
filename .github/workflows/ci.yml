@@ -158,7 +158,11 @@ jobs:
         with:
           name: jstream-ui
           path: ui-dist
-      - run: cargo xtask dist --ui-dir ui-dist --out dist
+      # Named after the commit pushed, not the merge commit a pull request checks out.
+      - shell: bash
+        env:
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: cargo xtask dist --ui-dir ui-dist --out dist --revision "${SHA::10}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: dist/*.zip

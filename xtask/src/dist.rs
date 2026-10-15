@@ -42,10 +42,13 @@ const CRT_STATIC: &str = "-Ctarget-feature=+crt-static";
 /// C++ redistributable, and a statically linked runtime imports none of them. The
 /// Universal CRT (`ucrtbase.dll`, `api-ms-win-crt-*`) is allowed: it is part of Windows
 /// 10 and 11, and `jstream.exe` imports it even with `crt-static`, from a prebuilt static
-/// library built with `/MD` (most likely WebView2's loader).
-const CRT_DLLS: &[&str] = &["vcruntime", "msvcp", "msvcr", "concrt", "vccorlib"];
+/// library built with `/MD` (most likely WebView2's loader). So is the system's own
+/// `msvcrt.dll`, which every Windows ships: `msvcr` refuses only the versioned
+/// redistributable ones (`msvcr100.dll`, `msvcr120.dll`).
+const CRT_DLLS: &[&str] = &["vcruntime", "msvcp", "concrt", "vccorlib"];
 
-const USAGE: &str = "usage: cargo xtask dist [--ui-dir <built UI folder>] [--out <folder>]";
+const USAGE: &str =
+    "usage: cargo xtask dist [--ui-dir <built UI folder>] [--out <folder>] [--revision <name>]";
 
 /// The text file at the top of the zip.
 const README: &str = "\
@@ -65,6 +68,7 @@ jstream_vcam_windows.dll is the virtual camera, registered the first time you tu
 pub fn run(args: &[String], root: &Path) -> Result<bool> {
     let mut ui_dir = None;
     let mut out = None;
+    let mut revision = None;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || {
@@ -75,6 +79,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
         match arg.as_str() {
             "--ui-dir" => ui_dir = Some(value()?),
             "--out" => out = Some(value()?),
+            "--revision" => revision = Some(value()?.to_string_lossy().into_owned()),
             _ => bail!("unknown argument `{arg}`\n{USAGE}"),
         }
     }
@@ -100,7 +105,11 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     for binary in BINARIES {
         check_no_crt_imports(&release.join(binary))?;
     }
-    let name = format!("jstream-{}-windows-{}", revision(root), arch());
+    let name = format!(
+        "jstream-{}-windows-{}",
+        revision.unwrap_or_else(|| describe(root)),
+        arch()
+    );
     let stage = out.join(&name);
     if stage.exists() {
         fs::remove_dir_all(&stage).with_context(|| format!("removing {}", stage.display()))?;
@@ -180,7 +189,10 @@ fn check_no_crt_imports(path: &Path) -> Result<()> {
 
 /// Whether `dll` (lowercase) is a Visual C++ runtime DLL.
 fn is_crt(dll: &str) -> bool {
-    CRT_DLLS.iter().any(|prefix| dll.starts_with(prefix))
+    let versioned_msvcr = dll
+        .strip_prefix("msvcr")
+        .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()));
+    versioned_msvcr || CRT_DLLS.iter().any(|prefix| dll.starts_with(prefix))
 }
 
 /// The DLLs a PE image imports, at load time or delay-loaded, lowercase.
@@ -290,8 +302,10 @@ fn u32_at(image: &[u8], at: usize) -> Result<usize> {
     usize::try_from(value).context("an offset past usize")
 }
 
-/// The commit the zip is built from, for its name: `git describe --always --dirty`.
-fn revision(root: &Path) -> String {
+/// The commit the zip is built from, for its name when `--revision` names none:
+/// `git describe --always --dirty`. CI passes `--revision`, because a pull request's
+/// checkout is GitHub's merge commit, which is in no branch's history.
+fn describe(root: &Path) -> String {
     Command::new("git")
         .args(["describe", "--always", "--dirty"])
         .current_dir(root)
@@ -548,6 +562,7 @@ mod tests {
             "vcruntime140_1.dll",
             "msvcp140.dll",
             "vccorlib140.dll",
+            "msvcr120.dll",
         ] {
             assert!(is_crt(dll), "{dll}");
         }
@@ -557,6 +572,7 @@ mod tests {
             "d3d11.dll",
             "ucrtbase.dll",
             "api-ms-win-crt-runtime-l1-1-0.dll",
+            "msvcrt.dll",
         ] {
             assert!(!is_crt(dll), "{dll}");
         }

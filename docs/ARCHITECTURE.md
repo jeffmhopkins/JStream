@@ -877,7 +877,7 @@ verified = { hash = "b3:042c342d215b5bc4", by = "agent:claude@session_01TiAAtPXb
 <!-- @section
 covers = ["xtask/src/dist.rs", ".cargo/config.toml"]
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:34ed823aeee861ed", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 CI fix: dist refuses only Visual C++ runtime imports; the Universal CRT is an OS component jstream.exe imports even with crt-static (first Windows run)" }
+verified = { hash = "b3:f373f94a24b30eb6", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "Round 1 N2: CI names the zip after the pushed commit via --revision; N1: msvcrt.dll allowed as an OS component (text says vcruntime/msvcp refused, still true); rest holds" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -907,8 +907,9 @@ Direct3D 12).
   runtime statically for every MSVC build. A `RUSTFLAGS` variable replaces the config's
   flags, so `dist` adds `crt-static` back to it. The zip is written by `dist` itself,
   deflated, with fixed timestamps, so the same files make the same zip. The `dist` CI job
-  builds it with the `wasm` job's UI and uploads it as an artifact, as is, on every PR
-  and push to `main`. The CEF runtime and the browser helper join it when they exist.
+  builds it with the `wasm` job's UI, names it after the pushed commit (`--revision`,
+  since a pull request checks out GitHub's merge commit), and uploads it as an artifact,
+  as is, on every PR and push to `main`. The CEF runtime and the browser helper join it when they exist.
 - **Virtual camera:** the app registers the COM media source from its own folder the first
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
   because Frame Server ignores per-user registration. The app can unregister the source and

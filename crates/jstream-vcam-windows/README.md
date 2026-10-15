@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:398e809d36aea368", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH packaging (dist's CRT check now allows the Universal CRT); DLL and registration text unchanged, holds" }
+verified = { hash = "b3:4895c736e5b94111", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "Round 1: stale via ARCH packaging (zip naming in CI); DLL and registration text unchanged, holds" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -84,7 +84,7 @@ and the example on Windows.
 <!-- @section
 covers = ["crates/jstream-vcam-windows/examples/**"]
 depends_on = ["docs/ARCHITECTURE.md#packaging"]
-verified = { hash = "b3:fc4bf345f9ce8ce0", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH packaging (dist's CRT check now allows the Universal CRT); DLL and registration text unchanged, holds" }
+verified = { hash = "b3:b30ba80d9963b554", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "Round 1: stale via ARCH packaging (zip naming in CI); DLL and registration text unchanged, holds" }
 -->
 
 `examples/vcam_smoke` stands in for the engine side: it publishes the ring, the fence and
