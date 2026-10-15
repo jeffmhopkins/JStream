@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:478c17b470c9be59", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main into D1: section text is main's; stale only via ARCH#threading/crate-map, where D1 changes only the audio mixer's collector sentences; re-read this section's threading and crate-map references, none concerns the mixer's collector" }
+verified = { hash = "b3:92b7be6dc6ff4116", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main into D1: section text is main's; stale only via ARCH#threading/crate-map, where D1 changes only the audio mixer's collector sentences and audio's crossbeam dependency; re-read its threading and crate-map references, none concerns either" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -180,16 +180,19 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Not yet:** the D3D11 side. Capture and the encoders don't take GPU frames yet; see
     [Open questions](#open-questions).
 
-- **`WindowsCredentials`**, the OS credential store for stream keys
+- **`WindowsCredentials`**, the OS credential store for stream keys and OAuth tokens
   ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence),
   [R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `exists` and `delete` on
   Windows Credential Manager (`CredWriteW`, `CredReadW`, `CredDeleteW`). It also
   implements `jstream-platform`'s `StreamKeyStore`, naming each output's credential
-  with `CredentialTarget::stream_key`, so a host hands it to `Engine::with_key_store`.
-  - **Names:** a `CredentialTarget`, `JStream/stream-key/<output id>`. Generic
+  with `CredentialTarget::stream_key`, so a host hands it to `Engine::with_key_store`,
+  and `OAuthTokenStore`, naming each account's refresh token with
+  `CredentialTarget::oauth_token`.
+  - **Names:** a `CredentialTarget`, `JStream/stream-key/<output id>` or
+    `JStream/oauth-token/<account>`. Generic
     credentials are one per-user namespace shared by every app, so the product prefix
-    keeps ours apart and groups them in Credential Manager, and the kind segment keeps a
-    future secret kind (OAuth tokens) from sharing a name with a stream key. Output IDs
+    keeps ours apart and groups them in Credential Manager, and the kind segment keeps an
+    OAuth token from sharing a name with a stream key. Output and account IDs
     are opaque, so any ID is taken except an empty one, one with a control character (a
     NUL would cut the name short, so two IDs could name one credential) or one that makes
     the name longer than `CRED_MAX_GENERIC_TARGET_NAME_LENGTH` UTF-16 units.
@@ -213,11 +216,12 @@ packet flags, positions across a device move), the capture helpers (BGRA to NV12
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the H.264
 helpers (configuration check, NV12 packing, `pts` mapping) and the credential helpers
-(target names, blob limits, zeroing) run on every platform. The QPC clock
+(target names of both kinds, blob limits, zeroing) run on every platform. The QPC clock
 test, the start-race test (a destroyed message-only window maps to `NotFound`), the
 credential limits check, the credential round trip (a uniquely named credential
 written, replaced, read and deleted in the real store, a non-UTF-8 one refused on read,
-deleted again on failure) and the same through `StreamKeyStore` run on Windows. Tests against real devices, the OS encoder, the GPU and a display are platform
+deleted again on failure), the same through `StreamKeyStore`, and a refresh token
+through `OAuthTokenStore` beside a stream key of the same ID run on Windows. Tests against real devices, the OS encoder, the GPU and a display are platform
 tests: behind the `hw-tests` feature and `#[ignore]`d, because CI machines may have no
 audio devices, no Media Foundation, no GPU and no display
 ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
