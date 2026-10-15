@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:54d45885bf880e6b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: only daemon doc comments changed (crash.rs, logs.rs); the daemon is still the headless layer-6 host serving the WebSocket API, so the host table and diagram hold" }
+verified = { hash = "b3:d002ffb73e0e21a0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via apps/jstream-cli (mcp.rs comment, README, tests): jstream-cli is still the remote client with the stdio MCP proxy and doesn't link the engine; table and diagram hold" }
 -->
 
 ```
@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:3add71b67ae24b75", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#132) into #136: re-read Threads with both; #132's live-value handover paragraph (stopped marker) and this PR's pipeline changes (bounded stop drain, cpu_draw moved into pipeline.rs as a test stand-in) don't touch each other; the output thread still muxes and sends, the drain bound is detail in core Design, and panic boundaries, watcher and failed paths are unchanged" }
+verified = { hash = "b3:19e8591f937b563e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#139, #140) into #136: prose identical to main; re-read the section with #139's SeqCst handover and this PR's runtime changes (bounded 2 s stop drain via LivePublish::stop_by, rt_panic_is_reported); the output-pipeline paragraph claims no unbounded stop and the thread table is unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -464,10 +464,17 @@ control side polls the published generations; the real-time threads never wait f
 A thread that isn't adopting snapshots counts as caught up, so a gesture's live values
 aren't held while it is stopped or parked (no output running, nothing to render, no
 device to mix for). Before it stops or parks it publishes a stopped marker in place of
-its generation, and it shows nothing while marked. On resuming it clears the marker
-before it loads a snapshot, and reads the parameter channels only after that load. So
-if the control side saw the marker and released a gesture, the thread's next load comes
-after the committing snapshot was published and already carries the committed value.
+its generation, and it shows nothing while marked. Each reader's slot starts as
+the stopped marker, so a gesture committed before a thread has ever run waits on
+nothing. On starting or resuming it clears the marker before it loads a snapshot, and
+reads the parameter channels only after that load. So if the control side saw the
+marker and released a gesture, the thread's next load comes after the committing
+snapshot was published and already carries the committed value. That needs a store
+then load on each side (the thread clears the marker then loads the snapshot; the
+control side publishes the snapshot then reads the marker), which release and acquire
+alone don't order: the marker and generation stores and reads are `SeqCst`, with a
+`SeqCst` fence between each side's store and its load. A fence doesn't allocate, lock
+or wait, so R-RT-001 and R-RT-002 still hold.
 
 The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
 reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
@@ -480,7 +487,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:a8fecc8b48db2141", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only via protocol source: the render_ticks doc comment changed, no wire shape; this section names no drop counter semantics, so it holds" }
+verified = { hash = "b3:730d037d3a32ecb6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via the jstream-server README (open question 8): Transport bullet still holds; the handshake timeout is server-local, envelope unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -572,7 +579,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:898752585c07eb75", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the video tool description change: the Snapshots bullet (image block is the only copy, png a placeholder) and Events bullet (stats outside the buffer) still hold" }
+verified = { hash = "b3:86ae7c32cfa70b9a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via jstream-mcp server.rs/README: tools, events buffer, schema, access and audit bullets unaffected by sending hello at initialize; audit still names the client (clientInfo.name)" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

@@ -34,6 +34,11 @@ struct Harness {
 }
 
 fn start(engine: &MockEngine) -> Harness {
+    start_with(engine, |_| {})
+}
+
+/// A server serving `engine`, with its configuration changed by `configure`.
+fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) -> Harness {
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -49,10 +54,11 @@ fn start(engine: &MockEngine) -> Harness {
         counter.fetch_add(1, Ordering::SeqCst);
         Box::new(engine.connect())
     });
-    let config = match Token::new(TOKEN) {
+    let mut config = match Token::new(TOKEN) {
         Ok(token) => ServerConfig::new(token),
         Err(error) => panic!("token: {error}"),
     };
+    configure(&mut config);
     let server = match runtime.block_on(Server::bind(config, connector)) {
         Ok(server) => server,
         Err(error) => panic!("bind: {error}"),
@@ -845,4 +851,136 @@ fn closing_a_connection_drops_its_event_subscription() {
         !closed,
         "the server waited for the client and sent its close frame"
     );
+}
+
+/// Reads until the server ends the connection: the close frame's code, or `None` if it
+/// ended without one.
+fn closed_by_server(harness: &Harness, socket: &mut RawSocket) -> Option<u16> {
+    harness.run(async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Close(frame))) => break frame.map(|frame| frame.code.into()),
+                Some(Ok(_)) => continue,
+                None | Some(Err(_)) => break None,
+            }
+        }
+    })
+}
+
+/// A connection that completes the WebSocket upgrade but never sends `hello` is closed
+/// (close code 1008) once the handshake timeout has passed, while one that completed its
+/// handshake stays open past it.
+#[test]
+fn a_client_that_never_says_hello_is_closed() {
+    let harness = start_with(&MockEngine::new(), |config| {
+        config.handshake_timeout = Duration::from_millis(300);
+    });
+    let (control, _) = harness.session();
+    let bearer = format!("Bearer {TOKEN}");
+    let mut silent = match harness.raw(None, Some(&harness.authority), Some(&bearer)) {
+        Ok(socket) => socket,
+        Err(status) => panic!("upgrade refused: {status}"),
+    };
+    assert_eq!(closed_by_server(&harness, &mut silent), Some(1008));
+    // The client that said hello in time is still served after the deadline.
+    harness.run(async { tokio::time::sleep(Duration::from_millis(400)).await });
+    let response = ok(harness.run(control.call(create_scene("main"))));
+    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+}
+
+/// At most `max_connections` (32 by default) WebSocket connections are open at once: one
+/// more is refused at the upgrade with HTTP 503 and no session is opened, and a slot
+/// freed by a closed connection can be taken again.
+#[test]
+fn connections_over_the_cap_are_refused() {
+    let harness = start_with(&MockEngine::new(), |config| {
+        // Long enough that no connection here is closed for its silence.
+        config.handshake_timeout = Duration::from_secs(60);
+    });
+    let bearer = format!("Bearer {TOKEN}");
+    let host = harness.authority.clone();
+    let mut open: Vec<RawSocket> = (0..32)
+        .map(|n| match harness.raw(None, Some(&host), Some(&bearer)) {
+            Ok(socket) => socket,
+            Err(status) => panic!("connection {n} refused: {status}"),
+        })
+        .collect();
+    assert_eq!(
+        harness.raw(None, Some(&host), Some(&bearer)).err(),
+        Some(StatusCode::SERVICE_UNAVAILABLE)
+    );
+    assert_eq!(
+        harness.sessions.load(Ordering::SeqCst),
+        32,
+        "no 33rd session"
+    );
+    // Through the client, too.
+    let reason = expect_disconnected(harness.connect());
+    assert!(reason.contains("503"), "{reason}");
+    // Closing one frees its slot, once the server has seen it go.
+    if let Some(mut first) = open.pop() {
+        harness.run(async {
+            let _ = first.close(None).await;
+            while first.next().await.is_some() {}
+        });
+    }
+    harness.run(async {
+        loop {
+            let mut request = match harness.url.as_str().into_client_request() {
+                Ok(request) => request,
+                Err(error) => panic!("request: {error}"),
+            };
+            match HeaderValue::from_str(&bearer) {
+                Ok(value) => request.headers_mut().insert(header::AUTHORIZATION, value),
+                Err(error) => panic!("header: {error}"),
+            };
+            match tokio_tungstenite::connect_async(request).await {
+                Ok((socket, _)) => break open.push(socket),
+                Err(tungstenite::Error::Http(response))
+                    if response.status() == StatusCode::SERVICE_UNAVAILABLE =>
+                {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+                Err(error) => panic!("unexpected connection error: {error}"),
+            }
+        }
+    });
+    assert_eq!(harness.sessions.load(Ordering::SeqCst), 33);
+}
+
+/// A connection that sends its upgrade request's headers too slowly is dropped once the
+/// header-read timeout has passed, and no session is opened; a connection whose request
+/// was accepted is not dropped by it.
+#[test]
+fn a_client_that_sends_headers_too_slowly_is_dropped() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let harness = start_with(&MockEngine::new(), |config| {
+        config.header_read_timeout = Duration::from_millis(300);
+    });
+    let (control, _) = harness.session();
+    let addr = harness.authority.clone();
+    let read = harness.run(async {
+        let mut stream = match tokio::net::TcpStream::connect(&addr).await {
+            Ok(stream) => stream,
+            Err(error) => panic!("connect: {error}"),
+        };
+        // Part of a request, then nothing more.
+        let partial = format!("GET {} HTTP/1.1\r\nHost: {addr}\r\n", crate::WS_PATH);
+        if let Err(error) = stream.write_all(partial.as_bytes()).await {
+            panic!("write: {error}");
+        }
+        let mut buf = [0u8; 256];
+        stream.read(&mut buf).await
+    });
+    // Dropped: the server closed (or reset) the connection without answering.
+    assert!(matches!(read, Ok(0) | Err(_)), "{read:?}");
+    assert_eq!(
+        harness.sessions.load(Ordering::SeqCst),
+        1,
+        "no session opened"
+    );
+    // The client whose request was accepted is still served after the deadline.
+    harness.run(async { tokio::time::sleep(Duration::from_millis(400)).await });
+    let response = ok(harness.run(control.call(create_scene("main"))));
+    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
 }

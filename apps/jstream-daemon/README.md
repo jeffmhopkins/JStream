@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:a60922474764c7dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read daemon Design against core Design's #129 edits (bounded stop drain, LivePublish::stop_by, Stop drain drop row): the daemon builds one Engine with with_output only, never sets backends or a publish target, so neither the drain bound nor with_cpu_compositor needs mention here" }
+verified = { hash = "b3:15beda7456e1f502", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#140) into #136: re-read; daemon builds one Engine with with_output only, never sets backends or a publish target, so the bounded stop drain doesn't reach it; ServerConfig::new with only the port changed still holds with #140's defaults" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
