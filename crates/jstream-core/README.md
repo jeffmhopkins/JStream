@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:341de0452f28bef3", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: only core tests change (each Backends literal gains video_devices from FakeVideoDevices; CaptureStats literals gain frames_undecodable: 0); with_backends/injection text unchanged and holds" }
+verified = { hash = "b3:f654b82f608d7d28", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#177 C4b, #225) into B5: re-read; core text unchanged by the merge (stamps only); History bullet and main's platform text hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f96e761c279c4f3b", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: tests-only edits in core (Backends.video_devices, CaptureStats.frames_undecodable literals); drops table still reads frames_skipped only for capture_frames, which is what drops.rs does (decode failures are not reported in stats.tick yet)" }
+verified = { hash = "b3:b1390806ba97cbf1", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#177 C4b, #225) into B5: re-read; text unchanged by the merge; history paragraph keeps item.set_source and item.move" }
 -->
 
 ### Engine and sessions
