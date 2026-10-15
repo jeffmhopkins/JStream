@@ -2340,7 +2340,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:de38d89391222d92", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at Q3 (#309): the design text is main's (Playwright against a mock daemon); D5's mock additions (buses, sends, audio) are additive to the state the mock daemon serves; holds" }
+stamp = { hash = "b3:d34a62e19cda7872", by = "agent:claude@session_014tD7qzFcSezrCaUXKkGDhv", note = "#308 merge of main at #376: text unchanged; Mixer bullet matches mixer.rs and the style.css mixer block; holds" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:4b7f99a329a36029" }
@@ -2372,8 +2372,11 @@ stamp = { hash = "b3:374727eaba299426" }
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mixer.rs"]
+stamp = { hash = "b3:a107eaa05e9d2e99", by = "agent:claude@session_014tD7qzFcSezrCaUXKkGDhv", note = "#308 merge of main at #376: text unchanged; Mixer bullet matches mixer.rs and the style.css mixer block; holds" }
+
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:ef3e4d543c670393" }
+stamp = { hash = "b3:635ac2ea261a0c9b", by = "agent:claude@session_014tD7qzFcSezrCaUXKkGDhv", note = "#308 merge of main at #376: text unchanged; Mixer bullet matches mixer.rs and the style.css mixer block; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:81728ddff971bf23" }
@@ -2382,10 +2385,10 @@ stamp = { hash = "b3:81728ddff971bf23" }
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:bd8197d3c2a90a4b" }
+stamp = { hash = "b3:a66de12665a42d77", by = "agent:claude@session_014tD7qzFcSezrCaUXKkGDhv", note = "#308 merge of main at #376: text unchanged; Mixer bullet matches mixer.rs and the style.css mixer block; holds" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:e5df397b64055237", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line gained the e2e README sections; contents list holds" }
+stamp = { hash = "b3:b8d7e70c05f3137b", by = "agent:claude@session_014tD7qzFcSezrCaUXKkGDhv", note = "#308 merge of main at #376 (stamp ledger): text unchanged; contents list names mixer.rs beside outputs.rs; holds" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -2414,8 +2417,11 @@ stamp = { hash = "b3:374727eaba299426" }
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mixer.rs"]
+stamp = { hash = "b3:a107eaa05e9d2e99", by = "agent:claude@session_014tD7qzFcSezrCaUXKkGDhv", note = "#308 merge of main at #376 (stamp ledger): text unchanged; contents list names mixer.rs beside outputs.rs; holds" }
+
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:ef3e4d543c670393" }
+stamp = { hash = "b3:635ac2ea261a0c9b", by = "agent:claude@session_014tD7qzFcSezrCaUXKkGDhv", note = "#308 merge of main at #376 (stamp ledger): text unchanged; contents list names mixer.rs beside outputs.rs; holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:81728ddff971bf23" }
