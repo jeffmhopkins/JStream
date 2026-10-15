@@ -94,9 +94,10 @@ state machine. Contents:
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
-  mixer input has its fader and its sends (silenced while it is `muted`), the master
-  stage's audio chain runs on the mixer's master chain, and an output with an audio
-  chain has an output tap running it
+  mixer input has its fader and its sends (silenced while it is `muted`), scaled by
+  its activity gain (`activity.rs`): a `when_shown` source is heard only while the
+  Program mix shows it. The master stage's audio chain runs on the mixer's master
+  chain, and an output with an audio chain has an output tap running it
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md));
   `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
@@ -174,13 +175,14 @@ state machine. Contents:
   engine in-process. The audio routing (`audio.rs` and
   `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
   batches and undo, `meters.tick` while a mixer is attached and none after,
-  `audio.reset_loudness`, and the master's true peak and loudness; `src/tests/audio.rs`
+  `audio.reset_loudness`, the master's true peak and loudness, and a `when_shown`
+  source's activity gain following scene switches, shown and hidden items and undo
+  (`activity.rs` checks reachability itself); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
   off closes its input and its meter and turning it on opens them again. The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
-Not here yet: live values, `when_shown`'s activity
-gain (D6), the audio and outputs snapshots, a GPU encode target, and
+Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
 the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -625,7 +627,15 @@ brings the mixer in line with the collection under the collection lock:
   latest, and stays muted until then. Every control is a few atomics, so a sync never
   waits on the mixer thread ([R-RT-003](../../docs/RULES.md#R-RT-003)), and the
   `Routed` lock is the last one taken. The program stage's microphone and desktop
-  inputs are not sources and keep sending to the master at unity;
+  inputs are not sources and keep sending to the master at unity.
+- each such input's activity gain (`activity.rs`, ADR-0028's "shown"): 1 for a source
+  that follows `always`; for a `when_shown` one, `min(1, Σ w)` over the roots that
+  reach it through visible items and nested scene sources whose audio is on. The roots
+  are the program scene (weight 1) and every nested scene source whose audio is on and
+  follows `always` (weight 1 each). The mixer applies it after the input's fader and
+  meter, scaling every send, and ramps to it over one block, so a cut never clicks
+  and the meter still reads a source that is off program. `scene.switch` and a batch
+  that moves program sync too, after program is reconciled.
 - the master stage's audio chain on the mixer's master chain (`MixerControl::master`),
   which runs on every bus that feeds an output, and each running output tap's chain
   (below), with `filters::Chain::apply`: a filter whose kind and position are
@@ -1044,7 +1054,8 @@ history, idempotency keys and the program scene are not saved (see *Program scen
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
 - Video filter kinds, and blend modes other than `normal`, in the compositor.
-- `when_shown`'s activity gain (D6), and meters for every bus's true peak and loudness.
+- Activity gains that fade with a transition (T1: only cuts exist, so every weight
+  is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one

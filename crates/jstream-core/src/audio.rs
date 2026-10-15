@@ -9,6 +9,10 @@
 //! every routed source and every bus, with true peak and BS.1770 loudness on the master,
 //! which the mixer thread measures on each block it mixes ([`MasterMeters`]).
 //!
+//! Each source's `follow` is applied as its input's activity gain, computed from the
+//! scene on program (`crate::activity`), so a `when_shown` source is heard only while
+//! the Program mix shows it. The engine syncs again when program changes.
+//!
 //! The audio sources' inputs are opened and closed by the program stage
 //! (`crate::audio_sources`, which opens none for a source whose audio is off, and runs
 //! each source's filter chain); this module only sets them up.
@@ -18,16 +22,18 @@
 //! output that starts with an audio chain of its own gets an output tap on the master
 //! bus, which runs that chain after the master's; the output encodes its audio from the
 //! tap instead of sharing the master bus's encode. Each sync brings both chains in line
-//! with the collection, so their filters change live. Not yet: `follow` (`when_shown`) is
-//! D6's activity gain.
+//! with the collection, so their filters change live.
 
+use crate::activity::activity_gains;
 use crate::filters::{Chain, chain_of};
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{
     BusControl, InputControl, MeterReading, MixerControl, OutputTapControl, OutputTapId,
 };
 use jstream_graph::State;
-use jstream_protocol::{BusId, BusMeter, Finite32, Loudness, OutputId, SourceId, SourceMeter};
+use jstream_protocol::{
+    BusId, BusMeter, Finite32, Loudness, OutputId, SceneId, SourceId, SourceMeter,
+};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -72,12 +78,14 @@ pub(crate) struct MixerHandles {
 }
 
 impl AudioRouting {
-    /// Starts routing into `mixer`, set up as `state` says, with the audio sources'
-    /// mixer `inputs`. Returns the attach's number, for [`detach`](Self::detach).
+    /// Starts routing into `mixer`, set up as `state` says with `program` on the
+    /// Program mix, with the audio sources' mixer `inputs`. Returns the attach's number,
+    /// for [`detach`](Self::detach).
     pub(crate) fn attach(
         &mut self,
         mixer: MixerHandles,
         state: &State,
+        program: Option<&SceneId>,
         inputs: &BTreeMap<SourceId, InputControl>,
     ) -> u64 {
         self.attaches = self.attaches.wrapping_add(1);
@@ -92,7 +100,7 @@ impl AudioRouting {
             taps: BTreeMap::new(),
             removing_taps: Vec::new(),
         });
-        self.sync(state, inputs);
+        self.sync(state, program, inputs);
         self.attaches
     }
 
@@ -165,9 +173,15 @@ impl AudioRouting {
 
     /// Brings the mixer in line with `state`: adds and removes buses, sets every fader,
     /// mute and send, those of the audio sources' `inputs` (which the program stage opens
-    /// and closes, `crate::audio_sources`) included, and the master's and the output
-    /// taps' filter chains. Does nothing while no mixer runs.
-    pub(crate) fn sync(&mut self, state: &State, inputs: &BTreeMap<SourceId, InputControl>) {
+    /// and closes, `crate::audio_sources`) included, each input's activity gain for
+    /// `program` on the Program mix, and the master's and the output taps' filter
+    /// chains. Does nothing while no mixer runs.
+    pub(crate) fn sync(
+        &mut self,
+        state: &State,
+        program: Option<&SceneId>,
+        inputs: &BTreeMap<SourceId, InputControl>,
+    ) {
         let Some(attached) = &mut self.attached else {
             return;
         };
@@ -221,17 +235,16 @@ impl AudioRouting {
             control.set_gain_db(bus.gain_db().get());
             control.set_muted(bus.muted());
         }
+        let activity = activity_gains(state, program);
         // An input whose source went, or has no audio now, stops being routed.
         for (id, input) in inputs {
             let Some(audio) = state.source(id).and_then(|s| s.audio()) else {
                 continue;
             };
-            input.set_gain_db(audio.gain_db.get());
-            // Off, the program stage closes the source's input (`crate::audio_sources`);
-            // until it has, the input is silent and unmetered here. A mute keeps the
-            // sends but silences them, so the input's post-fader meter still reads
-            // (ADR-0028).
-            input.set_muted(!audio.enabled);
+            // The activity gain and the sends go first: a new input opens muted, and
+            // the mixer may run a block between these stores, so it must not become
+            // audible before its routing is in place.
+            input.set_activity_gain(activity.get(id).copied().unwrap_or(1.0));
             let master = (BusId::master(), attached.master.id());
             let others = attached
                 .buses
@@ -246,6 +259,12 @@ impl AudioRouting {
                     }
                 }
             }
+            input.set_gain_db(audio.gain_db.get());
+            // Off, the program stage closes the source's input (`crate::audio_sources`);
+            // until it has, the input is silent and unmetered here. A mute keeps the
+            // sends but silences them, so the input's post-fader meter still reads
+            // (ADR-0028).
+            input.set_muted(!audio.enabled);
         }
     }
 
@@ -475,10 +494,13 @@ mod tests {
                 meters,
             },
             graph.state(),
+            None,
             &inputs,
         );
         let attached = routing.attached.as_ref().expect("attached");
         let vod = attached.buses[&BusId::new("vod")].id();
+        // An audio input follows `always`.
+        assert_eq!(input.activity_gain(), 1.0);
         // A new source sends to the master at 0 dB, and nowhere else.
         assert_eq!(input.send(jstream_audio::BusId::MASTER), Some(1.0));
         assert_eq!(input.send(vod), None);
@@ -509,11 +531,13 @@ mod tests {
                 },
             ],
         );
-        routing.sync(graph.state(), &inputs);
+        routing.sync(graph.state(), None, &inputs);
         assert_eq!(input.send(jstream_audio::BusId::MASTER), None);
         // Muted: the send is kept but silent, and the input itself still plays to its
         // meter.
         assert_eq!(input.send(vod), Some(0.0));
+        // Following `when_shown` with no scene on program, it is not heard.
+        assert_eq!(input.activity_gain(), 0.0);
         assert!((input.gain() - 1.995).abs() < 1e-3, "{}", input.gain());
         assert!(!input.muted());
         assert!((mixer.bus().gain() - 0.1).abs() < 1e-4);
@@ -530,7 +554,7 @@ mod tests {
                 muted: Some(false),
             }],
         );
-        routing.sync(graph.state(), &inputs);
+        routing.sync(graph.state(), None, &inputs);
         let send = input.send(vod).expect("a send to vod");
         assert!((send - 0.501).abs() < 1e-3, "{send}");
 
@@ -550,7 +574,7 @@ mod tests {
                 },
             ],
         );
-        routing.sync(graph.state(), &inputs);
+        routing.sync(graph.state(), None, &inputs);
         assert!(input.muted());
         let attached = routing.attached.as_ref().expect("attached");
         assert!(attached.buses.is_empty());

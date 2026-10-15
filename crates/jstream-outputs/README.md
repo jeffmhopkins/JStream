@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:01d13ed88b420a07", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#243: re-read the whole section against Transport::shutdown now shutting down only the write side; edited the Transport bullet (FIN, reply readable, drop closes the rest, Windows abort with Both) and the Tests paragraph (new shutdown_leaves_the_server_s_reply_readable); #209/#236 text still holds" }
+verified = { hash = "b3:3bfb1c14434e16e3", by = "agent:claude", note = "re-read the Tests paragraph against the shutdown_over_tls test now waiting for the server's read timeout before the client shuts down (a test-only ordering fix for macOS EINVAL); the test list and every Transport claim still hold" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
