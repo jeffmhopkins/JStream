@@ -1,6 +1,7 @@
 //! The engine behind the server: one `Engine`, one `InProcessControl` session per
-//! WebSocket connection, and the signals that stop it. On Windows the engine is live:
-//! it runs the media pipeline on the OS backends and publishes over RTMP(S).
+//! WebSocket connection and per MCP session, and the signals that stop it. On Windows
+//! the engine is live: it runs the media pipeline on the OS backends and publishes
+//! over RTMP(S).
 
 use crate::args::Options;
 use jstream_core::Engine;
@@ -146,8 +147,9 @@ fn opener(
     })
 }
 
-/// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token`. Each
-/// connection gets its own session (its own `client_id`); all of them share the engine.
+/// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token`, with MCP's
+/// streamable-HTTP transport on. Each connection and each MCP session gets its own
+/// session (its own `client_id`); all of them share the engine.
 pub async fn bind(
     engine: Arc<Engine>,
     port: u16,
@@ -156,6 +158,7 @@ pub async fn bind(
     let connector: Connector = Arc::new(move || Box::new(engine.connect()));
     let mut config = ServerConfig::new(token);
     config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+    config.mcp = true;
     Server::bind(config, connector).await
 }
 
@@ -241,6 +244,11 @@ mod tests {
             .expect("binds");
         assert!(server.local_addr().ip().is_loopback());
         assert_ne!(server.local_addr().port(), 0);
+        assert_eq!(
+            server.mcp_url(),
+            Some(format!("http://{}/mcp", server.local_addr())),
+            "serves MCP"
+        );
         let url = server.ws_url();
         let (stop, stopped) = oneshot::channel::<()>();
         let serving = tokio::spawn(server.serve_with_shutdown(async move {

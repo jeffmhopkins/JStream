@@ -1,10 +1,11 @@
-//! The stream-key store: the seam to the OS credential store (R-SEC-001,
-//! docs/RULES.md#R-SEC-001).
+//! The stream-key and OAuth-token stores: the seams to the OS credential store
+//! (R-SEC-001, docs/RULES.md#R-SEC-001).
 //!
-//! Stream keys live only there, never in the collection, a log, an event or an error. The
-//! engine is handed a [`StreamKeyStore`] by the host: a platform crate's (Windows
-//! Credential Manager first), or [`fake::MemoryKeyStore`](crate::fake::MemoryKeyStore)
-//! in tests.
+//! Stream keys and OAuth refresh tokens live only there, never in the collection, a log,
+//! an event or an error. The host hands the engine a [`StreamKeyStore`] and the YouTube
+//! client an [`OAuthTokenStore`]: a platform crate's (Windows Credential Manager first),
+//! or [`fake::MemoryKeyStore`](crate::fake::MemoryKeyStore) and
+//! [`fake::MemoryTokenStore`](crate::fake::MemoryTokenStore) in tests.
 
 use std::fmt;
 use std::sync::atomic::{Ordering, compiler_fence};
@@ -46,7 +47,45 @@ pub trait StreamKeyStore: Send + Sync {
     }
 }
 
-/// A secret, such as a stream key, on its way to or from the credential store.
+/// Stores one OAuth refresh token per account, keyed by an account ID the caller chooses
+/// (for YouTube, the Google account the user signed in with).
+///
+/// A separate seam from [`StreamKeyStore`], so a token and a stream key never share a
+/// name even when an account ID equals an output ID. Only the long-lived refresh token is
+/// stored; access tokens are short-lived and stay in the caller's memory. The same rules
+/// as [`StreamKeyStore`] hold: calls may block briefly, so they run off real-time
+/// threads, and **no error may contain a token**.
+pub trait OAuthTokenStore: Send + Sync {
+    /// Stores `token` for `account`, replacing any token it had.
+    ///
+    /// # Errors
+    /// The store refused or failed.
+    fn set(&self, account: &str, token: &Secret) -> Result<(), PlatformError>;
+
+    /// The token stored for `account`, or `None`.
+    ///
+    /// # Errors
+    /// The store failed.
+    fn get(&self, account: &str) -> Result<Option<Secret>, PlatformError>;
+
+    /// Removes the token stored for `account`, as on sign-out or when the provider
+    /// revoked it. Removing a token that isn't there succeeds.
+    ///
+    /// # Errors
+    /// The store refused or failed.
+    fn clear(&self, account: &str) -> Result<(), PlatformError>;
+
+    /// Whether a token is stored for `account`. By default, [`get`](Self::get) and drop
+    /// the token; a store that can check without reading the secret should do so.
+    ///
+    /// # Errors
+    /// The store failed.
+    fn is_set(&self, account: &str) -> Result<bool, PlatformError> {
+        Ok(self.get(account)?.is_some())
+    }
+}
+
+/// A secret, such as a stream key or an OAuth refresh token, on its way to or from the credential store.
 ///
 /// It never prints: its `Debug` is `"***"` and it has no `Display`. The only way to read
 /// it is [`expose`](Self::expose). It isn't `Clone`, so the only copies are the ones a
@@ -160,5 +199,67 @@ mod tests {
         store.clear("out_1").expect("clears");
         store.clear("out_1").expect("clearing nothing succeeds");
         assert!(shared.is_empty());
+    }
+
+    #[test]
+    fn the_memory_token_store_keeps_one_token_per_account_apart_from_stream_keys() {
+        use super::{OAuthTokenStore, StreamKeyStore};
+        use crate::fake::{MemoryKeyStore, MemoryTokenStore};
+
+        let tokens = MemoryTokenStore::new();
+        let keys = MemoryKeyStore::new();
+        let shared = tokens.clone();
+        assert_eq!(tokens.is_set("acct").ok(), Some(false));
+        tokens
+            .set("acct", &Secret::new("1//first"))
+            .expect("stores");
+        tokens
+            .set("acct", &Secret::new("1//second"))
+            .expect("replaces");
+        keys.set("acct", &Secret::new("live_key")).expect("stores");
+        assert_eq!(
+            shared
+                .get("acct")
+                .ok()
+                .flatten()
+                .map(|t| t.expose().to_owned()),
+            Some("1//second".to_owned())
+        );
+        assert_eq!(shared.is_set("other").ok(), Some(false));
+        assert_eq!(shared.len(), 1);
+
+        tokens.clear("acct").expect("clears");
+        tokens.clear("acct").expect("clearing nothing succeeds");
+        assert!(shared.is_empty());
+        // Clearing the token left the stream key with the same name alone.
+        assert_eq!(keys.is_set("acct").ok(), Some(true));
+    }
+
+    /// R-SEC-001: a refresh token never shows in the store's `Debug`, in what `get`
+    /// returns, or in an error, whichever call fails.
+    #[test]
+    fn oauth_tokens_are_redacted() {
+        use super::OAuthTokenStore;
+        use crate::fake::MemoryTokenStore;
+
+        let token = "1//0gRefreshTokenValue";
+        let store = MemoryTokenStore::new();
+        store.set("acct", &Secret::new(token)).expect("stores");
+        let read = store.get("acct").expect("reads");
+        let debug = format!("{store:?} {read:?}");
+        assert!(!debug.contains("RefreshToken"), "{debug}");
+
+        store.set_failing(true);
+        let errors = [
+            store.set("acct", &Secret::new(token)).err(),
+            store.get("acct").err(),
+            store.is_set("acct").err(),
+            store.clear("acct").err(),
+        ];
+        for err in errors {
+            let err = err.expect("every call fails");
+            let shown = format!("{err} {err:?}");
+            assert!(!shown.contains("RefreshToken"), "{shown}");
+        }
     }
 }

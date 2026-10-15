@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:8afa655b32d5a083", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 (protocol 0.7): new edits, actions and query plus key_set and outputs fields that parse with serde defaults from older servers are additive, a minor bump; names are noun.verb; no rule text changed" }
+verified = { hash = "b3:d1aae25b710240dd", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read R-API-001..004 against 0.8 (main, additive) and I1 (transport only, no protocol change)" }
 -->
 
 <a id="R-API-001"></a>
@@ -616,7 +616,7 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
-| `sweep` | weekly docs/external/facts sweep plus override audit list (scheduled) | n/a | M1 |
+| `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
 
 <a id="R-GIT-004"></a>
 ### R-GIT-004: One logical change per PR
