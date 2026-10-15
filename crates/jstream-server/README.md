@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a7c5ed99f5a535f8", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0044 accepted, R-SEC-002 amended for pairing: nothing is built yet, so the server's admission text (control token on every request) still holds on this branch" }
+verified = { hash = "b3:42323e3c06de0f79", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: cascade; unaffected" }
 -->
 
 ### Listening and admission

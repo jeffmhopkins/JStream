@@ -2,16 +2,25 @@
 //! applies each input's fader, sends it into the buses, applies each bus's fader, and
 //! meters inputs and buses.
 //!
-//! **Signal order** (docs/adr/0028-audio-model-v2.md): per input, ring → fader and mute
-//! → each send's gain → bus sum. Per bus, sum → fader and mute → output. Sends are
-//! post-fader. The master bus (slot 0) is the block [`Mixer::mix`] writes out; every
-//! bus's last block is also readable with [`Mixer::bus_block`].
+//! **Signal order** (docs/adr/0028-audio-model-v2.md): per input, ring → filter chain
+//! → fader and mute → each send's gain → bus sum. Per bus, sum → filter chain → fader
+//! and mute → output. Sends are post-fader.
+//!
+//! **Latency compensation.** After its chain, each input is delayed to the longest
+//! input chain's latency and each bus to the longest bus chain's, so the paths line up.
+//! A block's `pts` is the media time of the input it was computed from: its first frame
+//! minus that total latency ([`Mixer::latency_frames`]). A `Delay` filter adds no
+//! latency, so its audio from media time `t` is stamped `t` plus its delay: ADR-0028's
+//! deliberate shift. The master bus (slot 0) is the block [`Mixer::mix`] writes out;
+//! every bus's last block is also readable with [`Mixer::bus_block`].
 //!
 //! **Time line.** Engine frame `n` is media time `n / rate` (the media clock's zero,
 //! docs/adr/0014-media-clock.md). A block is the frames `[n, n + block)`; its pts is `n`
-//! ticks of `1 / rate` seconds. The mixer produces a block once the clock has passed
-//! its end by `latency` frames ([`Mixer::poll`]), so every input's audio for that window
-//! has had `latency` to arrive (device period, the resampler's look-ahead, and jitter).
+//! minus the compensated latency above (so `n` when no chain has any), in ticks of
+//! `1 / rate` seconds. The mixer produces a block once the clock has passed its end by
+//! the configured arrival latency, [`MixerConfig::latency_frames`] ([`Mixer::poll`]), so
+//! every input's audio for that window has had that long to arrive (device period, the
+//! resampler's look-ahead, and jitter).
 //! Inputs that missed it read as silence and are counted as underrun.
 //!
 //! **Falling behind.** If the mixer thread is stalled so long that the block it is due
@@ -36,7 +45,8 @@ use crossbeam_channel::Receiver;
 use jstream_media::{MediaTime, Rounding, Timebase};
 
 use super::bus::{BusShared, MASTER_ID, MAX_BUSES, NO_BUS};
-use super::cmd::{self, Command, ControlPlane};
+use super::chain::Chain;
+use super::cmd::{self, ChainTarget, Command, ControlPlane};
 use super::input::InputShared;
 use super::retire::Retirer;
 use super::ring::FrameRing;
@@ -106,8 +116,10 @@ pub struct Block {
     pub frame: i64,
     /// Frames in the block ([`MixerConfig::block_frames`]).
     pub frames: usize,
-    /// The block's presentation time: `frame` ticks of `1 / sample_rate` seconds on the
-    /// media clock.
+    /// The block's presentation time on the media clock, in ticks of `1 / sample_rate`
+    /// seconds: the media time of the input it was computed from, `frame` minus the
+    /// filter chains' latency ([`Mixer::latency_frames`]). Equal to `frame` while no
+    /// filter adds latency.
     pub pts: MediaTime,
 }
 
@@ -123,6 +135,7 @@ struct Slot {
     /// Per bus slot, the bus `send_now` was applied to. When the slot holds another
     /// bus, the send starts again from silence.
     send_bus: [u64; MAX_BUSES],
+    chain: Box<Chain>,
 }
 
 #[derive(Debug)]
@@ -131,6 +144,7 @@ struct BusSlot {
     shared: Arc<BusShared>,
     /// The fader gain applied at the end of the previous block.
     gain_now: f32,
+    chain: Box<Chain>,
 }
 
 /// Adds and removes inputs and buses while [`Mixer::poll`] runs on another thread.
@@ -159,6 +173,10 @@ pub struct Mixer {
     scratch: Box<[[f32; 2]]>,
     /// Each bus slot's sum, then its output: `block_frames` frames per slot.
     acc: Box<[[f32; 2]]>,
+    /// The longest input chain's latency, frames: every input is delayed to it.
+    input_latency: usize,
+    /// The longest bus chain's latency, frames: every bus is delayed to it.
+    bus_latency: usize,
 }
 
 impl Mixer {
@@ -188,6 +206,7 @@ impl Mixer {
             id: MASTER_ID,
             shared: Arc::clone(&master),
             gain_now: 1.0,
+            chain: Box::new(Chain::new(config.sample_rate)?),
         });
         Ok(Self {
             config,
@@ -200,6 +219,8 @@ impl Mixer {
             position: None,
             scratch: vec![[0.0; 2]; config.block_frames].into_boxed_slice(),
             acc: vec![[0.0; 2]; MAX_BUSES * config.block_frames].into_boxed_slice(),
+            input_latency: 0,
+            bus_latency: 0,
         })
     }
 
@@ -276,6 +297,14 @@ impl Mixer {
             .map(<[[f32; 2]]>::as_flattened)
     }
 
+    /// The filter chains' latency, frames: the longest input chain's plus the longest
+    /// bus chain's, as of the last block mixed or command applied. Each block's `pts`
+    /// is its first frame minus this, so it changes when a filter with latency is added
+    /// or removed.
+    pub fn latency_frames(&self) -> usize {
+        self.input_latency + self.bus_latency
+    }
+
     /// The configuration.
     pub fn config(&self) -> MixerConfig {
         self.config
@@ -342,8 +371,11 @@ impl Mixer {
             buses,
             scratch,
             acc,
+            input_latency,
+            bus_latency,
             ..
         } = self;
+        let (input_latency, bus_latency) = (*input_latency, *bus_latency);
         for (bus, sum) in buses.iter().zip(acc.chunks_exact_mut(n)) {
             if bus.is_some() {
                 sum.fill([0.0; 2]);
@@ -357,6 +389,8 @@ impl Mixer {
                     .underrun_frames
                     .add((n - rep.valid.min(n)) as u64);
             }
+            let comp = input_latency - slot.chain.latency().min(input_latency);
+            slot.chain.process(scratch, comp);
             let target = slot.shared.gain.effective();
             apply_gain(scratch, slot.gain_now, target);
             slot.gain_now = target;
@@ -375,6 +409,8 @@ impl Mixer {
         }
         for (bus, sum) in buses.iter_mut().zip(acc.chunks_exact_mut(n)) {
             let Some(bus) = bus else { continue };
+            let comp = bus_latency - bus.chain.latency().min(bus_latency);
+            bus.chain.process(sum, comp);
             let target = bus.shared.gain.effective();
             apply_gain(sum, bus.gain_now, target);
             bus.gain_now = target;
@@ -392,22 +428,32 @@ impl Mixer {
         // Slot 0 is the master.
         out.copy_from_slice(acc[..n].as_flattened());
         self.position = Some(end);
+        let latency = (input_latency + bus_latency) as i64;
         Ok(Block {
             frame,
             frames: n,
-            pts: MediaTime::new(frame, self.timebase),
+            pts: MediaTime::new(frame.saturating_sub(latency), self.timebase),
         })
     }
 
-    /// Installs inputs and buses the control plane queued, and retires the ones it
-    /// removed. Pushing stays within the capacity reserved in [`Mixer::new`].
+    /// Installs inputs, buses and filters the control plane queued, retires the ones it
+    /// removed, and applies filter edits. Pushing and inserting stay within the capacity
+    /// reserved in [`Mixer::new`] and when each chain was built.
     fn apply_commands(&mut self) {
+        let mut changed = false;
         while let Ok(command) = self.commands.try_recv() {
+            changed = true;
             match command {
-                Command::Add { id, ring, shared } => {
+                Command::Add {
+                    id,
+                    ring,
+                    shared,
+                    chain,
+                } => {
                     if self.inputs.len() >= cmd::MAX_INPUTS {
                         self.plane.retirer().ring(ring);
                         self.plane.retirer().shared(shared);
+                        self.plane.retirer().chain(chain);
                         continue;
                     }
                     if let Some(pos) = self.position {
@@ -425,23 +471,89 @@ impl Mixer {
                         gain_now,
                         send_now,
                         send_bus,
+                        chain,
                     });
                 }
                 Command::Remove(id) => self.retire_id(id),
-                Command::AddBus { slot, id, shared } => match self.buses.get_mut(slot) {
+                Command::AddBus {
+                    slot,
+                    id,
+                    shared,
+                    chain,
+                } => match self.buses.get_mut(slot) {
                     Some(entry @ None) => {
                         let gain_now = shared.gain.effective();
                         *entry = Some(BusSlot {
                             id,
                             shared,
                             gain_now,
+                            chain,
                         });
                     }
                     // The control plane only hands out free slots; refuse anything else.
-                    _ => self.plane.retirer().bus(shared),
+                    _ => {
+                        self.plane.retirer().bus(shared);
+                        self.plane.retirer().chain(chain);
+                    }
                 },
                 Command::RemoveBus { slot, id } => self.retire_bus(slot, id),
+                Command::AddFilter {
+                    target,
+                    index,
+                    id,
+                    kernel,
+                } => {
+                    let refused = match self.chain_mut(target) {
+                        Some(chain) => chain.insert(index, id, kernel).err(),
+                        None => Some(kernel),
+                    };
+                    if let Some(kernel) = refused {
+                        self.plane.retirer().kernel(kernel);
+                    }
+                }
+                Command::RemoveFilter { target, id } => {
+                    if let Some(kernel) = self.chain_mut(target).and_then(|c| c.remove(id)) {
+                        self.plane.retirer().kernel(kernel);
+                    }
+                }
+                Command::EditFilter { target, id, params } => {
+                    if let Some(chain) = self.chain_mut(target) {
+                        chain.edit(id, &params);
+                    }
+                }
             }
+        }
+        if changed {
+            self.input_latency = self
+                .inputs
+                .iter()
+                .map(|slot| slot.chain.latency())
+                .max()
+                .unwrap_or(0);
+            self.bus_latency = self
+                .buses
+                .iter()
+                .flatten()
+                .map(|bus| bus.chain.latency())
+                .max()
+                .unwrap_or(0);
+        }
+    }
+
+    /// The chain a filter command names, if its input or bus is installed.
+    fn chain_mut(&mut self, target: ChainTarget) -> Option<&mut Chain> {
+        match target {
+            ChainTarget::Input(id) => self
+                .inputs
+                .iter_mut()
+                .find(|slot| slot.id == id)
+                .map(|slot| &mut *slot.chain),
+            ChainTarget::Bus { slot, id } => self
+                .buses
+                .get_mut(slot)?
+                .as_mut()
+                .filter(|bus| bus.id == id)
+                .map(|bus| &mut *bus.chain),
         }
     }
 
@@ -454,6 +566,7 @@ impl Mixer {
         }
         if let Some(bus) = entry.take() {
             self.plane.retirer().bus(bus.shared);
+            self.plane.retirer().chain(bus.chain);
         }
     }
 
@@ -464,6 +577,7 @@ impl Mixer {
         let slot = self.inputs.swap_remove(index);
         self.plane.retirer().ring(slot.ring);
         self.plane.retirer().shared(slot.shared);
+        self.plane.retirer().chain(slot.chain);
     }
 
     fn check_out(&self, out: &[f32]) -> Result<(), AudioError> {
@@ -485,22 +599,35 @@ impl Drop for Mixer {
     fn drop(&mut self) {
         loop {
             match self.commands.try_recv() {
-                Ok(Command::Add { ring, shared, .. }) => {
+                Ok(Command::Add {
+                    ring,
+                    shared,
+                    chain,
+                    ..
+                }) => {
                     self.plane.retirer().ring(ring);
                     self.plane.retirer().shared(shared);
+                    self.plane.retirer().chain(chain);
                 }
                 Ok(Command::Remove(id)) => self.retire_id(id),
-                Ok(Command::AddBus { shared, .. }) => self.plane.retirer().bus(shared),
+                Ok(Command::AddBus { shared, chain, .. }) => {
+                    self.plane.retirer().bus(shared);
+                    self.plane.retirer().chain(chain);
+                }
                 Ok(Command::RemoveBus { slot, id }) => self.retire_bus(slot, id),
+                Ok(Command::AddFilter { kernel, .. }) => self.plane.retirer().kernel(kernel),
+                Ok(Command::RemoveFilter { .. } | Command::EditFilter { .. }) => {}
                 Err(_) => break,
             }
         }
         for slot in self.inputs.drain(..) {
             self.plane.retirer().ring(slot.ring);
             self.plane.retirer().shared(slot.shared);
+            self.plane.retirer().chain(slot.chain);
         }
         for bus in self.buses.iter_mut().filter_map(Option::take) {
             self.plane.retirer().bus(bus.shared);
+            self.plane.retirer().chain(bus.chain);
         }
     }
 }
@@ -923,6 +1050,229 @@ mod tests {
         m.mix(40_000, &mut out).unwrap();
         assert_frames(&out, [1.0, 1.0], "first block at full level");
         assert_eq!(ca.stats().underrun_frames, 0);
+    }
+
+    /// Feeds `secs` of `f(frame)` stereo frames in 10 ms packets stamped exactly.
+    fn feed_with(p: &mut InputProducer, f: impl Fn(u64) -> [f32; 2], secs: f64) {
+        let frames = 480u64;
+        let packets = (secs * 100.0) as u64;
+        for i in 0..packets {
+            let samples: Vec<f32> = (0..frames).flat_map(|n| f(i * frames + n)).collect();
+            p.push_packet(&AudioPacket {
+                samples: &samples,
+                device_position: i * frames,
+                time: Some(MediaTime::new(
+                    (i * frames) as i64,
+                    Timebase::per_second(RATE).unwrap(),
+                )),
+                flags: AudioPacketFlags::default(),
+            });
+        }
+    }
+
+    /// An input's chain runs before its fader and a bus's chain on its sum, and edits
+    /// and removals reach the mixer through the command queue.
+    #[test]
+    fn filter_chains_run_on_inputs_and_buses_and_are_edited_live() {
+        use crate::{FilterParams, FilterSpec};
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        feed(&mut a, 0.5, 0.5, 1.0);
+        let input_gain = ca.add_filter(FilterSpec::Gain { gain_db: -6.0 }).unwrap();
+        ca.set_gain(2.0);
+        let bus_gain = m
+            .bus()
+            .add_filter(FilterSpec::Gain { gain_db: 6.0 })
+            .unwrap();
+        assert_eq!(input_gain.latency_frames(), 0);
+        let mut out = vec![0.0; 960];
+        // The gain kernels ramp over 10 ms (480 frames): settle, then measure.
+        m.mix(40_000, &mut out).unwrap();
+        m.mix(40_480, &mut out).unwrap();
+        let g6 = 10f32.powf(6.0 / 20.0);
+        let want = 0.5 / g6 * 2.0 * g6;
+        assert_frames(&out, [want, want], "input chain, fader, bus chain");
+        // The input meter is after the chain and the fader.
+        assert!((ca.take_meter().peak[0] - 0.5 / g6 * 2.0).abs() < 1e-5);
+
+        input_gain.set(FilterParams::Gain { gain_db: 0.0 }).unwrap();
+        m.mix(40_960, &mut out).unwrap();
+        m.mix(41_440, &mut out).unwrap();
+        assert_frames(&out, [g6, g6], "after the edit");
+
+        assert!(bus_gain.remove());
+        assert!(!bus_gain.remove());
+        m.mix(41_920, &mut out).unwrap();
+        assert_frames(&out, [1.0, 1.0], "bus filter removed");
+        assert!(matches!(
+            bus_gain.set(FilterParams::Gain { gain_db: 0.0 }),
+            Err(AudioError::Removed)
+        ));
+        assert_eq!(m.latency_frames(), 0);
+    }
+
+    /// A chain with latency (a limiter's look-ahead) delays the other inputs and buses
+    /// to match, and the block's pts moves back by the total, so every path lines up and
+    /// the stamp is the media time of the input in the block.
+    #[test]
+    fn latency_is_compensated_and_stamped() {
+        use crate::FilterSpec;
+        use crate::filter::LimiterParams;
+        let tone =
+            |n: u64| (0.25 * (std::f64::consts::TAU * 100.0 * n as f64 / 48_000.0).sin()) as f32;
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        let (mut b, _cb) = m.add_input(stereo48()).unwrap();
+        // The same tone, on the left from A and on the right from B.
+        feed_with(&mut a, |n| [tone(n), 0.0], 1.0);
+        feed_with(&mut b, |n| [0.0, tone(n)], 1.0);
+        let limiter = |lookahead_ms| FilterSpec::Limiter {
+            lookahead_ms,
+            params: LimiterParams::default(),
+        };
+        let lim = ca.add_filter(limiter(5.0)).unwrap();
+        assert_eq!(lim.latency_frames(), 240);
+        let aux = m.add_bus().unwrap();
+        ca.set_send(aux.id(), 1.0);
+        let aux_lim = aux.add_filter(limiter(2.0)).unwrap();
+        assert_eq!(aux_lim.latency_frames(), 96);
+
+        let mut out = vec![0.0; 960];
+        let blk = m.mix(40_000, &mut out).unwrap();
+        assert_eq!(m.latency_frames(), 240 + 96);
+        // The send into the aux bus ramps in over this block; the aux chain holds its
+        // tail into the next one, so compare from the third block.
+        m.mix(40_480, &mut out).unwrap();
+        assert_eq!(
+            blk.pts,
+            MediaTime::new(40_000 - 240 - 96, Timebase::per_second(RATE).unwrap())
+        );
+        for frame in [40_960, 41_440] {
+            m.mix(frame, &mut out).unwrap();
+            // A (with the limiter) and B (compensated) line up on the master...
+            for (i, f) in out.chunks_exact(2).enumerate() {
+                assert!((f[0] - f[1]).abs() < 1e-3, "frame {i}: {f:?}");
+            }
+            // ...which is delayed by both chains: the input's and the aux bus's.
+            for (i, f) in out.chunks_exact(2).enumerate() {
+                let want = tone((frame + i as i64 - 240 - 96) as u64);
+                assert!((f[0] - want).abs() < 2e-3, "frame {i}: {} vs {want}", f[0]);
+            }
+            // The aux bus, which has the longest bus chain, is delayed by its own.
+            let aux_out = m.bus_block(aux.id()).unwrap();
+            for (i, f) in aux_out.chunks_exact(2).enumerate() {
+                let want = tone((frame + i as i64 - 240 - 96) as u64);
+                assert!(
+                    (f[0] - want).abs() < 2e-3,
+                    "aux frame {i}: {} vs {want}",
+                    f[0]
+                );
+            }
+        }
+        // Removing the latency brings the stamp back to the mixed frame.
+        assert!(lim.remove() && aux_lim.remove());
+        let blk = m.mix(41_920, &mut out).unwrap();
+        assert_eq!(m.latency_frames(), 0);
+        assert_eq!(blk.pts.ticks(), 41_920);
+    }
+
+    /// ADR-0028: a delay filter's output is stamped later by its delay. It has no
+    /// latency, so `pts` stays the mixed frame while the samples it carries come from
+    /// the input that much earlier.
+    #[test]
+    fn a_delay_filter_is_stamped_later_by_its_delay() {
+        use crate::FilterSpec;
+        let tone =
+            |n: u64| (0.25 * (std::f64::consts::TAU * 100.0 * n as f64 / 48_000.0).sin()) as f32;
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        feed_with(&mut a, |n| [tone(n), tone(n)], 1.0);
+        let delay = ca
+            .add_filter(FilterSpec::Delay {
+                max_ms: 100.0,
+                delay_ms: 10.0,
+            })
+            .unwrap();
+        assert_eq!(delay.latency_frames(), 0);
+        let mut out = vec![0.0; 960];
+        m.mix(40_000, &mut out).unwrap();
+        for frame in [40_480, 40_960] {
+            let blk = m.mix(frame, &mut out).unwrap();
+            assert_eq!(m.latency_frames(), 0);
+            assert_eq!(blk.pts.ticks(), frame);
+            // Input frame t is in the block stamped t + 480.
+            for (i, f) in out.chunks_exact(2).enumerate() {
+                let want = tone((frame + i as i64 - 480) as u64);
+                assert!((f[0] - want).abs() < 1e-3, "frame {i}: {} vs {want}", f[0]);
+            }
+        }
+    }
+
+    #[test]
+    fn filter_additions_and_edits_are_checked() {
+        use crate::filter::{GateParams, LimiterParams};
+        use crate::{FilterParams, FilterSpec};
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (_a, ca) = m.add_input(stereo48()).unwrap();
+        // At most 100 ms of latency per chain: five 20 ms limiters, not six.
+        let limiter = FilterSpec::Limiter {
+            lookahead_ms: 20.0,
+            params: LimiterParams::default(),
+        };
+        let mut chain = Vec::new();
+        for _ in 0..5 {
+            chain.push(ca.add_filter(limiter).unwrap());
+        }
+        assert!(matches!(
+            ca.add_filter(limiter),
+            Err(AudioError::InvalidConfig { .. })
+        ));
+        // At most 8 filters.
+        for _ in 0..3 {
+            chain.push(ca.add_filter(FilterSpec::Gain { gain_db: 0.0 }).unwrap());
+        }
+        assert!(matches!(
+            ca.add_filter(FilterSpec::Gain { gain_db: 0.0 }),
+            Err(AudioError::TooManyFilters)
+        ));
+        // Out of range, or another kind's parameters.
+        assert!(matches!(
+            ca.add_filter(FilterSpec::Gain { gain_db: 99.0 }),
+            Err(AudioError::TooManyFilters | AudioError::InvalidConfig { .. })
+        ));
+        let gain = &chain[5];
+        assert!(matches!(
+            gain.set(FilterParams::NoiseGate(GateParams::default())),
+            Err(AudioError::InvalidConfig { .. })
+        ));
+        assert!(matches!(
+            gain.set(FilterParams::Gain { gain_db: 99.0 }),
+            Err(AudioError::InvalidConfig { .. })
+        ));
+        assert!(gain.set(FilterParams::Gain { gain_db: -3.0 }).is_ok());
+        let aux = m.add_bus().unwrap();
+        let delay = aux
+            .add_filter(FilterSpec::Delay {
+                max_ms: 10.0,
+                delay_ms: 5.0,
+            })
+            .unwrap();
+        assert_eq!(delay.latency_frames(), 0, "a delay is a shift, not latency");
+        assert!(delay.set(FilterParams::Delay { delay_ms: 10.0 }).is_ok());
+        assert!(matches!(
+            delay.set(FilterParams::Delay { delay_ms: 11.0 }),
+            Err(AudioError::InvalidConfig { .. })
+        ));
+        // Once the input is gone, its filters are too.
+        assert!(ca.remove());
+        assert!(matches!(
+            ca.add_filter(FilterSpec::Gain { gain_db: 0.0 }),
+            Err(AudioError::Removed)
+        ));
+        assert!(!chain[0].remove());
+        let mut out = vec![0.0; 960];
+        m.mix(0, &mut out).unwrap();
+        assert_eq!(m.latency_frames(), 0);
     }
 
     #[test]

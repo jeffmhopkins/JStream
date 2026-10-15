@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:9b8119ee0c3297c6", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; contents list holds; mock.rs only swaps InvalidArgument literals for the constructor, including #203's running-output undo test" }
+verified = { hash = "b3:b24d855a6714afcc", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: re-read; contents list holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:55afc10914989afb", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; #203's undo and redo bullet and B9's delete.plan internal / no blockers note both hold" }
+verified = { hash = "b3:b10544e7956fd894", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: kept main's B9 line (delete.plan internal, no blockers on refused deletes) beside this branch's set_role/item.move bullets; matches mock.rs" }
 -->
 
 ### The trait
@@ -101,20 +101,20 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but protocol 0.12's `scene.set_role` and `item.move` (which answer
-  `internal`), with the checks `jstream-graph` makes, in the same order per
+- every protocol edit, with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
-  - reorder indices out of range;
+  - reorder and `item.move` indices out of range (`item.move` into another scene may
+    name one past its top);
   - a placement edit's `scene_id` naming a scene other than the item's own;
   - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
     not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or
     either while a source's settings refer to it;
-  - nesting cycles from `item.add` and `item.set_source`;
+  - nesting cycles from `item.add`, `item.set_source` and `item.move`;
   - a `source.create` whose `duplicated_from` names the source itself. Like the graph,
     the mock stores `duplicated_from` as a plain link (`source.duplicate` sets it) and
     reports it only while the source it names exists;
@@ -140,10 +140,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   scene), `output.list` and `encoder.list` (ordered by ID), each at the current `rev`.
   So it keeps everything an edit sets: the canvas, source names, kinds and settings,
   each item's placement (its transform, or its geometry and the transform view of it),
-  crop and visibility, each output's kind, target and encoder profile, and each
-  profile. `video.snapshot` is not one of those reads: the mock has no compositor and
-  answers it with `internal`, as it does for any protocol variant it does not
-  implement;
+  crop and visibility, each scene's role and each item's scene after an `item.move`,
+  each output's kind, target and encoder profile, and each profile. `video.snapshot`
+  is not one of those reads: the mock has no compositor and answers it with
+  `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
@@ -162,7 +162,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Each batch is a step built
   from the same inverse edits `jstream-graph` returns: a removed item comes back at its
   index with its placement in its own form (transform or geometry), crop and
-  visibility, a deleted scene at its position with its items, a deleted source with its
+  visibility, a deleted scene at its position with its role and items, `item.move`
+  back to the item's previous scene and index, `scene.set_role` back to the previous
+  role, a deleted source with its
   settings and `duplicated_from`, `item.set_source` back to the item's previous source,
   a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
