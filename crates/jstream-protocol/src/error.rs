@@ -167,6 +167,8 @@ pub enum EntityKind {
     Encoder,
     /// A filter in a source's chain (ADR-0026). Its ID is unique within the source.
     Filter,
+    /// An audio bus.
+    Bus,
 }
 
 impl fmt::Display for EntityKind {
@@ -178,6 +180,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
             EntityKind::Filter => "filter",
+            EntityKind::Bus => "bus",
         })
     }
 }
