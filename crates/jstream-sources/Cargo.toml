@@ -1,7 +1,7 @@
 [package]
 name = "jstream-sources"
 version = "0.0.0"
-description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour, image and text sources."
+description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour, image, text and media file sources."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

@@ -32,6 +32,19 @@ pub struct AudioDeviceInfo {
     pub is_default: bool,
 }
 
+/// A running process, as [`AudioIo::processes`] lists it: what process loopback
+/// ([`AudioInputTarget::ProcessLoopback`]) can record.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AudioProcess {
+    /// The process ID.
+    pub pid: u32,
+    /// The ID of the process that started it, if the OS reports one. It may have
+    /// exited, and its ID may have been reused since.
+    pub parent_pid: Option<u32>,
+    /// The executable's file name, such as `obs64.exe`, without its folder.
+    pub exe: String,
+}
+
 /// What an input stream records.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -71,6 +84,21 @@ pub trait AudioIo: Send + Sync {
     /// # Errors
     /// [`PlatformError::Os`] when the OS refuses to enumerate them.
     fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError>;
+
+    /// The processes running now, any of which process loopback can record.
+    ///
+    /// # Errors
+    /// [`PlatformError::Os`] when the OS refuses to list them.
+    fn processes(&self) -> Result<Vec<AudioProcess>, PlatformError>;
+
+    /// The format [`open_input`](AudioIo::open_input) would deliver `target` in if it
+    /// were opened now, so the engine can prepare a handler for it. The device can
+    /// still change before the open: the opened stream's
+    /// [`format`](AudioStream::format) is the one that counts.
+    ///
+    /// # Errors
+    /// As for [`open_input`](AudioIo::open_input).
+    fn input_format(&self, target: &AudioInputTarget) -> Result<AudioFormat, PlatformError>;
 
     /// Starts recording `target`, calling `handler` on the backend's audio thread for
     /// every packet. Dropping the returned stream stops it, and the handler is dropped

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:f249ac4b0318ae8d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B9 #197, G3c #235) into C9: main's text kept with C9's; G3c's register_vcam bullet kept beside C9's MfMediaDecoders bullet and delay-load entry; re-read" }
+verified = { hash = "b3:6a2cb17c6d42fe45", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (C5 #238 audio sources) into C9: C5's process list and input_format text kept beside C9's MfMediaDecoders bullet; re-read" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -34,7 +34,13 @@ The code is ported from spikes S1 to S3. This first cut has:
   one time line ([ADR-0014](../../docs/adr/0014-media-clock.md)). `now` never decreases.
 - **`WasapiAudio`** (`AudioIo`):
   - **Listing** the active capture and render endpoints, with the console-role default
-    of each.
+    of each, and the running processes (a ToolHelp snapshot: each one's ID, its
+    parent's and its executable's file name), which process loopback can record.
+  - **Format query:** `input_format` returns the format a stream on a target would
+    have, without opening it: the format below for the target's endpoint (the current
+    default for a default target), found by activating a client and reading its mix
+    format, and 48 kHz stereo for process loopback of a running process (`NotFound`
+    for one that isn't).
   - **Streams** for every target the traits define: an input, the default input, loopback
     of an output or the default output, process loopback (a process and its children,
     through the virtual process-loopback device), an output and the default output.
@@ -412,7 +418,12 @@ machines may have no audio devices, no Media Foundation, no GPU and no display
 target, stages it and checks that the shared fence passes the staged value. The capture
 tests list the displays, capture the primary display for a second, checking the
 frames' format and `pts`, start a capture of a destroyed window, which must be
-`NotFound`, and capture three times in a row in one process. The GPU capture tests read back twenty staged frames (each opaque, so a
+`NotFound`, and capture three times in a row in one process. The audio tests list the
+devices (one default each way), record the default input for a second on the media
+clock, play a quiet tone and record its loopback, check that `input_format` matches
+the opened stream for the default input and the default output's loopback, and find
+this process in the process list, record its process loopback and get `NotFound` for
+a process that isn't running. The GPU capture tests read back twenty staged frames (each opaque, so a
 read before the copy finished would show), refuse another device's queue, outlive the
 context, and hold every frame until the ring drops new ones, then release them. They
 need screen activity, so move the mouse while they run. The virtual-camera test starts

@@ -13,17 +13,20 @@ use std::sync::Arc;
 ///
 /// Sources are created by their [`SourceKind`] from a complete, already validated
 /// settings map. Creating one may block (an image is read and decoded then), so it never
-/// happens on a real-time thread. Asking for a frame doesn't block or allocate for the
-/// built-in kinds: frames are made when the source is created or updated and handed out
-/// as shared [`Arc`]s, so the render thread can hold one past the next update.
+/// happens on a real-time thread. Asking for a frame doesn't block on I/O or allocate
+/// for the built-in kinds: frames are made when the source is created or updated, or
+/// decoded ahead on a thread of the source's own (`media`, which hands each over under a
+/// short lock), and handed out as shared [`Arc`]s, so the render thread can hold one
+/// past the next update.
 pub trait Source: Send {
     /// The frame to show at `at`, the time since the source started on the media clock
     /// (ADR-0014, docs/adr/0014-media-clock.md). A time before the start shows the
     /// first frame.
     ///
     /// # Errors
-    /// Whatever stops the source from producing a frame. The built-in kinds never fail
-    /// here; their errors surface when they are created.
+    /// Whatever stops the source from producing a frame. The built-in kinds' errors
+    /// surface when they are created, apart from a `media` file that fails to decode
+    /// partway, which fails here from then on.
     fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError>;
 
     /// When the frame shown at `at` is next replaced, on the same clock as

@@ -27,8 +27,8 @@ mod video_device;
 
 pub use audio::{
     AudioDeviceInfo, AudioDirection, AudioInputHandler, AudioInputTarget, AudioIo,
-    AudioOutputHandler, AudioOutputTarget, AudioPacket, AudioPacketFlags, AudioRenderBuffer,
-    AudioStream,
+    AudioOutputHandler, AudioOutputTarget, AudioPacket, AudioPacketFlags, AudioProcess,
+    AudioRenderBuffer, AudioStream,
 };
 pub use backends::Backends;
 pub use capture::{Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo};

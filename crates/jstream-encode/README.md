@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:b8800600b21a38a2", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Stale only via ARCH data-model (media added to built kinds) and crate-map platform row; encode text untouched, re-read, holds" }
+verified = { hash = "b3:91891ce8bcca31ac", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (C5 #238 audio sources) into C9: stale only via ARCH data-model (C5 audio-only sentence and C9's media built kind); encode text untouched, holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

@@ -7,9 +7,11 @@
 //! WebP and GIF, animated GIF and WebP included, decoded with pure-Rust crates), `text`
 //! (a string drawn with a TrueType or OpenType font, read with `skrifa`) and `media` (a
 //! video file, demuxed and decoded by the platform's [`MediaDecoders`] from
-//! [`Context::media`]). The other built-in kinds are described only. `jstream-core`
-//! drives sources from its `jstream-sources` thread through [`Registry::create`],
-//! [`Source::frame`], [`Source::next_change`] and [`Source::show`].
+//! [`Context::media`]). The audio-only kinds (`audio_input`, `desktop_audio` and
+//! `app_audio`) make no frames: the engine records the [`AudioTarget`] their settings
+//! name. The other built-in kinds are described only. `jstream-core` drives sources
+//! from its `jstream-sources` thread through [`Registry::create`], [`Source::frame`],
+//! [`Source::next_change`] and [`Source::show`].
 //!
 //! [`MediaDecoders`]: jstream_platform::MediaDecoders
 //!
@@ -17,6 +19,7 @@
 
 #![forbid(unsafe_code)]
 
+mod audio;
 mod color;
 mod describe;
 mod error;
@@ -26,6 +29,7 @@ mod registry;
 mod source;
 mod text;
 
+pub use audio::AudioTarget;
 pub use error::SourceError;
 pub use registry::Registry;
 pub use source::{AssetRoots, Context, Limits, Source, SourceKind, needs_restart};

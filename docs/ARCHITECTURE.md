@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:904b39782369576f", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: media added to the built kinds, videos advance on the media clock; re-read" }
+verified = { hash = "b3:57040e39b36a547c", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (C5 #238 audio sources) into C9: Built so far lists color, image, media and text, with C5's audio-only kinds sentence kept; re-read" }
 -->
 
 ```
@@ -360,7 +360,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   built-in kinds come from `jstream-sources`. The engine runs a source of each one
   whose kind is built (`color`, `image`, `media` and `text`), rebuilt when its settings
   change, and the program mix shows its frames, animations and videos advancing on the
-  media clock.
+  media clock. The audio-only kinds (`audio_input`, `desktop_audio`, `app_audio`) have
+  no `Source`: while an output runs, the engine records each as a mixer input sent to
+  master.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
   container: mp4 }`, the path checked to be absolute and to end in a file name. A stream

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:f503de8c5c5c5a96", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Stale only via platform#purpose (Media files bullet, Backends and fakes lists); OAuthTokenStore and Secret text unchanged; holds" }
+verified = { hash = "b3:b807681e2126561f", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (C5 #238 audio sources) into C9: stale only via platform#purpose (audio and media-file bullets); youtube text unchanged, holds" }
 -->
 
 Layer-2 client for Google sign-in and the
