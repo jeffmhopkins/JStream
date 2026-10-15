@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:4a0ec5b672b9d8d0", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Commands and Queries list the 0.7 output edits, key actions and output.list; new Outputs (output.rs) bullet; PROTOCOL_VERSION 0.7 with stats.tick as 0.6; checked against command.rs, query.rs, output.rs, version.rs" }
+verified = { hash = "b3:9f1b3279d7c32a8f", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5: parity bullet now says the fixture collection has two RTMP outputs and covers output.list and URL rejections (parity.rs); the rest of the contents list is unchanged" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -67,8 +67,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
-  support, not wire types. One batch that builds a small collection, the exact answer
-  to every collection read of it, and the exact error for batches rejected against it.
+  support, not wire types. One batch that builds a small collection with two RTMP
+  outputs, the exact answer to every collection read of it (`output.list` included),
+  and the exact error for batches rejected against it (RTMP URL checks included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. It changes no
@@ -79,7 +80,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:e6e59bc369fcff37", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: handshake example at 0.7; actions include storing a stream key; new outputs paragraph (create/set_target/delete, URL checks from graph target.rs, write-only key, key outlives delete, clear_key on a deleted output); state.get outputs, output.list, key_set with pre-0.7 defaults; geometry paragraph says 0.7" }
+verified = { hash = "b3:791a57d4658a05af", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5 changed only parity.rs (test fixture behind the fixtures feature); no wire type, schema or snapshot changed, so the design section holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

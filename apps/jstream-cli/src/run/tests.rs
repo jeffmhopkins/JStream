@@ -309,7 +309,9 @@ fn state_get_golden() {
            \x20 cam_2  cam     true     0,0       1,1    0         0,0,0,0\n\
            \x20 cam_1  cam     true     0,0       1,1    0         0,0,0,0\n\
             scene brb (Be right back):\n\
-           \x20 no items\n")
+           \x20 no items\n\
+            outputs:\n\
+           \x20 no outputs\n")
     );
     let item = |id: &str| {
         format!(
@@ -329,7 +331,7 @@ fn state_get_golden() {
     );
     assert_eq!(
         run_on(&MockEngine::new(), &["--mock", "state", "get"]),
-        ok("rev 0\nsources:\n  no sources\nno scenes\n")
+        ok("rev 0\nsources:\n  no sources\nno scenes\noutputs:\n  no outputs\n")
     );
 }
 
@@ -457,7 +459,7 @@ fn outputs_golden() {
     let engine = populated();
     assert_eq!(
         run_on(&engine, &["--mock", "output", "status", "out_1"]),
-        ok("out_1: stopped\n")
+        ok("out_1: stopped, stream key not set\n")
     );
     assert_eq!(
         run_on(&engine, &["--mock", "output", "start", "out_1"]),
@@ -474,6 +476,190 @@ fn outputs_golden() {
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "output", "stop", "out_1"]),
         ok("{\"id\":\"req_1\",\"result\":{\"kind\":\"action\"}}\n")
+    );
+}
+
+/// Runs the CLI with `line` and `input` as stdin against a new session of `engine`.
+fn run_on_with_input(engine: &MockEngine, line: &[&str], input: &str) -> Outcome {
+    run_with_input(
+        &|_: &Connection| -> Result<Box<dyn Control>, CliError> { Ok(Box::new(engine.connect())) },
+        line,
+        input,
+    )
+}
+
+#[test]
+fn configured_outputs_golden() {
+    let engine = MockEngine::new();
+    let create = [
+        "--mock",
+        "edit",
+        "output.create",
+        "yt",
+        "rtmp://old.example.com/live2",
+        "output.create",
+        "tw",
+        "rtmp://live.twitch.tv/app",
+        "output.set_target",
+        "yt",
+        "rtmps://a.rtmps.youtube.com:443/live2",
+    ];
+    assert_eq!(run_on(&engine, &create), ok("applied: rev 1 (req_1)\n"));
+    let table = "\
+        \x20 ID  KIND  TARGET\n\
+        \x20 tw  rtmp  rtmp://live.twitch.tv/app\n\
+        \x20 yt  rtmp  rtmps://a.rtmps.youtube.com:443/live2\n";
+    let unindented = table.replace("\n  ", "\n");
+    assert_eq!(
+        run_on(&engine, &["--mock", "output", "list"]),
+        ok(&format!("rev 1\n{}", &unindented[2..]))
+    );
+    assert_eq!(
+        run_on(&engine, &["--mock", "state", "get"]),
+        ok(&format!(
+            "rev 1\nsources:\n  no sources\nno scenes\noutputs:\n{table}"
+        ))
+    );
+    assert_eq!(
+        run_on(&engine, &["--json", "--mock", "output", "list"]),
+        ok(concat!(
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"output.list","rev":1,"outputs":["#,
+            r#"{"output_id":"tw","kind":{"type":"rtmp","target":{"type":"generic","url":"rtmp://live.twitch.tv/app"}}},"#,
+            r#"{"output_id":"yt","kind":{"type":"rtmp","target":{"type":"generic","url":"rtmps://a.rtmps.youtube.com:443/live2"}}}"#,
+            "]}}}\n"
+        ))
+    );
+    assert_eq!(
+        run_on(&engine, &["--mock", "edit", "output.delete", "tw"]),
+        ok("applied: rev 2 (req_1)\n")
+    );
+    // The engine refuses a URL that carries a credential, without repeating it.
+    assert_eq!(
+        run_on(
+            &engine,
+            &[
+                "--mock",
+                "edit",
+                "output.set_target",
+                "yt",
+                "rtmp://u:hunter2@host/app"
+            ]
+        ),
+        failed(
+            17,
+            "error: invalid `edits.0.target.url`: must not carry credentials \
+             (`user:password@`): set the stream key with `output.set_key` (invalid_argument)\n"
+        )
+    );
+    assert_eq!(engine.rev(), Rev(2));
+}
+
+/// The stream key comes from stdin or `--key-file`, never from the command line, and is
+/// never printed.
+#[test]
+fn stream_keys_golden() {
+    let engine = MockEngine::new();
+    let yt = OutputId::new("yt");
+    let create = ["--mock", "edit", "output.create", "yt", "rtmp://host/live2"];
+    assert_eq!(run_on(&engine, &create), ok("applied: rev 1 (req_1)\n"));
+    let key = || engine.stream_key(&yt).map(|key| key.expose().to_owned());
+
+    assert_eq!(
+        run_on_with_input(
+            &engine,
+            &["--mock", "output", "set-key", "yt"],
+            "abcd-1234\n"
+        ),
+        ok("output.set_key accepted for yt (req_1)\n")
+    );
+    assert_eq!(key().as_deref(), Some("abcd-1234"));
+    assert_eq!(
+        run_on(&engine, &["--mock", "output", "status", "yt"]),
+        ok("yt: stopped, stream key set\n")
+    );
+
+    let dir = std::env::temp_dir().join(format!("jstream-cli-key-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let file = dir.join("key");
+    let path = file.to_str().expect("a UTF-8 temp path").to_owned();
+    std::fs::write(&file, "  efgh-5678\r\n").expect("written");
+    let from_file = [
+        "--json",
+        "--mock",
+        "output",
+        "set-key",
+        "yt",
+        "--key-file",
+        &path,
+    ];
+    assert_eq!(
+        run_on_with_input(&engine, &from_file, "ignored"),
+        ok("{\"id\":\"req_1\",\"result\":{\"kind\":\"action\"}}\n")
+    );
+    assert_eq!(key().as_deref(), Some("efgh-5678"));
+    std::fs::write(&file, "\n").expect("written");
+    let empty_file = ["--mock", "output", "set-key", "yt", "--key-file", &path];
+    assert_eq!(
+        run_on(&engine, &empty_file),
+        failed(2, &format!("error: the key file `{path}` is empty\n"))
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    let missing = run_on(
+        &engine,
+        &["--mock", "output", "set-key", "yt", "--key-file", &path],
+    );
+    assert_eq!(missing.code, exit::USAGE);
+    assert!(
+        missing.err.contains("could not read the key file"),
+        "{missing:?}"
+    );
+
+    // A key given as an argument is refused and not repeated.
+    assert_eq!(
+        run_on(
+            &engine,
+            &["--mock", "output", "set-key", "yt", "hunter2-key"]
+        ),
+        failed(
+            2,
+            "error: `output set-key` reads the key from stdin or `--key-file <path>`, \
+             never from the command line\n"
+        )
+    );
+    assert_eq!(
+        run_on_with_input(&engine, &["--mock", "output", "set-key", "yt"], " \n"),
+        failed(
+            2,
+            "error: no stream key on stdin: pipe it in, or pass `--key-file <path>`\n"
+        )
+    );
+    // The engine's checks, which never repeat the key either.
+    assert_eq!(
+        run_on_with_input(&engine, &["--mock", "output", "set-key", "yt"], "two words"),
+        failed(
+            17,
+            "error: invalid `key`: must not contain whitespace or control \
+             characters (invalid_argument)\n"
+        )
+    );
+    assert_eq!(
+        run_on_with_input(&engine, &["--mock", "output", "set-key", "nope"], "k"),
+        failed(15, "error: output `nope` does not exist (not_found)\n")
+    );
+    assert_eq!(key().as_deref(), Some("efgh-5678"));
+
+    assert_eq!(
+        run_on(&engine, &["--mock", "output", "clear-key", "yt"]),
+        ok("output.clear_key accepted for yt (req_1)\n")
+    );
+    assert_eq!(key(), None);
+    assert_eq!(
+        run_on(&engine, &["--json", "--mock", "output", "status", "yt"]),
+        ok(concat!(
+            r#"{"id":"req_1","result":{"kind":"query","result":"#,
+            r#"{"type":"output.status","output_id":"yt","state":"stopped","key_set":false}}}"#,
+            "\n"
+        ))
     );
 }
 
@@ -687,7 +873,7 @@ fn mock_connection_with_the_feature() {
             &connect,
             &["--mock", "--mock-output", "o", "output", "status", "o"]
         ),
-        ok("o: stopped\n")
+        ok("o: stopped, stream key not set\n")
     );
 }
 

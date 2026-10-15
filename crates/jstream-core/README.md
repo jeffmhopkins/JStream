@@ -92,7 +92,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:aef719c0b537e603", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Queries/Actions bullets cover output.list, key_set, set_key/clear_key; Outputs rewritten for collection outputs + Outputs::sync + apply_with_running + with_output declared; new Stream keys paragraph matches key_action/check_key/no_key_store; removed the R-SEC-001 Not yet line" }
+verified = { hash = "b3:3ee16ff7b4e46827", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5: control#design (mock) changed; the differential-script paragraph still holds (the script's parity collection now includes outputs, and the test passes); core code unchanged" }
 -->
 
 ### Engine and sessions

@@ -3,15 +3,15 @@
 //! Everything here writes through the `Write` handles it is given, so tests capture the
 //! output (golden strings) and the binary passes locked stdout and stderr. The session
 //! comes from a [`Connector`]: the WebSocket client in the binary, or a `MockEngine`.
-//! `mcp` also reads the input it is given (stdin in the binary).
+//! `mcp` and `output set-key` also read the input they are given (stdin in the binary).
 
 use crate::args::{self, Command, Connection, Invocation, USAGE};
 use crate::block::{block_on, next_event};
 use crate::exit::{self, CliError};
 use crate::mcp;
 use jstream_control::protocol::{
-    Action, Call, CallResult, Event, Hello, ItemInfo, PROTOCOL_VERSION, QueryResult, Response,
-    SourceInfo, SourceKind, Welcome,
+    Action, Call, CallResult, Event, Hello, ItemInfo, OutputInfo, OutputKind, PROTOCOL_VERSION,
+    QueryResult, Response, RtmpTarget, SecretString, SourceInfo, SourceKind, Welcome,
 };
 use jstream_control::{Control, ControlError, EventStream, WsConfig, WsControl};
 use serde_json::json;
@@ -83,8 +83,32 @@ fn read_token(path: Option<String>) -> Result<String, CliError> {
     Ok(token.to_owned())
 }
 
+/// Reads the stream key for `output set-key`: the file's text, or else all of `input`
+/// (stdin), without surrounding whitespace (a key has none, and a file or a pipe usually
+/// ends with a newline). No message repeats any of what was read.
+fn read_key(key_file: Option<&str>, input: &mut dyn BufRead) -> Result<SecretString, CliError> {
+    let text = match key_file {
+        Some(path) => std::fs::read_to_string(path).map_err(|error| {
+            CliError::Usage(format!("could not read the key file `{path}`: {error}"))
+        })?,
+        None => {
+            let mut text = String::new();
+            input.read_to_string(&mut text).map_err(CliError::Read)?;
+            text
+        }
+    };
+    let key = text.trim();
+    if key.is_empty() {
+        return Err(CliError::Usage(match key_file {
+            Some(path) => format!("the key file `{path}` is empty"),
+            None => "no stream key on stdin: pipe it in, or pass `--key-file <path>`".into(),
+        }));
+    }
+    Ok(SecretString::new(key))
+}
+
 /// Parses `args`, runs the command, writes its output to `out` and any error to `err`,
-/// and returns the process exit code. Only `mcp` reads `input`.
+/// and returns the process exit code. Only `mcp` and `output set-key` read `input`.
 pub fn run(
     args: &[String],
     connector: Connector<'_>,
@@ -132,11 +156,33 @@ pub fn execute(
         }
         _ => {}
     }
+    // A stream key is read before connecting, so a missing one fails without a session.
+    let action = match &invocation.command {
+        Command::Action(action) => Some(action.clone()),
+        Command::SetKey {
+            output_id,
+            key_file,
+        } => Some(Action::OutputSetKey {
+            output_id: output_id.clone(),
+            key: read_key(key_file.as_deref(), input)?,
+        }),
+        _ => None,
+    };
     let control = connector(&invocation.connection)?;
     let welcome = block_on(control.hello(Hello {
         protocol: PROTOCOL_VERSION,
         client_name: CLIENT_NAME.into(),
     }))?;
+    if let Some(action) = action {
+        let response = block_on(control.call(Call::Action {
+            action: action.clone(),
+        }))?;
+        return if json {
+            line(out, &response)
+        } else {
+            write_action(out, &action, &response)
+        };
+    }
     match &invocation.command {
         Command::Hello => write_welcome(out, &welcome, json),
         Command::Query(query) => {
@@ -145,23 +191,16 @@ pub fn execute(
             };
             write_response(out, &block_on(control.call(call))?, json)
         }
-        Command::Action(action) => {
-            let call = Call::Action {
-                action: action.clone(),
-            };
-            let response = block_on(control.call(call))?;
-            if json {
-                line(out, &response)
-            } else {
-                write_action(out, action, &response)
-            }
-        }
         Command::Edit(batch) => {
             let call = Call::Batch(batch.clone());
             write_response(out, &block_on(control.call(call))?, json)
         }
         Command::Events { count } => stream_events(control.events(), *count, json, out),
-        Command::Help | Command::Version | Command::Mcp => Ok(()),
+        Command::Help
+        | Command::Version
+        | Command::Mcp
+        | Command::Action(_)
+        | Command::SetKey { .. } => Ok(()),
     }
 }
 
@@ -220,7 +259,10 @@ fn write_welcome(out: &mut dyn Write, welcome: &Welcome, json: bool) -> Result<(
 fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Result<(), CliError> {
     let id = &response.id;
     match action {
-        Action::OutputStart { output_id } | Action::OutputStop { output_id } => {
+        Action::OutputStart { output_id }
+        | Action::OutputStop { output_id }
+        | Action::OutputSetKey { output_id, .. }
+        | Action::OutputClearKey { output_id } => {
             writeln!(out, "{} accepted for {output_id} ({id})", action.name())?;
         }
         other => writeln!(out, "{} accepted ({id})", other.name())?,
@@ -259,9 +301,16 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             table(out, "", &["ID", "NAME", "ITEMS"], rows.collect())?;
         }
         QueryResult::OutputStatus {
-            output_id, state, ..
+            output_id,
+            state,
+            key_set,
         } => {
-            writeln!(out, "{output_id}: {}", wire_name(state))?;
+            let key = if *key_set { "set" } else { "not set" };
+            writeln!(out, "{output_id}: {}, stream key {key}", wire_name(state))?;
+        }
+        QueryResult::OutputList { rev, outputs } => {
+            writeln!(out, "rev {rev}")?;
+            write_outputs(out, "", outputs)?;
         }
         QueryResult::SourceList { rev, sources } => {
             writeln!(out, "rev {rev}")?;
@@ -291,7 +340,7 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             rev,
             sources,
             scenes,
-            ..
+            outputs,
         } => {
             writeln!(out, "rev {rev}")?;
             writeln!(out, "sources:")?;
@@ -303,6 +352,8 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                 writeln!(out, "scene {} ({}):", scene.scene_id, scene.name)?;
                 write_items(out, "  ", &scene.items)?;
             }
+            writeln!(out, "outputs:")?;
+            write_outputs(out, "  ", outputs)?;
         }
         other => line(out, other)?,
     }
@@ -328,6 +379,35 @@ fn write_sources(
         vec![source.source_id.to_string(), source.name.clone(), kind]
     });
     table(out, indent, &["ID", "NAME", "KIND"], rows.collect())
+}
+
+/// Outputs as a table, with the target in the spelling `output.create` takes (the RTMP
+/// server URL). A kind or target this CLI doesn't know prints as JSON.
+fn write_outputs(
+    out: &mut dyn Write,
+    indent: &str,
+    outputs: &[OutputInfo],
+) -> Result<(), CliError> {
+    if outputs.is_empty() {
+        writeln!(out, "{indent}no outputs")?;
+        return Ok(());
+    }
+    let rows = outputs.iter().map(|output| {
+        let (kind, target) = match &output.kind {
+            OutputKind::Rtmp {
+                target: RtmpTarget::Generic { url },
+            } => ("rtmp".to_owned(), url.clone()),
+            other => (
+                serde_json::to_value(other)
+                    .ok()
+                    .and_then(|value| value.get("type").map(wire_name))
+                    .unwrap_or_else(|| "?".into()),
+                serde_json::to_string(other).unwrap_or_else(|_| "?".into()),
+            ),
+        };
+        vec![output.output_id.to_string(), kind, target]
+    });
+    table(out, indent, &["ID", "KIND", "TARGET"], rows.collect())
 }
 
 /// Items as a table, bottom first, with each property in the argument order of the edit

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:8c01e3ac115def0d", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 touched apps/jstream-cli only for protocol 0.7 goldens and the new key_set/outputs fields; the CLI is still the remote client and doesn't link the engine; diagram and host table hold" }
+verified = { hash = "b3:95a8a97af5a549ed", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5 touched apps/jstream-cli for output commands and key input; the CLI still talks only through jstream-control and never links the engine; diagram and host table hold" }
 -->
 
 ```
@@ -490,7 +490,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1297cb1237ce04ea", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#150, #151, #152) into #142: only verified lines conflicted; re-read the section: the 0.7 output edits, Stream keys and output.list bullets are #142's, Transport and Slow clients unaffected by #150's test-only change" }
+verified = { hash = "b3:3d12e4942720f250", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5 changed jstream-control's mock and protocol's parity fixture only; no message, edit, query or transport rule in this section changed" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
