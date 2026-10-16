@@ -1113,7 +1113,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:ec76a643a1a5e0b1", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#247): main's Startup/Listening text now names --ui-dir and the UI directory; P1's data-directory bullet (jstream-platform paths, portable marker), Dependencies entry and open question 5 are unaffected and still match logs.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:071621e792175828", by = "agent:claude", note = "Re-read Design against core's #433 change (outputs at the canvas size): daemon design says nothing about output or capture size; holds" }
+stamp = { hash = "b3:4e3e5143a4067a68", by = "agent:claude", note = "Re-read after core vcam wording (B1): daemon design names no output or camera size; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
