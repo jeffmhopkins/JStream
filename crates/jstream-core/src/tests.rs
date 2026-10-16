@@ -8,6 +8,7 @@ mod audio_routing;
 mod collection;
 mod gpu_capture;
 mod history;
+mod preview;
 mod sources;
 #[cfg(all(windows, feature = "hw-tests"))]
 mod windows_gpu;
@@ -100,6 +101,8 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
         source_id: SourceId::new(source),
         transform: None,
         geometry: None,
+        opacity: None,
+        blend: None,
     }
 }
 
@@ -530,7 +533,7 @@ fn events_reach_every_subscriber_in_order() {
     let by_agent = block_on(agent.call(Call::Batch(Batch::single(create("a"))))).expect("batch");
     let by_user = block_on(user.call(Call::Batch(Batch::single(create("b"))))).expect("batch");
     let started = block_on(agent.call(output_call("yt", true))).expect("start");
-    assert_eq!(started.result, CallResult::Action {});
+    assert_eq!(started.result, CallResult::action());
 
     let changed = |state| Event::OutputStateChanged {
         output_id: OutputId::new("yt"),
@@ -616,7 +619,7 @@ fn scene_switch_changes_program_without_an_edit() {
     assert_eq!(program(&agent), Some(SceneId::new("a")));
 
     let switch = block_on(agent.call(switch_call("b"))).expect("switch");
-    assert_eq!(switch.result, CallResult::Action {});
+    assert_eq!(switch.result, CallResult::action());
     assert_eq!(engine.rev(), Rev(1), "a switch is not an edit");
     assert_eq!(drain(&mut events), vec![switched("b", &agent, switch.id)]);
     assert_eq!(program(&user), Some(SceneId::new("b")));
@@ -2000,6 +2003,8 @@ fn video_snapshot_draws_a_geometry_on_the_collection_canvas() {
                     source_id: SourceId::new("webcam"),
                     transform: None,
                     geometry: Some(geometry),
+                    opacity: None,
+                    blend: None,
                 },
             ],
             expected_rev: None,
@@ -4485,6 +4490,9 @@ fn stream_key_actions_report_without_naming_the_key() {
             "live\nSECRET",
             "must not contain whitespace or control characters",
         ),
+        // #441: a leading byte-order mark, and any other non-ASCII character.
+        ("\u{FEFF}live_SECRET", "must contain only ASCII characters"),
+        ("live_S\u{e9}CRET", "must contain only ASCII characters"),
     ] {
         let error = block_on(control.call(set_key("out_yt", key))).expect_err("bad key");
         assert_eq!(

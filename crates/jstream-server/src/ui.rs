@@ -202,7 +202,7 @@ pub(crate) async fn handle(
         return StatusCode::NOT_FOUND.into_response();
     };
     match app.gate.admit(&headers, accepted.peer) {
-        Ok(()) => {}
+        Ok(_) => {}
         Err(Refusal::Token) => {
             return (
                 StatusCode::UNAUTHORIZED,

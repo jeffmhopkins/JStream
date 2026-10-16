@@ -1,13 +1,16 @@
 //! An in-memory [`BrowserBackend`] for tests (feature `fake`): it records the pages it
 //! opens, and a test plays audio into them and reads back their CSS and whether they
-//! closed. Its pages never paint.
+//! closed. Its pages never paint. A test plays a page's requests through its
+//! [`RequestPolicy`] with [`FakePageState::request`].
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use jstream_platform::{GpuContext, GpuFrame};
 
-use crate::{BrowserBackend, BrowserError, BrowserPage, PageAudio, PageSpec};
+use crate::{
+    BrowserBackend, BrowserError, BrowserPage, PageAudio, PageSpec, RequestPolicy, Verdict,
+};
 
 /// A browser that opens pages in memory.
 #[derive(Debug, Default)]
@@ -28,6 +31,7 @@ pub struct FakePageState {
     spec: PageSpec,
     css: Mutex<Vec<String>>,
     audio: Arc<PageAudio>,
+    policy: RequestPolicy,
     closed: AtomicBool,
 }
 
@@ -48,6 +52,11 @@ impl FakePageState {
     /// Its audio, to push packets into as CEF would.
     pub fn audio(&self) -> &Arc<PageAudio> {
         &self.audio
+    }
+
+    /// Makes a request as the page would, and says whether its policy let it through.
+    pub fn request(&self, url: &str) -> bool {
+        self.policy.check(url) == Verdict::Allow
     }
 
     /// Whether the page was dropped.
@@ -73,7 +82,7 @@ impl FakeBrowser {
         self.lock().refuse = error;
     }
 
-    /// Whether the engine last gave it a device ([`BrowserBackend::use_device`]).
+    /// Whether the host last gave it a device ([`BrowserBackend::use_device`]).
     pub fn has_device(&self) -> bool {
         self.lock().device
     }
@@ -93,6 +102,7 @@ impl BrowserBackend for FakeBrowser {
             spec: spec.clone(),
             css: Mutex::new(Vec::new()),
             audio: PageAudio::new(),
+            policy: RequestPolicy::for_location(&spec.location),
             closed: AtomicBool::new(false),
         });
         state.pages.push(Arc::clone(&page));
@@ -122,6 +132,10 @@ impl BrowserPage for FakePage {
 
     fn audio(&self) -> &Arc<PageAudio> {
         &self.0.audio
+    }
+
+    fn denied_requests(&self) -> u64 {
+        self.0.policy.denied()
     }
 }
 

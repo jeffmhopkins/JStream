@@ -53,12 +53,14 @@ generated from the protocol's JSON Schema when a `Server` is built: every varian
 `Edit`, `Action` and `Query`, and each `HistoryOp`, is named `noun.verb`, and the tool
 named after its noun
 takes it as its `op` argument. A command added to the protocol becomes an op with no
-change here, and a new noun becomes a new tool. The generated list is in the snapshot
+change here, and a new noun becomes a new tool, except `youtube`, whose ops get no
+tool ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3; the
+exclusion lands with the YouTube commands). The generated list is in the snapshot
 below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `video` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -76,6 +78,13 @@ names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-ro
 [`schema/tools.snap`](schema/tools.snap): a protocol change shows up there as the tool
 diff agents will see. After an intended change, regenerate it with
 `INSTA_UPDATE=always cargo test -p jstream-mcp` and review the diff.
+
+The `pairing` and `device` tools (protocol 0.21) need no code here either: the session
+`jstream-server` hands this crate answers them
+([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), so an agent can
+pair and revoke devices as any client can (ADR-0006), and gets `unsupported` from a
+session with no server in front. A `pairing.start` result carries the code, the one
+place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 ### MCP revisions
 

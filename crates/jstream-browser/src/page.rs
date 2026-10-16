@@ -102,7 +102,7 @@ impl PageLocation {
 /// Windows paths (`C:\a b\x.html`, `\\server\share\x.html`, and both under the `\\?\`
 /// prefix that `canonicalize` adds) become `file:///C:/a%20b/x.html` and
 /// `file://server/share/x.html`; Unix paths become `file:///a/x.html`.
-fn file_url(path: &Path) -> String {
+pub(crate) fn file_url(path: &Path) -> String {
     let text = path.to_string_lossy();
     let text = if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
         format!(r"\\{unc}")

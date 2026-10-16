@@ -7,9 +7,9 @@
 
 use crate::exit::CliError;
 use jstream_control::protocol::{
-    Action, Batch, Crop, Edit, Finite32, FitMode, IdempotencyKey, ItemGeometry, ItemId,
-    ItemTransform, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole, Size,
-    SourceId, SourceKind, Vec2,
+    Action, Batch, BlendMode, Crop, DeviceId, Edit, Finite32, FitMode, IdempotencyKey,
+    ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId,
+    SceneRole, Size, SourceId, SourceKind, Vec2,
 };
 
 /// The help text, printed by `help`, `--help` and `-h`.
@@ -53,6 +53,11 @@ Commands:
                                    stdin; never from the command line
   output clear-key <output-id>     remove the output's stream key (action
                                    output.clear_key)
+  pair                             start pairing a device and print its one-time
+                                   code, open for 2 minutes (action pairing.start)
+  device list                      list the paired devices (query device.list)
+  device revoke <device-id>        revoke a paired device and close its
+                                   connections (action device.revoke)
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
   events [--count <n>]             print events as they arrive; stop after <n>
@@ -76,6 +81,9 @@ Edits (each is its protocol command name followed by its arguments):
   item.move <item-id> <scene-id> <index>
   item.set_visible <item-id> true|false
   item.set_source <item-id> <source-id>
+  item.set_opacity <item-id> <0..1>
+  item.set_blend <item-id> normal|additive|multiply|screen|overlay|darken|lighten
+                 |difference|exclusion   (the engine draws only normal so far)
   item.set_crop <item-id> <left> <top> <right> <bottom>
   item.set_transform <item-id> <x> <y> <scale-x> <scale-y> <rotation-deg>
   item.set_geometry <item-id> <center-x> <center-y> <width> <height> <rotation-deg>
@@ -279,13 +287,18 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["output", "clear-key", id] => Command::Action(Action::OutputClearKey {
             output_id: OutputId::new(*id),
         }),
+        ["pair"] => Command::Action(Action::PairingStart),
+        ["device", "list"] => Command::Query(Query::DeviceList),
+        ["device", "revoke", id] => Command::Action(Action::DeviceRevoke {
+            device_id: DeviceId::new(*id),
+        }),
         ["edit", rest @ ..] => Command::Edit(parse_batch(rest)?),
         ["events", rest @ ..] => parse_events(rest)?,
         ["mcp"] => Command::Mcp,
         [word, ..] => {
             let known = [
                 "help", "version", "hello", "state", "scene", "source", "item", "output", "video",
-                "studio", "edit", "events", "mcp",
+                "studio", "edit", "events", "mcp", "pair", "device",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -375,8 +388,8 @@ fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "scene.delete" | "source.delete" | "item.remove" | "output.delete" => 1,
         "scene.create" | "scene.rename" | "scene.reorder" | "scene.set_role" | "source.rename"
-        | "item.reorder" | "item.set_visible" | "item.set_source" | "output.create"
-        | "output.set_target" | "canvas.set_size" => 2,
+        | "item.reorder" | "item.set_visible" | "item.set_source" | "item.set_opacity"
+        | "item.set_blend" | "output.create" | "output.set_target" | "canvas.set_size" => 2,
         "source.create" | "source.duplicate" | "item.add" | "item.move" => 3,
         "item.set_crop" => 5,
         "item.set_transform" => 6,
@@ -466,6 +479,8 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
             source_id: SourceId::new(*source),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         },
         ("item.remove", [id]) => Edit::ItemRemove {
             item_id: ItemId::new(*id),
@@ -473,6 +488,21 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         ("item.set_source", [id, source]) => Edit::ItemSetSource {
             item_id: ItemId::new(*id),
             source_id: SourceId::new(*source),
+        },
+        ("item.set_opacity", [id, opacity]) => Edit::ItemSetOpacity {
+            item_id: ItemId::new(*id),
+            scene_id: None,
+            opacity: finite(opacity, "opacity")?,
+        },
+        ("item.set_blend", [id, blend]) => Edit::ItemSetBlend {
+            item_id: ItemId::new(*id),
+            blend: BlendMode::from_name(blend).ok_or_else(|| {
+                let names: Vec<&str> = BlendMode::ALL.iter().map(BlendMode::as_str).collect();
+                usage(format!(
+                    "`item.set_blend` takes one of {}, not `{blend}`",
+                    names.join(", ")
+                ))
+            })?,
         },
         ("item.reorder", [id, index]) => Edit::ItemReorder {
             item_id: ItemId::new(*id),
@@ -637,8 +667,8 @@ mod tests {
     use super::{Command, Connection, Invocation, parse};
     use crate::exit::CliError;
     use jstream_control::protocol::{
-        Action, Batch, Crop, Edit, FitMode, IdempotencyKey, ItemId, OutputId, OutputKind, Query,
-        Rev, RtmpTarget, SceneId, SceneRole, SourceId, SourceKind,
+        Action, Batch, BlendMode, Crop, DeviceId, Edit, Finite32, FitMode, IdempotencyKey, ItemId,
+        OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole, SourceId, SourceKind,
     };
 
     fn args(line: &[&str]) -> Vec<String> {
@@ -750,6 +780,19 @@ mod tests {
             Command::Query(Query::StudioGet)
         );
         assert!(err(&["studio"]).starts_with("wrong arguments for `"));
+        assert_eq!(ok(&["pair"]).command, Command::Action(Action::PairingStart));
+        assert!(err(&["pair", "now"]).starts_with("wrong arguments for `"));
+        assert_eq!(
+            ok(&["device", "list"]).command,
+            Command::Query(Query::DeviceList)
+        );
+        assert_eq!(
+            ok(&["device", "revoke", "dev_1"]).command,
+            Command::Action(Action::DeviceRevoke {
+                device_id: DeviceId::new("dev_1")
+            })
+        );
+        assert!(err(&["device"]).starts_with("wrong arguments for `"));
     }
 
     #[test]
@@ -946,6 +989,8 @@ mod tests {
                         source_id: SourceId::new("cam"),
                         transform: None,
                         geometry: None,
+                        opacity: None,
+                        blend: None,
                     },
                     Edit::ItemSetVisible {
                         item_id: ItemId::new("i1"),
@@ -1021,16 +1066,37 @@ mod tests {
             "item.set_source",
             "i",
             "b",
+            "item.set_opacity",
+            "i",
+            "0.5",
+            "item.set_blend",
+            "i",
+            "screen",
         ];
         let Command::Edit(batch) = ok(&line).command else {
             panic!("not an edit");
         };
         assert_eq!(
-            batch.edits.last(),
-            Some(&Edit::ItemSetSource {
+            batch.edits[11],
+            Edit::ItemSetSource {
                 item_id: ItemId::new("i"),
                 source_id: SourceId::new("b"),
-            })
+            }
+        );
+        assert_eq!(
+            batch.edits[12..],
+            [
+                Edit::ItemSetOpacity {
+                    item_id: ItemId::new("i"),
+                    scene_id: None,
+                    opacity: Finite32::new(0.5).expect("finite"),
+                },
+                // The CLI sends any mode; the engine refuses the ones it doesn't draw.
+                Edit::ItemSetBlend {
+                    item_id: ItemId::new("i"),
+                    blend: BlendMode::Screen,
+                },
+            ]
         );
         let names: Vec<&str> = batch.edits.iter().map(Edit::name).collect();
         assert_eq!(
@@ -1048,6 +1114,8 @@ mod tests {
                 "item.set_geometry",
                 "canvas.set_size",
                 "item.set_source",
+                "item.set_opacity",
+                "item.set_blend",
             ]
         );
         assert_eq!(
@@ -1232,6 +1300,11 @@ mod tests {
         assert_eq!(
             err(&["edit", "item.set_transform", "i", "inf", "0", "1", "1", "0"]),
             "`x` must be a finite number, not `inf`"
+        );
+        assert_eq!(
+            err(&["edit", "item.set_blend", "i", "dissolve"]),
+            "`item.set_blend` takes one of normal, additive, multiply, screen, overlay, \
+             darken, lighten, difference, exclusion, not `dissolve`"
         );
         assert_eq!(
             err(&["edit", "scene.set_role", "s", "folder"]),

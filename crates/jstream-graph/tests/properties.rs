@@ -127,6 +127,8 @@ fn start() -> Graph {
         source_id: SourceId::new(source),
         transform: None,
         geometry: None,
+        opacity: None,
+        blend: None,
     };
     let builtin = |kind: &str| SourceKind::Builtin { kind: kind.into() };
     let edits = vec![
@@ -450,6 +452,8 @@ fn edit() -> BoxedStrategy<Edit> {
                 source_id,
                 transform,
                 geometry,
+                opacity: None,
+                blend: None,
             }),
         2 => item_id().prop_map(|item_id| Edit::ItemRemove { item_id }),
         1 => (item_id(), scene_id(), index())
