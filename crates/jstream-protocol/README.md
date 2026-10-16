@@ -96,7 +96,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.20 because of
   pairing (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
   `unsupported` error and the `device` entity kind,
-  [ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)); 0.19 added
+  [ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)); 0.19 added
   audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
   `audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
   `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
@@ -334,15 +334,22 @@ never a type per kind.
   edits.N.settings.<id>` (or `edits.N.patch.<id>`). Values are never clamped. A
   reference to a missing scene or source is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
-  `collection` and `app` are relative, with `/` separators and no `..` segment, drive
-  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
+  `collection` and `app` are relative, with `/` separators and no empty or `..` segment,
+  drive letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
   Under `absolute` the path is `/…`, `\…`, `C:\…` or `C:/…`, with no `..` segment, no
   second leading separator (`\\host\share`, `//host/share`, `\\.\…` and `\\?\…` name
   a UNC share or a device, and opening one on Windows hands the engine's credentials to
   that host), no `:` but the drive letter's, and no `?` or `*` (Win32 never allows
   them in a file name, and `\??\UNC\…` or `\??\GLOBALROOT\Device\…` is an NT object
-  path that reaches the same hosts and devices). An asset that doesn't exist yet is
-  accepted.
+  path that reaches the same hosts and devices). Under every root, the last component
+  must not name a DOS device, which Win32 opens in place of a file in any folder: a
+  stem (the name before the first `.`, without trailing spaces, in any case) of `CON`,
+  `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`,
+  `CONIN$` or `CONOUT$`. So `C:\x\nul`, `\CON .png` and `/x/aux.txt` are refused under
+  `absolute`, and `CON.png` and `media/nul` under `collection` or `app` (joined to the
+  root folder, they still open the device), while `CONSOLE.png` or `COM10.png` is not.
+  Earlier components may use these names: Win32 fails to open such a path, and elsewhere
+  they are ordinary folders. An asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
@@ -507,7 +514,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 lists the paired devices, and `device.revoke {device_id}` forgets one (`not_found` with
 entity `device` for an unknown one). They concern whom a listener admits, so the server
 in front of the engine answers them
-([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md),
+([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md),
 [jstream-server › Design](../jstream-server/README.md#design)); a `Control` with no
 server in front answers `unsupported`. The code is a `SecretString`: it never prints,
 and nothing but this answer carries it ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).

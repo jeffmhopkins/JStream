@@ -14,7 +14,7 @@ use jstream_control::{
 };
 use std::future::Future;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::{Notify, Semaphore, oneshot};
@@ -38,6 +38,9 @@ struct Harness {
     /// How many events the server's sessions have taken from the engine, over all
     /// connections.
     taken: Arc<AtomicUsize>,
+    /// While set, the engine never answers `hello`, as one that accepted the session and
+    /// then hangs.
+    silent: Arc<AtomicBool>,
     stop: Option<oneshot::Sender<()>>,
     /// The serving task: done once `serve_with_shutdown` has returned.
     serving: Option<tokio::task::JoinHandle<Result<(), crate::ServerError>>>,
@@ -77,16 +80,23 @@ fn start_on(
     let sessions = Arc::new(AtomicUsize::new(0));
     let open = Arc::new(AtomicUsize::new(0));
     let taken = Arc::new(AtomicUsize::new(0));
-    let counters = (Arc::clone(&sessions), Arc::clone(&open), Arc::clone(&taken));
+    let silent = Arc::new(AtomicBool::new(false));
+    let counters = (
+        Arc::clone(&sessions),
+        Arc::clone(&open),
+        Arc::clone(&taken),
+        Arc::clone(&silent),
+    );
     let engine = engine.clone();
     let connector: Connector = Arc::new(move || {
-        let (sessions, open, taken) = &counters;
+        let (sessions, open, taken, silent) = &counters;
         sessions.fetch_add(1, Ordering::SeqCst);
         open.fetch_add(1, Ordering::SeqCst);
         Box::new(Tracked {
             inner: engine.connect(),
             open: Arc::clone(open),
             taken: Arc::clone(taken),
+            silent: Arc::clone(silent),
         })
     });
     let mut config = match Token::new(TOKEN) {
@@ -116,6 +126,7 @@ fn start_on(
         sessions,
         open,
         taken,
+        silent,
         stop: Some(stop),
         serving: Some(serving),
     }
@@ -123,15 +134,20 @@ fn start_on(
 
 /// A mock session that counts, for the [`Harness`], the events the server takes from it
 /// and whether the server still holds it. These are what the shutdown tests wait on,
-/// rather than on wall-clock time, which a loaded machine stretches (#137).
+/// rather than on wall-clock time, which a loaded machine stretches (#137). While
+/// `silent` is set, `hello` is never answered.
 struct Tracked {
     inner: jstream_control::MockControl,
     open: Arc<AtomicUsize>,
     taken: Arc<AtomicUsize>,
+    silent: Arc<AtomicBool>,
 }
 
 impl Control for Tracked {
     fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        if self.silent.load(Ordering::SeqCst) {
+            return Box::pin(std::future::pending());
+        }
         self.inner.hello(hello)
     }
 
@@ -1183,6 +1199,34 @@ fn a_client_that_never_says_hello_is_closed() {
     harness.run(async { tokio::time::sleep(Duration::from_millis(400)).await });
     let response = ok(harness.run(control.call(create_scene("main"))));
     assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+}
+
+/// A client that says `hello` in time to an engine that never answers it is still closed
+/// (close code 1008) at the handshake deadline, and its session is dropped, rather than
+/// holding its connection slot until the engine answers (#273).
+#[test]
+fn a_hello_the_engine_never_answers_is_closed_at_the_deadline() {
+    let harness = start_with(&MockEngine::new(), |config| {
+        config.handshake_timeout = Duration::from_millis(300);
+    });
+    harness.silent.store(true, Ordering::SeqCst);
+    let bearer = format!("Bearer {TOKEN}");
+    let mut socket = match harness.raw(None, Some(&harness.authority), Some(&bearer)) {
+        Ok(socket) => socket,
+        Err(status) => panic!("upgrade refused: {status}"),
+    };
+    let hello =
+        match serde_json::to_string(&jstream_control::protocol::ClientMessage::Hello(hello())) {
+            Ok(text) => text,
+            Err(error) => panic!("hello: {error}"),
+        };
+    harness.run(async {
+        if let Err(error) = socket.send(Message::Text(hello.into())).await {
+            panic!("send: {error}");
+        }
+    });
+    assert_eq!(closed_by_server(&harness, &mut socket), Some(1008));
+    harness.wait_until(|| harness.open.load(Ordering::SeqCst) == 0);
 }
 
 /// At most `max_connections` (32 by default) WebSocket connections are open at once: one

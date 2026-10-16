@@ -79,7 +79,7 @@ diff agents will see. After an intended change, regenerate it with
 
 The `pairing` and `device` tools (protocol 0.20) need no code here either: the session
 `jstream-server` hands this crate answers them
-([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)), so an agent can
+([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), so an agent can
 pair and revoke devices as any client can (ADR-0006), and gets `unsupported` from a
 session with no server in front. A `pairing.start` result carries the code, the one
 place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
@@ -121,6 +121,7 @@ batches (MCP removed them in 2025-06-18).
 | The arguments don't fit the tool, or an `events` cursor is past the newest event | the same, with the protocol's `malformed` code and the reason |
 | The connection to the engine was lost during the call | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again ([Session and identity](#design)). |
 | `hello` failed with a lost connection | the same `disconnected` code, saying the call was not sent and that the MCP server must be restarted for a new session, with its own undo history |
+| `hello` wasn't answered within 3 s | the same `disconnected` code, saying the call was not sent and that the next call sends `hello` again ([Session and identity](#design)) |
 | Unknown tool, or a `tools/call` without `name` or with non-object `arguments` | JSON-RPC `-32602` |
 | Unparseable JSON / not a valid request / unknown method | `-32700` / `-32600` / `-32601` |
 
@@ -154,7 +155,10 @@ session must open before the agent goes idle, not at its first tool call. If tha
 engine that accepted the connection and then hangs doesn't hold `initialize` until it
 closes), the request still succeeds, and a client that skips both (a stateless
 client going straight to `tools/call`) gets its `hello` before the next tool call that
-needs the engine, which reports a failure. Later names don't change the session.
+needs the engine, which reports a failure. That `hello` has the same 3 s bound: if it
+runs out, the call isn't sent and fails with `disconnected`, and the call after it sends
+`hello` again (if the engine closed the connection meanwhile, that call reports a lost
+connection, as below). Later names don't change the session.
 `describe_api`, argument errors and `events` reads never call the engine
 ([Events](#design)).
 

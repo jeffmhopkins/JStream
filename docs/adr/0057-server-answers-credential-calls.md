@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0046"
+id = "ADR-0057"
 title = "The server answers the credential calls, and actions may answer with data"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0046: The server answers the credential calls, and actions may answer with data
+# ADR-0057: The server answers the credential calls, and actions may answer with data
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

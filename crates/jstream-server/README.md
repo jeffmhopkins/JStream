@@ -42,7 +42,7 @@ Contents (a first cut; [Design](#design) explains the choices):
   for a device token.
 - **Admitted session** (`admitted.rs`): the `Control` wrapper every connection and MCP
   session gets, which answers `pairing.start`, `device.list` and `device.revoke` itself
-  ([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)).
+  ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)).
 - **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
   an accepted upgrade request in time.
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every request passes
@@ -254,7 +254,7 @@ its own from a short code instead of the control token.
   `tests::pairing_codes_and_device_tokens_are_never_logged` checks this.
 
 These three calls are answered by the server, not the engine
-([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)): see *Sessions*.
+([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)): see *Sessions*.
 
 ### Sessions
 
@@ -271,7 +271,8 @@ task speaks the envelope
   first handshake (`unsupported_version`) is answered and the connection closed (close
   code 1008), as the envelope says. A connection whose handshake hasn't succeeded within
   `handshake_timeout` of being accepted is closed with code 1008 too (`no handshake in
-  time`).
+  time`), including one whose `hello` arrived in time but that the engine hasn't
+  answered by then: the wait for the engine's answer races the same deadline.
 - Each `request` is forwarded to `Control::call` and may stay in flight while others
   run; answers go back as they complete, carrying the client's request ID. A request
   before `hello` is answered by the session itself (`handshake_required`).

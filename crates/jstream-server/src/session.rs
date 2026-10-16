@@ -9,7 +9,8 @@
 //! answered after the shutdown), the paired device whose token admitted it is revoked
 //! (close code 1008, ADR-0044), or the handshake hasn't succeeded by its deadline
 //! (`ServerConfig::handshake_timeout`, counted from when the connection was accepted;
-//! close code 1008); dropping the session then ends its event streams.
+//! close code 1008), even if the client's `hello` is still waiting for the engine's
+//! answer; dropping the session then ends its event streams.
 //!
 //! **Logging.** The task runs in its connection's `connection` span. It logs the
 //! handshake's outcome (the `client_id`, or the refusal's code) and why the connection
@@ -42,13 +43,14 @@ use futures_util::stream::{FuturesUnordered, SplitSink};
 use futures_util::{SinkExt, StreamExt};
 use jstream_control::{BoxFuture, Control, ControlError, EventStream};
 use jstream_protocol::{
-    ClientId, ClientMessage, ErrorResponse, Event, EventMessage, ProtocolError, RequestId,
-    Response, ServerMessage, WireError,
+    ClientId, ClientMessage, ErrorResponse, Event, EventMessage, Hello, ProtocolError, RequestId,
+    Response, ServerMessage, Welcome, WireError,
 };
 use std::collections::VecDeque;
+use std::pin::Pin;
 use std::time::Duration;
 use tokio::sync::watch;
-use tokio::time::Instant;
+use tokio::time::{Instant, Sleep};
 
 /// How many session-to-wire request ID pairs a connection remembers. A `state.changed`
 /// event normally arrives within a few calls of its answer.
@@ -83,6 +85,24 @@ struct Closed;
 
 /// The answer to one forwarded request, with the client's ID for it.
 type Answer = (RequestId, Result<Response, ControlError>);
+
+/// Forwards `hello` to the engine. Before the first handshake succeeds (`pending`), the
+/// engine's answer races `deadline`: `None` if the deadline passed first, so an engine
+/// that never answers doesn't hold the connection past the handshake timeout (#273).
+async fn handshake(
+    control: &dyn Control,
+    hello: Hello,
+    pending: bool,
+    deadline: &mut Pin<&mut Sleep>,
+) -> Option<Result<Welcome, ControlError>> {
+    if !pending {
+        return Some(control.hello(hello).await);
+    }
+    tokio::select! {
+        answer = control.hello(hello) => Some(answer),
+        () = deadline.as_mut() => None,
+    }
+}
 
 /// Runs one connection until it ends. A connection whose handshake hasn't succeeded by
 /// `hello_by` is closed, and so is one whose device `revoked` signals.
@@ -144,8 +164,18 @@ pub(crate) async fn run(
                             error: error.into(),
                         }));
                     }
-                    Ok(ClientMessage::Hello(hello)) => match control.hello(hello).await {
-                        Ok(welcome) => {
+                    Ok(ClientMessage::Hello(hello)) => match handshake(
+                        control,
+                        hello,
+                        ids.client_id.is_none(),
+                        &mut handshake_deadline,
+                    )
+                    .await
+                    {
+                        // The engine hasn't answered by the deadline: the same close as a
+                        // client that never said hello.
+                        None => break Ok(Some(close(close_code::POLICY, "no handshake in time"))),
+                        Some(Ok(welcome)) => {
                             tracing::info!(client_id = %welcome.client_id, "handshake done");
                             ids.client_id = Some(welcome.client_id.clone());
                             if events.is_none() {
@@ -153,7 +183,7 @@ pub(crate) async fn run(
                             }
                             outbox.push(ServerMessage::Welcome(welcome));
                         }
-                        Err(ControlError::Protocol(error)) => {
+                        Some(Err(ControlError::Protocol(error))) => {
                             tracing::info!(code = error.error.code(), "handshake refused");
                             let refused = matches!(error.error, ProtocolError::UnsupportedVersion { .. });
                             outbox.push(ServerMessage::Error(ErrorResponse { id: None, error }));
@@ -162,7 +192,7 @@ pub(crate) async fn run(
                                 break Ok(Some(close(close_code::POLICY, "unsupported protocol version")));
                             }
                         }
-                        Err(error) => break Ok(Some(engine_gone(&error))),
+                        Some(Err(error)) => break Ok(Some(engine_gone(&error))),
                     },
                     Ok(ClientMessage::Request(request)) => {
                         calls.push(Box::pin(async move {
