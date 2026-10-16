@@ -843,4 +843,39 @@ mod tests {
         );
         assert_eq!(state.queue.get(1).map(|d| d.at), Some(1_040_000));
     }
+
+    #[test]
+    fn pieces_at_a_rate_without_whole_10_ms_keep_every_frame_and_stay_contiguous() {
+        // 10 ms at 22 050 Hz is 220.5 frames: pieces of 220, the last one shorter.
+        let format = AudioFormat::new(
+            22_050,
+            jstream_media::ChannelLayout::Stereo,
+            jstream_media::SampleFormat::F32Interleaved,
+        )
+        .expect("a format");
+        let frames = 22_050_usize;
+        let samples: Vec<f32> = (0..frames * 2).map(|index| index as f32).collect();
+        let block = Sound {
+            at: 5_000_000,
+            samples: samples.clone(),
+            length: 1_000_000,
+        };
+        let pieces = block.pieces(format);
+        assert_eq!(pieces.len(), frames.div_ceil(220), "pieces of 220 frames");
+        let joined: Vec<f32> = pieces.iter().flat_map(|p| p.samples.clone()).collect();
+        assert_eq!(joined, samples, "every frame kept, in order");
+        assert_eq!(pieces.first().map(|p| p.at), Some(5_000_000));
+        for pair in pieces.windows(2) {
+            let gap = pair[1].at - pair[0].end();
+            assert!(
+                (0..=1).contains(&gap),
+                "each piece starts where the last ended, within rounding: {gap} µs"
+            );
+        }
+        let last = pieces.last().map(Sound::end).expect("a last piece");
+        assert!(
+            (5_999_999..=6_000_000).contains(&last),
+            "the pieces end where the block did: {last}"
+        );
+    }
 }

@@ -587,7 +587,8 @@ fn a_file_with_only_audio_plays_it_and_loops_seamlessly() {
 }
 
 /// #446: a decoder that hands over a second of sound at once (as an MP3 file did on
-/// Windows) is still handed on only shortly ahead of the timeline. Handed on whole, its
+/// Windows) is still handed on only shortly ahead of the timeline, with continuous
+/// positions and no discontinuity across the block seam. Handed on whole, its
 /// end overwrote its start in the mixer input's ring before it was heard, so each
 /// second played only its last fifth.
 #[test]
