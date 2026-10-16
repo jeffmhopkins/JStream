@@ -1,13 +1,17 @@
 //! Starts and stops the program stage every running output shares, and each output's
 //! own threads.
 //!
-//! Capture is the platform's mailbox, read by the render thread. The render thread
-//! composites the program mix from the render snapshot the control side published
-//! ([`RenderHub`]) and, because the fake GPU interop has no encode target, reads the
-//! frame back and pushes CPU RGBA. What it lets go of (a replaced snapshot, GPU images
-//! past their frame fence, a finished encoder session's input) goes to the program
-//! stage's `jstream-collector` thread (R-RT-003), and so does a finished session's
-//! input the mixer thread lets go of. The mixer thread polls the engine clock. Encode threads live inside the encoder sessions. The output thread muxes
+//! Capture is the platform's mailbox, read by the render thread. When the platform's
+//! GPU interop opens a device and the capture backend can deliver frames on it, the
+//! render thread composites on that device and samples each captured texture where it
+//! is; otherwise it composites on a device of its own and uploads CPU frames
+//! ([`open_capture`]). It composites the program mix from the render snapshot the
+//! control side published ([`RenderHub`]) and, because there is no encode target yet,
+//! reads the frame back and pushes CPU RGBA. What it lets go of (a replaced snapshot,
+//! GPU images past their frame fence, a finished encoder session's input) goes to the
+//! program stage's `jstream-collector` thread (R-RT-003), and so does a finished
+//! session's input the mixer thread lets go of. The mixer thread polls the engine
+//! clock. Encode threads live inside the encoder sessions. The output thread muxes
 //! FLV and publishes it, or muxes fragmented MP4 and writes it to a recording file
 //! ([`Sink`]). A virtual camera has no encoder session: the render thread sends the
 //! program frames to its camera thread through a [`VcamTap`], over bounded channels,
@@ -46,8 +50,9 @@ use jstream_media::{
     MediaTime, PixelFormat, Plane, Rounding, SampleFormat, Timebase, VideoFrame, VideoFrameInfo,
 };
 use jstream_platform::{
-    AudioEncoderConfig, AudioIo, Backends, Capture, CaptureStream, Codecs, HardwarePreference,
-    MediaClock, RateControl, VcamFormat, VideoEncoderConfig, VideoSurface,
+    AudioEncoderConfig, AudioIo, Backends, Capture, CaptureStream, CaptureTarget, Codecs,
+    GpuContext, GpuFrame, GpuInterop, HardwarePreference, MediaClock, RateControl, VcamFormat,
+    VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
@@ -68,15 +73,16 @@ use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_came
 use crate::runtime::{
     Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
 };
-use crate::snapshot::{self, CaptureFrame, GpuKey, Shot};
+use crate::snapshot::{self, CaptureFrame, CaptureImage, GpuKey, Shot};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
 const FRAME_NUM: u32 = 1;
 const FRAME_DEN: u32 = 30;
 const SAMPLE_RATE: u32 = 48_000;
-/// How long `output.start` waits for the render thread to open the compositor on the
-/// software adapter, unless the engine was given another bound. It only keeps a stuck
-/// adapter from blocking the call forever; a slower open is not a pipeline fault.
+/// How long `output.start` waits for the render thread to open the compositor, on the
+/// platform's GPU context or, without one, on the software adapter, unless the engine
+/// was given another bound. It only keeps a stuck adapter from blocking the call
+/// forever; a slower open is not a pipeline fault.
 pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 /// Composite errors in a row that the render thread rides out by repeating the last
 /// frame. One more reports the output failed: one second at the base rate.
@@ -106,23 +112,24 @@ pub(crate) type DrawFn = Box<
     ) -> Result<Option<Reclaimed>, String>,
 >;
 
-/// Opens the render thread's [`DrawFn`], on that thread. The engine's opens the wgpu
-/// compositor on the software adapter ([`gpu_draw`]). Tests inject [`cpu_draw`] (or a
-/// variant) so the pipeline runs without an adapter.
-pub(crate) type OpenDraw = Arc<dyn Fn() -> Result<DrawFn, String> + Send + Sync>;
+/// Opens the render thread's [`DrawFn`], on that thread, on the platform's GPU context
+/// when the pipeline has one. The engine's opens the wgpu compositor on that context,
+/// or on the software adapter without one ([`gpu_draw`]). Tests inject [`cpu_draw`]
+/// (or a variant) so the pipeline runs without an adapter.
+pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, String> + Send + Sync>;
 
 /// A CPU stand-in for [`gpu_draw`]: it copies the captured RGBA8 frame, or fills black
-/// when there is none, which is what the GPU path draws for a collection with no scene.
-/// It ignores the scenes. Tests use it to run the pipeline without a wgpu adapter
+/// when there is none (or the frame is on the GPU), which is what the GPU path draws for
+/// a collection with no scene. It ignores the scenes. Tests use it to run the pipeline without a wgpu adapter
 /// ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenDraw {
-    Arc::new(|| {
+    Arc::new(|_: Option<&GpuContext>| {
         let draw: DrawFn = Box::new(
             |_: &Shot, size: FrameSize, capture: Option<&CaptureFrame<'_>>, out: &mut Vec<u8>| {
                 out.clear();
-                match capture {
-                    Some(capture) => out.extend_from_slice(capture.rgba),
-                    None => out.resize(size.width() as usize * size.height() as usize * 4, 0),
+                match capture.map(|capture| capture.image) {
+                    Some(CaptureImage::Rgba { rgba, .. }) => out.extend_from_slice(rgba),
+                    _ => out.resize(size.width() as usize * size.height() as usize * 4, 0),
                 }
                 Ok(None)
             },
@@ -148,9 +155,13 @@ pub struct OutputStats {
     pub video_subscriber: SubscriberStats,
     /// What the output's audio subscriber has been given and lost.
     pub audio_subscriber: SubscriberStats,
-    /// CPU readbacks on the render thread, which every running output shares. The fake
-    /// GPU path has no encode target, so every encoded frame is one of these.
+    /// CPU readbacks on the render thread, which every running output shares. There is
+    /// no encode target yet, so every encoded frame is one of these.
     pub readbacks: u64,
+    /// New capture frames the render thread took from the mailbox on the GPU path: each
+    /// a texture shared with the platform, composited with no CPU copy. Zero on the CPU
+    /// path.
+    pub gpu_captures: u64,
 }
 
 struct PipelineStats {
@@ -324,6 +335,7 @@ pub(crate) struct Program {
     /// Open encoder sessions by key, held weakly: each lives while an output holds it.
     sessions: Mutex<SessionRegistry<EncodeKey, Encoders>>,
     readbacks: Arc<AtomicU64>,
+    gpu_captures: Arc<AtomicU64>,
     /// The mixer's inputs, one per audio source, and the thread that follows the
     /// collection. Closed in `drop` once the mixer thread has stopped. Behind a lock
     /// only so the program can be shared.
@@ -617,6 +629,10 @@ impl Running {
                 .program
                 .as_ref()
                 .map_or(0, |p| p.readbacks.load(Ordering::Relaxed)),
+            gpu_captures: self
+                .program
+                .as_ref()
+                .map_or(0, |p| p.gpu_captures.load(Ordering::Relaxed)),
         }
     }
 
@@ -706,6 +722,7 @@ pub(crate) struct Parts {
     capture: Arc<dyn Capture>,
     audio: Arc<dyn AudioIo>,
     codecs: Arc<dyn Codecs>,
+    gpu: Arc<dyn GpuInterop>,
     draw: OpenDraw,
     open_timeout: Duration,
     render: Arc<RenderHub>,
@@ -724,6 +741,7 @@ pub(crate) fn parts_from(
         capture: Arc::clone(&backends.capture),
         audio: Arc::clone(&backends.audio),
         codecs: Arc::clone(&backends.codecs),
+        gpu: Arc::clone(&backends.gpu),
         draw,
         open_timeout,
         render,
@@ -731,12 +749,23 @@ pub(crate) fn parts_from(
     }
 }
 
-/// The wgpu compositor on the software adapter, reading every frame back to the CPU.
-/// Its [`ResourceCache`] keeps the uploads and nested-scene layers from tick to tick.
+/// The wgpu compositor, reading every frame back to the CPU: on the platform's GPU
+/// context when there is one, else on the software adapter. Its [`ResourceCache`] keeps
+/// the uploads, the imported capture textures and the nested-scene layers from tick to
+/// tick.
 pub(crate) fn gpu_draw() -> OpenDraw {
-    Arc::new(|| {
-        let mut compositor =
-            Compositor::open(OpenOptions::headless()).map_err(|err| render_open_error(&err))?;
+    Arc::new(|context: Option<&GpuContext>| {
+        let mut compositor = match context {
+            Some(context) => Compositor::on_context(context),
+            None => {
+                Compositor::open(OpenOptions::headless()).map_err(|err| render_open_error(&err))?
+            }
+        };
+        tracing::info!(
+            adapter = %compositor.adapter_description(),
+            platform = context.is_some(),
+            "render compositor opened"
+        );
         let mut cache = ResourceCache::<GpuKey>::new();
         let draw: DrawFn = Box::new(move |shot, size, capture, out| {
             cache.begin_frame();
@@ -815,7 +844,13 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
 /// mixer threads, and waits for the compositor to open. On failure everything opened
 /// is dropped again.
 pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Program>, String> {
-    let (size, capture) = open_capture(&parts)?;
+    // `context` is bound first, so on an early return it drops last, after the stream,
+    // as in the render loop.
+    let OpenedCapture {
+        context,
+        size,
+        stream: capture,
+    } = open_capture(&parts)?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
     // On an early return this closes the inputs, each stream before its ring's last
@@ -839,6 +874,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let capture_drops = DropSnapshot::new();
     let stop = Arc::new(AtomicBool::new(false));
     let readbacks = Arc::new(AtomicU64::new(0));
+    let gpu_captures = Arc::new(AtomicU64::new(0));
     let failures = Arc::new(Failures::default());
     let (ready_tx, ready_rx) = mpsc::channel();
     let (video_taps, video_inputs) = mpsc::channel();
@@ -861,6 +897,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let mixer_collector = collector.clone();
     let render = spawn("jstream-render", {
         let job = RenderJob {
+            context,
             capture,
             reader: RenderReader::new(Arc::clone(&parts.render), collector.clone()),
             collector,
@@ -873,6 +910,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             stop: Arc::clone(&stop),
             ready: ready_tx,
             readbacks: Arc::clone(&readbacks),
+            gpu_captures: Arc::clone(&gpu_captures),
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
         };
@@ -921,6 +959,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         failures,
         sessions: Mutex::new(SessionRegistry::new()),
         readbacks,
+        gpu_captures,
         audio: Mutex::new(audio),
         capture_drops,
         bus,
@@ -1132,9 +1171,80 @@ fn frame_period(clock: Timebase) -> Result<MediaTime, String> {
         .map_err(|err| format!("frame period on the media clock: {err}"))
 }
 
-fn open_capture(parts: &Parts) -> Result<(FrameSize, Box<dyn CaptureStream>), String> {
-    let targets = parts
+/// The started capture, and the platform's GPU context when the render thread
+/// composites on it.
+pub(crate) struct OpenedCapture {
+    pub(crate) size: FrameSize,
+    pub(crate) stream: Box<dyn CaptureStream>,
+    pub(crate) context: Option<GpuContext>,
+}
+
+/// Starts capturing the primary display (else the first target), on the GPU path when
+/// it works, else on the CPU path (ARCH › GPU pipeline, step 6).
+///
+/// The GPU path needs the platform's GPU interop to open a device and the capture
+/// backend to deliver frames on it ([`Capture::on_context`]). Its stream's frames are
+/// textures the render thread samples where they are. When the interop has no device
+/// (the fakes, CI, a machine without one), the render thread opens its own and the
+/// capture delivers CPU frames. When there is a device but the backend has no GPU path,
+/// or the GPU capture does not start, the capture delivers CPU frames and the render
+/// thread still composites on the platform's device. Each fallback is logged.
+pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
+    let (target, size) = primary_target(parts.capture.as_ref())?;
+    let context = match parts.gpu.open_device() {
+        Ok(context) => Some(context),
+        Err(err) => {
+            tracing::info!(error = %err, "no GPU interop; compositing on the render thread's own device");
+            None
+        }
+    };
+    let gpu = context
+        .as_ref()
+        .and_then(|context| gpu_capture(parts.capture.as_ref(), context));
+    if let Some(capture) = gpu {
+        match capture.start(&target) {
+            Ok(stream) => {
+                tracing::info!("capture delivers GPU frames");
+                return Ok(OpenedCapture {
+                    size,
+                    stream,
+                    context,
+                });
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "GPU capture did not start; capturing CPU frames");
+            }
+        }
+    }
+    let stream = parts
         .capture
+        .start(&target)
+        .map_err(|err| format!("starting capture: {err}"))?;
+    Ok(OpenedCapture {
+        size,
+        stream,
+        context,
+    })
+}
+
+/// The capture backend on `context`, or `None`, logged, when it has no GPU path.
+fn gpu_capture(capture: &dyn Capture, context: &GpuContext) -> Option<Arc<dyn Capture>> {
+    match capture.on_context(context) {
+        Ok(Some(capture)) => Some(capture),
+        Ok(None) => {
+            tracing::info!("the capture backend has no GPU path; capturing CPU frames");
+            None
+        }
+        Err(err) => {
+            tracing::warn!(error = %err, "capture refused the GPU context; capturing CPU frames");
+            None
+        }
+    }
+}
+
+/// The primary display, else the first target, with its size.
+fn primary_target(capture: &dyn Capture) -> Result<(CaptureTarget, FrameSize), String> {
+    let targets = capture
         .targets()
         .map_err(|err| format!("listing capture targets: {err}"))?;
     let index = targets
@@ -1148,11 +1258,7 @@ fn open_capture(parts: &Parts) -> Result<(FrameSize, Box<dyn CaptureStream>), St
     let Some(size) = info.size else {
         return Err(format!("capture target `{}` has no size", info.name));
     };
-    let stream = parts
-        .capture
-        .start(&info.target)
-        .map_err(|err| format!("starting capture: {err}"))?;
-    Ok((size, stream))
+    Ok((info.target, size))
 }
 
 /// The video encoder settings for `profile` at `size` and the base frame rate.
@@ -1240,6 +1346,9 @@ fn stream_info(size: FrameSize, origin: MediaTime, profile: &EncoderProfile) -> 
 }
 
 struct RenderJob {
+    /// The platform's GPU context the compositor opens on, or `None` for its own device.
+    /// The render loop drops it last, after the compositor and the capture stream.
+    context: Option<GpuContext>,
     capture: Box<dyn CaptureStream>,
     reader: RenderReader,
     /// Takes the input of a session that has finished, so the render thread never drops
@@ -1256,6 +1365,7 @@ struct RenderJob {
     stop: Arc<AtomicBool>,
     ready: mpsc::Sender<Result<(), String>>,
     readbacks: Arc<AtomicU64>,
+    gpu_captures: Arc<AtomicU64>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
 }
@@ -1275,11 +1385,20 @@ fn render_thread(job: RenderJob) {
 /// What the render thread keeps between ticks. The buffers are reused, so a tick
 /// allocates only the frame the encoder takes ownership of.
 struct Frames {
-    /// The latest capture, converted to RGBA8. Empty until the first usable frame.
+    /// The latest CPU capture, converted to RGBA8. Empty until the first usable frame,
+    /// and while the latest capture is `gpu`.
     source: Vec<u8>,
-    /// Counts the captures copied into `source`, so the compositor uploads a capture
-    /// only when it is new.
+    /// The latest capture when it is a texture on the compositor's device. Held until
+    /// the next frame replaces it, so the tick that repeats it still has it.
+    gpu: Option<GpuFrame>,
+    /// Whether the compositor is on the platform's GPU context, so GPU frames can be
+    /// sampled. Off, a GPU frame is unusable.
+    on_gpu: bool,
+    /// Counts the captures taken, so the compositor uploads a CPU capture only when it
+    /// is new.
     source_version: u64,
+    /// GPU frames taken, for [`OutputStats::gpu_captures`].
+    gpu_captures: u64,
     /// The last frame composited in full. Repeated when a tick cannot draw.
     shown: Vec<u8>,
     /// Where a tick composites; swapped into `shown` when the draw succeeds.
@@ -1293,13 +1412,27 @@ impl Frames {
     /// Reads the capture mailbox. An error or a missing frame keeps the last one.
     fn read_capture(&mut self, capture: &mut dyn CaptureStream, size: FrameSize) {
         match capture.latest() {
+            Ok(Some(VideoSurface::Gpu(frame)))
+                if self.on_gpu
+                    && matches!(frame.info().format, PixelFormat::Rgba8 | PixelFormat::Bgra8) =>
+            {
+                self.capture_failing = false;
+                self.gpu = Some(frame);
+                self.source.clear();
+                self.source_version += 1;
+                self.gpu_captures += 1;
+            }
             Ok(Some(surface)) => {
                 self.capture_failing = false;
                 if rgba_from_surface(&surface, size, &mut self.source) {
+                    self.gpu = None;
                     self.source_version += 1;
                 } else if !self.warned_format {
                     self.warned_format = true;
-                    tracing::warn!("capture frame is not CPU RGBA or BGRA at the encoder size");
+                    tracing::warn!(
+                        "capture frame is neither CPU RGBA or BGRA at the encoder size nor \
+                         an RGBA or BGRA texture on the compositor's device"
+                    );
                 }
             }
             Ok(None) => {}
@@ -1321,10 +1454,16 @@ impl Frames {
         shot: &Shot,
         size: FrameSize,
     ) -> Result<Option<Reclaimed>, String> {
-        let capture = (!self.source.is_empty()).then_some(CaptureFrame {
+        let image = match &self.gpu {
+            Some(frame) => Some(CaptureImage::Gpu(frame)),
+            None => (!self.source.is_empty()).then_some(CaptureImage::Rgba {
+                size,
+                rgba: &self.source,
+            }),
+        };
+        let capture = image.map(|image| CaptureFrame {
             version: self.source_version,
-            size,
-            rgba: &self.source,
+            image,
         });
         let freed = draw(shot, size, capture.as_ref(), &mut self.scratch)?;
         std::mem::swap(&mut self.scratch, &mut self.shown);
@@ -1356,6 +1495,7 @@ impl Frames {
 /// to the collector; the thread runs until the program stops. While it has no session and no camera it draws nothing.
 fn render_loop(job: RenderJob) {
     let RenderJob {
+        context,
         mut capture,
         mut reader,
         collector,
@@ -1368,12 +1508,13 @@ fn render_loop(job: RenderJob) {
         stop,
         ready,
         readbacks,
+        gpu_captures,
         drops,
         fail,
     } = job;
     let mut targets: Vec<VideoInput> = Vec::new();
     let mut cams: Vec<VcamTap> = Vec::new();
-    let mut draw = match open() {
+    let mut draw = match open(context.as_ref()) {
         Ok(draw) => draw,
         Err(err) => {
             let _ = ready.send(Err(err));
@@ -1386,7 +1527,10 @@ fn render_loop(job: RenderJob) {
     reader.start();
     let mut frames = Frames {
         source: Vec::new(),
+        gpu: None,
+        on_gpu: context.is_some(),
         source_version: 0,
+        gpu_captures: 0,
         shown: Vec::new(),
         scratch: Vec::new(),
         capture: jstream_platform::CaptureStats::default(),
@@ -1466,6 +1610,7 @@ fn render_loop(job: RenderJob) {
             }
         }
         drops.publish(capture_drops(frames.capture).saturating_add(render_tick_drops(skipped)));
+        gpu_captures.store(frames.gpu_captures, Ordering::Relaxed);
         if !frames.shown.is_empty() {
             push_each(
                 &mut targets,
@@ -1497,6 +1642,12 @@ fn render_loop(job: RenderJob) {
             }
         };
     }
+    // The held frame, the compositor and the stream all use the context's device: they
+    // go before the context, as its platform state requires (README › GPU frames).
+    drop(frames);
+    drop(draw);
+    drop(capture);
+    drop(context);
 }
 
 /// The tick to draw when the clock reads `now` and the next tick was `due`, and how
