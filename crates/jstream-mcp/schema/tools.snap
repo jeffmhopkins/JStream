@@ -225,7 +225,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.\n\nThe item's placement is `geometry` when that is sent, else a legacy placement:\n`transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).\nSending both is `invalid_argument`.",
+                "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.\n\nThe item's placement is `geometry` when that is sent, else a legacy placement:\n`transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).\nSending both is `invalid_argument`. That identity draws the source at its own\npixel size from the canvas's top-left, so a `display`, `window` or `webcam` larger\nthan the canvas shows only its corner: for those, send a `geometry` covering the\ncanvas (`center` at half the canvas size, `size` the canvas size, `fit_mode`\n`fit`), as `jstream-cli` does.",
                 "properties": {
                   "geometry": {
                     "anyOf": [
@@ -2533,7 +2533,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `item` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.\n\nThe item's placement is `geometry` when that is sent, else a legacy placement:\n`transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).\nSending both is `invalid_argument`.",
+                "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.\n\nThe item's placement is `geometry` when that is sent, else a legacy placement:\n`transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).\nSending both is `invalid_argument`. That identity draws the source at its own\npixel size from the canvas's top-left, so a `display`, `window` or `webcam` larger\nthan the canvas shows only its corner: for those, send a `geometry` covering the\ncanvas (`center` at half the canvas size, `size` the canvas size, `fit_mode`\n`fit`), as `jstream-cli` does.",
                 "properties": {
                   "geometry": {
                     "anyOf": [

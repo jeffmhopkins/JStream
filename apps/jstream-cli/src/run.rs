@@ -10,8 +10,9 @@ use crate::block::{block_on, next_event};
 use crate::exit::{self, CliError};
 use crate::mcp;
 use jstream_control::protocol::{
-    Action, Call, CallResult, Event, Hello, ItemInfo, OutputInfo, OutputKind, PROTOCOL_VERSION,
-    QueryResult, Response, RtmpTarget, SecretString, SourceInfo, SourceKind, Welcome,
+    Action, Batch, Call, CallResult, Canvas, Edit, Event, Hello, ItemGeometry, ItemInfo,
+    OutputInfo, OutputKind, PROTOCOL_VERSION, Query, QueryResult, Response, RtmpTarget,
+    SecretString, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use jstream_control::{Control, ControlError, EventStream, WsConfig, WsControl};
 use serde_json::json;
@@ -209,7 +210,9 @@ pub fn execute(
             write_response(out, &block_on(control.call(call))?, json)
         }
         Command::Edit(batch) => {
-            let call = Call::Batch(batch.clone());
+            let mut batch = batch.clone();
+            fit_captures(&mut batch, || state(&*control))?;
+            let call = Call::Batch(batch);
             write_response(out, &block_on(control.call(call))?, json)
         }
         Command::Events { count } => stream_events(control.events(), *count, json, out),
@@ -218,6 +221,102 @@ pub fn execute(
         | Command::Mcp
         | Command::Action(_)
         | Command::SetKey { .. } => Ok(()),
+    }
+}
+
+/// The source kinds whose frames come at their own size (a screen, a window, a camera),
+/// so an item showing one at the legacy 1:1 placement shows only its top-left corner.
+const CAPTURE_KINDS: &[&str] = &["display", "window", "webcam"];
+
+/// Gives each `item.add` in `batch` that names no placement and shows a capture source a
+/// `geometry` covering the canvas with `fit`, so the whole capture is in frame.
+///
+/// The protocol's own default for an omitted placement stays the legacy 1:1 one
+/// (ADR-0022); this is the CLI choosing a placement for the user. The canvas is the
+/// batch's latest `canvas.set_size` before the item, and a source created earlier in the
+/// batch gives its kind; anything else comes from `state` (`state.get`), called at most
+/// once and only when an item needs it.
+fn fit_captures(
+    batch: &mut Batch,
+    state: impl FnOnce() -> Result<(Canvas, Vec<SourceInfo>), CliError>,
+) -> Result<(), CliError> {
+    let mut state = Some(state);
+    let mut current: Option<(Canvas, Vec<SourceInfo>)> = None;
+    let mut canvas: Option<Canvas> = None;
+    let mut created: Vec<(SourceId, SourceKind)> = Vec::new();
+    for edit in &mut batch.edits {
+        match edit {
+            Edit::CanvasSetSize { width, height } => {
+                canvas = Some(Canvas {
+                    width: *width,
+                    height: *height,
+                });
+            }
+            Edit::SourceCreate {
+                source_id, kind, ..
+            } => created.push((source_id.clone(), kind.clone())),
+            Edit::ItemAdd {
+                source_id,
+                transform: None,
+                geometry: geometry @ None,
+                ..
+            } => {
+                let known = created
+                    .iter()
+                    .rev()
+                    .find(|(id, _)| id == source_id)
+                    .map(|(_, kind)| kind.clone());
+                if known.as_ref().is_some_and(|kind| !is_capture(kind)) {
+                    continue;
+                }
+                if (known.is_none() || canvas.is_none())
+                    && let Some(read) = state.take()
+                {
+                    current = Some(read()?);
+                }
+                let kind = known.or_else(|| {
+                    current.as_ref().and_then(|(_, sources)| {
+                        sources
+                            .iter()
+                            .find(|source| &source.source_id == source_id)
+                            .map(|source| source.kind.clone())
+                    })
+                });
+                // An unknown source is left for the engine to reject.
+                if !kind.as_ref().is_some_and(is_capture) {
+                    continue;
+                }
+                let Some(size) = canvas.or(current.as_ref().map(|(canvas, _)| *canvas)) else {
+                    continue;
+                };
+                // A zero canvas is left for the engine to reject too.
+                *geometry = ItemGeometry::covering_canvas(size.width, size.height).ok();
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn is_capture(kind: &SourceKind) -> bool {
+    matches!(kind, SourceKind::Builtin { kind } if CAPTURE_KINDS.contains(&kind.as_str()))
+}
+
+/// The canvas and sources, from `state.get`.
+fn state(control: &dyn Control) -> Result<(Canvas, Vec<SourceInfo>), CliError> {
+    let response = block_on(control.call(Call::Query {
+        query: Query::StateGet,
+    }))?;
+    match response.result {
+        CallResult::Query {
+            result: QueryResult::StateGet {
+                canvas, sources, ..
+            },
+        } => Ok((canvas, sources)),
+        _ => Err(ControlError::Disconnected {
+            reason: "the engine answered `state.get` with another result".into(),
+        }
+        .into()),
     }
 }
 

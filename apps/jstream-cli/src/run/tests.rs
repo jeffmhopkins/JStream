@@ -1,12 +1,13 @@
 //! Golden output (human and `--json`) and exit codes of whole CLI runs against the mock.
 
-use super::{CLIENT_NAME, Connector, connect, read_token, run, stream_events};
+use super::{CLIENT_NAME, Connector, connect, fit_captures, read_token, run, stream_events};
 use crate::args::Connection;
 use crate::block::block_on;
 use crate::exit::{self, CliError};
 use jstream_control::protocol::{
-    Batch, Call, ClientId, DropCounts, Edit, Event, Hello, ItemId, OutputId, OutputState,
-    PROTOCOL_VERSION, Response, Rev, SceneId, SourceId, SourceKind, Welcome,
+    Batch, Call, Canvas, ClientId, DropCounts, Edit, Event, Hello, ItemGeometry, ItemId,
+    ItemTransform, OutputId, OutputState, PROTOCOL_VERSION, Response, Rev, SceneId, SourceId,
+    SourceInfo, SourceKind, Welcome,
 };
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
 use serde_json::{Value, json};
@@ -1357,4 +1358,178 @@ fn mcp_over_the_mock_connection() {
         replies[1]["result"]["structuredContent"]["result"]["result"]["state"],
         "stopped"
     );
+}
+
+/// The placement of `item` in `scene`, from `state.get --json`.
+fn placement(engine: &MockEngine, scene: usize, item: usize) -> (Value, Value) {
+    let json = run_on(engine, &["--json", "--mock", "state", "get"]);
+    let value: Value = serde_json::from_str(json.out.trim()).expect("json");
+    let item = &value["result"]["result"]["scenes"][scene]["items"][item];
+    (item["geometry"].clone(), item["transform"].clone())
+}
+
+fn covering(width: f64, height: f64) -> Value {
+    json!({
+        "center": {"x": width / 2.0, "y": height / 2.0},
+        "size": {"width": width, "height": height},
+        "fit_mode": "fit",
+        "rotation_deg": 0.0,
+        "tilt_deg": 0.0,
+        "turn_deg": 0.0,
+        "depth_px": 0.0
+    })
+}
+
+/// An `item.add` of a capture source with no placement covers the canvas with `fit`, so
+/// a 4K display on a 720p canvas shows whole rather than its top-left corner. The canvas
+/// is the batch's own `canvas.set_size` when it has one.
+#[test]
+fn a_new_capture_item_fits_the_canvas() {
+    let engine = MockEngine::new();
+    let line = [
+        "--mock",
+        "edit",
+        "canvas.set_size",
+        "1280",
+        "720",
+        "scene.create",
+        "main",
+        "Main",
+        "source.create",
+        "screen",
+        "Screen",
+        "builtin:display",
+        "item.add",
+        "main",
+        "screen_1",
+        "screen",
+    ];
+    assert_eq!(run_on(&engine, &line), ok("applied: rev 1 (req_1)\n"));
+    let (geometry, _) = placement(&engine, 0, 0);
+    assert_eq!(geometry, covering(1280.0, 720.0));
+}
+
+/// A capture source that already exists is found through `state.get`, which also gives
+/// the canvas; a source of another kind keeps the legacy placement.
+#[test]
+fn an_existing_capture_source_fits_and_others_stay_legacy() {
+    let engine = populated();
+    assert_eq!(
+        run_on(
+            &engine,
+            &[
+                "--mock",
+                "edit",
+                "source.create",
+                "logo",
+                "Logo",
+                "builtin:image",
+                "item.add",
+                "brb",
+                "logo_1",
+                "logo",
+                "item.add",
+                "brb",
+                "cam_3",
+                "cam",
+            ],
+        ),
+        ok("applied: rev 2 (req_2)\n")
+    );
+    let (geometry, transform) = placement(&engine, 1, 0);
+    assert_eq!(geometry, Value::Null);
+    assert_ne!(transform, Value::Null);
+    let (geometry, _) = placement(&engine, 1, 1);
+    assert_eq!(geometry, covering(1920.0, 1080.0));
+}
+
+/// `state.get` is read only when an `item.add` needs it, and at most once.
+#[test]
+fn fitting_reads_the_state_only_when_needed() {
+    let add = |item: &str, source: &str| Edit::ItemAdd {
+        scene_id: SceneId::new("main"),
+        item_id: ItemId::new(item),
+        source_id: SourceId::new(source),
+        transform: None,
+        geometry: None,
+    };
+    let screen = Edit::SourceCreate {
+        source_id: SourceId::new("screen"),
+        name: "Screen".into(),
+        kind: SourceKind::Builtin {
+            kind: "display".into(),
+        },
+        settings: Default::default(),
+        duplicated_from: None,
+    };
+    let canvas = Edit::CanvasSetSize {
+        width: 640,
+        height: 360,
+    };
+    let batch = |edits: Vec<Edit>| Batch {
+        edits,
+        expected_rev: None,
+        idempotency_key: None,
+    };
+    let unread = || -> Result<(Canvas, Vec<SourceInfo>), CliError> { panic!("read the state") };
+
+    let mut known = batch(vec![canvas.clone(), screen.clone(), add("a", "screen")]);
+    fit_captures(&mut known, unread).expect("fits");
+    let Edit::ItemAdd { geometry, .. } = &known.edits[2] else {
+        panic!("item.add");
+    };
+    assert_eq!(
+        *geometry,
+        Some(ItemGeometry::covering_canvas(640, 360).expect("canvas"))
+    );
+
+    let reads = AtomicUsize::new(0);
+    let mut unknown = batch(vec![add("a", "cam"), add("b", "cam"), add("c", "gone")]);
+    fit_captures(&mut unknown, || {
+        reads.fetch_add(1, Ordering::SeqCst);
+        Ok((
+            Canvas {
+                width: 100,
+                height: 50,
+            },
+            vec![SourceInfo {
+                source_id: SourceId::new("cam"),
+                name: "Camera".into(),
+                kind: SourceKind::Builtin {
+                    kind: "webcam".into(),
+                },
+                settings: Default::default(),
+                duplicated_from: None,
+                audio: None,
+            }],
+        ))
+    })
+    .expect("fits");
+    assert_eq!(reads.load(Ordering::SeqCst), 1);
+    let fitted = Some(ItemGeometry::covering_canvas(100, 50).expect("canvas"));
+    let geometries: Vec<_> = unknown
+        .edits
+        .iter()
+        .map(|edit| match edit {
+            Edit::ItemAdd { geometry, .. } => *geometry,
+            _ => None,
+        })
+        .collect();
+    assert_eq!(geometries, vec![fitted, fitted, None]);
+
+    // A placement the user sent is kept.
+    let mut placed = batch(vec![
+        canvas,
+        screen,
+        Edit::ItemAdd {
+            scene_id: SceneId::new("main"),
+            item_id: ItemId::new("a"),
+            source_id: SourceId::new("screen"),
+            transform: Some(ItemTransform::IDENTITY),
+            geometry: None,
+        },
+    ]);
+    let before = placed.clone();
+    fit_captures(&mut placed, unread).expect("fits");
+    assert_eq!(placed, before);
 }
