@@ -960,7 +960,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 (b65be40, #283 browser sources) into #219: re-read. Body: wave's browser source and Recorded::Own audio text beside E3b's compose capture import, GPU-path held frame and allocation text; the browser page shown transparent is the wave's GPU frame, not E3b's capture path. Cargo.toml adds the wave's jstream-browser fake dev-dependency beside E3b's hw-tests feature and cfg(windows) platform-windows dev-dependency, which the dev-dependency paragraph names. tests.rs: E3b's mod gpu_capture, hw-tests-gated mod windows_gpu (:12-13), OpenDraw closures taking Option<&GpuContext>, and #396's HANG_BOUND; design names no test deadline; holds" }
+stamp = { hash = "b3:a9343db50056d4fb", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after the wave/m1 merge: the new Capture path paragraph and GPU-frame cache notes don't touch source creation; the browser paragraph still says giving a backend rebuilds browser and youtube_chat sources via opens_browser, which matches live.rs set_browser" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
@@ -1071,7 +1071,7 @@ stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:f16b463f8715a669", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:d60d0f3cc525c9e3", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 (b65be40, #283 browser sources) into #219: re-read. Body: wave's with_browser builder, browser page audio inputs and Tests text sit beside E3b's GPU-context Contents sentence and gpu_capture/windows_gpu Tests text. tests.rs carries E3b's mod gpu_capture (:9), the hw-tests-gated mod windows_gpu (:12-13, all(windows, feature = hw-tests)) and the cpu_pipeline OpenDraw closures and solid taking Option<&GpuContext>, plus #396's 30 s HANG_BOUND; the Tests bullet matches all of it and names no poll deadline; holds" }
+stamp = { hash = "b3:0eeb07a987f98382", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after the wave/m1 merge: the wave's E3b/E3c edits (GPU compositing on the platform context, capture-path tests) sit beside this branch's one change, with_browser naming the youtube_chat preset; the builder list is still complete" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1203,7 +1203,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 into #219: stale via core#design only (wave's browser sources and E3b's capture text); daemon text names neither with_browser nor the GPU path beyond handing WindowsGpu and WgcCapture to with_backends; holds" }
+stamp = { hash = "b3:a9343db50056d4fb", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from core design's GPU capture path and youtube_chat browser rebuild: the daemon section's claims about core (one Engine, a session per connect, the Windows backends incl. WindowsGpu, placeholder outputs elsewhere) still hold; it doesn't wire a browser backend" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: daemon design does not describe handshake timing; dep change in server Design doesn't affect it" }
