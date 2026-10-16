@@ -1,6 +1,6 @@
 //! The `youtube_chat` source: a browser source preset showing a live video's chat
 //! through YouTube's public popout chat page, which needs no sign-in and no Google
-//! OAuth client (ADR-0051, proposed). It shows chat and can't send, feature or moderate.
+//! OAuth client (ADR-0051 §1, kept by ADR-0058). It shows chat and can't send, feature or moderate.
 
 use crate::browser::open;
 use crate::describe::{kind, param, size};
