@@ -9,14 +9,16 @@
 //! what the real-time threads do inside a checked scope: every input's audio callback
 //! (`AudioInputHandler::on_packet`), then `Mixer::poll` until no block is due (which runs
 //! the input, bus, master and output-tap filter chains) and a read of each output tap's
-//! block, then a keyed compressor and the meters on each mixed block, as the mixer
-//! thread will run them (ADR-0028; sidechain keys and meters aren't in the mixer yet).
+//! block and of each input's own block (a drawn source's scope, #459), then a keyed
+//! compressor and the meters on each mixed block, as the mixer thread will run them
+//! (ADR-0028; sidechain keys and meters aren't in the mixer yet).
 //! Control-plane work (adding and removing inputs, buses, output taps, sends and
 //! filters, filter edits, gain and mute changes) runs between ticks, outside the scope,
 //! as it does on the control thread.
 //!
 //! The checked phase walks through the paths a session hits besides plain steady state:
-//! drift, jitter, timestamp outliers and missing stamps, lost packets, a discontinuity,
+//! drift, jitter, timestamp outliers and missing stamps, lost packets, a discontinuity
+//! (and one whose stamp is off the clock line),
 //! a stalled audio thread that catches up, a device gap long enough to reset the
 //! mapping, silent and non-finite packets, a stalled mixer (overrun and skipped
 //! frames), an input added and another removed while the mixer runs, a bus added, sent
@@ -84,6 +86,9 @@ enum Event {
     Lose,
     /// The packet is flagged as discontinuous.
     Discontinuity,
+    /// The packet is flagged as discontinuous and its stamp is 50 ms off the clock line,
+    /// so the drift fit's segment restarts with it at once.
+    DiscontinuityOffLine,
     /// The packet's stamp is 50 ms off the clock line.
     Outlier,
     /// The packet has no usable stamp.
@@ -208,7 +213,7 @@ impl Device {
         let stamp = T0 + first as f64 / self.true_rate + self.jitter_s * self.noise.next();
         let time = match event {
             Some(Event::NoStamp) => None,
-            Some(Event::Outlier) => Some(clock(stamp + 0.05)),
+            Some(Event::Outlier | Event::DiscontinuityOffLine) => Some(clock(stamp + 0.05)),
             _ => Some(clock(stamp)),
         };
         self.producer.on_packet(&AudioPacket {
@@ -216,7 +221,10 @@ impl Device {
             device_position: first,
             time,
             flags: AudioPacketFlags {
-                discontinuity: event == Some(Event::Discontinuity),
+                discontinuity: matches!(
+                    event,
+                    Some(Event::Discontinuity | Event::DiscontinuityOffLine)
+                ),
                 silent: event == Some(Event::Silent),
             },
         });
@@ -293,6 +301,9 @@ struct Sim {
     /// The output taps an encoder reads after each block, and how many blocks it read.
     taps: Vec<OutputTapId>,
     tap_blocks: u64,
+    /// The input blocks a scope read after each block (#459), as the mixer thread
+    /// reads a drawn source's.
+    input_blocks: u64,
     /// The mixer thread does not run until this tick (a stall).
     mixer_stalled_until: u64,
 }
@@ -320,6 +331,12 @@ impl Sim {
                     self.tap_blocks += 1;
                 }
             }
+            for d in &self.devices {
+                if let Some(block) = self.mixer.input_block(d.control.id()) {
+                    std::hint::black_box(block);
+                    self.input_blocks += 1;
+                }
+            }
         }
     }
 }
@@ -341,6 +358,7 @@ mod rt {
             (1_700, Event::Lose),
             (1_701, Event::Lose),
             (1_800, Event::Discontinuity),
+            (1_900, Event::DiscontinuityOffLine),
             (2_000, Event::Stall),
             (2_001, Event::Stall),
             (2_002, Event::Stall),
@@ -378,6 +396,7 @@ mod rt {
             chain: BusChain::new(),
             taps: Vec::new(),
             tap_blocks: 0,
+            input_blocks: 0,
             mixer_stalled_until: 0,
         };
         let control = sim.mixer.control();
@@ -623,6 +642,8 @@ mod rt {
         assert!(mic.gap_frames > 0, "{mic:?}");
         assert!(mic.discontinuities > 0, "{mic:?}");
         assert!(mic.reanchors > 0, "{mic:?}");
+        // Only the off-line discontinuity restarts the mic's mapping.
+        assert!(mic.resets > 0, "{mic:?}");
         assert!(mic.overrun_frames > 0, "{mic:?}");
         assert!(mic.drift_ppm.is_some(), "{mic:?}");
         assert!(loopback.resets > 0, "{loopback:?}");
@@ -653,6 +674,8 @@ mod rt {
         // tap for a second; minus the stall's.
         assert!(sim.tap_blocks > 1_300, "{}", sim.tap_blocks);
         assert!(aux_tap.expect("added").remove(), "removal queued");
+        // Every input's block, each block: at least the four inputs' for 30 s.
+        assert!(sim.input_blocks > 4 * 1_300, "{}", sim.input_blocks);
         // 45 s of 1024-frame blocks at 48 kHz, minus the stall's.
         assert!(bus.blocks > 2_000, "{bus:?}");
     }

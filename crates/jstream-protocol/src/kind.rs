@@ -211,6 +211,8 @@ pub enum ParamType {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         media: Option<Media>,
     },
+    /// A bus reference (`{"type":"bus","bus_id":…}`) or `null`. Since 0.24.
+    Bus,
     /// A type this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a descriptor from a newer server.
     #[serde(other)]
@@ -239,17 +241,17 @@ pub enum Media {
 }
 
 impl ParamDescriptor {
-    /// Whether the parameter holds a reference (asset, scene or source), and so accepts
-    /// `null` for "no reference".
+    /// Whether the parameter holds a reference (asset, scene, source or bus), and so
+    /// accepts `null` for "no reference".
     pub fn is_reference(&self) -> bool {
         matches!(
             self.ty,
-            ParamType::Asset { .. } | ParamType::Scene | ParamType::Source { .. }
+            ParamType::Asset { .. } | ParamType::Scene | ParamType::Source { .. } | ParamType::Bus
         )
     }
 
     /// Checks `value` against this parameter's type and constraints, reading nothing
-    /// else: whether a referenced scene or source exists (and what it produces) is the
+    /// else: whether a referenced scene, source or bus exists (and what it produces) is the
     /// graph's check. `null` passes only for a reference parameter. Values are never
     /// clamped. The error is the reason, for an `invalid_argument` that names the
     /// parameter.
@@ -318,6 +320,10 @@ impl ParamDescriptor {
                 None | Some(Reference::Source { .. }) => Ok(()),
                 Some(_) => Err("must be a source reference or null".into()),
             },
+            ParamType::Bus => match reference(value, "bus")? {
+                None | Some(Reference::Bus { .. }) => Ok(()),
+                Some(_) => Err("must be a bus reference or null".into()),
+            },
             ParamType::Unknown => Err("has a type this engine can't check".into()),
         }
     }
@@ -364,6 +370,11 @@ impl ParamDescriptor {
                 "type": "object",
                 "properties": {"type": {"const": "source"}, "source_id": {"type": "string"}},
                 "required": ["type", "source_id"],
+            })),
+            ParamType::Bus => null_or(json!({
+                "type": "object",
+                "properties": {"type": {"const": "bus"}, "bus_id": {"type": "string"}},
+                "required": ["type", "bus_id"],
             })),
             ParamType::Unknown => json!({}),
         };
@@ -427,9 +438,10 @@ fn reference(value: &Value, want: &str) -> Result<Option<Reference>, String> {
 /// regard to ASCII case) is `CON`, `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`,
 /// `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`. So `nul`, `NUL `, `nul.`,
 /// `Con.png` and `CON .png` are devices, and `CONSOLE.png`, `nul1.png` and `COM10.png`
-/// are not. Only the last component matters: Win32 opens a device named there in any
-/// folder (`C:\x\CON`), while a device name earlier in the path fails to open, and on
-/// other systems it is an ordinary folder name.
+/// are not. Only the last component matters, under any root: Win32 opens a device named
+/// there in any folder (`C:\x\CON`, or `CON.png` joined to a root folder), while a
+/// device name earlier in the path fails to open, and on other systems it is an
+/// ordinary folder name.
 fn is_dos_device_name(name: &str) -> bool {
     let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
     let upper = stem.to_ascii_uppercase();
@@ -446,16 +458,17 @@ fn is_dos_device_name(name: &str) -> bool {
 /// The path rules of an asset reference under `root`.
 ///
 /// Under `collection` and `app` the path is relative: `/` separators, and no empty or
-/// `..` segment, drive letter, leading `/` or backslash. Under `absolute` it must be
+/// `..` segment, drive letter, leading `/`, backslash or `:`. Under `absolute` it must be
 /// absolute (`/…`, `\…`, `C:/…` or `C:\…`) and still has no `..` segment. It must not
 /// start with two separators, which on Windows name a UNC share (`\\host\share\…`) or a
 /// device (`\\.\…`, `\\?\…`): opening one would send the engine's credentials to that
 /// host. Nor may it contain `:` other than a drive letter's, or `?` or `*`, which
 /// Win32 never allows in a file name and which name an NT object path (`\??\UNC\…`,
-/// `\??\GLOBALROOT\Device\…`). Nor may its last component name a DOS device, which
-/// Win32 opens in place of a file in any folder: a stem (the name before its first `.`,
-/// without trailing spaces, in any ASCII case) of `CON`, `PRN`, `AUX`, `NUL`,
-/// `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`.
+/// `\??\GLOBALROOT\Device\…`). Under every root, the last component must not name a
+/// DOS device, which Win32 opens in place of a file in any folder: a stem (the name
+/// before its first `.`, without trailing spaces, in any ASCII case) of `CON`, `PRN`,
+/// `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or
+/// `CONOUT$`.
 pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
     if path.is_empty() {
         return Err("the asset path must not be empty".into());
@@ -497,6 +510,9 @@ pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
                 Err("a relative asset path must not contain `:`".into())
             } else if segments().any(str::is_empty) {
                 Err("a relative asset path must not have an empty segment".into())
+            } else if segments().next_back().is_some_and(is_dos_device_name) {
+                // Joined to the root folder, `CON.png` still opens the device on Windows.
+                Err("a relative asset path must not end in a DOS device name".into())
             } else {
                 Ok(())
             }
@@ -634,6 +650,16 @@ mod tests {
         );
         assert!(scene.check(&json!("s")).is_err());
 
+        let bus = param("audio", ParamType::Bus, Value::Null);
+        assert!(bus.is_reference());
+        assert!(bus.check(&Value::Null).is_ok());
+        assert!(bus.check(&json!({"type": "bus", "bus_id": "vod"})).is_ok());
+        assert!(
+            bus.check(&json!({"type": "source", "source_id": "vod"}))
+                .is_err()
+        );
+        assert!(bus.check(&json!("vod")).is_err());
+
         let file = param(
             "file",
             ParamType::Asset {
@@ -659,6 +685,49 @@ mod tests {
         }
         assert!(file.check(&asset("absolute", "img/a.png")).is_err());
         assert!(super::check_asset_path(AssetRoot::App, "x/y.png").is_ok());
+    }
+
+    /// Issue #403: under `collection` and `app`, a relative path whose last component
+    /// names a DOS device is refused; a device name earlier in the path is not.
+    #[test]
+    fn relative_asset_paths_refuse_a_dos_device_name_last() {
+        for root in [AssetRoot::Collection, AssetRoot::App] {
+            let check = |path: &str| super::check_asset_path(root, path);
+            for good in [
+                "CONSOLE.png",
+                "media/nul1.png",
+                "COM10.png",
+                "LPT.png",
+                "COM\u{b9}0.png",
+                "icon.png",
+                "a.con",
+                "con/a.png",
+                "media/AUX/x/a.png",
+            ] {
+                assert!(check(good).is_ok(), "{root:?} {good}");
+            }
+            for bad in [
+                "CON",
+                "CON.png",
+                "media/nul",
+                "x/Con.png",
+                "aux.tar.gz",
+                "prn.",
+                "NUL ",
+                "CON .png",
+                "com1.png",
+                "img/COM9",
+                "com0.png",
+                "LPT1.png",
+                "lpt9",
+                "COM\u{b9}.png",
+                "LPT\u{b3}",
+                "CONIN$",
+                "a/conout$.png",
+            ] {
+                assert!(check(bad).is_err(), "{root:?} {bad}");
+            }
+        }
     }
 
     /// Issues #345 and #384: UNC, device, stream and DOS device paths are refused under

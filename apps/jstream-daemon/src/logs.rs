@@ -27,31 +27,11 @@ pub const LOG_PREFIX: &str = "jstream-daemon-";
 /// The file name suffix of the daemon's log files.
 pub const LOG_SUFFIX: &str = ".log";
 
-/// The platform's per-user data directory for JStream, where logs and crash reports
-/// go by default: `%APPDATA%\JStream` on Windows (ADR-0020's default; the portable
-/// marker is not handled yet), `~/Library/Application Support/JStream` on macOS, and
-/// `$XDG_DATA_HOME/jstream` (else `~/.local/share/jstream`) elsewhere. `None` when the
-/// environment names no home directory.
-pub fn data_dir() -> Option<PathBuf> {
-    let absolute = |name: &str| {
-        std::env::var_os(name)
-            .map(PathBuf::from)
-            .filter(|path| path.is_absolute())
-    };
-    if cfg!(windows) {
-        absolute("APPDATA").map(|dir| dir.join("JStream"))
-    } else if cfg!(target_os = "macos") {
-        absolute("HOME").map(|home| home.join("Library/Application Support/JStream"))
-    } else {
-        absolute("XDG_DATA_HOME")
-            .or_else(|| absolute("HOME").map(|home| home.join(".local/share")))
-            .map(|dir| dir.join("jstream"))
-    }
-}
-
-/// The default log directory: `logs` in [`data_dir`].
+/// The default log directory: `logs` in the data folder (ADR-0020: `%APPDATA%\JStream`,
+/// or the `data` folder beside the exe when it is portable), as
+/// `jstream_platform::paths::data_dir` finds it.
 pub fn default_dir() -> Option<PathBuf> {
-    data_dir().map(|dir| dir.join("logs"))
+    jstream_platform::paths::data_dir().map(|dir| dir.join("logs"))
 }
 
 /// Creates `dir` and its missing parents. On Unix the directories it creates are

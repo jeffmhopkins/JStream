@@ -1,7 +1,7 @@
 [package]
 name = "jstream-sources"
 version = "0.0.0"
-description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour, image and text sources."
+description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour, image, text, media file, audio waveform and audio spectrum sources."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 4
-summary = "`Source` trait plus built-ins (ADR-0031): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message (ADR-0041) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates."
+summary = "`Source` trait plus built-ins (ADR-0031): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message (ADR-0058) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates."
 unsafe_allowed = false
 
 [lints]
@@ -25,11 +25,14 @@ image-webp.workspace = true
 # opened by an injected backend. Without its `cef` feature it is pure Rust.
 jstream-browser.workspace = true
 jstream-media.workspace = true
-# The GPU frame and audio-input types the `Source` seam hands the engine (`gpu_frame`,
-# `audio`).
+# The platform seams sources use: the media-file backend trait (the `media` kind's
+# demuxer and decoders are injected, ADR-0031), and the GPU frame and audio-input types
+# the `Source` seam hands the engine (`gpu_frame`, `audio`).
 jstream-platform.workspace = true
 jstream-protocol.workspace = true
 png.workspace = true
+# The spectrum source's FFT (C10).
+realfft.workspace = true
 # Settings values and the kind descriptors' defaults (ADR-0025).
 serde_json.workspace = true
 # Fonts for the text source (ADR-0031: pure-Rust font crates).
@@ -39,5 +42,9 @@ zune-core.workspace = true
 zune-jpeg.workspace = true
 
 [dev-dependencies]
+# Checks that the audio scope and the scope sources draw without allocating (R-RT-001).
+assert_no_alloc.workspace = true
+# Fake media files for the `media` kind's tests (R-TEST-004).
+jstream-platform = { workspace = true, features = ["fake"] }
 # The in-memory browser backend for the `browser` kind's tests (R-TEST-004).
 jstream-browser = { workspace = true, features = ["fake"] }

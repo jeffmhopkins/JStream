@@ -21,16 +21,16 @@
 use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
+use jstream_protocol::KindDescriptor;
 use jstream_protocol::{
-    Action, Batch, BusId, Call, CallResult, Canvas, Chord, ClientId, Crop, Edit, EncoderProfile,
-    EncoderProfileId, EncoderProfileInfo, EntityKind, Event, GeometryError, Hello, HistoryCall,
-    HistoryDirection, HotkeyBinding, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform,
-    OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError,
-    Query, QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceAudio, SourceId, SourceInfo,
-    SourceKind, Welcome,
+    Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, Chord, ClientId, Crop, Edit,
+    EncoderProfile, EncoderProfileId, EncoderProfileInfo, EntityKind, Event, Finite32,
+    GeometryError, Hello, HistoryCall, HistoryDirection, HotkeyBinding, IdempotencyKey,
+    ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
+    PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference,
+    RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
+    SecretString, Settings, SourceAudio, SourceId, SourceInfo, SourceKind, Welcome,
 };
-use jstream_protocol::{Finite32, KindDescriptor};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
 use std::pin::Pin;
@@ -39,6 +39,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::task::{Context, Poll, Waker};
 
 mod audio;
+mod filter;
 
 /// Locks `mutex`, ignoring poisoning: the mock's state stays consistent because every
 /// change is computed first and committed without panicking.
@@ -457,6 +458,8 @@ struct Source {
     settings: Settings,
     /// A plain link, which may name a deleted source; reported only while it exists.
     duplicated_from: Option<SourceId>,
+    /// Its filter chains, settings as given (ADR-0026).
+    filters: jstream_protocol::FilterChains,
     /// Set exactly for an audio source.
     audio: Option<SourceAudio>,
 }
@@ -481,6 +484,8 @@ struct Item {
     geometry: Option<ItemGeometry>,
     crop: Crop,
     visible: bool,
+    opacity: Finite32,
+    blend: BlendMode,
 }
 
 impl State {
@@ -712,7 +717,7 @@ impl State {
                     self.program = Some(scene_id);
                     self.emit_program(client_id, request_id);
                 }
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -723,15 +728,21 @@ impl State {
                 }
                 check_key(&key)?;
                 self.keys.insert(output_id, key);
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::OutputClearKey { output_id } => {
                 // Succeeds with no key, and for an output no longer in the collection.
                 self.keys.remove(&output_id);
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
+            }
+            // As the engine: the server in front answers these (ADR-0044).
+            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: other.name().into(),
+                });
             }
             // The mock runs no mixer, so there is no loudness to reset.
-            Action::AudioResetLoudness {} => return Ok(CallResult::Action {}),
+            Action::AudioResetLoudness {} => return Ok(CallResult::action()),
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {
@@ -759,7 +770,7 @@ impl State {
                 state,
             });
         }
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     fn query(&self, query: Query) -> Result<CallResult, ProtocolError> {
@@ -846,6 +857,13 @@ impl State {
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
             },
+            // The mock describes no kinds, so it lists none.
+            Query::KindList => QueryResult::KindList { kinds: Vec::new() },
+            Query::DeviceList => {
+                return Err(ProtocolError::Unsupported {
+                    call: "device.list".into(),
+                });
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(CallResult::Query { result })
@@ -1011,6 +1029,8 @@ impl Collection {
                 source_id,
                 transform,
                 geometry,
+                opacity,
+                blend,
             } => {
                 check_id(item_id.as_str(), at, "item_id")?;
                 let index = self.existing_scene(&scene_id)?;
@@ -1032,6 +1052,10 @@ impl Collection {
                     (None, Some(geometry)) => geometry_view(&geometry, at)?,
                     (transform, None) => transform.unwrap_or(ItemTransform::IDENTITY),
                 };
+                let opacity = opacity.unwrap_or(Finite32::ONE);
+                check_opacity(opacity, at)?;
+                let blend = blend.unwrap_or_default();
+                check_blend(blend, at)?;
                 self.scenes[index].items.push(item_id.clone());
                 self.items.insert(
                     item_id.clone(),
@@ -1042,6 +1066,8 @@ impl Collection {
                         geometry,
                         crop: Crop::NONE,
                         visible: true,
+                        opacity,
+                        blend,
                     },
                 );
                 vec![Edit::ItemRemove { item_id }]
@@ -1147,6 +1173,29 @@ impl Collection {
                     visible: old,
                 }]
             }
+            Edit::ItemSetOpacity {
+                item_id,
+                scene_id,
+                opacity,
+            } => {
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
+                check_opacity(opacity, at)?;
+                let old = std::mem::replace(&mut item.opacity, opacity);
+                vec![Edit::ItemSetOpacity {
+                    item_id,
+                    scene_id,
+                    opacity: old,
+                }]
+            }
+            Edit::ItemSetBlend { item_id, blend } => {
+                let item = self.existing_item(&item_id)?;
+                check_blend(blend, at)?;
+                let old = std::mem::replace(&mut item.blend, blend);
+                vec![Edit::ItemSetBlend {
+                    item_id,
+                    blend: old,
+                }]
+            }
             Edit::SourceCreate {
                 source_id,
                 name,
@@ -1206,10 +1255,10 @@ impl Collection {
                 new_source_id,
                 name,
             } => {
-                let Some((kind, settings)) = self
+                let Some((kind, settings, filters)) = self
                     .sources
                     .get(&source_id)
-                    .map(|s| (s.kind.clone(), s.settings.clone()))
+                    .map(|s| (s.kind.clone(), s.settings.clone(), s.filters.clone()))
                 else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
@@ -1222,6 +1271,10 @@ impl Collection {
                     settings,
                     Some(source_id.clone()),
                 )?;
+                // A duplicate keeps its original's filter IDs (ADR-0026 §2).
+                if let Some(copy) = self.sources.get_mut(&new_source_id) {
+                    copy.filters = filters;
+                }
                 self.audio_copied(&source_id, &new_source_id);
                 inverse
             }
@@ -1252,13 +1305,14 @@ impl Collection {
                 };
                 let restore_audio = self.audio_deleted(&source_id, &source.kind, source.audio);
                 let mut inverse = vec![Edit::SourceCreate {
-                    source_id,
+                    source_id: source_id.clone(),
                     name: source.name,
                     kind: source.kind,
                     settings: source.settings,
                     duplicated_from: source.duplicated_from,
                 }];
                 inverse.extend(restore_audio);
+                inverse.extend(filter::restore_all(&source_id, source.filters));
                 inverse
             }
             Edit::OutputCreate { output_id, kind } => {
@@ -1401,6 +1455,11 @@ impl Collection {
                     profile,
                 }]
             }
+            edit @ (Edit::FilterAdd { .. }
+            | Edit::FilterRemove { .. }
+            | Edit::FilterSetEnabled { .. }
+            | Edit::FilterSetSettings { .. }
+            | Edit::FilterReorder { .. }) => self.apply_filter(edit, at)?,
             // The graph's checks, in its order: the chord, whether it is bound, whether
             // the action can be bound, then the objects it names.
             Edit::HotkeySet { chord, action } => {
@@ -1529,6 +1588,7 @@ impl Collection {
                 kind,
                 settings,
                 duplicated_from,
+                filters: jstream_protocol::FilterChains::default(),
                 audio,
             },
         );
@@ -1542,11 +1602,15 @@ impl Collection {
             .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))
     }
 
-    /// Whether any source's settings hold a reference matching `is_target`.
+    /// Whether any source's settings, or its filters' settings, hold a reference
+    /// matching `is_target`.
     fn is_referred_to(&self, is_target: impl Fn(&Reference) -> bool) -> bool {
-        self.sources
-            .values()
-            .any(|source| source.settings.references().any(|(_, r)| is_target(&r)))
+        self.sources.values().any(|source| {
+            let filters = source.filters.video.iter().chain(&source.filters.audio);
+            std::iter::once(&source.settings)
+                .chain(filters.map(|f| &f.settings))
+                .any(|settings| settings.references().any(|(_, r)| is_target(&r)))
+        })
     }
 
     /// Every source, ordered by ID, as queries report them.
@@ -1562,6 +1626,7 @@ impl Collection {
                     .duplicated_from
                     .clone()
                     .filter(|original| self.sources.contains_key(original)),
+                filters: source.filters.clone(),
                 audio: source.audio,
             })
             .collect()
@@ -1609,6 +1674,8 @@ impl Collection {
                     geometry: item.geometry,
                     crop: item.crop,
                     visible: item.visible,
+                    opacity: item.opacity,
+                    blend: item.blend,
                 })
             })
             .collect()
@@ -1844,6 +1911,8 @@ fn restore_item(
         source_id: item.source_id.clone(),
         transform,
         geometry,
+        opacity: (item.opacity != Finite32::ONE).then_some(item.opacity),
+        blend: (!item.blend.is_normal()).then_some(item.blend),
     }];
     if index != top {
         edits.push(Edit::ItemReorder {
@@ -1868,6 +1937,30 @@ fn restore_item(
     Ok(edits)
 }
 
+/// Rejects an opacity outside [0, 1], as `jstream-graph` does.
+fn check_opacity(opacity: Finite32, at: usize) -> Result<(), ProtocolError> {
+    if !(0.0..=1.0).contains(&opacity.get()) {
+        return Err(invalid(at, "opacity", "must be from 0 to 1"));
+    }
+    Ok(())
+}
+
+/// Rejects every blend mode but `normal`, which is all the engine draws, as
+/// `jstream-graph` does.
+fn check_blend(blend: BlendMode, at: usize) -> Result<(), ProtocolError> {
+    if !blend.is_normal() {
+        return Err(invalid(
+            at,
+            "blend",
+            format!(
+                "`{}` is not drawn by the compositor yet; only `normal` is",
+                blend.as_str()
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// Whether an output in `state` is not running: `stopped` or `failed`.
 fn is_idle(state: OutputState) -> bool {
     matches!(state, OutputState::Stopped | OutputState::Failed)
@@ -1885,6 +1978,9 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
         "must be at most 1024 bytes"
     } else if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
         "must not contain whitespace or control characters"
+    } else if !key.is_ascii() {
+        // No streaming service issues one; a leading U+FEFF is the usual case (#441).
+        "must contain only ASCII characters"
     } else {
         return Ok(());
     };
@@ -2092,7 +2188,7 @@ mod tests {
     use super::MockEngine;
     use crate::{Control, ControlError, EventStream};
     use jstream_protocol::{
-        Action, Batch, BusId, BusInfo, Call, CallResult, Canvas, ClientId, Crop, Edit,
+        Action, Batch, BlendMode, BusId, BusInfo, Call, CallResult, Canvas, ClientId, Crop, Edit,
         EncoderProfile, EncoderProfileId, EntityKind, Event, Finite32, Hello, HistoryCall,
         HistoryDirection, HistoryOp, IdempotencyKey, ItemId, ItemTransform, OutputId, OutputInfo,
         OutputKind, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query,
@@ -2171,6 +2267,8 @@ mod tests {
             source_id: SourceId::new(source),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         }
     }
 
@@ -2261,6 +2359,8 @@ mod tests {
                     source_id: SourceId::new("webcam"),
                     transform: None,
                     geometry: None,
+                    opacity: None,
+                    blend: None,
                 },
                 Edit::SceneRename {
                     scene_id: SceneId::new("intro"),
@@ -2288,6 +2388,8 @@ mod tests {
             source_id: SourceId::new("webcam"),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         });
         assert_eq!(batch(&*control, readd), Ok(Rev(3)));
     }
@@ -2416,6 +2518,27 @@ mod tests {
             Ok(parity::COLLECTION_REV)
         );
         (engine, control)
+    }
+
+    /// `kind.list` answers with no kinds, even for kinds `with_kinds` told it about: the
+    /// mock describes none. It answers rather than failing, so a client can report a
+    /// failed `kind.list` without the mock tripping it (#401). `kind.describe` still
+    /// answers `internal`.
+    #[test]
+    fn kind_list_lists_no_kinds() {
+        let (_engine, control) = parity_engine();
+        assert_eq!(
+            query(&*control, Query::KindList),
+            Ok(QueryResult::KindList { kinds: Vec::new() })
+        );
+        let describe = Query::KindDescribe {
+            kind_id: "color".into(),
+        };
+        let refused = query(&*control, describe).expect_err("kind.describe");
+        assert!(
+            matches!(refused.protocol(), Some(ProtocolError::Internal { .. })),
+            "{refused:?}"
+        );
     }
 
     /// The answer to a history call: `(rev, step_rev, undo_depth, redo_depth)`.
@@ -2550,6 +2673,10 @@ mod tests {
                 },
                 Edit::SourceDelete {
                     source_id: SourceId::new("aux"),
+                },
+                // Its inverse re-adds its filters, in order and with their switches.
+                Edit::SourceDelete {
+                    source_id: SourceId::new("desk"),
                 },
                 // The audio: a bus's name, the master's fader, a send's gain, a source's
                 // audio, a new send, then a bus with its fader and send, and the audio
@@ -2859,6 +2986,7 @@ mod tests {
                 ("cam", "Camera"),
                 ("cam_2", "Camera 2"),
                 ("cam_copy", "Camera copy"),
+                ("desk", "Desktop"),
                 ("mic", "Microphone"),
                 ("mic_copy", "Microphone copy"),
             ]
@@ -2986,6 +3114,8 @@ mod tests {
                     source_id: SourceId::new("cam"),
                     transform: None,
                     geometry: None,
+                    opacity: None,
+                    blend: None,
                 },
             ],
             expected_rev: None,
@@ -3027,6 +3157,62 @@ mod tests {
             .find(|item| item.item_id.as_str() == "ib")
             .expect("ib is in b");
         assert_eq!(ib.source_id.as_str(), "a_src");
+    }
+
+    /// #362: a bus a source's settings draw can't be deleted until they are cleared, as
+    /// the engine refuses it (`jstream-graph`), in the same batch or before.
+    #[test]
+    fn a_bus_a_source_draws_cannot_be_deleted() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let wave = |bus: serde_json::Value| Edit::SourceSetSettings {
+            source_id: SourceId::new("wave"),
+            patch: [("audio", bus)].into_iter().collect(),
+        };
+        batch(
+            &*control,
+            Batch {
+                edits: vec![
+                    Edit::BusCreate {
+                        bus_id: BusId::new("vod"),
+                        name: "VOD".into(),
+                    },
+                    Edit::SourceCreate {
+                        source_id: SourceId::new("wave"),
+                        name: "Waveform".into(),
+                        kind: SourceKind::Builtin {
+                            kind: "waveform".into(),
+                        },
+                        settings: Settings::new(),
+                        duplicated_from: None,
+                    },
+                    wave(serde_json::json!({"type": "bus", "bus_id": "vod"})),
+                ],
+                expected_rev: None,
+                idempotency_key: None,
+            },
+        )
+        .expect("created");
+        let delete = Edit::BusDelete {
+            bus_id: BusId::new("vod"),
+        };
+        let error = batch(&*control, Batch::single(delete.clone())).expect_err("refused");
+        assert!(
+            matches!(
+                error.protocol(),
+                Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.bus_id"
+            ),
+            "{error:?}"
+        );
+        batch(
+            &*control,
+            Batch {
+                edits: vec![wave(serde_json::Value::Null), delete],
+                expected_rev: None,
+                idempotency_key: None,
+            },
+        )
+        .expect("cleared, then deleted");
     }
 
     /// Every batch the shared parity fixture rejects fails with exactly the error
@@ -3078,8 +3264,8 @@ mod tests {
         assert_eq!(hotkeys, parity::hotkeys());
     }
 
-    /// `audio.reset_loudness` names nothing, so it binds and no delete removes it; an
-    /// encoder profile's delete removes no binding either, since no action names one.
+    /// `audio.reset_loudness` names nothing, so it binds and an output's delete leaves it
+    /// bound.
     #[test]
     fn an_action_that_names_nothing_can_be_bound() {
         let (_engine, control) = parity_engine();
@@ -3368,6 +3554,50 @@ mod tests {
         assert_eq!(state(&*control), grouped);
     }
 
+    /// `item.set_opacity` undoes to the old value, and removing a faded item comes back
+    /// faded, as `jstream-graph`'s inverses do.
+    #[test]
+    fn undo_restores_opacity_and_a_removed_items_opacity() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let setup = Batch {
+            edits: vec![create("a"), webcam(), add("a", "i1", "webcam")],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let before = state(&*control);
+        let fade = Batch {
+            edits: vec![
+                Edit::ItemSetOpacity {
+                    item_id: ItemId::new("i1"),
+                    scene_id: None,
+                    opacity: Finite32::new(0.25).expect("finite"),
+                },
+                Edit::ItemSetBlend {
+                    item_id: ItemId::new("i1"),
+                    blend: BlendMode::Normal,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, fade), Ok(Rev(2)));
+        let faded = state(&*control);
+        assert_ne!(faded, before);
+        assert_eq!(undo(&*control), Ok((Rev(3), Rev(2), 1, 1)));
+        assert_eq!(state(&*control), before);
+        assert_eq!(redo(&*control), Ok((Rev(4), Rev(2), 2, 0)));
+        assert_eq!(state(&*control), faded);
+
+        let remove = Batch::single(Edit::ItemRemove {
+            item_id: ItemId::new("i1"),
+        });
+        assert_eq!(batch(&*control, remove), Ok(Rev(5)));
+        assert_eq!(undo(&*control), Ok((Rev(6), Rev(5), 2, 1)));
+        assert_eq!(state(&*control), faded);
+    }
+
     #[test]
     fn rev_conflict_is_checked_before_empty_batch() {
         let engine = MockEngine::new();
@@ -3540,7 +3770,7 @@ mod tests {
             },
         };
         let started = block_on(agent.call(start)).expect("start");
-        assert_eq!(started.result, CallResult::Action {});
+        assert_eq!(started.result, CallResult::action());
 
         let changed = |state| Event::OutputStateChanged {
             output_id: OutputId::new("yt"),
@@ -3645,7 +3875,7 @@ mod tests {
         let start = Action::OutputStart {
             output_id: OutputId::new("yt"),
         };
-        assert_eq!(action(&*control, start), Ok(CallResult::Action {}));
+        assert_eq!(action(&*control, start), Ok(CallResult::action()));
         let delete = || {
             Batch::single(Edit::OutputDelete {
                 output_id: OutputId::new("yt"),
@@ -3670,7 +3900,7 @@ mod tests {
         let stop = Action::OutputStop {
             output_id: OutputId::new("yt"),
         };
-        assert_eq!(action(&*control, stop), Ok(CallResult::Action {}));
+        assert_eq!(action(&*control, stop), Ok(CallResult::action()));
         assert_eq!(batch(&*control, delete()), Ok(Rev(3)));
         let gone = status(&*control, "yt").expect_err("forgotten");
         assert_eq!(code(&gone), Some("not_found"));
@@ -3739,6 +3969,8 @@ mod tests {
                 "secret\u{7}",
                 "must not contain whitespace or control characters",
             ),
+            ("\u{FEFF}secret", "must contain only ASCII characters"),
+            ("s\u{e9}cret", "must contain only ASCII characters"),
         ] {
             let error = set("yt", key).expect_err("bad key");
             assert_eq!(
@@ -3748,7 +3980,7 @@ mod tests {
         }
         assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, false)));
 
-        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::Action {}));
+        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::action()));
         assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, true)));
         assert_eq!(
             engine
@@ -3772,7 +4004,7 @@ mod tests {
             let clear = Action::OutputClearKey {
                 output_id: OutputId::new("yt"),
             };
-            assert_eq!(action(&*control, clear), Ok(CallResult::Action {}));
+            assert_eq!(action(&*control, clear), Ok(CallResult::action()));
         }
         assert!(engine.stream_key(&OutputId::new("yt")).is_none());
         let events = drain(&mut events);

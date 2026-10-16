@@ -5,16 +5,17 @@
 use crate::{Connector, Server, ServerConfig, Token};
 use futures_util::{SinkExt, StreamExt};
 use jstream_control::protocol::{
-    Action, Batch, Call, CallResult, ClientId, Edit, Event, Hello, OutputId, OutputState,
-    PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Response, Rev,
-    SceneId, ServerMessage, Welcome,
+    Action, ActionResult, Batch, BinaryFrame, BinaryHeader, Call, CallResult, ClientId, DeviceId,
+    DeviceInfo, Edit, Event, Hello, OutputId, OutputState, PROTOCOL_VERSION, PreviewCodec,
+    ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Response, Rev, SceneId,
+    ServerMessage, StreamKind, Welcome,
 };
 use jstream_control::{
-    BoxFuture, Control, ControlError, EventStream, MockEngine, WsConfig, WsControl,
+    BinaryStream, BoxFuture, Control, ControlError, EventStream, MockEngine, WsConfig, WsControl,
 };
 use std::future::Future;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::{Notify, Semaphore, oneshot};
@@ -38,7 +39,13 @@ struct Harness {
     /// How many events the server's sessions have taken from the engine, over all
     /// connections.
     taken: Arc<AtomicUsize>,
+    /// While set, the engine never answers `hello`, as one that accepted the session and
+    /// then hangs.
+    silent: Arc<AtomicBool>,
     stop: Option<oneshot::Sender<()>>,
+    /// Whether the server was configured as reached over TLS, so its own origin is
+    /// `https://`.
+    tls: bool,
     /// The serving task: done once `serve_with_shutdown` has returned.
     serving: Option<tokio::task::JoinHandle<Result<(), crate::ServerError>>>,
 }
@@ -49,34 +56,98 @@ fn start(engine: &MockEngine) -> Harness {
 
 /// A server serving `engine`, with its configuration changed by `configure`.
 fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) -> Harness {
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
+    start_on(multi_thread(), engine, configure)
+}
+
+/// [`start_with`] on a runtime that runs every task on the thread that calls
+/// [`Harness::run`], so a subscriber set there sees every log line.
+fn start_on_this_thread(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) -> Harness {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build();
+    start_on(runtime, engine, configure)
+}
+
+/// The runtime the tests' servers run on, unless they ask for another.
+fn multi_thread() -> std::io::Result<Runtime> {
+    tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
         .build()
-    {
-        Ok(runtime) => runtime,
-        Err(error) => panic!("runtime: {error}"),
-    };
+}
+
+fn start_on(
+    runtime: std::io::Result<Runtime>,
+    engine: &MockEngine,
+    configure: impl FnOnce(&mut ServerConfig),
+) -> Harness {
     let sessions = Arc::new(AtomicUsize::new(0));
     let open = Arc::new(AtomicUsize::new(0));
     let taken = Arc::new(AtomicUsize::new(0));
-    let counters = (Arc::clone(&sessions), Arc::clone(&open), Arc::clone(&taken));
+    let silent = Arc::new(AtomicBool::new(false));
+    let counters = (
+        Arc::clone(&sessions),
+        Arc::clone(&open),
+        Arc::clone(&taken),
+        Arc::clone(&silent),
+    );
     let engine = engine.clone();
     let connector: Connector = Arc::new(move || {
-        let (sessions, open, taken) = &counters;
+        let (sessions, open, taken, silent) = &counters;
         sessions.fetch_add(1, Ordering::SeqCst);
         open.fetch_add(1, Ordering::SeqCst);
         Box::new(Tracked {
             inner: engine.connect(),
             open: Arc::clone(open),
             taken: Arc::clone(taken),
+            silent: Arc::clone(silent),
         })
     });
+    serve_on(runtime, connector, configure, sessions, open, taken, silent)
+}
+
+/// A server opening its sessions with `connector`, counting them in `sessions`,
+/// `open` and `taken`, with `silent` as its [`Harness`]'s flag (see [`Harness`]). The
+/// connector's sessions honour `silent` only if they are [`Tracked`].
+fn serve(
+    connector: Connector,
+    configure: impl FnOnce(&mut ServerConfig),
+    sessions: Arc<AtomicUsize>,
+    open: Arc<AtomicUsize>,
+    taken: Arc<AtomicUsize>,
+    silent: Arc<AtomicBool>,
+) -> Harness {
+    serve_on(
+        multi_thread(),
+        connector,
+        configure,
+        sessions,
+        open,
+        taken,
+        silent,
+    )
+}
+
+/// [`serve`] on `runtime`.
+fn serve_on(
+    runtime: std::io::Result<Runtime>,
+    connector: Connector,
+    configure: impl FnOnce(&mut ServerConfig),
+    sessions: Arc<AtomicUsize>,
+    open: Arc<AtomicUsize>,
+    taken: Arc<AtomicUsize>,
+    silent: Arc<AtomicBool>,
+) -> Harness {
+    let runtime = match runtime {
+        Ok(runtime) => runtime,
+        Err(error) => panic!("runtime: {error}"),
+    };
     let mut config = match Token::new(TOKEN) {
         Ok(token) => ServerConfig::new(token),
         Err(error) => panic!("token: {error}"),
     };
     configure(&mut config);
+    let tls = config.tls;
     let server = match runtime.block_on(Server::bind(config, connector)) {
         Ok(server) => server,
         Err(error) => panic!("bind: {error}"),
@@ -85,7 +156,8 @@ fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) ->
         server.local_addr().ip().is_loopback(),
         "binds to localhost by default"
     );
-    let url = server.ws_url();
+    // The test server speaks plain HTTP even with `tls` on, whose `wss://` it names.
+    let url = server.ws_url().replacen("wss://", "ws://", 1);
     let authority = server.local_addr().to_string();
     let (stop, stopped) = oneshot::channel::<()>();
     let serving = runtime.spawn(server.serve_with_shutdown(async move {
@@ -99,22 +171,29 @@ fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) ->
         sessions,
         open,
         taken,
+        silent,
         stop: Some(stop),
+        tls,
         serving: Some(serving),
     }
 }
 
 /// A mock session that counts, for the [`Harness`], the events the server takes from it
 /// and whether the server still holds it. These are what the shutdown tests wait on,
-/// rather than on wall-clock time, which a loaded machine stretches (#137).
+/// rather than on wall-clock time, which a loaded machine stretches (#137). While
+/// `silent` is set, `hello` is never answered.
 struct Tracked {
     inner: jstream_control::MockControl,
     open: Arc<AtomicUsize>,
     taken: Arc<AtomicUsize>,
+    silent: Arc<AtomicBool>,
 }
 
 impl Control for Tracked {
     fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        if self.silent.load(Ordering::SeqCst) {
+            return Box::pin(std::future::pending());
+        }
         self.inner.hello(hello)
     }
 
@@ -158,7 +237,11 @@ impl Harness {
     }
 
     fn connect(&self) -> Result<WsControl, ControlError> {
-        self.run(WsControl::connect(WsConfig::new(self.url.clone(), TOKEN)))
+        let mut config = WsConfig::new(self.url.clone(), TOKEN);
+        if self.tls {
+            config.origin = Some(format!("https://{}", self.authority));
+        }
+        self.run(WsControl::connect(config))
     }
 
     /// A connected client that has completed the handshake.
@@ -403,7 +486,7 @@ fn a_batch_a_query_and_events_round_trip() {
         },
     };
     let response = ok(harness.run(control.call(start)));
-    assert_eq!(response.result, CallResult::Action {});
+    assert_eq!(response.result, CallResult::action());
     for state in [OutputState::Starting, OutputState::Active] {
         assert_eq!(
             next_event(&harness, &mut events),
@@ -1168,6 +1251,34 @@ fn a_client_that_never_says_hello_is_closed() {
     assert_eq!(response.result, CallResult::batch(Rev(1)));
 }
 
+/// A client that says `hello` in time to an engine that never answers it is still closed
+/// (close code 1008) at the handshake deadline, and its session is dropped, rather than
+/// holding its connection slot until the engine answers (#273).
+#[test]
+fn a_hello_the_engine_never_answers_is_closed_at_the_deadline() {
+    let harness = start_with(&MockEngine::new(), |config| {
+        config.handshake_timeout = Duration::from_millis(300);
+    });
+    harness.silent.store(true, Ordering::SeqCst);
+    let bearer = format!("Bearer {TOKEN}");
+    let mut socket = match harness.raw(None, Some(&harness.authority), Some(&bearer)) {
+        Ok(socket) => socket,
+        Err(status) => panic!("upgrade refused: {status}"),
+    };
+    let hello =
+        match serde_json::to_string(&jstream_control::protocol::ClientMessage::Hello(hello())) {
+            Ok(text) => text,
+            Err(error) => panic!("hello: {error}"),
+        };
+    harness.run(async {
+        if let Err(error) = socket.send(Message::Text(hello.into())).await {
+            panic!("send: {error}");
+        }
+    });
+    assert_eq!(closed_by_server(&harness, &mut socket), Some(1008));
+    harness.wait_until(|| harness.open.load(Ordering::SeqCst) == 0);
+}
+
 /// At most `max_connections` (32 by default) WebSocket connections are open at once: one
 /// more is refused at the upgrade with HTTP 503 and no session is opened, and a slot
 /// freed by a closed connection can be taken again.
@@ -1760,6 +1871,130 @@ fn mcp_keep_alive_outlasts_the_header_read_timeout() {
     assert_eq!((first.status, second.status), (200, 200));
 }
 
+/// A mock session with a binary channel the test feeds: [`Control::binary`] hands the
+/// sending end of a fresh channel to `feed`.
+struct Framed {
+    inner: jstream_control::MockControl,
+    feed: Arc<std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<BinaryFrame>>>>,
+}
+
+impl Control for Framed {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        self.inner.hello(hello)
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        self.inner.call(call)
+    }
+
+    fn events(&self) -> EventStream {
+        self.inner.events()
+    }
+
+    fn binary(&self) -> BinaryStream {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        *self
+            .feed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(tx);
+        Box::pin(futures_util::stream::poll_fn(move |cx| rx.poll_recv(cx)))
+    }
+}
+
+fn preview_frame(channel: u32, keyframe: bool, n: u8) -> BinaryFrame {
+    BinaryFrame {
+        header: BinaryHeader {
+            kind: StreamKind::Preview,
+            channel,
+            codec: Some(PreviewCodec::H264),
+            keyframe,
+            end: false,
+            width: 640,
+            height: 360,
+            pts_us: i64::from(n) * 66_666,
+            rev: Rev(u64::from(n)),
+        },
+        payload: Arc::from(&[0, 0, 0, 1, n][..]),
+    }
+}
+
+/// The session's binary frames reach the client as binary messages, in order and
+/// byte for byte, once the handshake has opened the channel; the server reads none
+/// from the client.
+#[test]
+fn preview_frames_go_out_as_binary_messages() {
+    let engine = MockEngine::new();
+    let feed = Arc::new(std::sync::Mutex::new(None));
+    let slot = Arc::clone(&feed);
+    let connector: Connector = Arc::new(move || {
+        Box::new(Framed {
+            inner: engine.connect(),
+            feed: Arc::clone(&slot),
+        })
+    });
+    let counter = || Arc::new(AtomicUsize::new(0));
+    let silent = Arc::new(AtomicBool::new(false));
+    let harness = serve(connector, |_| {}, counter(), counter(), counter(), silent);
+    let (control, _) = harness.session();
+    let mut frames = control.binary();
+    // The server opened the session's channel when the handshake succeeded.
+    let sender = feed
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+        .expect("the server opened the binary channel");
+    let sent: Vec<_> = (0..3).map(|n| preview_frame(5, n == 0, n)).collect();
+    for frame in &sent {
+        assert!(sender.send(frame.clone()).is_ok());
+    }
+    let end = BinaryFrame::end(StreamKind::Preview, 5, Rev(3), "the encoder stopped");
+    assert!(sender.send(end.clone()).is_ok());
+    let received: Vec<_> = harness.run(async {
+        let mut received = Vec::new();
+        while received.len() < 4 {
+            match frames.next().await {
+                Some(frame) => received.push(frame),
+                None => panic!("the binary channel ended"),
+            }
+        }
+        received
+    });
+    assert_eq!(received[..3], sent[..]);
+    assert_eq!(received[3], end);
+
+    // A client's binary message is not part of the protocol.
+    let bearer = format!("Bearer {TOKEN}");
+    let mut socket = match harness.raw(
+        Some(&harness.own_origin()),
+        Some(&harness.authority.clone()),
+        Some(&bearer),
+    ) {
+        Ok(socket) => socket,
+        Err(status) => panic!("refused: {status}"),
+    };
+    let reply = harness.run(async {
+        if let Err(error) = socket.send(Message::Binary(vec![1, 2, 3].into())).await {
+            panic!("send: {error}");
+        }
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(reply))) => {
+                    match serde_json::from_str::<ServerMessage>(reply.as_str()) {
+                        Ok(message) => return message,
+                        Err(error) => panic!("unreadable reply {reply}: {error}"),
+                    }
+                }
+                Some(Ok(_)) => continue,
+                other => panic!("no reply: {other:?}"),
+            }
+        }
+    });
+    match reply {
+        ServerMessage::Error(error) => assert_eq!(error.error.error.code(), "malformed"),
+        other => panic!("unexpected reply {other:?}"),
+    }
+}
+
 /// A UI bundle in a fresh temporary directory, removed on drop, beside a `secret` file
 /// outside it that no request may reach.
 struct Bundle {
@@ -2064,4 +2299,589 @@ fn a_websocket_upgrade_accepts_the_token_as_a_subprotocol() {
         }
         other => panic!("expected 401, got {:?}", other.map(|(_, r)| r.status())),
     }
+}
+
+// Pairing (ADR-0044).
+
+impl Harness {
+    /// POSTs `body` as JSON to the pairing path on a new connection, with `headers`
+    /// (`Host` is added unless given).
+    fn post_pair(&self, headers: &[(&str, &str)], body: &str) -> HttpReply {
+        let addr = self.authority.clone();
+        let mut all: Vec<(&str, &str)> = vec![("Content-Type", "application/json")];
+        if !headers.iter().any(|(n, _)| n.eq_ignore_ascii_case("host")) {
+            all.push(("Host", &addr));
+        }
+        all.extend_from_slice(headers);
+        self.run(async {
+            let mut stream = match tokio::net::TcpStream::connect(&addr).await {
+                Ok(stream) => stream,
+                Err(error) => panic!("connect: {error}"),
+            };
+            http_to(&mut stream, "POST", crate::PAIR_PATH, &all, body).await
+        })
+    }
+
+    /// Starts pairing over `control` and returns the code.
+    fn start_pairing(&self, control: &WsControl) -> String {
+        let response = ok(self.run(control.call(Call::Action {
+            action: Action::PairingStart,
+        })));
+        match response.result {
+            CallResult::Action {
+                result:
+                    Some(ActionResult::PairingStart {
+                        code,
+                        expires_in_secs,
+                    }),
+            } => {
+                assert_eq!(expires_in_secs, 120);
+                code.expose().to_owned()
+            }
+            other => panic!("expected a pairing code, got {other:?}"),
+        }
+    }
+
+    /// Pairs a device named `name` with `code`, returning its ID and token.
+    fn pair(&self, code: &str, name: &str) -> (String, String) {
+        let body = serde_json::json!({"code": code, "name": name}).to_string();
+        let origin = self.own_origin();
+        let reply = self.post_pair(&[("Origin", &origin)], &body);
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        assert_eq!(reply.header("cache-control"), Some("no-store"));
+        let answer = reply.json();
+        match (answer["device_id"].as_str(), answer["token"].as_str()) {
+            (Some(id), Some(token)) => (id.to_owned(), token.to_owned()),
+            _ => panic!("no device in {answer}"),
+        }
+    }
+
+    fn device_list(&self, control: &WsControl) -> Vec<DeviceInfo> {
+        let call = Call::Query {
+            query: Query::DeviceList,
+        };
+        match ok(self.run(control.call(call))).result {
+            CallResult::Query {
+                result: QueryResult::DeviceList { devices },
+            } => devices,
+            other => panic!("expected device.list, got {other:?}"),
+        }
+    }
+}
+
+/// A code that differs from `code` in its last symbol.
+fn wrong_code(code: &str) -> String {
+    if code.ends_with('0') {
+        format!("{}1", &code[..8])
+    } else {
+        format!("{}0", &code[..8])
+    }
+}
+
+/// ADR-0044 end to end: an authenticated client starts pairing, a device trades the code
+/// for its own token, connects with it as itself, and a revoke closes it and locks it out.
+#[test]
+fn a_paired_device_connects_with_its_own_token_until_revoked() {
+    let harness = start(&MockEngine::new());
+    let (host, _) = harness.session();
+    // No code open: the one unauthenticated request is refused like a missing token.
+    let body = r#"{"code":"0000-0000","name":"Tablet"}"#;
+    assert_eq!(harness.post_pair(&[], body).status, 401);
+
+    let code = harness.start_pairing(&host);
+    // A foreign page can't pair, even with the code.
+    let foreign = serde_json::json!({"code": code, "name": "Evil"}).to_string();
+    let reply = harness.post_pair(&[("Origin", "http://evil.example")], &foreign);
+    assert_eq!(reply.status, 403);
+    // A bad name uses up no attempt; then the code pairs, once.
+    let unnamed = serde_json::json!({"code": code, "name": " "}).to_string();
+    assert_eq!(harness.post_pair(&[], &unnamed).status, 400);
+    let (device_id, token) = harness.pair(&code, "Tablet");
+    assert_eq!(token.len(), 64);
+    let again = serde_json::json!({"code": code, "name": "Again"}).to_string();
+    assert_eq!(harness.post_pair(&[], &again).status, 401);
+
+    // The device token gets in, and the device acts like any client.
+    let device = ok(harness.run(WsControl::connect(WsConfig::new(
+        harness.url.clone(),
+        token.clone(),
+    ))));
+    ok(harness.run(device.hello(hello())));
+    ok(harness.run(device.call(create_scene("scn_tablet"))));
+    let devices = harness.device_list(&device);
+    assert_eq!(devices.len(), 1);
+    assert_eq!(devices[0].device_id.as_str(), device_id);
+    assert_eq!(devices[0].name, "Tablet");
+    let origin = harness.own_origin();
+    let bearer = format!("Bearer {token}");
+    assert!(
+        harness
+            .raw(Some(&origin), Some(&harness.authority), Some(&bearer))
+            .is_ok()
+    );
+
+    // Revoking it closes its connection and locks its token out.
+    let mut events = device.events();
+    let revoke = Call::Action {
+        action: Action::DeviceRevoke {
+            device_id: DeviceId::new(device_id.as_str()),
+        },
+    };
+    ok(harness.run(host.call(revoke.clone())));
+    while next_event(&harness, &mut events).is_some() {}
+    let refused = harness.run(WsControl::connect(WsConfig::new(
+        harness.url.clone(),
+        token,
+    )));
+    assert!(expect_disconnected(refused).contains("401"));
+    assert!(harness.device_list(&host).is_empty());
+    assert_eq!(protocol_code(harness.run(host.call(revoke))), "not_found");
+}
+
+/// The server answers the pairing calls itself, after the handshake like any call, and
+/// the newest code replaces the one open.
+#[test]
+fn pairing_needs_the_handshake_and_the_newest_code_wins() {
+    let harness = start(&MockEngine::new());
+    let control = ok(harness.connect());
+    let early = harness.run(control.call(Call::Action {
+        action: Action::PairingStart,
+    }));
+    assert_eq!(protocol_code(early), "handshake_required");
+    ok(harness.run(control.hello(hello())));
+    let code = harness.start_pairing(&control);
+    let newer = harness.start_pairing(&control);
+    if newer != code {
+        let stale = serde_json::json!({"code": code, "name": "Old"}).to_string();
+        assert_eq!(harness.post_pair(&[], &stale).status, 403);
+    }
+    harness.pair(&newer, "Kitchen tablet");
+}
+
+/// Five wrong codes void the open one, so a guesser gets five tries per code.
+#[test]
+fn five_wrong_codes_void_the_open_one() {
+    let harness = start(&MockEngine::new());
+    let (control, _) = harness.session();
+    let code = harness.start_pairing(&control);
+    let guess = serde_json::json!({"code": wrong_code(&code), "name": "Guess"}).to_string();
+    for _ in 0..5 {
+        assert_eq!(harness.post_pair(&[], &guess).status, 403);
+    }
+    let right = serde_json::json!({"code": code, "name": "Late"}).to_string();
+    assert_eq!(harness.post_pair(&[], &right).status, 401);
+}
+
+/// MCP agents reach the pairing calls as the `pairing` and `device` tools, and a device
+/// token opens MCP sessions of its own, which the control token can't use.
+#[test]
+fn mcp_agents_can_pair_and_list_devices() {
+    let harness = start_with(&MockEngine::new(), mcp_on());
+    let session = harness.mcp_session("agent");
+    let call = |tool: &str, op: serde_json::Value| {
+        serde_json::json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                           "params": {"name": tool, "arguments": {"op": op}}})
+    };
+    let reply = harness.mcp(
+        Some(&session),
+        &call("pairing", serde_json::json!({"type": "pairing.start"})),
+    );
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let answer = reply.json();
+    let Some(code) = answer
+        .pointer("/result/structuredContent/result/result/code")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+    else {
+        panic!("no code in {answer}");
+    };
+    let (device_id, token) = harness.pair(&code, "Agent box");
+    let reply = harness.mcp(
+        Some(&session),
+        &call("device", serde_json::json!({"type": "device.list"})),
+    );
+    let listed = reply.json();
+    assert_eq!(
+        listed.pointer("/result/structuredContent/result/result/devices/0/device_id"),
+        Some(&serde_json::Value::from(device_id.as_str())),
+        "{listed}"
+    );
+    assert!(
+        !reply.body.contains(&token),
+        "device tokens are never reported"
+    );
+    // The device's own session; the control token can't use it.
+    let bearer = format!("Bearer {token}");
+    let headers = [
+        ("Authorization", bearer.as_str()),
+        ("Content-Type", "application/json"),
+        ("Accept", "application/json, text/event-stream"),
+    ];
+    let reply = harness.http("POST", &headers, &mcp_initialize("device").to_string());
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let Some(device_session) = reply.header("mcp-session-id").map(str::to_owned) else {
+        panic!("no session");
+    };
+    let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
+    assert_eq!(harness.mcp(Some(&device_session), &note).status, 404);
+}
+
+/// R-SEC-001: neither a pairing code nor a device token appears in what the server
+/// logs, from starting pairing, through wrong and right attempts and the device's
+/// connection, to its revocation.
+#[test]
+fn pairing_codes_and_device_tokens_are_never_logged() {
+    let capture = crate::gate::tests::Capture::default();
+    let mut secrets = Vec::new();
+    tracing::subscriber::with_default(capture.clone(), || {
+        let harness = start_on_this_thread(&MockEngine::new(), |_| {});
+        let (host, _) = harness.session();
+        let first = harness.start_pairing(&host);
+        let wrong = wrong_code(&first);
+        let guess = serde_json::json!({"code": wrong, "name": "Guess"}).to_string();
+        for _ in 0..5 {
+            assert_eq!(harness.post_pair(&[], &guess).status, 403);
+        }
+        let code = harness.start_pairing(&host);
+        let (device_id, token) = harness.pair(&code, "Tablet");
+        let device = ok(harness.run(WsControl::connect(WsConfig::new(
+            harness.url.clone(),
+            token.clone(),
+        ))));
+        ok(harness.run(device.hello(hello())));
+        let revoke = Call::Action {
+            action: Action::DeviceRevoke {
+                device_id: DeviceId::new(device_id.as_str()),
+            },
+        };
+        ok(harness.run(host.call(revoke)));
+        let refused = harness.run(WsControl::connect(WsConfig::new(
+            harness.url.clone(),
+            token.clone(),
+        )));
+        assert!(refused.is_err());
+        secrets.extend([first, wrong, code, token]);
+    });
+    let logged = capture.text();
+    for expected in [
+        "pairing started",
+        "pairing code voided after 5 wrong attempts",
+        "wrong pairing code",
+        "device paired",
+        "Tablet",
+        "device revoked",
+    ] {
+        assert!(logged.contains(expected), "{expected} not logged: {logged}");
+    }
+    for secret in &secrets {
+        let bare = secret.replace('-', "");
+        assert!(
+            !logged.contains(secret.as_str()) && !logged.contains(&bare),
+            "{secret} logged: {logged}"
+        );
+    }
+}
+
+// The browser pairing page and the device cookie (ADR-0047).
+
+/// A server with the UI and `ServerConfig::tls` on, as if it were reached over TLS. The
+/// test still speaks plain HTTP to it.
+fn tls_ui(dist: std::path::PathBuf) -> impl FnOnce(&mut ServerConfig) {
+    |config| {
+        config.ui_dir = Some(dist);
+        config.tls = true;
+    }
+}
+
+impl Harness {
+    /// The server's own origin on a TLS listener.
+    fn tls_origin(&self) -> String {
+        format!("https://{}", self.authority)
+    }
+
+    /// Opens a raw WebSocket as a browser holding `cookie` would: its own `https`
+    /// `Origin`, the `Cookie` line, `Sec-Fetch-Site` when given, and no `Authorization`.
+    fn cookie_upgrade(&self, cookie: &str, site: Option<&str>) -> Result<RawSocket, StatusCode> {
+        let mut request = match self.url.as_str().into_client_request() {
+            Ok(request) => request,
+            Err(error) => panic!("request: {error}"),
+        };
+        let origin = self.tls_origin();
+        let headers = request.headers_mut();
+        for (name, value) in [
+            ("origin", Some(origin.as_str())),
+            ("cookie", Some(cookie)),
+            ("sec-fetch-site", site),
+        ] {
+            if let Some(value) = value {
+                match HeaderValue::from_str(value) {
+                    Ok(value) => headers.insert(name, value),
+                    Err(error) => panic!("header: {error}"),
+                };
+            }
+        }
+        match self.run(tokio_tungstenite::connect_async(request)) {
+            Ok((socket, _)) => Ok(socket),
+            Err(tungstenite::Error::Http(response)) => Err(response.status()),
+            Err(error) => panic!("unexpected connection error: {error}"),
+        }
+    }
+}
+
+/// ADR-0047: without TLS there is no pairing page, the UI's `401` links to nothing, and
+/// a browser exchange is refused without using up an attempt.
+#[test]
+fn without_tls_there_is_no_pairing_page_or_cookie() {
+    let bundle = Bundle::new("no-tls");
+    let dist = bundle.dist();
+    let harness = start_with(&MockEngine::new(), |config| config.ui_dir = Some(dist));
+    let bearer = format!("Bearer {TOKEN}");
+    for headers in [vec![], vec![("Authorization", bearer.as_str())]] {
+        let page = harness.request("GET", crate::PAIR_PAGE_PATH, &headers);
+        assert_eq!(page.status, 404, "{headers:?}");
+        assert!(!page.body.contains("<form"), "{}", page.body);
+    }
+    let refused = harness.request("GET", "/", &[]);
+    assert_eq!(refused.status, 401);
+    assert!(!refused.body.contains("/pair"), "{}", refused.body);
+
+    let (host, _) = harness.session();
+    let code = harness.start_pairing(&host);
+    let browser = serde_json::json!({"code": code, "name": "Browser", "browser": true});
+    let reply = harness.post_pair(&[], &browser.to_string());
+    assert_eq!(reply.status, 400, "{}", reply.body);
+    assert_eq!(reply.header("set-cookie"), None);
+    let not_bool = serde_json::json!({"code": code, "name": "Browser", "browser": "yes"});
+    assert_eq!(harness.post_pair(&[], &not_bool.to_string()).status, 400);
+    // The code is still open: a native exchange (with `browser: false`) pairs.
+    let native = serde_json::json!({"code": code, "name": "Native", "browser": false});
+    let reply = harness.post_pair(&[], &native.to_string());
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    assert!(reply.json()["token"].as_str().is_some());
+    assert_eq!(reply.header("set-cookie"), None);
+}
+
+/// ADR-0047: on a TLS listener `GET /pair` is a fixed page served without a token,
+/// after the `Host` and `Origin` checks, under the UI's nonce policy; the UI's `401`
+/// links to it, and the UI's fallback never serves the path.
+#[test]
+fn on_tls_the_pairing_page_is_served_without_a_token() {
+    let bundle = Bundle::new("tls-page");
+    let harness = start_with(&MockEngine::new(), tls_ui(bundle.dist()));
+    let page = harness.request("GET", crate::PAIR_PAGE_PATH, &[]);
+    assert_eq!(page.status, 200, "{}", page.body);
+    assert_eq!(
+        page.header("content-type"),
+        Some("text/html; charset=utf-8")
+    );
+    assert_eq!(page.header("x-content-type-options"), Some("nosniff"));
+    assert_eq!(page.header("referrer-policy"), Some("no-referrer"));
+    assert_eq!(page.header("set-cookie"), None);
+    let Some(policy) = page.header("content-security-policy") else {
+        panic!("no CSP");
+    };
+    let Some(nonce) = policy
+        .split("'nonce-")
+        .nth(1)
+        .and_then(|rest| rest.split('\'').next())
+    else {
+        panic!("no nonce in {policy}");
+    };
+    assert_eq!(nonce.len(), 32);
+    assert_eq!(
+        page.body
+            .matches(&format!("<script nonce=\"{nonce}\">"))
+            .count(),
+        1,
+        "{}",
+        page.body
+    );
+    assert!(!page.body.contains("{{__TRUNK NONCE__}}"));
+    assert!(
+        policy.contains(&format!("connect-src 'self' wss://{};", harness.authority)),
+        "{policy}"
+    );
+    assert!(!page.body.contains("init()"), "not the UI bundle");
+    let head = harness.request("HEAD", crate::PAIR_PAGE_PATH, &[]);
+    assert_eq!(head.status, 200);
+    let post = harness.request("POST", crate::PAIR_PAGE_PATH, &[]);
+    assert_eq!(
+        (post.status, post.header("allow")),
+        (405, Some("GET, HEAD"))
+    );
+
+    // Still behind the `Host` and `Origin` checks.
+    let foreign = harness.request(
+        "GET",
+        crate::PAIR_PAGE_PATH,
+        &[("Origin", "https://evil.example")],
+    );
+    assert_eq!(foreign.status, 403);
+    let plain_origin = format!("http://{}", harness.authority);
+    let plain = harness.request("GET", crate::PAIR_PAGE_PATH, &[("Origin", &plain_origin)]);
+    assert_eq!(plain.status, 403, "a TLS listener's own origin is https");
+    let rebound = harness.request(
+        "GET",
+        crate::PAIR_PAGE_PATH,
+        &[("Host", "evil.example:443")],
+    );
+    assert_eq!(rebound.status, 403);
+
+    // A UI path without a credential: the `Basic` challenge and a link to the page.
+    let refused = harness.request("GET", "/", &[]);
+    assert_eq!(refused.status, 401);
+    assert_eq!(
+        refused.header("www-authenticate"),
+        Some("Basic realm=\"JStream\", charset=\"UTF-8\"")
+    );
+    assert!(
+        refused.body.contains("<a href=\"/pair\">"),
+        "{}",
+        refused.body
+    );
+    assert_eq!(
+        refused.header("content-type"),
+        Some("text/html; charset=utf-8")
+    );
+    // Paths below `/pair` are reserved too: the UI never serves its index for them.
+    let basic = basic();
+    let below = harness.request("GET", "/pair/x", &[("Authorization", &basic)]);
+    assert_eq!(below.status, 404, "{}", below.body);
+    let ui = harness.request("GET", "/scenes", &[("Authorization", &basic)]);
+    assert_eq!(ui.status, 200, "the fallback still serves the UI's routes");
+    assert_eq!(harness.sessions.load(Ordering::SeqCst), 0);
+}
+
+/// The value of the `__Host-jstream_device` cookie a `Set-Cookie` line sets, after
+/// checking it has every attribute ADR-0047 names.
+fn set_device_cookie(set_cookie: Option<&str>) -> String {
+    let Some(line) = set_cookie else {
+        panic!("no Set-Cookie");
+    };
+    let mut parts = line.split("; ");
+    let Some(token) = parts
+        .next()
+        .and_then(|pair| pair.strip_prefix("__Host-jstream_device="))
+    else {
+        panic!("not the device cookie: {line}");
+    };
+    let attributes: Vec<&str> = parts.collect();
+    assert_eq!(
+        attributes,
+        [
+            "Secure",
+            "HttpOnly",
+            "SameSite=Strict",
+            "Path=/",
+            "Max-Age=2592000"
+        ],
+        "{line}"
+    );
+    token.to_owned()
+}
+
+/// ADR-0047 end to end: a browser exchange answers the device ID only and sets the
+/// token as the cookie; the cookie then admits the browser to the UI and its WebSocket,
+/// as that device, only on same-origin or typed requests, only once per request, never
+/// for the control token, and not after a revoke. Nothing logs the cookie.
+#[test]
+fn a_browser_pairs_into_a_cookie_that_admits_it_until_revoked() {
+    let bundle = Bundle::new("tls-cookie");
+    let dist = bundle.dist();
+    let capture = crate::gate::tests::Capture::default();
+    let mut token = String::new();
+    tracing::subscriber::with_default(capture.clone(), || {
+        let harness = start_on_this_thread(&MockEngine::new(), tls_ui(dist));
+        let (host, _) = harness.session();
+        let code = harness.start_pairing(&host);
+        let body = serde_json::json!({"code": code, "name": "Browser", "browser": true});
+        let origin = harness.tls_origin();
+        let reply = harness.post_pair(&[("Origin", &origin)], &body.to_string());
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        assert_eq!(reply.header("cache-control"), Some("no-store"));
+        token = set_device_cookie(reply.header("set-cookie"));
+        assert_eq!(token.len(), 64);
+        let answer = reply.json();
+        let Some(device_id) = answer["device_id"].as_str().map(str::to_owned) else {
+            panic!("no device ID in {answer}");
+        };
+        assert_eq!(answer.as_object().map(|o| o.len()), Some(1), "{answer}");
+        assert!(
+            !reply.body.contains(&token),
+            "the page never sees the token"
+        );
+
+        let cookie = format!("__Host-jstream_device={token}");
+        let get = |headers: &[(&str, &str)]| harness.request("GET", "/", headers).status;
+        assert_eq!(get(&[("Cookie", &cookie), ("Sec-Fetch-Site", "none")]), 200);
+        assert_eq!(
+            get(&[
+                ("Cookie", &cookie),
+                ("Sec-Fetch-Site", "same-origin"),
+                ("Origin", &origin)
+            ]),
+            200
+        );
+        // A page on another port or a sibling subdomain (same-site), another site, or a
+        // browser that sends no `Sec-Fetch-Site` falls back to the challenge.
+        for site in [Some("same-site"), Some("cross-site"), None] {
+            let mut headers = vec![("Cookie", cookie.as_str())];
+            if let Some(site) = site {
+                headers.push(("Sec-Fetch-Site", site));
+            }
+            assert_eq!(get(&headers), 401, "{site:?}");
+        }
+        // Twice, on one line or two.
+        let twice = format!("{cookie}; {cookie}");
+        assert_eq!(get(&[("Cookie", &twice), ("Sec-Fetch-Site", "none")]), 401);
+        assert_eq!(
+            get(&[
+                ("Cookie", &cookie),
+                ("Cookie", &cookie),
+                ("Sec-Fetch-Site", "none")
+            ]),
+            401
+        );
+        // The control token is never a cookie.
+        let control = format!("__Host-jstream_device={TOKEN}");
+        assert_eq!(
+            get(&[("Cookie", &control), ("Sec-Fetch-Site", "none")]),
+            401
+        );
+
+        // The UI's WebSocket, as the device.
+        assert!(harness.cookie_upgrade(&cookie, Some("same-origin")).is_ok());
+        assert_eq!(
+            harness.cookie_upgrade(&cookie, Some("same-site")).err(),
+            Some(StatusCode::UNAUTHORIZED)
+        );
+        assert_eq!(
+            harness.cookie_upgrade(&control, Some("same-origin")).err(),
+            Some(StatusCode::UNAUTHORIZED)
+        );
+        let devices = harness.device_list(&host);
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].device_id.as_str(), device_id);
+
+        // Revoked, the cookie is worthless.
+        ok(harness.run(host.call(Call::Action {
+            action: Action::DeviceRevoke {
+                device_id: DeviceId::new(device_id.as_str()),
+            },
+        })));
+        assert_eq!(get(&[("Cookie", &cookie), ("Sec-Fetch-Site", "none")]), 401);
+        assert_eq!(
+            harness.cookie_upgrade(&cookie, Some("same-origin")).err(),
+            Some(StatusCode::UNAUTHORIZED)
+        );
+    });
+    let logged = capture.text();
+    assert!(logged.contains("device paired"), "{logged}");
+    assert!(
+        logged.contains("device cookie without a same-origin Sec-Fetch-Site")
+            && logged.contains("device cookie repeated"),
+        "{logged}"
+    );
+    assert!(!token.is_empty() && !logged.contains(&token), "{logged}");
+    assert!(!logged.contains(TOKEN), "{logged}");
 }

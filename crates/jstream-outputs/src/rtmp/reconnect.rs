@@ -253,6 +253,10 @@ const EX_HEADER: u8 = 0x80;
 const CODEC_AVC: u8 = 7;
 /// The `FrameType` of a keyframe.
 const FRAME_KEY: u8 = 1;
+/// Legacy `AVCPacketType`s (`jstream_mux::flv::AvcPacketType`). End of sequence (2) is
+/// neither.
+const AVC_SEQUENCE_HEADER: u8 = 0;
+const AVC_NALU: u8 = 1;
 /// Enhanced RTMP `VideoPacketType`s (`jstream_mux::flv::ExVideoPacketType`).
 const EX_SEQUENCE_START: u8 = 0;
 const EX_CODED_FRAMES: u8 = 1;
@@ -260,11 +264,12 @@ const EX_CODED_FRAMES_X: u8 = 3;
 
 /// A VIDEODATA body: a sequence header, a keyframe, or other.
 ///
-/// Legacy tags (AVC): the high nibble is the frame type, the low one the codec, and an
-/// `AVCPacketType` of 0 is the sequence header. Enhanced RTMP tags (HEVC, AV1) set
-/// `IsExHeader`, then carry a 3-bit frame type and a 4-bit `VideoPacketType`:
-/// `SequenceStart` is the header, and a keyframe is `CodedFrames` or `CodedFramesX`
-/// with frame type 1. Every other packet type (`SequenceEnd`, `Metadata`,
+/// Legacy tags (AVC): the high nibble is the frame type, the low one the codec. An
+/// `AVCPacketType` of 0 is the sequence header, and a keyframe is a NALU (1) with frame
+/// type 1; an end of sequence (2) is other, even though it is marked as a keyframe.
+/// Enhanced RTMP tags (HEVC, AV1) set `IsExHeader`, then carry a 3-bit frame type and a
+/// 4-bit `VideoPacketType`: `SequenceStart` is the header, and a keyframe is
+/// `CodedFrames` or `CodedFramesX` with frame type 1. Every other packet type (`SequenceEnd`, `Metadata`,
 /// `MPEG2TSSequenceStart`, `Multitrack`, `ModEx`) and command frames are other: they
 /// are neither kept for re-sending nor a point to resume at.
 fn classify_video(body: &[u8]) -> Packet {
@@ -277,7 +282,11 @@ fn classify_video(body: &[u8]) -> Packet {
                 _ => Packet::Other,
             }
         }
-        [first, 0, ..] if first & 0x0F == CODEC_AVC => Packet::Header,
+        [first, packet_type, ..] if first & 0x0F == CODEC_AVC => match *packet_type {
+            AVC_SEQUENCE_HEADER => Packet::Header,
+            AVC_NALU if first >> 4 == FRAME_KEY => Packet::Keyframe,
+            _ => Packet::Other,
+        },
         [first, ..] if first >> 4 == FRAME_KEY => Packet::Keyframe,
         _ => Packet::Other,
     }
