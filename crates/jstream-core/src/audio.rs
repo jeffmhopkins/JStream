@@ -13,11 +13,15 @@
 //! scene on program (`crate::activity`), so a `when_shown` source is heard only while
 //! the Program mix shows it. The engine syncs again when program changes.
 //!
-//! The `waveform` and `spectrum` sources that draw a bus (#362) get its scope from the
-//! engine's [`AudioScopes`]. Each sync keeps a scope for every bus a source's settings
-//! refer to, drops the others, and hands the mixer thread the list of mixer buses to
-//! feed them from ([`ScopeTaps`], through `arc-swap`, so the thread never waits on the
-//! engine).
+//! The `waveform` and `spectrum` sources that draw a bus (#362) or another source
+//! (#459) get its scope from the engine's [`AudioScopes`]. Each sync keeps a scope for
+//! every bus a source's settings refer to and every source a scope source's
+//! `audio_source` names, drops the others, and hands the mixer thread the list of what
+//! feeds each ([`ScopeTaps`], through `arc-swap`, so the thread never waits on the
+//! engine): a bus's mixer bus, or a drawn source's mixer input, whose block is that
+//! source after its fader and activity gain. A drawn source that is muted, whose audio
+//! is off, or that has no mixer input now (its stream isn't open) is fed silence, so
+//! it draws what the audience hears from it.
 //!
 //! The audio sources' inputs are opened and closed by the program stage
 //! (`crate::audio_sources`, which opens none for a source whose audio is off); this
@@ -30,7 +34,7 @@ use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{BusControl, InputControl, MeterReading, MixerControl};
 use jstream_graph::State;
 use jstream_protocol::{
-    BusId, BusMeter, Finite32, Loudness, Reference, SceneId, SourceId, SourceMeter,
+    BusId, BusMeter, Finite32, Loudness, Reference, SceneId, SourceId, SourceKind, SourceMeter,
 };
 use jstream_sources::{AudioScope, AudioScopes};
 use std::collections::{BTreeMap, BTreeSet};
@@ -74,12 +78,24 @@ pub(crate) struct MixerHandles {
     pub(crate) taps: Arc<ScopeTaps>,
 }
 
-/// One bus scope the mixer thread feeds: after each block, the block of `bus` goes into
-/// `scope`.
+/// One bus or source scope the mixer thread feeds: after each block, the block `feed`
+/// names goes into `scope`.
 #[derive(Debug)]
 pub(crate) struct ScopeTap {
-    pub(crate) bus: jstream_audio::BusId,
+    pub(crate) feed: TapFeed,
     pub(crate) scope: Arc<AudioScope>,
+}
+
+/// Where a [`ScopeTap`]'s blocks come from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TapFeed {
+    /// A mixer bus, after its fader ([`jstream_audio::Mixer::bus_block`]).
+    Bus(jstream_audio::BusId),
+    /// A source's mixer input, after its fader, mute and activity gain, before its
+    /// sends ([`jstream_audio::Mixer::input_block`]).
+    Input(jstream_audio::InputId),
+    /// Silence: a drawn source that is muted, off, or has no mixer input.
+    Silence,
 }
 
 /// The bus scopes the mixer thread feeds, handed over as an immutable list through
@@ -99,7 +115,7 @@ impl ScopeTaps {
             && current
                 .iter()
                 .zip(&taps)
-                .all(|(a, b)| a.bus == b.bus && Arc::ptr_eq(&a.scope, &b.scope));
+                .all(|(a, b)| a.feed == b.feed && Arc::ptr_eq(&a.scope, &b.scope));
         if !same {
             self.current.store(Arc::new(taps));
         }
@@ -157,6 +173,17 @@ fn drawn_buses(state: &State) -> BTreeSet<BusId> {
         .flat_map(|source| source.settings().references())
         .filter_map(|(_, reference)| match reference {
             Reference::Bus { bus_id } => Some(bus_id),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Every source a scope source's `audio_source` draws (#459).
+fn drawn_sources(state: &State) -> BTreeSet<SourceId> {
+    state
+        .sources()
+        .filter_map(|source| match source.kind() {
+            SourceKind::Builtin { kind } => jstream_sources::drawn_source(kind, source.settings()),
             _ => None,
         })
         .collect()
@@ -248,9 +275,10 @@ impl AudioRouting {
             control.set_muted(bus.muted());
         }
         // The scopes of the buses sources draw, each fed from its mixer bus once the
-        // mixer holds it.
+        // mixer holds it, and of the sources they draw, each fed from its input.
         attached.scopes.retain(&drawn_buses(state));
-        let taps = attached
+        attached.scopes.retain_sources(&drawn_sources(state));
+        let buses = attached
             .scopes
             .buses()
             .into_iter()
@@ -260,10 +288,23 @@ impl AudioRouting {
                 } else {
                     attached.buses.get(&id)?.id()
                 };
-                Some(ScopeTap { bus, scope })
-            })
-            .collect();
-        attached.taps.publish(taps);
+                Some(ScopeTap {
+                    feed: TapFeed::Bus(bus),
+                    scope,
+                })
+            });
+        let sources = attached.scopes.sources().into_iter().map(|(id, scope)| {
+            let audible = state
+                .source(&id)
+                .and_then(|s| s.audio())
+                .is_some_and(|audio| audio.enabled && !audio.muted);
+            let feed = match inputs.get(&id) {
+                Some(input) if audible => TapFeed::Input(input.id()),
+                _ => TapFeed::Silence,
+            };
+            ScopeTap { feed, scope }
+        });
+        attached.taps.publish(buses.chain(sources).collect());
         let activity = activity_gains(state, program);
         // An input whose source went, or has no audio now, stops being routed.
         for (id, input) in inputs {

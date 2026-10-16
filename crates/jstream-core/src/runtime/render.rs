@@ -200,8 +200,8 @@ pub(crate) enum Garbage {
     /// A virtual camera's tap the render thread let go of. Once its camera thread has
     /// ended, it holds the last reference to its channels and the output's stop flag.
     Vcam(VcamTap),
-    /// A list of bus scopes the mixer thread replaced; it may hold the last reference
-    /// to a scope no source draws any more.
+    /// A list of bus and source scopes the mixer thread replaced; it may hold the last
+    /// reference to a scope no source draws any more.
     Scopes(Arc<Vec<ScopeTap>>),
 }
 

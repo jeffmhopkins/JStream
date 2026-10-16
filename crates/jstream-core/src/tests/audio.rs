@@ -734,6 +734,96 @@ fn a_browser_page_is_recorded_alongside_the_defaults() {
     assert!(eventually(|| audio.open_streams() == 0));
 }
 
+/// #459: a `waveform` drawing a source gets that source's audio after its own fader,
+/// before any bus, from the mixer thread: here the desktop is at -6 dB and sends to no
+/// bus, so its scope reads half the delivered level while the program mix carries only
+/// the microphone at full level. Muted, the source draws silence.
+#[test]
+fn a_source_a_source_draws_feeds_its_scope_after_its_fader() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            audio_source("mic", "audio_input", None),
+            audio_source("desk", "desktop_audio", None),
+            Edit::SourceSetAudio {
+                source_id: SourceId::new("desk"),
+                enabled: None,
+                follow: None,
+                gain_db: Some(jstream_protocol::Finite32::new(-6.0).expect("finite")),
+                muted: None,
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("desk"),
+                bus_id: jstream_protocol::BusId::master(),
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "Waveform".into(),
+                kind: SourceKind::Builtin {
+                    kind: "waveform".into(),
+                },
+                settings: Settings(
+                    [(
+                        "audio_source".to_owned(),
+                        json!({"type": "source", "source_id": "desk"}),
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
+                duplicated_from: None,
+            },
+        ]),
+    )
+    .expect("created");
+    let scopes = engine.audio_scopes();
+    let desk = scopes.source(&SourceId::new("desk"));
+    let program = engine.audio_scope();
+    let mut window = [0.0f32; 256];
+    let near = |window: &[f32], level: f32| window.iter().all(|&s| (s - level).abs() < 0.01);
+
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(
+        eventually(|| {
+            audio.deliver(480, 0.25);
+            clock.advance(10_000);
+            let (_, rate) = desk.latest(&mut window);
+            rate == 48_000 && near(&window, 0.125)
+        }),
+        "the source's scope didn't read it after its -6 dB fader: {window:?}"
+    );
+    program.latest(&mut window);
+    assert!(
+        near(&window, 0.25),
+        "the program mix carries the microphone only: {window:?}"
+    );
+
+    batch(
+        &control,
+        edits(vec![Edit::SourceSetAudio {
+            source_id: SourceId::new("desk"),
+            enabled: None,
+            follow: None,
+            gain_db: None,
+            muted: Some(true),
+        }]),
+    )
+    .expect("muted");
+    assert!(
+        eventually(|| {
+            audio.deliver(480, 0.25);
+            clock.advance(10_000);
+            let (_, rate) = desk.latest(&mut window);
+            rate == 48_000 && near(&window, 0.0)
+        }),
+        "a muted source draws silence: {window:?}"
+    );
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+}
+
 /// The routing (D5) finds the inputs the program stage opens: an audio source that
 /// records is metered in `meters.tick`. Turning its audio off closes its input and drops
 /// its meter, and doesn't bring the default microphone and desktop back; turning it on
