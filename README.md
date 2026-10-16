@@ -124,7 +124,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | C2 | Text source | ✅ merged | #221 |
 | C5 | Audio sources | 🧪 merged, Windows run pending: audio hardware tests | #238 |
 | C3 | Display and window capture sources | ⏳ planned |  |
-| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: Windows run #341 | #283, #289, #298 |
+| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341 | #283, #289, #298 |
 | D1 | Live mixer inputs | ✅ merged | #149, #199 |
 | D3 | Loudness meters | ✅ merged | #152 |
 | D7a | Filter kernels | ✅ merged | #159 |
