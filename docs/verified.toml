@@ -1110,7 +1110,7 @@ stamp = { hash = "b3:b3f8a6543cd7d21a", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:46e3da0e16d2373a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (#458) into #457. #457's tests.rs change makes no Design claim; #458's stop-drain paragraph, drop table and lock order came in unchanged from wave/m1 and match pipeline.rs. Tests pass after the merge." }
+stamp = { hash = "b3:d9810f746541f642", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: render-thread paragraph joins #434 (canvas-sized output, scaled capture) with E3b (GPU frame sampled in place); #458's stop-drain text matches pipeline.rs Queues; re-merge brings #457, a vcam test counting change that leaves the virtual camera design text true; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's browser paragraph says a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser and the new tests/audio.rs case; the wave's B7 opacity/blend/filter text is in other paragraphs; holds" }
@@ -1224,7 +1224,7 @@ stamp = { hash = "b3:b3f8a6543cd7d21a", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:46e3da0e16d2373a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (#458, stop-drain count) into #457. #457 changes only the vcam test's per-run frame baseline in tests.rs; #458 added its left-behind test and the stop-side drop-count wording. The Tests list names both correctly and the Drop-counts bullet is #458's verified text. cargo test -p jstream-core passes after the merge." }
+stamp = { hash = "b3:d9810f746541f642", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: tests list joins the wave's GPU-capture render test, main's #433 tests (output size follows the canvas; captures converted at their own size, only when shown) and #458's final-tick count; re-merge brings #457, which only changes how the vcam test counts frames per start, a test not named in this section; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
