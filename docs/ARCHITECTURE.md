@@ -815,8 +815,8 @@ depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native
 A browser source is a CEF off-screen browser
 ([ADR-0021](adr/0021-browser-source.md)), built in `jstream-browser`
 ([ADR-0046](adr/0046-browser-crate-and-helper.md),
-[its README](../crates/jstream-browser/README.md)). The desktop app wires it in behind
-its off-by-default `cef` feature; the daemon and the program mix don't use it yet. Each `OnAcceleratedPaint`
+[its README](../crates/jstream-browser/README.md)). The desktop app and the daemon wire it
+in behind their off-by-default `cef` features; the program mix doesn't use it yet. Each `OnAcceleratedPaint`
 hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
 and no fence. CEF takes the texture back into its pool when the callback returns. So the
 callback opens the handle on the wgpu D3D12 device, imports it through hal as in the GPU
