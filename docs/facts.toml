@@ -22,3 +22,17 @@ value = "25H2, 26H2"
 check = "manual"
 source = { ext = "win11-lifecycle" }
 note = "Home/Pro editions currently in servicing; changes yearly"
+
+[[fact]]
+id = "ubuntu-lts-supported"
+value = "24.04, 26.04"
+check = "manual"
+source = { ext = "ubuntu-release-cycle" }
+note = "Ubuntu LTS releases in standard support that ship PipeWire 1.0 or later (22.04 ships PulseAudio); changes every two years"
+
+[[fact]]
+id = "fedora-maintained"
+value = "43, 44"
+check = "manual"
+source = { ext = "fedora-eol" }
+note = "Fedora releases not yet end of life; changes every six months"

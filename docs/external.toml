@@ -275,3 +275,51 @@ relied_on = "Quota costs: liveBroadcasts.insert 1, liveBroadcasts.transition 1, 
 review_every = "180d"
 status = "ok"
 checked_note = "Re-read the Live Streaming rows of the cost table and the reset time"
+
+[[external]]
+id = "xdp-screencast"
+url = "https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html"
+relied_on = "ScreenCast portal: SelectSources options restore_token and persist_mode (0 none, 1 while running, 2 until revoked) since interface version 4; restore tokens are single-use and Start returns a replacement; cursor_mode 4 sends the cursor as PipeWire stream metadata; OpenPipeWireRemote returns an fd for pw_context_connect_fd that exposes only the cast nodes (ADR-0059)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read restore_token, persist_mode values, cursor_mode metadata and OpenPipeWireRemote"
+
+[[external]]
+id = "pipewire-docs"
+url = "https://docs.pipewire.org/"
+relied_on = "PipeWire is a low-level multimedia framework for low-latency audio and video streams, the API screen-cast nodes and audio devices are read through (ADR-0059)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read the self-description on the front page"
+
+[[external]]
+id = "libva"
+url = "https://github.com/intel/libva"
+relied_on = "libva is the implementation of VA-API, the hardware video acceleration API the Linux encoder loads at run time (ADR-0059)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read the README's description of libva as the VA-API implementation"
+
+[[external]]
+id = "openh264-binary-license"
+url = "https://www.openh264.org/BINARY_LICENSE.txt"
+relied_on = "Cisco's MPEG LA patent license covers only the Cisco-provided OpenH264 binary, when it is separately downloaded to the end user's device and not integrated with third-party software before that download (ADR-0059 question 1)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the conditions for the Cisco-provided binary"
+
+[[external]]
+id = "ubuntu-release-cycle"
+url = "https://ubuntu.com/about/release-cycle"
+relied_on = "Ubuntu LTS releases in standard security maintenance: 22.04 (until May 2027), 24.04 (until May 2029), 26.04 (until May 2031) (ADR-0059 fact ubuntu-lts-supported)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the standard-maintenance rows for 22.04, 24.04 and 26.04"
+
+[[external]]
+id = "fedora-eol"
+url = "https://endoflife.date/fedora"
+relied_on = "Fedora releases still supported: 43 (until Dec 2026) and 44 (until Jun 2027) (ADR-0059 fact fedora-maintained)"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read the supported rows; Fedora 42 is end of life"
