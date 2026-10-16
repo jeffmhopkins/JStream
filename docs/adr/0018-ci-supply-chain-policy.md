@@ -2,14 +2,15 @@
 id = "ADR-0018"
 title = "CI supply-chain policy: pinned actions, Dependabot, current runtimes"
 kind = "adr"
-status = "accepted"
+status = "superseded"
 tier = "maintainer"
+superseded_by = "docs/adr/0056-ci-supply-chain-policy-v2.md"
 -->
 
 # ADR-0018: CI supply-chain policy: pinned actions, Dependabot, current runtimes
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0056: CI supply-chain policy v2: Dependabot also updates the end-to-end tests' npm packages](0056-ci-supply-chain-policy-v2.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

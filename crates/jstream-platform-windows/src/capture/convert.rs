@@ -1,7 +1,9 @@
-//! BGRA to NV12 on the CPU, for the capture fallback path (ARCH › GPU pipeline, step 6).
+//! BGRA or RGBA to NV12 on the CPU, for the capture fallback path (ARCH › GPU pipeline,
+//! step 6) and the H.264 encoder's CPU path.
 //!
-//! WGC delivers 8-bit BGRA. The H.264 encoder's CPU path takes NV12 in BT.709 limited
-//! range (`ColorInfo::default()`), so that is what this produces. The samples are treated
+//! WGC delivers 8-bit BGRA, and the compositor 8-bit RGBA. The H.264 encoder's CPU path
+//! takes NV12 in BT.709 limited range (`ColorInfo::default()`), so that is what this
+//! produces. The samples are treated
 //! as gamma-encoded R'G'B', as every capture and encode pipeline does.
 //!
 //! Chroma is **left-sited**, the H.264 default (`chroma_sample_location_type` 0, which
@@ -36,28 +38,63 @@ pub(crate) fn even_size(width: u32, height: u32) -> Option<(u32, u32)> {
     (w > 0 && h > 0).then_some((w, h))
 }
 
+/// Where red, green and blue sit in a packed 8-bit pixel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RgbOrder {
+    /// Blue, green, red, alpha: WGC's frames.
+    Bgra,
+    /// Red, green, blue, alpha: the compositor's frames.
+    Rgba,
+}
+
+impl RgbOrder {
+    /// The byte offsets of red, green and blue in a pixel.
+    fn offsets(self) -> [usize; 3] {
+        match self {
+            Self::Bgra => [2, 1, 0],
+            Self::Rgba => [0, 1, 2],
+        }
+    }
+}
+
 /// Converts the top-left `width` x `height` pixels of a BGRA image into `frame`, whose
 /// size gives `width` and `height`. Rows of `src` are `stride` bytes apart; alpha is
 /// ignored.
 ///
 /// # Errors
-/// [`PlatformError::Unsupported`] when `frame` isn't NV12 in BT.709 limited range or has
-/// an odd dimension, and [`PlatformError::InvalidState`] when `src` or `stride` is too
-/// small for the frame.
+/// As [`rgb_to_nv12`].
 pub(crate) fn bgra_to_nv12(
     src: &[u8],
     stride: usize,
+    frame: &mut VideoFrame,
+) -> Result<(), PlatformError> {
+    rgb_to_nv12(src, stride, RgbOrder::Bgra, frame)
+}
+
+/// Converts the top-left `width` x `height` pixels of a packed 8-bit image in `order`
+/// into `frame`, whose size gives `width` and `height`. Rows of `src` are `stride` bytes
+/// apart; alpha is ignored.
+///
+/// # Errors
+/// [`PlatformError::Unsupported`] when `frame` isn't NV12 in BT.709 limited range or has
+/// an odd dimension, and [`PlatformError::InvalidState`] when `src` or `stride` is too
+/// small for the frame.
+pub(crate) fn rgb_to_nv12(
+    src: &[u8],
+    stride: usize,
+    order: RgbOrder,
     frame: &mut VideoFrame,
 ) -> Result<(), PlatformError> {
     let info = *frame.info();
     if info.format != PixelFormat::Nv12 || info.color != ColorInfo::default() {
         return Err(PlatformError::Unsupported {
             what: format!(
-                "BGRA to {:?} in {:?} (the converter writes BT.709 limited NV12)",
+                "{order:?} to {:?} in {:?} (the converter writes BT.709 limited NV12)",
                 info.format, info.color
             ),
         });
     }
+    let [ri, gi, bi] = order.offsets();
     let (w, h) = (info.size.width(), info.size.height());
     if w % 2 != 0 || h % 2 != 0 {
         return Err(PlatformError::Unsupported {
@@ -70,7 +107,7 @@ pub(crate) fn bgra_to_nv12(
         .and_then(|b| b.checked_add(row_bytes));
     if stride < row_bytes || needed.is_none_or(|n| src.len() < n) {
         return Err(PlatformError::InvalidState {
-            what: "BGRA to NV12",
+            what: "RGB to NV12",
             state: "the source is smaller than the frame",
         });
     }
@@ -82,7 +119,7 @@ pub(crate) fn bgra_to_nv12(
         let s = src_row(y);
         if let Some(dst) = frame.row_mut(0, y) {
             for (d, p) in dst.iter_mut().zip(s.chunks_exact(4)) {
-                let (b, g, r) = (i32::from(p[0]), i32::from(p[1]), i32::from(p[2]));
+                let (r, g, b) = (i32::from(p[ri]), i32::from(p[gi]), i32::from(p[bi]));
                 let v = 16 + ((Y_R * r + Y_G * g + Y_B * b + (1 << 15)) >> 16);
                 *d = v.clamp(16, 235) as u8;
             }
@@ -108,7 +145,7 @@ pub(crate) fn bgra_to_nv12(
                     };
                     row(top) + row(bottom)
                 };
-                let (sb, sg, sr) = (sum(0), sum(1), sum(2));
+                let (sr, sg, sb) = (sum(ri), sum(gi), sum(bi));
                 let u = 128 + ((U_R * sr + U_G * sg + U_B * sb + (1 << 18)) >> 19);
                 let v = 128 + ((V_R * sr + V_G * sg + V_B * sb + (1 << 18)) >> 19);
                 d[0] = u.clamp(16, 240) as u8;
@@ -126,7 +163,7 @@ mod tests {
         VideoFrameInfo,
     };
 
-    use super::{bgra_to_nv12, even_size};
+    use super::{RgbOrder, bgra_to_nv12, even_size, rgb_to_nv12};
 
     fn frame(w: u32, h: u32) -> VideoFrame {
         VideoFrame::zeroed(VideoFrameInfo {
@@ -174,6 +211,19 @@ mod tests {
                     .all(|c| c == [yuv.1, yuv.2])
             );
         }
+    }
+
+    #[test]
+    fn rgba_converts_like_bgra() {
+        // The left-sited test's image, so every channel of every sample counts.
+        let rgb = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (40, 90, 200)];
+        let bgra: Vec<u8> = rgb.iter().flat_map(|&(r, g, b)| [b, g, r, 255]).collect();
+        let rgba: Vec<u8> = rgb.iter().flat_map(|&(r, g, b)| [r, g, b, 255]).collect();
+        let (mut a, mut b) = (frame(4, 2), frame(4, 2));
+        bgra_to_nv12(&[bgra.clone(), bgra].concat(), 16, &mut a).expect("BGRA");
+        rgb_to_nv12(&[rgba.clone(), rgba].concat(), 16, RgbOrder::Rgba, &mut b).expect("RGBA");
+        assert_eq!(a.planes(), b.planes());
+        assert_eq!(a.row(0, 0).expect("row"), &[63, 173, 32, 91]);
     }
 
     #[test]

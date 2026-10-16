@@ -15,6 +15,17 @@ unsafe_allowed = false
 [lints]
 workspace = true
 
+[features]
+# Browser sources through CEF (ADR-0021, ADR-0048), Windows only. The daemon doesn't build
+# or link CEF: pages run in the sandboxed browser helper, which needs
+# `jstream-browser-helper.exe` (CEF's bootstrap exe renamed), its DLL and CEF's runtime
+# files next to `jstream-daemon.exe`. Off by default, as in `jstream-browser`, until those
+# are packaged (its README's open items). Without it, `browser` sources show nothing.
+cef = ["jstream-browser/cef"]
+# Compile-checks the CEF wiring without CEF (`jstream-browser`'s `dox`), for CI's clippy.
+# A binary built with it doesn't link.
+dox = ["cef", "jstream-browser/dox"]
+
 [dependencies]
 anyhow.workspace = true
 # Crash reports redact secrets by their BLAKE3 digests, never keeping their text.
@@ -26,6 +37,9 @@ jstream-core.workspace = true
 jstream-media.workspace = true
 # `Backends`, and the stream key store the publish opener reads.
 jstream-platform.workspace = true
+# The `BrowserBackend` the daemon gives the engine for `browser` sources, and, with the
+# `cef` feature on Windows, its CEF backend.
+jstream-browser.workspace = true
 # `OutputId`, for `--output`; `OutputKind`, for the publish opener.
 jstream-protocol.workspace = true
 jstream-server.workspace = true
@@ -48,4 +62,6 @@ futures-util.workspace = true
 jstream-control = { workspace = true, features = ["ws"] }
 # The publish opener's tests: an in-memory key store, and the fake backends.
 jstream-platform = { workspace = true, features = ["fake"] }
+# The browser wiring's test: a browser that opens pages in memory.
+jstream-browser = { workspace = true, features = ["fake"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "time"] }

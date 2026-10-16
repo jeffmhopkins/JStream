@@ -17,7 +17,7 @@ pub(crate) const DATA: &str = "docs/progress.toml";
 /// The doc that carries the block.
 const TARGET: &str = "README.md";
 /// The name of the generated block.
-const BLOCK: &str = "progress";
+pub(crate) const BLOCK: &str = "progress";
 /// Each status, with the label the item table shows for it.
 const STATUSES: &[(&str, &str)] = &[
     ("done", "✅ merged"),

@@ -7,20 +7,20 @@
 
 use crate::audio;
 use crate::deps::{self, Node};
-use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
-use crate::target::{record_path_problem, rtmp_url_problem};
+use crate::model::{Chains, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
+use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem};
 use crate::touched::Touched;
 use jstream_protocol::{
-    Batch, Blocker, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId,
-    ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor,
-    ParamType, ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, Settings,
-    SourceAudio, SourceId, SourceKind,
+    Batch, BlendMode, Blocker, Canvas, Crop, Edit, EntityKind, Finite32, GeometryError,
+    ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputKind,
+    ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference, Rev, RtmpTarget,
+    SceneId, Settings, SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The kinds a graph can create, by ID.
-type Kinds = BTreeMap<String, KindDescriptor>;
+pub(crate) type Kinds = BTreeMap<String, KindDescriptor>;
 
 /// The result of a successful [`Graph::apply`].
 #[derive(Clone, Debug, PartialEq)]
@@ -119,7 +119,12 @@ pub(crate) fn invalid(at: usize, name: &str, reason: impl Into<String>) -> Proto
 }
 
 /// The `invalid_argument` that refuses deleting `target` while `blockers` refer to it.
-fn blocked(at: usize, name: &str, target: &Node, blockers: Vec<Blocker>) -> ProtocolError {
+pub(crate) fn blocked(
+    at: usize,
+    name: &str,
+    target: &Node,
+    blockers: Vec<Blocker>,
+) -> ProtocolError {
     let list: Vec<String> = blockers
         .iter()
         .map(|b| format!("{} `{}` ({})", b.entity, b.id, b.field))
@@ -164,7 +169,12 @@ pub(crate) fn check_name(value: &str, at: usize) -> Result<(), ProtocolError> {
 }
 
 /// Converts a wire index into a position below `len`.
-fn check_index(index: u32, len: usize, at: usize, what: &str) -> Result<usize, ProtocolError> {
+pub(crate) fn check_index(
+    index: u32,
+    len: usize,
+    at: usize,
+    what: &str,
+) -> Result<usize, ProtocolError> {
     match usize::try_from(index) {
         Ok(i) if i < len => Ok(i),
         _ => Err(invalid(
@@ -175,7 +185,7 @@ fn check_index(index: u32, len: usize, at: usize, what: &str) -> Result<usize, P
     }
 }
 
-fn wire_index(index: usize) -> Result<u32, ProtocolError> {
+pub(crate) fn wire_index(index: usize) -> Result<u32, ProtocolError> {
     u32::try_from(index).map_err(|_| ProtocolError::Internal {
         reason: format!("position {index} does not fit the protocol's u32 index"),
     })
@@ -284,6 +294,9 @@ fn apply_edit(
     if let Some(applied) = crate::encoder::apply(state, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::filter::apply(state, kinds, edit, at) {
+        return applied;
+    }
     if let Some(applied) = crate::audio::apply(state, edit, at) {
         return applied;
     }
@@ -370,6 +383,8 @@ fn apply_edit(
             source_id,
             transform,
             geometry,
+            opacity,
+            blend,
         } => {
             check_id(item_id.as_str(), at, "item_id")?;
             let si = find_scene(state, scene_id)?;
@@ -396,12 +411,19 @@ fn apply_edit(
                     Placement::Legacy(transform.unwrap_or(ItemTransform::IDENTITY))
                 }
             };
+            let opacity = opacity.unwrap_or(Finite32::ONE);
+            check_opacity(opacity, at)?;
+            let blend = blend.unwrap_or_default();
+            check_blend(blend, at)?;
             state.scenes[si].items.push(Item {
                 id: item_id.clone(),
                 source_id: source_id.clone(),
                 placement,
                 crop: Crop::NONE,
                 visible: true,
+                opacity,
+                blend,
+                effects: Vec::new(),
             });
             Ok(vec![Edit::ItemRemove {
                 item_id: item_id.clone(),
@@ -506,6 +528,30 @@ fn apply_edit(
                 visible: old,
             }])
         }
+        Edit::ItemSetOpacity {
+            item_id,
+            scene_id,
+            opacity,
+        } => {
+            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
+            check_opacity(*opacity, at)?;
+            let old = std::mem::replace(&mut item.opacity, *opacity);
+            Ok(vec![Edit::ItemSetOpacity {
+                item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
+                opacity: old,
+            }])
+        }
+        Edit::ItemSetBlend { item_id, blend } => {
+            let (si, ii) = find_item(state, item_id)?;
+            check_blend(*blend, at)?;
+            let item = item_mut(state, (si, ii))?;
+            let old = std::mem::replace(&mut item.blend, *blend);
+            Ok(vec![Edit::ItemSetBlend {
+                item_id: item_id.clone(),
+                blend: old,
+            }])
+        }
         Edit::SourceCreate {
             source_id,
             name,
@@ -547,7 +593,7 @@ fn apply_edit(
                         return Err(invalid(
                             at,
                             "kind.kind",
-                            format!("`{kind}` is a filter kind, not a source kind"),
+                            format!("kind `{kind}` is a filter kind, not a source kind"),
                         ));
                     }
                     complete_settings(state, kinds, descriptor, source_id, settings, at)?
@@ -578,6 +624,7 @@ fn apply_edit(
                 .source(source_id)
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
             let (kind, settings) = (original.kind.clone(), original.settings.clone());
+            let filters = original.filters.clone();
             check_id(new_source_id.as_str(), at, "new_source_id")?;
             check_name(name, at)?;
             // The copy has the original's outgoing edges and none coming in, so it can't
@@ -591,6 +638,9 @@ fn apply_edit(
                 Some(source_id.clone()),
                 None,
             )?;
+            if let Some(copy) = state.sources.get_mut(new_source_id) {
+                copy.filters = filters;
+            }
             audio::copied(state, source_id, new_source_id);
             Ok(inverse)
         }
@@ -624,6 +674,7 @@ fn apply_edit(
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
             let restore_audio =
                 audio::deleted(state, kinds, &source.id, &source.kind, source.audio);
+            let restore_filters = crate::filter::restore_all(&source);
             let mut inverse = vec![Edit::SourceCreate {
                 source_id: source.id,
                 name: source.name,
@@ -632,6 +683,7 @@ fn apply_edit(
                 duplicated_from: source.duplicated_from,
             }];
             inverse.extend(restore_audio);
+            inverse.extend(restore_filters);
             Ok(inverse)
         }
         Edit::OutputCreate { output_id, kind } => {
@@ -741,6 +793,30 @@ fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolErro
         .map_err(|err| invalid(at, "geometry", err.to_string()))
 }
 
+/// Rejects an opacity outside [0, 1] (ADR-0023 §1).
+fn check_opacity(opacity: Finite32, at: usize) -> Result<(), ProtocolError> {
+    if !(0.0..=1.0).contains(&opacity.get()) {
+        return Err(invalid(at, "opacity", "must be from 0 to 1"));
+    }
+    Ok(())
+}
+
+/// Rejects a blend mode the compositor doesn't draw yet, so stored state never claims
+/// one (ADR-0023 §1). Only `normal` is drawn so far.
+fn check_blend(blend: BlendMode, at: usize) -> Result<(), ProtocolError> {
+    if !blend.is_normal() {
+        return Err(invalid(
+            at,
+            "blend",
+            format!(
+                "`{}` is not drawn by the compositor yet; only `normal` is",
+                blend.as_str()
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn check_canvas_side(value: u32, at: usize, name: &str) -> Result<(), ProtocolError> {
     if value == 0 || value > MAX_CANVAS_EDGE {
         return Err(invalid(
@@ -775,6 +851,10 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
     match target {
         RtmpTarget::Generic { url } => match rtmp_url_problem(url) {
             Some(problem) => Err(invalid(at, &format!("{name}.url"), problem)),
+            None => Ok(()),
+        },
+        RtmpTarget::YouTube { broadcast_id } => match broadcast_id_problem(broadcast_id) {
+            Some(problem) => Err(invalid(at, &format!("{name}.broadcast_id"), problem)),
             None => Ok(()),
         },
         RtmpTarget::Unknown => Err(invalid(
@@ -834,6 +914,7 @@ fn create_source(
             kind: kind.clone(),
             settings,
             duplicated_from,
+            filters: Chains::default(),
             audio,
         },
     );
@@ -882,6 +963,8 @@ fn restore_item(
         source_id: item.source_id.clone(),
         transform,
         geometry,
+        opacity: (item.opacity != Finite32::ONE).then_some(item.opacity),
+        blend: (!item.blend.is_normal()).then_some(item.blend),
     }];
     if index != top {
         edits.push(Edit::ItemReorder {
@@ -909,7 +992,7 @@ fn restore_item(
 /// The complete settings of a new source of kind `descriptor`: `given`, checked, with
 /// every parameter it leaves out (or sends as `null`, outside reference parameters) at
 /// its default.
-fn complete_settings(
+pub(crate) fn complete_settings(
     state: &State,
     kinds: &Kinds,
     descriptor: &KindDescriptor,
@@ -1008,10 +1091,10 @@ fn set_settings(
 }
 
 /// Checks one settings value for `param` of source `source_id`: its type and
-/// constraints, that a referenced scene or source exists (`not_found` if not), and that a
+/// constraints, that a referenced scene, source or bus exists (`not_found` if not), and that a
 /// referenced source produces what the parameter needs. A source may name itself here;
 /// [`check_reference_cycles`] rejects that as a cycle.
-fn check_value(
+pub(crate) fn check_value(
     state: &State,
     kinds: &Kinds,
     source_id: &SourceId,
@@ -1026,6 +1109,11 @@ fn check_value(
     match Reference::from_value(value) {
         Some(Reference::Scene { scene_id }) => {
             find_scene(state, &scene_id)?;
+        }
+        Some(Reference::Bus { bus_id }) => {
+            if state.bus(&bus_id).is_none() {
+                return Err(not_found(EntityKind::Bus, bus_id.as_str()));
+            }
         }
         Some(Reference::Source { source_id: target }) if &target != source_id => {
             let referenced = state

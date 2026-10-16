@@ -15,26 +15,49 @@
 //! default replaced by one in another format), and finds an application again when the
 //! process it recorded has exited (it restarted, under a new process ID).
 //!
+//! Each source's input runs its audio filter chain (ADR-0026): the thread keeps the
+//! input's filters in line with the chain on the same passes, updating a filter in place
+//! when only its settings changed. A filter the mixer refuses is bypassed, and new
+//! settings it refuses are tried again on the next pass; both are logged.
+//!
+//! A source that makes audio of its own (a `browser` page) gets an input too, fed by
+//! the running source itself ([`jstream_sources::SourceAudio`]) from when it is built
+//! until it is deleted or built again, and not while its audio is turned off.
+//!
 //! While the collection has no audio source, the program records the default
 //! microphone and desktop audio, as it did before audio sources existed, so a
-//! collection made earlier is not silent.
+//! collection made earlier is not silent. A page's audio doesn't count as an audio
+//! source here: it plays alongside the defaults.
 //!
-//! Each audio source's open input is also listed in [`Routed`], where the engine's audio
-//! routing (`crate::audio`) finds it to set its fader, mute and sends. A source's input
-//! opens muted, so it is heard only once the routing has set it up.
+//! Each source's open input (an audio source's, a page's or a media file's) is also
+//! listed in [`Routed`], where the engine's audio routing (`crate::audio`) finds it to
+//! set its fader, mute and sends. A source's input opens muted, so it is heard only once
+//! the routing has set it up.
+//!
+//! A live source with sound of its own that plays on the program's clock (a media file)
+//! is one more input, opened and routed like an audio source's: the engine records it
+//! here once the source is built ([`AudioSources::sync_live`]), and the thread opens its
+//! stream on a mixer input as it opens a device, unless the source's audio is off. A
+//! rebuilt source is a new input. Like a page's audio, its sound counts as no audio
+//! source for the rule above: a video doesn't stop the microphone being recorded.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use jstream_audio::{InputControl, MixerControl};
-use jstream_platform::{AudioInputTarget, AudioIo, AudioProcess, AudioStream, DeviceId};
+use jstream_platform::{
+    AudioInputTarget, AudioIo, AudioProcess, AudioStream, DeviceId, MediaClock,
+};
 use jstream_protocol::{SourceId, SourceKind};
-use jstream_sources::AudioTarget;
+use jstream_sources::{AudioTarget, SourceAudio};
 
 use crate::drops::{AudioInputDrops, DropLedger, DropSourceId, lock_ledger};
+use crate::filters::{Chain, Chained, chain_of};
+use crate::live::LiveAudio;
 use crate::lock;
 
 /// How often the thread retries unavailable sources, reopens failed streams and checks
@@ -80,18 +103,37 @@ impl Routed {
     }
 }
 
-/// Each audio-only source of the collection, with what it records, or `None` while its
-/// audio is off (ADR-0028: off, the engine doesn't open its stream).
-type Targets = BTreeMap<SourceId, Option<AudioTarget>>;
+/// Each source the program records for: an audio-only source of the collection, or a
+/// running source with audio of its own.
+type Targets = BTreeMap<SourceId, Target>;
+
+/// What the program records for one source, and whether its audio is on (ADR-0028: off,
+/// the engine doesn't open its stream).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Target {
+    recorded: Recorded,
+    on: bool,
+}
 
 #[derive(Default)]
 struct WantedState {
     targets: Targets,
+    /// The live sources' own sound.
+    live: BTreeMap<SourceId, LiveAudio>,
+    /// The sources whose audio is off, of any kind: a live source's sound isn't opened
+    /// while it is.
+    off: BTreeSet<SourceId>,
+    /// Each source's mixer input's packets, as the last pass saw them, for tests.
+    #[cfg(test)]
+    packets: BTreeMap<SourceId, u64>,
+    /// Each source's audio filter chain, as the mixer runs it. Sources without filters
+    /// have no entry.
+    chains: BTreeMap<SourceId, Vec<Chained>>,
     /// How each source fares while the program stage runs.
     status: BTreeMap<SourceId, AudioStatus>,
 }
 
-/// Whether the program stage records an audio source.
+/// Whether the program stage records an audio source or mixes a source's sound.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum AudioStatus {
     /// It has a mixer input, fed by its device or application.
@@ -100,11 +142,44 @@ pub(crate) enum AudioStatus {
     Unavailable(String),
 }
 
+/// What the program records for one source.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Recorded {
+    /// An audio-only source's device or application.
+    Device(AudioTarget),
+    /// A running source's own audio.
+    Own(OwnAudio),
+}
+
+/// A running source's own audio, compared by identity: a source built again has new
+/// audio, and its input is opened again.
+#[derive(Clone)]
+struct OwnAudio(Arc<dyn SourceAudio>);
+
+impl PartialEq for OwnAudio {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for OwnAudio {}
+
+impl fmt::Debug for OwnAudio {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("OwnAudio").field(&self.0.format()).finish()
+    }
+}
+
 impl AudioSources {
-    /// Brings the wanted set in line with the collection's audio-only sources, and
-    /// wakes the program stage's thread when it changed.
-    pub(crate) fn sync(&mut self, state: &jstream_graph::State) {
-        let targets: Targets = state
+    /// Brings the wanted set in line with the collection's audio-only sources and the
+    /// running sources' own audio (`own`, from `LiveSources::audio`), and wakes the
+    /// program stage's thread when it changed.
+    pub(crate) fn sync(
+        &mut self,
+        state: &jstream_graph::State,
+        own: BTreeMap<SourceId, Arc<dyn SourceAudio>>,
+    ) {
+        let mut targets: Targets = state
             .sources()
             .filter_map(|source| {
                 let SourceKind::Builtin { kind } = source.kind() else {
@@ -112,18 +187,46 @@ impl AudioSources {
                 };
                 let target = AudioTarget::of(kind, source.settings())?;
                 let on = source.audio().is_none_or(|audio| audio.enabled);
-                Some((source.id().clone(), on.then_some(target)))
+                let recorded = Recorded::Device(target);
+                Some((source.id().clone(), Target { recorded, on }))
             })
             .collect();
+        for (id, audio) in own {
+            if let Some(source) = state.source(&id) {
+                let on = source.audio().is_none_or(|audio| audio.enabled);
+                let recorded = Recorded::Own(OwnAudio(audio));
+                targets.entry(id).or_insert(Target { recorded, on });
+            }
+        }
+        let off: BTreeSet<SourceId> = state
+            .sources()
+            .filter(|source| source.audio().is_some_and(|audio| !audio.enabled))
+            .map(|source| source.id().clone())
+            .collect();
+        let chains: BTreeMap<SourceId, Vec<Chained>> = state
+            .sources()
+            .map(|source| (source.id().clone(), chain_of(source)))
+            .filter(|(_, chain)| !chain.is_empty())
+            .collect();
         let mut wanted = lock(&self.wanted.state);
-        if wanted.targets != targets {
-            // A deleted source, or one whose audio is off, has no status from now on,
-            // even before the thread closes its input.
-            wanted
-                .status
-                .retain(|id, _| targets.get(id).is_some_and(Option::is_some));
-            wanted.targets = targets;
+        if wanted.chains != chains {
+            wanted.chains = chains;
             self.wanted.changed.notify_all();
+        }
+        if wanted.targets != targets || wanted.off != off {
+            wanted.targets = targets;
+            wanted.off = off;
+            changed(&mut wanted, &self.wanted.changed);
+        }
+    }
+
+    /// Brings the live sources' sound in line with `live`, and wakes the program
+    /// stage's thread when it changed.
+    pub(crate) fn sync_live(&mut self, live: BTreeMap<SourceId, LiveAudio>) {
+        let mut wanted = lock(&self.wanted.state);
+        if wanted.live != live {
+            wanted.live = live;
+            changed(&mut wanted, &self.wanted.changed);
         }
     }
 
@@ -148,11 +251,26 @@ impl AudioSources {
         self.wanted.routed.insert(source_id, input);
     }
 
+    /// The packets `source_id`'s mixer input has received, as the program stage's last
+    /// pass saw them.
+    #[cfg(test)]
+    pub(crate) fn packets(&self, source_id: &SourceId) -> Option<u64> {
+        lock(&self.wanted.state).packets.get(source_id).copied()
+    }
+
     /// How the program stage fares with `source_id`, while it runs.
     #[cfg(test)]
     pub(crate) fn status(&self, source_id: &SourceId) -> Option<AudioStatus> {
         lock(&self.wanted.state).status.get(source_id).cloned()
     }
+}
+
+/// After a change to the wanted set: a deleted source, or one whose audio is off, has no
+/// status from now on, even before the thread closes its input; and the thread wakes.
+fn changed(wanted: &mut WantedState, wake: &Condvar) {
+    let wants = Wants::of(wanted);
+    wanted.status.retain(|id, _| wants.names(id));
+    wake.notify_all();
 }
 
 /// One input the program records: an audio source, or while there is none, the default
@@ -170,10 +288,18 @@ enum Want {
     Target(AudioInputTarget),
     /// The running process with this executable name.
     App(String),
+    /// A live source's own sound.
+    Live(LiveAudio),
+    /// A running source's own audio.
+    Own(OwnAudio),
 }
 
 impl Want {
-    fn of(target: &AudioTarget) -> Self {
+    fn of(recorded: &Recorded) -> Self {
+        let target = match recorded {
+            Recorded::Device(target) => target,
+            Recorded::Own(audio) => return Self::Own(audio.clone()),
+        };
         match target {
             AudioTarget::Input { device: None } => Self::Target(AudioInputTarget::DefaultInput),
             AudioTarget::Input {
@@ -185,12 +311,58 @@ impl Want {
     }
 }
 
-/// The inputs to record: one per audio source whose audio is on, or the defaults while
-/// the collection has no audio source at all (one whose audio is off still counts, so
-/// turning the last one off doesn't bring the defaults back).
-fn wanted_inputs(targets: &Targets) -> BTreeMap<Key, Want> {
-    if targets.is_empty() {
-        return BTreeMap::from([
+/// What the program stage's thread works from: a copy of the wanted set.
+#[derive(Clone)]
+struct Wants {
+    targets: Targets,
+    /// The live sources' sound, but for the sources whose audio is off.
+    live: BTreeMap<SourceId, LiveAudio>,
+    /// Each source's audio filter chain.
+    chains: BTreeMap<SourceId, Vec<Chained>>,
+}
+
+impl Wants {
+    fn of(state: &WantedState) -> Self {
+        Self {
+            targets: state.targets.clone(),
+            live: state
+                .live
+                .iter()
+                .filter(|(id, _)| !state.off.contains(*id))
+                .map(|(id, live)| (id.clone(), live.clone()))
+                .collect(),
+            chains: state.chains.clone(),
+        }
+    }
+
+    /// Whether `id` is a source this opens an input for.
+    fn names(&self, id: &SourceId) -> bool {
+        self.targets.get(id).is_some_and(|target| target.on) || self.live.contains_key(id)
+    }
+}
+
+/// The inputs to record: one per audio source, per running source's own audio and per
+/// live source's sound whose audio is on, and the defaults while the collection has no
+/// audio-only source at all (one whose audio is off still counts, so turning the last
+/// one off doesn't bring the defaults back; a page's or a file's sound doesn't count).
+fn wanted_inputs(wants: &Wants) -> BTreeMap<Key, Want> {
+    let targets = &wants.targets;
+    let mut wanted: BTreeMap<Key, Want> = targets
+        .iter()
+        .filter(|(_, target)| target.on)
+        .map(|(id, target)| (Key::Source(id.clone()), Want::of(&target.recorded)))
+        .chain(
+            wants
+                .live
+                .iter()
+                .map(|(id, live)| (Key::Source(id.clone()), Want::Live(live.clone()))),
+        )
+        .collect();
+    if !targets
+        .values()
+        .any(|target| matches!(target.recorded, Recorded::Device(_)))
+    {
+        wanted.extend([
             (
                 Key::Microphone,
                 Want::Target(AudioInputTarget::DefaultInput),
@@ -201,10 +373,7 @@ fn wanted_inputs(targets: &Targets) -> BTreeMap<Key, Want> {
             ),
         ]);
     }
-    targets
-        .iter()
-        .filter_map(|(id, target)| Some((Key::Source(id.clone()), Want::of(target.as_ref()?))))
-        .collect()
+    wanted
 }
 
 /// The program stage's audio inputs and the thread that keeps them in line with the
@@ -224,6 +393,8 @@ struct Open {
     /// Where each audio source's input is listed for the routing.
     wanted: Arc<Wanted>,
     audio: Arc<dyn AudioIo>,
+    /// The media clock a live source's sound is stamped on.
+    clock: Arc<dyn MediaClock>,
     ledger: Arc<Mutex<DropLedger>>,
     inputs: BTreeMap<Key, Input>,
     /// Inputs whose removal the mixer's command queue could not take yet.
@@ -247,6 +418,8 @@ struct Live {
     drops: DropSourceId,
     /// The process an application input records.
     pid: Option<u32>,
+    /// The source's filters on this input.
+    chain: Chain,
 }
 
 impl AudioInputs {
@@ -259,6 +432,7 @@ impl AudioInputs {
     pub(crate) fn start(
         mixer: MixerControl,
         audio: Arc<dyn AudioIo>,
+        clock: Arc<dyn MediaClock>,
         wanted: Arc<Wanted>,
         ledger: Arc<Mutex<DropLedger>>,
     ) -> Result<Self, String> {
@@ -266,6 +440,7 @@ impl AudioInputs {
             mixer,
             wanted: Arc::clone(&wanted),
             audio,
+            clock,
             ledger,
             inputs: BTreeMap::new(),
             removing: Vec::new(),
@@ -277,9 +452,9 @@ impl AudioInputs {
             stop,
             thread: None,
         };
-        let targets = lock(&inputs.wanted.state).targets.clone();
-        let pass = lock(&inputs.open).reconcile(&targets);
-        pass.finish(&inputs.wanted, &targets);
+        let wants = Wants::of(&lock(&inputs.wanted.state));
+        let pass = lock(&inputs.open).reconcile(&wants);
+        pass.finish(&inputs.wanted, &wants);
         let thread = thread::Builder::new()
             .name("jstream-audio-sources".into())
             .spawn({
@@ -328,7 +503,7 @@ impl Drop for AudioInputs {
 /// The thread: reconciles whenever the collection changes, and on every tick.
 fn run(open: &Mutex<Open>, wanted: &Wanted, stop: &AtomicBool) {
     loop {
-        let targets = {
+        let wants = {
             let state = lock(&wanted.state);
             if stop.load(Ordering::Acquire) {
                 return;
@@ -341,10 +516,10 @@ fn run(open: &Mutex<Open>, wanted: &Wanted, stop: &AtomicBool) {
             if stop.load(Ordering::Acquire) {
                 return;
             }
-            state.targets.clone()
+            Wants::of(&state)
         };
-        let pass = lock(open).reconcile(&targets);
-        pass.finish(wanted, &targets);
+        let pass = lock(open).reconcile(&wants);
+        pass.finish(wanted, &wants);
     }
 }
 
@@ -353,6 +528,9 @@ fn run(open: &Mutex<Open>, wanted: &Wanted, stop: &AtomicBool) {
 struct Pass {
     status: BTreeMap<SourceId, AudioStatus>,
     notes: Vec<Note>,
+    /// Each source's mixer input's packets so far, for tests.
+    #[cfg(test)]
+    packets: BTreeMap<SourceId, u64>,
 }
 
 /// A change in one input worth a log line.
@@ -360,11 +538,13 @@ enum Note {
     Reopening(Key, &'static str),
     Available(Key),
     Unavailable(Key, String),
+    /// A filter, or a filter's new settings, the mixer refused.
+    Refused(Key, String),
 }
 
 impl Pass {
     /// Logs the pass's notes and records the statuses. Called with no lock held.
-    fn finish(self, wanted: &Wanted, targets: &Targets) {
+    fn finish(self, wanted: &Wanted, wants: &Wants) {
         for note in &self.notes {
             match note {
                 Note::Reopening(key, reason) => {
@@ -376,13 +556,21 @@ impl Pass {
                 Note::Unavailable(key, reason) => {
                     tracing::warn!(input = ?key, reason, "audio input is unavailable");
                 }
+                Note::Refused(key, reason) => {
+                    tracing::warn!(input = ?key, reason, "audio filter not applied");
+                }
             }
         }
         let mut state = lock(&wanted.state);
+        #[cfg(test)]
+        {
+            state.packets = self.packets;
+        }
+        let now = Wants::of(&state);
         state.status = self
             .status
             .into_iter()
-            .filter(|(id, _)| targets.contains_key(id) && state.targets.contains_key(id))
+            .filter(|(id, _)| wants.names(id) && now.names(id))
             .collect();
     }
 }
@@ -391,11 +579,12 @@ impl Open {
     /// Brings the inputs in line with `targets` and returns each source's status and
     /// what to log:
     /// closes the inputs no longer wanted or wanted differently, reopens failed ones and
-    /// those whose application exited, and opens every input that isn't recording.
-    fn reconcile(&mut self, targets: &Targets) -> Pass {
+    /// those whose application exited, opens every input that isn't recording, and
+    /// brings each source input's filters in line with its chain.
+    fn reconcile(&mut self, wants: &Wants) -> Pass {
         let mut notes = Vec::new();
         self.removing.retain(|control| !control.remove());
-        let wanted = wanted_inputs(targets);
+        let wanted = wanted_inputs(wants);
         let stale: Vec<Key> = self
             .inputs
             .iter()
@@ -445,6 +634,12 @@ impl Open {
                     }
                 }
             }
+            if let (Key::Source(id), Some(live)) = (&key, input.live.as_mut()) {
+                let chain = wants.chains.get(id).map_or(&[][..], Vec::as_slice);
+                for reason in live.chain.apply(&live.control, chain) {
+                    notes.push(Note::Refused(key.clone(), reason));
+                }
+            }
             self.inputs.insert(key, input);
         }
         let status = self
@@ -461,7 +656,23 @@ impl Open {
                 Some((id.clone(), status))
             })
             .collect();
-        Pass { status, notes }
+        #[cfg(test)]
+        let packets = self
+            .inputs
+            .iter()
+            .filter_map(|(key, input)| {
+                let (Key::Source(id), Some(live)) = (key, &input.live) else {
+                    return None;
+                };
+                Some((id.clone(), live.control.stats().packets))
+            })
+            .collect();
+        Pass {
+            status,
+            notes,
+            #[cfg(test)]
+            packets,
+        }
     }
 
     /// Opens one input: resolves its target, adds a mixer input in the format the
@@ -476,6 +687,13 @@ impl Open {
         processes: Option<&Result<Vec<AudioProcess>, jstream_platform::PlatformError>>,
     ) -> Result<Live, String> {
         let (target, pid) = match want {
+            Want::Live(live) => {
+                let Key::Source(id) = key else {
+                    return Err("a live source's sound without its source".into());
+                };
+                return self.open_live(id, live);
+            }
+            Want::Own(audio) => return self.open_own(key, audio),
             Want::Target(target) => (target.clone(), None),
             Want::App(exe) => {
                 let processes = match processes {
@@ -522,6 +740,59 @@ impl Open {
             control,
             drops,
             pid,
+            chain: Chain::default(),
+        })
+    }
+
+    /// Opens a running source's own audio: a mixer input in the format it makes, fed by
+    /// the source, opened muted and listed for the routing as an audio source's is.
+    fn open_own(&mut self, key: &Key, audio: &OwnAudio) -> Result<Live, String> {
+        let format = audio.0.format();
+        let (producer, control) = self
+            .mixer
+            .add_input(format)
+            .map_err(|err| format!("mixer input: {err}"))?;
+        control.set_muted(true);
+        let stream = audio.0.open(Box::new(producer));
+        let drops = lock_ledger(&self.ledger).add(AudioInputDrops::new(control.clone()));
+        if let Key::Source(id) = key {
+            self.wanted.routed.insert(id.clone(), control.clone());
+        }
+        Ok(Live {
+            stream,
+            control,
+            drops,
+            pid: None,
+            chain: Chain::default(),
+        })
+    }
+
+    /// Opens a live source's sound: a mixer input in its format, fed by the source's
+    /// own stream, opened muted and listed for the routing as an audio source's is.
+    fn open_live(&mut self, id: &SourceId, live: &LiveAudio) -> Result<Live, String> {
+        let (producer, control) = self
+            .mixer
+            .add_input(live.audio.format())
+            .map_err(|err| format!("mixer input: {err}"))?;
+        control.set_muted(true);
+        let stream = match live
+            .audio
+            .open(Box::new(producer), Arc::clone(&self.clock), live.start)
+        {
+            Ok(stream) => stream,
+            Err(err) => {
+                self.remove(control);
+                return Err(err);
+            }
+        };
+        let drops = lock_ledger(&self.ledger).add(AudioInputDrops::new(control.clone()));
+        self.wanted.routed.insert(id.clone(), control.clone());
+        Ok(Live {
+            stream,
+            control,
+            drops,
+            pid: None,
+            chain: Chain::default(),
         })
     }
 
