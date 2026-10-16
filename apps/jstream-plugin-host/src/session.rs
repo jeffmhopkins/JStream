@@ -557,15 +557,20 @@ mod tests {
     }
 
     /// A re-activation keeps the heartbeat going, so the engine doesn't count a slow one
-    /// as a hang.
+    /// as a hang. The slow work waits for three beats rather than sleeping a fixed time:
+    /// a loaded runner can start the beating thread late or oversleep its 100 ms.
     #[test]
     fn a_restart_beats_while_it_reactivates() {
         let shared = Shared::new_boxed();
+        let beats = || shared.status.heartbeat.load(Ordering::Relaxed);
         let got = while_beating(&shared, || {
-            std::thread::sleep(Duration::from_millis(350));
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while beats() < 3 && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
             7
         });
         assert_eq!(got, 7);
-        assert!(shared.status.heartbeat.load(Ordering::Relaxed) >= 3);
+        assert!(beats() >= 3, "{} beats while it reactivated", beats());
     }
 }
