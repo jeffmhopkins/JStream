@@ -3087,7 +3087,7 @@ stamp = { hash = "b3:7b5a1d8b0b60bed1", by = "agent:wave-owner", note = "merge-m
 stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/progress.rs"]
-stamp = { hash = "b3:7de442ed32252572", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "B1/N3 on #419: merge-main bullet still accurate; resolve_generated now accepts only adr-status, adr-index and progress blocks, and mod.rs says to run docs generate when the merge stays open" }
+stamp = { hash = "b3:c9b742f8a0c98b24", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "progress.rs change (#473): docs progress now also counts the (#N) of each '* ...' line in a wave landing squash. The bootstrap bullet still says docs progress lists the entries the merged history contradicts, which holds; the detail is in DOCS#generated, updated in this PR. cargo test -p xtask passes, and docs progress on main no longer reports wave-landed rows as unmerged." }
 
 ["DOCS#dependency-lint"."body"]
 stamp = { hash = "b3:416056ff5f5233ae", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the unsafe bullet adds the browser-helper crate (UNSAFE_CRATES and R-UNSAFE-001, for its RunWinMain export); cef-dll-sys now sits behind jstream-browser's helper feature, not cef; matches lint_deps.rs" }
