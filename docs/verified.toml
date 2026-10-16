@@ -204,7 +204,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:df852e7f05dbe37d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool list incl. preview matches tools.rs/tests (19 tools); tools.snap is 183139 bytes so 'about 183 KB' holds; preview.subscribe fails with action_failed over MCP" }
+stamp = { hash = "b3:c98abedaa04bbd23", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:8eea55b34b97d6a9" }
@@ -219,10 +219,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:028b0382eca63259", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: still 19 tools incl. preview (tests.rs:413), tools.snap 183139 bytes; #296 hello bound text is the wave's; holds" }
+stamp = { hash = "b3:ff5a88f59ef0b46b", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:99ac70785f202198", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool list incl. preview matches tools.rs/tests (19 tools); tools.snap is 183139 bytes so 'about 183 KB' holds; preview.subscribe fails with action_failed over MCP" }
+stamp = { hash = "b3:ad636bb607a1e22d", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -243,7 +243,7 @@ stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:ecbeed415296fc75", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: still 19 tools incl. preview (tests.rs:413), tools.snap 183139 bytes; #296 hello bound text is the wave's; holds" }
+stamp = { hash = "b3:6c64b5a5d1f3c41c", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -288,7 +288,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
+stamp = { hash = "b3:17b528286df59ffa", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -300,7 +300,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:07915c072e50c894" }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:19f498d3756ec793", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
+stamp = { hash = "b3:b8b1bee36d6dc25e", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:a421c4283dce201f", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
@@ -330,19 +330,19 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:21d26c102287211d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): stale via protocol README (asset-path wording); Binary streams bullet holds at 0.20" }
+stamp = { hash = "b3:5d78e1bce5e4426c", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:3cc940ee388748ab", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
+stamp = { hash = "b3:dfd21ea6711b150c", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e0cb44e8efdae762", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
+stamp = { hash = "b3:b14bfd39066be522", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:00b08a8a958896ed", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
+stamp = { hash = "b3:ea9065740cac105f", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -360,7 +360,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:21417cbdaf52afc4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
+stamp = { hash = "b3:46964aa9c4b1c494", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -375,7 +375,7 @@ stamp = { hash = "b3:f22d68608273ddbc", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:81d3874a4e5f7ef3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol README and kind.rs changes are asset-path doc wording and a comment rewrap; the control-protocol summary makes no asset-path claim and still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:faf6f5fe57bbaef7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
+stamp = { hash = "b3:0feb1b31ce2c384d", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:a667a8df3f0ef64b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -396,13 +396,16 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Summary of envelope/edits/actions holds; asset-path rule detail lives in protocol README Design, unchanged here by #403" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
+stamp = { hash = "b3:97d4f0e22f1cbfd4", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/Cargo.toml"]
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:c45a8315f65c47e0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: Binary streams bullet holds at 0.20 (wave still 0.19); #296's hello race leaves the frame path alone (binary() still opened only on Some(Ok(welcome)))" }
+stamp = { hash = "b3:5af36d33e764350b", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
+
+["ARCH#protocol"."file:crates/jstream-server/src/admitted.rs"]
+stamp = { hash = "b3:b40149170c54dd7d", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
 stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -417,7 +420,7 @@ stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:a1aefe27604ba6d2", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 (#320 only adds the jstream-outputs crate-map row; merge-main took wave stamps that predate this PR): Binary streams bullet at 0.20 (wave still 0.19), 32-byte header; holds" }
+stamp = { hash = "b3:a86c4597e7e99d59", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -432,10 +435,10 @@ stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:a9fff0d2d3f6ed96", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: Binary streams bullet holds at 0.20 (wave still 0.19); #296's hello race leaves the frame path alone (binary() still opened only on Some(Ok(welcome)))" }
+stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:3c2fca618c361391", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: tests.rs passes the wave's silent flag through serve(), the harness helper the preview test uses; test-only, no behaviour the section describes changes; holds" }
+stamp = { hash = "b3:991aaa6de3af3ecf", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -834,7 +837,7 @@ stamp = { hash = "b3:81f5ba35d6efa0cd" }
 stamp = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): stale via control design; CLI opens no binary channel; holds" }
+stamp = { hash = "b3:60dffe124556f6c5", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
@@ -903,10 +906,10 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:d727e5dacfd34bd7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage documents `jstream-cli pair` (prints the one-time code), `device list` and `device revoke <id>`, and maps the new `unsupported` error to exit 20, matching args.rs and run.rs write_action/exit mapping; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): main's error-event and e2e-test text merged; binary() bullet (N3 wording) holds; the e2e tests don't cover the binary path, and nothing here says they do" }
+stamp = { hash = "b3:60dffe124556f6c5", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
+stamp = { hash = "b3:17b528286df59ffa", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -972,16 +975,16 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:0ddc9a76eeb853c7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): Cargo.toml keeps zune-jpeg dev-dep beside E3b's windows dev-dep table; E3b's capture path is the program stage's, the preview passes None as capture so a display source still draws nothing as the Preview streams text says; holds" }
+stamp = { hash = "b3:09613a2b193bea3f", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): stale via control/protocol design and tests.rs; Preview streams text unchanged and matches preview/mod.rs; holds" }
+stamp = { hash = "b3:60dffe124556f6c5", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:e64d4c4f8eb61304", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): Cargo.toml keeps zune-jpeg dev-dep beside E3b's windows dev-dep table; E3b's capture path is the program stage's, the preview passes None as capture so a display source still draws nothing as the Preview streams text says; holds" }
+stamp = { hash = "b3:d1931a5574ff0201", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
+stamp = { hash = "b3:17b528286df59ffa", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1011,7 +1014,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:d94c0be86ccbfc61", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: wave's browser and live-audio text merged; Preview streams text unchanged and matches preview/mod.rs and engine.rs:2006; holds" }
+stamp = { hash = "b3:f27f68f7e31c81cd", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1065,7 +1068,7 @@ stamp = { hash = "b3:62d7ac855f8e3c18", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:2a9b879f1299c571", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): Cargo.toml keeps zune-jpeg dev-dep beside E3b's windows dev-dep table; E3b's capture path is the program stage's, the preview passes None as capture so a display source still draws nothing as the Preview streams text says; holds" }
+stamp = { hash = "b3:3383d7f41d448c1a", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
@@ -1116,7 +1119,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:d94c0be86ccbfc61", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: engine.rs gains with_browser and audio.sync(live.audio()); PreviewSource for Shared unchanged; Preview bullet holds" }
+stamp = { hash = "b3:f27f68f7e31c81cd", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1170,7 +1173,7 @@ stamp = { hash = "b3:62d7ac855f8e3c18", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:2a9b879f1299c571", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): E3b's GPU capture text merged; preview bullet holds (own headless compositor, snapshot::compose with no capture)" }
+stamp = { hash = "b3:3383d7f41d448c1a", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
@@ -1233,10 +1236,10 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:a984c6e7ba2e3698", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:0ddc9a76eeb853c7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): stale via core design; daemon text is the wave's; holds" }
+stamp = { hash = "b3:09613a2b193bea3f", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:06af0b68f544ac32", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: stale via core/server design; daemon text is the wave's; holds" }
+stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:7ab4accbf98f6662" }
@@ -1548,7 +1551,7 @@ stamp = { hash = "b3:6c1b99c4b8c63792" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:e64d4c4f8eb61304", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): stale via protocol design (asset-path wording); graph text is the wave's; holds" }
+stamp = { hash = "b3:d1931a5574ff0201", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1599,10 +1602,10 @@ stamp = { hash = "b3:534ac6c88886c8f2" }
 stamp = { hash = "b3:943bb9518712a4b5" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:dbf1bed20626b135", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: tool table's preview row holds beside the wave's 3 s hello rows" }
+stamp = { hash = "b3:e29381de643615de", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:df852e7f05dbe37d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool table lists preview and says it only fails over MCP; matches tests.rs" }
+stamp = { hash = "b3:c98abedaa04bbd23", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1635,7 +1638,7 @@ stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:ecbeed415296fc75", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: tool table's preview row holds beside the wave's 3 s hello rows" }
+stamp = { hash = "b3:6c64b5a5d1f3c41c", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1665,7 +1668,7 @@ stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:ecbeed415296fc75", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: tests.rs adds #296's hello tests; preview tool and 19-tool count hold" }
+stamp = { hash = "b3:6c64b5a5d1f3c41c", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -2070,7 +2073,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:e64d4c4f8eb61304", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): #412/#414 shader asset-path wording merged; Binary streams section unchanged; holds" }
+stamp = { hash = "b3:d1931a5574ff0201", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2088,16 +2091,16 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:3cc940ee388748ab", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:dfd21ea6711b150c", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e0cb44e8efdae762", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:b14bfd39066be522", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:00b08a8a958896ed", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:ea9065740cac105f", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2115,7 +2118,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:21417cbdaf52afc4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:46964aa9c4b1c494", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2130,7 +2133,7 @@ stamp = { hash = "b3:f22d68608273ddbc", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:81d3874a4e5f7ef3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: Rejections bullet now lists the empty-segment rule check_asset_path already enforces for collection/app, and the DOS-device sentence is rewrapped; checked against check_asset_path" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:faf6f5fe57bbaef7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:0feb1b31ce2c384d", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:a667a8df3f0ef64b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2151,10 +2154,10 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Rejections bullet updated for #403: DOS device names refused as the last component under every root (relative CON.png, media/nul); rest of Design unaffected" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:97d4f0e22f1cbfd4", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:3a3ab69b05ee9912", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:e8138d6588ca0c9a", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -2163,7 +2166,7 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:00b08a8a958896ed", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:ea9065740cac105f", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2181,7 +2184,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:21417cbdaf52afc4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:46964aa9c4b1c494", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2196,7 +2199,7 @@ stamp = { hash = "b3:f22d68608273ddbc", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:81d3874a4e5f7ef3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: kind.rs change is a rewrap of check_asset_path's doc comment only; Kinds and settings contents bullet still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:faf6f5fe57bbaef7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:0feb1b31ce2c384d", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:a667a8df3f0ef64b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2217,7 +2220,7 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Contents list unchanged by #403 (check_asset_path rule only); no asset-path rule stated here" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:97d4f0e22f1cbfd4", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-render#design"."body"]
 stamp = { hash = "b3:69374f6949f04237", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
@@ -2337,13 +2340,13 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU-frames-through-the-cache test text matches the_cache_imports_gpu_frames_without_keeping_their_holds in tests.rs; holds" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:06af0b68f544ac32", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: #296 races the engine's hello against the deadline; events and binary() are still opened only after Some(Ok(welcome)) (session.rs:184-186); Preview frames bullet holds" }
+stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): run drops events and binary before finish, which sends only the JSON outbox, then main's close handshake reads and drops what the client sends (binary included); Preview frames bullet and main's close text agree" }
+stamp = { hash = "b3:60dffe124556f6c5", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
+stamp = { hash = "b3:17b528286df59ffa", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2355,7 +2358,7 @@ stamp = { hash = "b3:fbe7c61707faa7bd" }
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:fc786e23618932db", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b40149170c54dd7d", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/config.rs"]
 stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2370,7 +2373,7 @@ stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:a1aefe27604ba6d2", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 (#320 only adds the jstream-outputs crate-map row; merge-main took wave stamps that predate this PR): Preview frames bullet (binary() once after hello, FRAME_BUFFER 8, keyframe gate) and main's close handshake text agree with session.rs; holds" }
+stamp = { hash = "b3:a86c4597e7e99d59", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -2385,22 +2388,22 @@ stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:a9fff0d2d3f6ed96", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: #296 races the engine's hello against the deadline; events and binary() are still opened only after Some(Ok(welcome)) (session.rs:184-186); Preview frames bullet holds" }
+stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:3c2fca618c361391", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: tests.rs passes the wave's silent flag through serve(), the harness helper the preview test uses; test-only, no behaviour the section describes changes; holds" }
+stamp = { hash = "b3:991aaa6de3af3ecf", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."body"]
-stamp = { hash = "b3:4c45e4e1103422b9", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
+stamp = { hash = "b3:e828e552d8f6c1e1", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-server"]
 stamp = { hash = "b3:91b837e64ac2fb2b" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:fc786e23618932db", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b40149170c54dd7d", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/config.rs"]
 stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2415,7 +2418,7 @@ stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:a1aefe27604ba6d2", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 (#320 only adds the jstream-outputs crate-map row; merge-main took wave stamps that predate this PR): Preview frames (preview.rs) bullet matches preview.rs; lib.rs mod preview; holds" }
+stamp = { hash = "b3:a86c4597e7e99d59", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -2430,10 +2433,10 @@ stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:a9fff0d2d3f6ed96", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: session.rs gains handshake(); Preview frames bullet holds" }
+stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:3c2fca618c361391", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: tests.rs passes the wave's silent flag through serve(), the harness helper the preview test uses; test-only, no behaviour the section describes changes; holds" }
+stamp = { hash = "b3:991aaa6de3af3ecf", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2565,7 +2568,7 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:5510e827f0205b81", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the sentence that the server side is built and the UI's pairing form isn't, now linking ADR-0047, still holds since this PR adds no UI code; cascade from control Design; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): stale via control design; UI preview still not hooked up; holds" }
+stamp = { hash = "b3:60dffe124556f6c5", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -3057,7 +3060,7 @@ stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:7ab4accbf98f6662" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): stale via ARCH#protocol; preview is an additive minor bump (0.20), consistent with R-API-001; holds" }
+stamp = { hash = "b3:17b528286df59ffa", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
@@ -3111,7 +3114,7 @@ stamp = { hash = "b3:bcf7e43d31e4a6e1", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:a61b2dec171a5423", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from CLI Usage (pair/device), daemon Usage (device file) and server Design (pairing): no step pairs a device, and every command still uses the control token; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:06af0b68f544ac32", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: stale via server design; go-live steps use no preview; holds" }
+stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "rechecked after merging wave/m1 (#251 preview streams, 0.20): pairing stays 0.21 with 0.20 named as the previous bump; noun lists carry both pairing/device and preview; Admitted now forwards Control::binary so 'passes everything else through' holds; holds" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:c40bfcab7de124d7", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }
