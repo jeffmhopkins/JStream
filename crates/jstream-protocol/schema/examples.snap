@@ -10,9 +10,11 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r12","call":{"kind":"action","action":{"type":"output.set_key","output_id":"out_yt","key":"fixture-key-0000"}}}
 {"type":"request","id":"r13","call":{"kind":"action","action":{"type":"output.clear_key","output_id":"out_yt"}}}
 {"type":"request","id":"r14","call":{"kind":"action","action":{"type":"audio.reset_loudness"}}}
-{"type":"request","id":"r15","call":{"kind":"action","action":{"type":"scene.switch","scene_id":"scn_2"}}}
-{"type":"request","id":"r16","call":{"kind":"action","action":{"type":"pairing.start"}}}
-{"type":"request","id":"r17","call":{"kind":"action","action":{"type":"device.revoke","device_id":"dev_1"}}}
+{"type":"request","id":"r15","call":{"kind":"action","action":{"type":"preview.subscribe","channel":1,"max_width":960,"fps":30,"codecs":["h264","jpeg"]}}}
+{"type":"request","id":"r16","call":{"kind":"action","action":{"type":"preview.unsubscribe","channel":1}}}
+{"type":"request","id":"r17","call":{"kind":"action","action":{"type":"scene.switch","scene_id":"scn_2"}}}
+{"type":"request","id":"r18","call":{"kind":"action","action":{"type":"pairing.start"}}}
+{"type":"request","id":"r19","call":{"kind":"action","action":{"type":"device.revoke","device_id":"dev_1"}}}
 {"type":"request","id":"r20","call":{"kind":"query","query":{"type":"scene.list"}}}
 {"type":"request","id":"r21","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}
 {"type":"request","id":"r22","call":{"kind":"query","query":{"type":"source.list"}}}

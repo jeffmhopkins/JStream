@@ -17,6 +17,7 @@ use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
+use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
     Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program, launch_vcam,
@@ -31,8 +32,8 @@ use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
     EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
-    OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    SecretString, SourceId,
+    OutputKind, OutputState, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer,
+    RequestId, Rev, SecretString, SourceId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -85,6 +86,8 @@ struct Shared {
     /// Where the collection is saved, if the host named a file. Taken before the
     /// collection lock, never while holding it, so the disk write happens outside it.
     collection_file: Mutex<Option<CollectionFile>>,
+    /// The preview thread, which draws and encodes every session's preview streams.
+    previews: PreviewHub,
 }
 
 impl Default for Engine {
@@ -102,6 +105,7 @@ impl Default for Engine {
                 keys: Mutex::new(None),
                 audit: Audit::default(),
                 collection_file: Mutex::new(None),
+                previews: PreviewHub::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -489,6 +493,7 @@ impl Engine {
     #[doc(hidden)]
     #[must_use]
     pub fn with_cpu_compositor(self) -> Self {
+        self.shared.previews.set_draw(crate::preview::cpu_draw());
         self.with_draw(crate::runtime::cpu_draw())
     }
 
@@ -577,6 +582,7 @@ impl Engine {
         client_id: &ClientId,
         request_id: &RequestId,
         call: Call,
+        previews: &SessionPreviews,
     ) -> Executed {
         let span = tracing::info_span!(
             "command",
@@ -613,6 +619,11 @@ impl Engine {
         } = call
         {
             self.key_action(action)
+        } else if let Call::Action {
+            action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
+        } = call
+        {
+            self.preview_action(previews, action)
         } else if self.backends_ready()
             && matches!(
                 call,
@@ -654,6 +665,46 @@ impl Engine {
             sink.record(pending.finish(client_id, request_id, &result));
         }
         Executed::Ready(result)
+    }
+
+    /// `preview.subscribe` and `preview.unsubscribe`, on the calling session's
+    /// previews. Nothing here holds the collection lock past reading `rev`.
+    fn preview_action(
+        &self,
+        previews: &SessionPreviews,
+        action: Action,
+    ) -> Result<CallResult, ProtocolError> {
+        match action {
+            Action::PreviewSubscribe {
+                channel,
+                max_width,
+                max_height,
+                fps,
+                codecs,
+            } => {
+                let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
+                let rev = lock(&self.shared.state).graph.rev();
+                let codecs = self.media.as_ref().and_then(|host| {
+                    lock(&host.backends)
+                        .as_ref()
+                        .map(|backends| Arc::clone(&backends.codecs))
+                });
+                let shared: Arc<dyn PreviewSource> = self.shared.clone();
+                previews.subscribe(
+                    &self.shared.previews,
+                    Arc::downgrade(&shared),
+                    channel,
+                    settings,
+                    Opening { codecs, rev },
+                )?;
+                Ok(CallResult::Action { result: None })
+            }
+            Action::PreviewUnsubscribe { channel } => {
+                previews.unsubscribe(channel);
+                Ok(CallResult::Action { result: None })
+            }
+            other => Err(not_implemented(other.name())),
+        }
     }
 
     /// The key store, if the host gave one. The handle is cloned so the store is
@@ -1953,6 +2004,13 @@ impl State {
             },
             wake,
         );
+    }
+}
+
+impl PreviewSource for Shared {
+    fn current(&self) -> (Arc<crate::runtime::RenderSnapshot>, Rev) {
+        let state = lock(&self.state);
+        (state.render.load(), state.graph.rev())
     }
 }
 

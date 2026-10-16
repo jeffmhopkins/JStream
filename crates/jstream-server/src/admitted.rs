@@ -21,7 +21,7 @@
 
 use crate::devices::{CODE_LIFETIME, Devices, Now};
 use crate::gate::Credential;
-use jstream_control::{BoxFuture, Control, ControlError, EventStream};
+use jstream_control::{BinaryStream, BoxFuture, Control, ControlError, EventStream};
 use jstream_protocol::{
     Action, ActionResult, Call, CallResult, EntityKind, Hello, ProtocolError, Query, QueryResult,
     RequestId, Response, SecretString, Welcome,
@@ -163,6 +163,10 @@ impl Control for Admitted {
 
     fn events(&self) -> EventStream {
         self.inner.events()
+    }
+
+    fn binary(&self) -> BinaryStream {
+        self.inner.binary()
     }
 }
 

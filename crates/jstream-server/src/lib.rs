@@ -27,6 +27,7 @@ mod gate;
 mod listener;
 mod mcp;
 mod pair;
+mod preview;
 mod session;
 #[cfg(test)]
 mod tests;
