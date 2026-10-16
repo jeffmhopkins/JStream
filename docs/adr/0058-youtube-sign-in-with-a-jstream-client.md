@@ -25,7 +25,7 @@ each user creates in their own Google Cloud project. The first real test of that
 (the Windows run in issue #337) asks the user to create a Cloud project, enable the
 YouTube Data API, make a "Desktop app" client and download its JSON. The maintainer
 rejected that: "I don't want cloud console stuff. That's against intent, is not ease for
-users." He also decided that agents should not control YouTube: "I don't think agents
+users." The maintainer also decided that agents should not control YouTube: "I don't think agents
 should control YouTube at all. That is ok being person only if it prevents cloud console
 stuff."
 
