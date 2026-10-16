@@ -3207,7 +3207,7 @@ stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:eb6fa77b409dd104", by = "agent:wave-owner", note = "says merge-main --from resolves conflicts the same way and lists sections to re-read; still true now that it also prints each one's earlier branch notes, which DOCS#verification describes" }
 
 ["RUNBOOK-WAVES#landing"."body"]
-stamp = { hash = "b3:6ae91e98d6488857", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
+stamp = { hash = "b3:292b39f21348b128", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "landing steps gain step 5: after the landing PR merges, a PR on main moves the wave's progress.toml rows from review to done or hardware (with the pending run in note), keeping review while a PR is open; step 6 (branch deleted) unchanged; wave/m1 landing (#464) review N1 asked for it" }
 
 ["RUNBOOK-WAVES#landing"."dep:REVIEW.md#gather"]
 stamp = { hash = "b3:8bf3f0afb967b2ae", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
