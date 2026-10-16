@@ -99,7 +99,7 @@ without building CEF):
 
 **The hardware check.** `examples/page_check.rs` opens the built-in test page (or
 `--url`) through the CEF backend on the engine's own device and QPC clock, as the daemon
-will, and reports the frames and audio that arrive, a custom-CSS change the page reacts
+will once the engine hands out its device, and reports the frames and audio that arrive, a custom-CSS change the page reacts
 to, the requests refused (the built-in page loads one image from outside its folder),
 and the shutdown time. It runs on Windows with the `cef` feature only.
 
@@ -117,9 +117,10 @@ from turning on the `cef` feature.
   replace the helper exe, unless a superseding ADR accepts running without it.
 - **Packaging and updates.** The CEF runtime isn't in the portable zip yet, with its
   licence notices, and nothing checks the pinned CEF against CEF stable.
-- **Hosts.** The daemon doesn't create a backend yet. The desktop app does, with its
-  `cef` feature, on a device of the media adapter it opens, not the engine's own,
-  which the engine doesn't hand out yet.
+- **Hosts.** The desktop app and the daemon each create a backend with their `cef`
+  feature, on a device of the media adapter they open
+  ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)), not the
+  engine's own, which the engine doesn't hand out yet.
 - **Compositing.** The program mix doesn't draw a page's `GpuFrame` yet; a `browser`
   source draws a transparent frame of its size until the render import of GPU frames
   lands.
