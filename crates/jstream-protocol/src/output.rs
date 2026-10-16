@@ -16,9 +16,8 @@ use std::fmt;
 
 /// What an output is and where it sends. Serialized with an internal `type` tag.
 ///
-/// RTMP(S) to a generic URL, recording to a file and the virtual camera are
-/// configurable so far. The YouTube-bound target of the data model comes later as a new
-/// variant.
+/// RTMP(S) to a generic URL or a YouTube broadcast, recording to a file and the
+/// virtual camera are configurable so far.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -90,6 +89,19 @@ pub enum RtmpTarget {
         /// credential: `user:password@`, a `?query` or a `#fragment`.
         url: String,
     },
+    /// A YouTube broadcast (ADR-0058): on `output.start` the engine reads the
+    /// broadcast's bound stream from the Live API and publishes to that stream's
+    /// `rtmps://` ingest address with its key. The key comes from YouTube, so
+    /// `output.set_key` isn't needed. The start fails with `action_failed` when the
+    /// engine isn't signed in to YouTube, the broadcast has no bound stream
+    /// (`youtube.bind_broadcast`), or YouTube refuses. The engine rejects, with
+    /// `invalid_argument`, an ID that is empty, longer than 128 bytes or has characters
+    /// other than ASCII letters, digits, `-` and `_`.
+    #[serde(rename = "youtube")]
+    YouTube {
+        /// The broadcast's ID, as `youtube.list_broadcasts` reports it.
+        broadcast_id: String,
+    },
     /// A target this version of the protocol doesn't know, from a newer server. Never
     /// sent; the engine refuses it in an edit with `invalid_argument`.
     #[serde(other)]
@@ -117,12 +129,14 @@ pub struct OutputInfo {
     pub filters: FilterChains,
 }
 
-/// A secret string, such as a stream key, sent by a client to the engine.
+/// A secret string, such as a stream key sent by a client to the engine, or the
+/// pairing code a server answers `pairing.start` with.
 ///
 /// On the wire it is a plain JSON string. In Rust it never prints: its `Debug` is
 /// `"***"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).
 /// A value that is not a string fails to parse with a message that doesn't repeat it.
-/// The engine never sends one back (R-SEC-001).
+/// The engine never sends one back, and a pairing code travels only in that one answer
+/// (R-SEC-001).
 #[derive(Clone, PartialEq, Eq, JsonSchema)]
 #[schemars(transparent)]
 pub struct SecretString(String);
@@ -256,6 +270,21 @@ mod tests {
     }
 
     #[test]
+    fn youtube_target_wire_form() {
+        let kind = OutputKind::Rtmp {
+            target: RtmpTarget::YouTube {
+                broadcast_id: "dQw4w9WgXcQ".into(),
+            },
+        };
+        let wire = json!({
+            "type": "rtmp",
+            "target": {"type": "youtube", "broadcast_id": "dQw4w9WgXcQ"}
+        });
+        assert_eq!(serde_json::to_value(&kind).ok(), Some(wire.clone()));
+        assert_eq!(serde_json::from_value::<OutputKind>(wire).ok(), Some(kind));
+    }
+
+    #[test]
     fn record_wire_form() {
         let kind = OutputKind::Record {
             path: "/home/me/Videos/show.mp4".into(),
@@ -293,7 +322,7 @@ mod tests {
             Some(OutputKind::Unknown)
         );
         assert_eq!(
-            parse(json!({"type": "rtmp", "target": {"type": "you_tube", "binding": "b"}})),
+            parse(json!({"type": "rtmp", "target": {"type": "srt_relay", "binding": "b"}})),
             Some(OutputKind::Rtmp {
                 target: RtmpTarget::Unknown
             })

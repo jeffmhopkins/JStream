@@ -7,10 +7,11 @@ use crate::event::OutputState;
 use crate::filter::FilterChains;
 use crate::finite::Finite32;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
-use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{BusId, DeviceId, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::output::OutputInfo;
 use crate::settings::Settings;
+use crate::youtube::{BroadcastInfo, BroadcastListStatus, BroadcastType, StreamInfo, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -79,12 +80,39 @@ pub enum Query {
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
+    /// Whether the engine is signed in to YouTube. Never calls YouTube.
+    #[serde(rename = "youtube.status")]
+    YoutubeStatus,
+    /// Lists the signed-in channel's broadcasts, one page of up to 50 at a time, in
+    /// YouTube's order. Calls the Live API, so it fails with `action_failed` when not
+    /// signed in or YouTube refuses (including when the day's quota is used up).
+    #[serde(rename = "youtube.list_broadcasts")]
+    YoutubeListBroadcasts {
+        /// Which broadcasts, by state. Omitted means `all`.
+        #[serde(default)]
+        status: BroadcastListStatus,
+        /// Which broadcasts, by type. Omitted means `all`, which includes the channel's
+        /// persistent ("Stream now") broadcast.
+        #[serde(default)]
+        broadcast_type: BroadcastType,
+        /// The `next_page_token` of an earlier page, for the page after it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_token: Option<String>,
+    },
+    /// Lists the signed-in channel's streams, one page of up to 50 at a time. Their keys
+    /// are never reported. Fails like `youtube.list_broadcasts`.
+    #[serde(rename = "youtube.list_streams")]
+    YoutubeListStreams {
+        /// The `next_page_token` of an earlier page, for the page after it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_token: Option<String>,
+    },
     /// Lists the collection's audio buses, ordered by ID, and every send into them.
     #[serde(rename = "bus.list")]
     BusList,
-    /// The batch that deletes a scene or source together with everything that refers to
-    /// it, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`
-    /// lists those `blockers`). The plan removes the items that place a deleted source,
+    /// The batch that deletes a scene, source or bus together with everything that
+    /// refers to it, which `scene.delete`, `source.delete` and `bus.delete` alone refuse
+    /// (their `invalid_argument` lists those `blockers`). The plan removes the items that place a deleted source,
     /// deletes the `scene` sources that show a deleted scene (and their items), and sets
     /// settings references to the target to `null`, keeping the sources that hold them.
     /// The client shows it, then sends its `edits` as an ordinary batch with
@@ -95,9 +123,15 @@ pub enum Query {
         /// What to delete.
         target: DeleteTarget,
     },
+    /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
+    /// paired and was last used, never its token. Answered by the server that admits
+    /// clients, not the engine: a `Control` with no server in front fails with
+    /// `unsupported`.
+    #[serde(rename = "device.list")]
+    DeviceList,
 }
 
-/// What a `delete.plan` deletes: a scene or a source.
+/// What a `delete.plan` deletes: a scene, a source or (since 0.24) a bus.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -111,6 +145,11 @@ pub enum DeleteTarget {
     Source {
         /// The source to delete.
         source_id: SourceId,
+    },
+    /// A bus other than the master. Since 0.24.
+    Bus {
+        /// The bus to delete.
+        bus_id: BusId,
     },
 }
 
@@ -129,8 +168,12 @@ impl Query {
             Query::OutputList => "output.list",
             Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
+            Query::YoutubeStatus => "youtube.status",
+            Query::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
+            Query::YoutubeListStreams { .. } => "youtube.list_streams",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
+            Query::DeviceList => "device.list",
         }
     }
 }
@@ -277,6 +320,30 @@ pub enum QueryResult {
         /// The profiles, ordered by ID.
         encoders: Vec<EncoderProfileInfo>,
     },
+    /// The result of `youtube.status`. Runtime state, so it carries no `rev`.
+    #[serde(rename = "youtube.status")]
+    YoutubeStatus {
+        /// Whether the engine is signed in.
+        auth: YoutubeAuth,
+    },
+    /// The result of `youtube.list_broadcasts`.
+    #[serde(rename = "youtube.list_broadcasts")]
+    YoutubeListBroadcasts {
+        /// This page's broadcasts.
+        broadcasts: Vec<BroadcastInfo>,
+        /// The token for the next page, if there is one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        next_page_token: Option<String>,
+    },
+    /// The result of `youtube.list_streams`.
+    #[serde(rename = "youtube.list_streams")]
+    YoutubeListStreams {
+        /// This page's streams.
+        streams: Vec<StreamInfo>,
+        /// The token for the next page, if there is one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        next_page_token: Option<String>,
+    },
     /// The result of `bus.list`.
     #[serde(rename = "bus.list")]
     BusList {
@@ -299,6 +366,13 @@ pub enum QueryResult {
         /// delete of the target itself.
         edits: Vec<Edit>,
     },
+    /// The result of `device.list`. Devices are not collection state, so it carries no
+    /// `rev`.
+    #[serde(rename = "device.list")]
+    DeviceList {
+        /// The paired devices, ordered by ID.
+        devices: Vec<DeviceInfo>,
+    },
 }
 
 impl QueryResult {
@@ -316,10 +390,29 @@ impl QueryResult {
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
+            QueryResult::YoutubeStatus { .. } => "youtube.status",
+            QueryResult::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
+            QueryResult::YoutubeListStreams { .. } => "youtube.list_streams",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::DeviceList { .. } => "device.list",
         }
     }
+}
+
+/// One paired device, as `device.list` reports it. Its token is never reported.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DeviceInfo {
+    /// The device's ID, which `device.revoke` takes.
+    pub device_id: DeviceId,
+    /// The name it gave when it paired. The audit log names its sessions
+    /// `device:<name>`.
+    pub name: String,
+    /// When it paired, in seconds since the Unix epoch (UTC).
+    pub paired_at: u64,
+    /// When its token was last presented, in seconds since the Unix epoch (UTC), to the
+    /// hour. A token unused for 30 days lapses and the device is dropped.
+    pub last_used_at: u64,
 }
 
 /// One scene in a `scene.list` result.

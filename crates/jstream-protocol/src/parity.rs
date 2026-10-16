@@ -18,7 +18,7 @@ use crate::{
     RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId,
     SourceInfo, SourceKind, Vec2, VideoCodec, VideoEncoding,
 };
-use crate::{AudioFollow, BusId, BusInfo, SendInfo, SourceAudio};
+use crate::{AudioFollow, BusId, BusInfo, MAX_BUSES, SendInfo, SourceAudio};
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
 /// applied to it: the batch is applied as one batch, so exactly one revision later.
@@ -1133,7 +1133,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             },
             invalid(
                 "edits.14.bus_id",
-                "a collection holds at most 16 buses, the master included",
+                &format!("a collection holds at most {MAX_BUSES} buses, the master included"),
             ),
         ),
         (

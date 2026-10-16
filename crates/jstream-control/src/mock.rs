@@ -696,7 +696,7 @@ impl State {
                     self.program = Some(scene_id);
                     self.emit_program(client_id, request_id);
                 }
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -707,15 +707,21 @@ impl State {
                 }
                 check_key(&key)?;
                 self.keys.insert(output_id, key);
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::OutputClearKey { output_id } => {
                 // Succeeds with no key, and for an output no longer in the collection.
                 self.keys.remove(&output_id);
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
+            }
+            // As the engine: the server in front answers these (ADR-0044).
+            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: other.name().into(),
+                });
             }
             // The mock runs no mixer, so there is no loudness to reset.
-            Action::AudioResetLoudness {} => return Ok(CallResult::Action {}),
+            Action::AudioResetLoudness {} => return Ok(CallResult::action()),
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {
@@ -743,7 +749,7 @@ impl State {
                 state,
             });
         }
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     fn query(&self, query: Query) -> Result<CallResult, ProtocolError> {
@@ -827,6 +833,13 @@ impl State {
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
             },
+            // The mock describes no kinds, so it lists none.
+            Query::KindList => QueryResult::KindList { kinds: Vec::new() },
+            Query::DeviceList => {
+                return Err(ProtocolError::Unsupported {
+                    call: "device.list".into(),
+                });
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(CallResult::Query { result })
@@ -1889,6 +1902,9 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
         "must be at most 1024 bytes"
     } else if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
         "must not contain whitespace or control characters"
+    } else if !key.is_ascii() {
+        // No streaming service issues one; a leading U+FEFF is the usual case (#441).
+        "must contain only ASCII characters"
     } else {
         return Ok(());
     };
@@ -2426,6 +2442,27 @@ mod tests {
             Ok(parity::COLLECTION_REV)
         );
         (engine, control)
+    }
+
+    /// `kind.list` answers with no kinds, even for kinds `with_kinds` told it about: the
+    /// mock describes none. It answers rather than failing, so a client can report a
+    /// failed `kind.list` without the mock tripping it (#401). `kind.describe` still
+    /// answers `internal`.
+    #[test]
+    fn kind_list_lists_no_kinds() {
+        let (_engine, control) = parity_engine();
+        assert_eq!(
+            query(&*control, Query::KindList),
+            Ok(QueryResult::KindList { kinds: Vec::new() })
+        );
+        let describe = Query::KindDescribe {
+            kind_id: "color".into(),
+        };
+        let refused = query(&*control, describe).expect_err("kind.describe");
+        assert!(
+            matches!(refused.protocol(), Some(ProtocolError::Internal { .. })),
+            "{refused:?}"
+        );
     }
 
     /// The answer to a history call: `(rev, step_rev, undo_depth, redo_depth)`.
@@ -3050,6 +3087,62 @@ mod tests {
         assert_eq!(ib.source_id.as_str(), "a_src");
     }
 
+    /// #362: a bus a source's settings draw can't be deleted until they are cleared, as
+    /// the engine refuses it (`jstream-graph`), in the same batch or before.
+    #[test]
+    fn a_bus_a_source_draws_cannot_be_deleted() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let wave = |bus: serde_json::Value| Edit::SourceSetSettings {
+            source_id: SourceId::new("wave"),
+            patch: [("audio", bus)].into_iter().collect(),
+        };
+        batch(
+            &*control,
+            Batch {
+                edits: vec![
+                    Edit::BusCreate {
+                        bus_id: BusId::new("vod"),
+                        name: "VOD".into(),
+                    },
+                    Edit::SourceCreate {
+                        source_id: SourceId::new("wave"),
+                        name: "Waveform".into(),
+                        kind: SourceKind::Builtin {
+                            kind: "waveform".into(),
+                        },
+                        settings: Settings::new(),
+                        duplicated_from: None,
+                    },
+                    wave(serde_json::json!({"type": "bus", "bus_id": "vod"})),
+                ],
+                expected_rev: None,
+                idempotency_key: None,
+            },
+        )
+        .expect("created");
+        let delete = Edit::BusDelete {
+            bus_id: BusId::new("vod"),
+        };
+        let error = batch(&*control, Batch::single(delete.clone())).expect_err("refused");
+        assert!(
+            matches!(
+                error.protocol(),
+                Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.bus_id"
+            ),
+            "{error:?}"
+        );
+        batch(
+            &*control,
+            Batch {
+                edits: vec![wave(serde_json::Value::Null), delete],
+                expected_rev: None,
+                idempotency_key: None,
+            },
+        )
+        .expect("cleared, then deleted");
+    }
+
     /// Every batch the shared parity fixture rejects fails with exactly the error
     /// `Graph::apply` returns for it, and applies nothing.
     #[test]
@@ -3551,7 +3644,7 @@ mod tests {
             },
         };
         let started = block_on(agent.call(start)).expect("start");
-        assert_eq!(started.result, CallResult::Action {});
+        assert_eq!(started.result, CallResult::action());
 
         let changed = |state| Event::OutputStateChanged {
             output_id: OutputId::new("yt"),
@@ -3657,7 +3750,7 @@ mod tests {
         let start = Action::OutputStart {
             output_id: OutputId::new("yt"),
         };
-        assert_eq!(action(&*control, start), Ok(CallResult::Action {}));
+        assert_eq!(action(&*control, start), Ok(CallResult::action()));
         let delete = || {
             Batch::single(Edit::OutputDelete {
                 output_id: OutputId::new("yt"),
@@ -3682,7 +3775,7 @@ mod tests {
         let stop = Action::OutputStop {
             output_id: OutputId::new("yt"),
         };
-        assert_eq!(action(&*control, stop), Ok(CallResult::Action {}));
+        assert_eq!(action(&*control, stop), Ok(CallResult::action()));
         assert_eq!(batch(&*control, delete()), Ok(Rev(3)));
         let gone = status(&*control, "yt").expect_err("forgotten");
         assert_eq!(code(&gone), Some("not_found"));
@@ -3751,6 +3844,8 @@ mod tests {
                 "secret\u{7}",
                 "must not contain whitespace or control characters",
             ),
+            ("\u{FEFF}secret", "must contain only ASCII characters"),
+            ("s\u{e9}cret", "must contain only ASCII characters"),
         ] {
             let error = set("yt", key).expect_err("bad key");
             assert_eq!(
@@ -3760,7 +3855,7 @@ mod tests {
         }
         assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, false)));
 
-        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::Action {}));
+        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::action()));
         assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, true)));
         assert_eq!(
             engine
@@ -3784,7 +3879,7 @@ mod tests {
             let clear = Action::OutputClearKey {
                 output_id: OutputId::new("yt"),
             };
-            assert_eq!(action(&*control, clear), Ok(CallResult::Action {}));
+            assert_eq!(action(&*control, clear), Ok(CallResult::action()));
         }
         assert!(engine.stream_key(&OutputId::new("yt")).is_none());
         let events = drain(&mut events);

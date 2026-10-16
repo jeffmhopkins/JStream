@@ -25,7 +25,9 @@ first cut defines its own wire types for them.
 
 Contents (a deliberately small first cut; [Design](#design) describes the whole model):
 - **Envelope** (`envelope.rs`): `ClientMessage` (`hello`, `request`) and `ServerMessage`
-  (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`.
+  (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`,
+  and `ActionResult`, the data an action may answer with (`pairing.start`'s code,
+  `youtube.sign_in`'s consent URL, a YouTube broadcast).
   `ClientMessage::parse` maps every parse failure to `malformed`.
 - **History** (`history.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
   `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
@@ -43,7 +45,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`), with `ItemTransform`
   (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch`, `audio.reset_loudness`);
+  `scene.switch`, `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
+  `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
+  `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
@@ -53,7 +57,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   master stage as `state.get` reports it
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
-  (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
+  (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
@@ -64,25 +68,38 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
   `SourceAudio` and `AudioFollow`, a source's audio settings; `BusInfo` and `SendInfo`,
   the buses and the send matrix as reads report them; the fader range and its shared
-  check (`gain_db_problem`); and `SourceMeter`, `BusMeter` and `Loudness`, the readings
+  check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
+  the UI use and the engine's mixer is held to; and `SourceMeter`, `BusMeter` and `Loudness`, the readings
   a `meters.tick` carries.
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
-  `kind.describe`, `delete.plan` (with its `DeleteTarget`) and `studio.get`, with
-  `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo` and `ItemInfo`
-  shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
+  `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source or a bus),
+  `studio.get` and `device.list`, with `QueryResult` and the `SceneSummary`,
+  `SceneInfo`, `SourceInfo`, `ItemInfo` and `DeviceInfo` shapes the reads report.
+  `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
-  mix as a PNG.
+  mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and `youtube.list_streams`
+  read the YouTube account.
+- **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
+  `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
+  Live API with an `other` value for anything newer.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
   [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)): `KindDescriptor`,
   `ParamDescriptor` and `ParamType`, the shapes that describe a source or filter kind's
   parameters, and `Settings`, a map from parameter ID to a JSON value, whose `scene`,
-  `source` and `asset` references are tagged objects (`Reference`). The per-value checks
+  `source`, `bus` and `asset` references are tagged objects (`Reference`). The per-value checks
   (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No kind is defined here.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
-  `events.dropped`, `stats.tick` and `meters.tick`.
+  `events.dropped`, `stats.tick`, `meters.tick`, `youtube.status_changed` and
+  `youtube.health_changed`.
+- **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
+  `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
+  their defaults and range checks, which the engine applies), and the binary
+  frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
+  `to_bytes`/`parse` and `BinaryError`, and `KeyframeGate`, the drop rule every hop that
+  queues frames applies ([Binary streams](#design)).
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
@@ -99,9 +116,23 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
-  audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
-  `audio.reset_loudness`); 0.18 added the `virtual_cam` output kind, 0.17
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.24 because of bus
+  references (the `bus` parameter type and reference, which the `waveform` and
+  `spectrum` kinds' `audio` setting uses, a `bus` `delete.plan` target, and
+  `bus.delete` refused while one refers to its bus); 0.23 added YouTube
+  ([YouTube](#design): the `youtube.*` commands and events, the `youtube`
+  RTMP target, and the YouTube actions' `ActionResult`s,
+  [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), 0.22
+  opacity, blend and filter chains (`item.set_opacity`, `item.set_blend`, the
+  `filter.*` edits, `SourceInfo.filters` and the `filter` entity kind,
+  [ADR-0023](../../docs/adr/0023-placements-references-and-clones.md),
+  [ADR-0026](../../docs/adr/0026-source-filter-chains.md)), 0.21 pairing
+  (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
+  `unsupported` error and the `device` entity kind,
+  [ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), 0.20
+  the preview streams (`preview.subscribe`, `preview.unsubscribe` and the binary
+  frame), 0.19 audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
+  `audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
   `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
@@ -166,8 +197,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":19},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":19},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":24},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":24},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -213,8 +244,11 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
 - **Action** (`Action`): has effects outside the collection state, such as network,
   devices, files, secrets, time or runtime state (starting an output, going live,
   storing a stream key, OAuth, switching the program scene). Never undoable or
-  batchable. The response only says the action was accepted; progress arrives as
-  events (`output.state_changed`).
+  batchable. The response says the action was accepted, and carries an
+  `ActionResult` only for an action that answers with data (`pairing.start`'s code,
+  0.21; `youtube.sign_in`'s consent URL and the broadcast a YouTube broadcast action
+  made or changed, 0.23; every other action omits `result`); progress arrives as events
+  (`output.state_changed`).
 
 The classification rule: **if the command's whole effect is a change to the collection
 state, and its inverse can be computed from the state before it, it is an edit.
@@ -290,17 +324,19 @@ and needs at least one. A `scene` source has no fader, mute or sends of its own:
 **Buses** are collection objects with an ID, a name and a fader (`gain_db`, `muted`).
 Every collection has the master bus, ID `master`, named `Master`; it can be renamed and
 faded but never deleted. `bus.create`, `bus.rename`, `bus.set_fader` and `bus.delete`
-manage the others, at most 16 buses in all. **Sends** route a source's audio into a
+manage the others, at most 16 buses in all (`MAX_BUSES`). **Sends** route a source's audio into a
 bus, post-fader, at a gain: `send.set { source_id, bus_id, gain_db }` creates one or
 changes its gain, `send.remove` removes it. Only a source with a channel of its own
 sends, so not a `scene` source. A new channel source sends to the master at 0 dB.
 Deleting a bus removes the sends into it, and deleting a source removes its sends;
-the inverses put them back. Every gain is in dB from −100 to +24; silence is `muted`.
+the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
+reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
+`bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
 Buses never feed buses (ADR-0028), so a send always runs from a source to a bus, and
-an audio routing cycle can't be expressed. A routing check comes with filters, the
-first thing that could feed one bus from another. The mixer has filter chains (D7b),
-but filters are not in the protocol yet. `follow`'s activity gain is the engine's (D6); the
+an audio routing cycle can't be expressed. Filter chains (0.22) belong only to
+sources (`FilterOwner` is `source`), so none feeds one bus from another either; a
+routing check comes with the first thing that could. `follow`'s activity gain is the engine's (D6); the
 protocol only stores it.
 
 Levels and loudness are runtime state: `meters.tick` carries them (see
@@ -322,13 +358,14 @@ never a type per kind.
 - A `ParamDescriptor` has an `id`, a `type` with its constraints flattened into the same
   object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
-  `accept`; `scene`; `source` with an optional `media`), a `default`, a `label`, an
+  `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24), a `default`, a `label`, an
   optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
 - Values are plain JSON. Colours are `#rrggbb`, or `#rrggbbaa` when `alpha` is set.
   References are tagged objects: `{"type":"scene","scene_id":…}`,
-  `{"type":"source","source_id":…}` and `{"type":"asset","root":…,"path":…}`, with
+  `{"type":"source","source_id":…}`, `{"type":"bus","bus_id":…}` (0.24) and
+  `{"type":"asset","root":…,"path":…}`, with
   `root` one of `collection`, `app` and `absolute`. A reference parameter also accepts
   `null`. `Settings::references` finds every reference in a map without the descriptor.
 - `source.create` takes optional `settings`. The engine checks each entry against the
@@ -340,29 +377,37 @@ never a type per kind.
   type, a number out of range, an unknown enum option, a bad colour, an over-long
   string, or a bad asset path are `invalid_argument` with `field =
   edits.N.settings.<id>` (or `edits.N.patch.<id>`). Values are never clamped. A
-  reference to a missing scene or source is `not_found`. A `source` reference that
+  reference to a missing scene, source or bus is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
-  `collection` and `app` are relative, with `/` separators and no `..` segment, drive
-  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
+  `collection` and `app` are relative, with `/` separators and no empty or `..` segment,
+  drive letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
   Under `absolute` the path is `/…`, `\…`, `C:\…` or `C:/…`, with no `..` segment, no
   second leading separator (`\\host\share`, `//host/share`, `\\.\…` and `\\?\…` name
   a UNC share or a device, and opening one on Windows hands the engine's credentials to
   that host), no `:` but the drive letter's, and no `?` or `*` (Win32 never allows
   them in a file name, and `\??\UNC\…` or `\??\GLOBALROOT\Device\…` is an NT object
-  path that reaches the same hosts and devices). An asset that doesn't exist yet is
-  accepted.
+  path that reaches the same hosts and devices). Under every root, the last component
+  must not name a DOS device, which Win32 opens in place of a file in any folder: a
+  stem (the name before the first `.`, without trailing spaces, in any case) of `CON`,
+  `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`,
+  `CONIN$` or `CONOUT$`. So `C:\x\nul`, `\CON .png` and `/x/aux.txt` are refused under
+  `absolute`, and `CON.png` and `media/nul` under `collection` or `app` (joined to the
+  root folder, they still open the device), while `CONSOLE.png` or `COM10.png` is not.
+  Earlier components may use these names: Win32 fails to open such a path, and elsewhere
+  they are ordinary folders. An asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
-  scenes, and scene and source references in settings (a filter's settings count as its
-  source's) form one dependency graph. An edit that would close a cycle (`item.add`,
-  `item.move`, `item.set_source`, `source.create`, `source.set_settings`, `filter.add`,
-  `filter.set_settings`) is
+  scenes, and scene, source and bus references in settings (a filter's settings count
+  as its source's) form one dependency graph. An edit that would close a cycle
+  (`item.add`, `item.move`, `item.set_source`, `source.create`, `source.set_settings`,
+  `filter.add`, `filter.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
-  scene `a`). Asset references are not edges.
+  scene `a`). A bus depends on nothing, so a bus reference never closes one. Asset
+  references are not edges.
 - **Deletes are refused while anything refers to the target**, with no cascading edit
   ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   `source.delete` is refused while an item places the source, and `scene.delete` while a
-  `scene` source shows the scene; either is refused while a setting refers to its
-  target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
+  `scene` source shows the scene; either, and `bus.delete` (0.24), is refused while a
+  setting refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
   `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
   or the source whose setting refers to it (`settings.<param>`, or
   `filters.<filter_id>.<param>` for a filter's setting). `delete.plan` returns
@@ -373,7 +418,7 @@ parameters), so a reader of 0.7 messages sees no change for those.
 
 ### Opacity, blend and filters
 
-A placement has an `opacity`, an alpha multiplier from 0 to 1 (default 1), and a
+All of this is added in 0.22. A placement has an `opacity`, an alpha multiplier from 0 to 1 (default 1), and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
 `difference`, `exclusion`; default `normal`). `item.add` takes both, optional;
 `item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
@@ -439,7 +484,10 @@ can't offer that size. It has no target either, so `output.set_target` refuses i
 and it encodes nothing, so its encoder profile is stored but unused. A 0.9 to 0.17
 client reads it as `Unknown`. The
 stream key is not collection state: it is a secret held in the OS credential store,
-so it is set with the `output.set_key` action and removed with `output.clear_key`.
+so it is set with the `output.set_key` action and removed with `output.clear_key`. A
+`youtube` target (0.23) names a broadcast instead of a URL: its ingest and key come
+from YouTube on each `output.start` ([YouTube](#design)), so it needs no
+`output.set_key`. Its ID must be ASCII letters, digits, `-` and `_`, at most 128 bytes.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
 error, query or log carries it, and `output.status` reports only `key_set`. A key
 outlives `output.delete`, so undoing the delete gives back a working output; a client
@@ -521,16 +569,22 @@ Queries read and never change `rev`. Those that read the collection state carry 
   has no scene). Runtime state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
-- `delete.plan {target}`: the batch that deletes a scene or source (`target` is
-  `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
-  everything that refers to it, as `edits` and the `rev` it was planned at, or
-  `not_found` for a missing target. In order, the edits remove the items that place a
+- `device.list`: the devices paired with the listener this client reached, each with
+  its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
+  collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
+- `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
+  `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
+  `{"type":"bus","bus_id":…}`) with everything that refers to it, as `edits` and the
+  `rev` it was planned at, or `not_found` for a missing target (and
+  `invalid_argument` on `target.bus_id` for the master, which is never deleted). In order, the edits remove the items that place a
   deleted source, set every settings reference to a deleted object to `null` (one
   `source.set_settings` per source, which keeps the source, and one
   `filter.set_settings` per filter), delete the `scene` sources
   that show a deleted scene, and last delete the target. Deleting a scene deletes the
   `scene` sources that show it, and the cascade stops there, since deleting a source
-  deletes no scene. A target nothing refers to plans just its own delete. The client
+  deletes no scene. A bus is held only by settings references, which the plan clears;
+  its `bus.delete` takes its sends. A target nothing refers to plans just its own
+  delete. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
   refused if the state moved on, and its undo is the batch's inverse.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
@@ -547,6 +601,17 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([jstream-server › Design](../jstream-server/README.md#design)), so a client must
   accept an answer of that size: `jstream-control`'s WebSocket client keeps
   tungstenite's default limits, which are well above it.
+
+**Pairing** (0.21, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
+`pairing.start` opens a one-time code and answers it in `result`
+(`{"type":"pairing.start","code":"XXXX-XXXX","expires_in_secs":120}`), `device.list`
+lists the paired devices, and `device.revoke {device_id}` forgets one (`not_found` with
+entity `device` for an unknown one). They concern whom a listener admits, so the server
+in front of the engine answers them
+([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md),
+[jstream-server › Design](../jstream-server/README.md#design)); a `Control` with no
+server in front answers `unsupported`. The code is a `SecretString`: it never prints,
+and nothing but this answer carries it ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 An item is reported with its `source_id`, `placement` form, `transform`, `geometry`,
 `crop`, `visible`, `opacity` and `blend`, and a source with its name, kind, settings and
@@ -588,8 +653,9 @@ undoing `item.set_source` is `item.set_source` back, and undoing
 `bus.create`, `bus.set_fader` unless the fader was at its default, and a `send.set` for
 each send the bus had; `source.set_audio`, `bus.set_fader` and `send.set` are each
 undone by the same edit with the old values, and a new send by `send.remove`. Deleting a source that items still
-place or a setting refers to, or a scene that a `scene` source shows or a setting refers
-to, is rejected, so no edit removes more than the object it names. `jstream-graph`'s property
+place or a setting refers to, a scene that a `scene` source shows or a setting refers
+to, or a bus a setting refers to, is rejected, so no edit removes more than the object
+it names (a bus's sends are part of it). `jstream-graph`'s property
 test checks that applying a random batch and then its inverse restores the state
 exactly. A new edit that can't state its inverse in edits needs new edits first.
 
@@ -686,7 +752,7 @@ After `welcome`, the server pushes every event to every client.
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
   built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
   those meters exist, as later optional fields. Audience figures are `youtube.stats`
-  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)).
+  ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)).
 - `meters.tick {sources, buses}` is one reading of the audio levels (0.19), about ten
   a second while the mixer runs; an idle engine emits none. Each routed source and
   each bus has `peak` (the largest absolute sample since the previous tick) and `rms`
@@ -695,6 +761,46 @@ After `welcome`, the server pushes every event to every client.
   `momentary`, `short_term` and `integrated` LUFS, each absent until there is enough
   audio above the absolute gate. Each tick is a full reading, so a client that misses
   one loses nothing; nothing numbers them.
+- `youtube.status_changed {auth}` and `youtube.health_changed {output_id, broadcast_id,
+  stream_id, status, health, issues}` (0.23) are described under [YouTube](#design).
+
+### YouTube
+
+JStream signs in to one Google account, once, with the full `youtube` scope
+([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md), keeping ADR-0041 §4), and every
+YouTube command is an action or a query (0.23). They are for the UI: the MCP server
+offers none of them, refuses a `youtube` output target and drops YouTube events, since
+YouTube is for people, not agents (ADR-0058 §3):
+
+- `youtube.sign_in` returns `{"type":"youtube.sign_in","url":…}`, Google's consent
+  page. Once the user agrees, Google redirects the browser to a listener the engine
+  opened on `127.0.0.1`, and the engine finishes the sign-in itself. No token ever
+  travels in the protocol ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): the refresh
+  token goes to the OS credential store. Sent again while a sign-in waits, it returns
+  the same URL.
+- `youtube.sign_out` revokes the token and forgets it.
+- `youtube.status` reports `auth`: `unavailable` (the engine has no Google OAuth client, as
+  in a build whose built-in client is still empty, so YouTube's API features are off
+  and clients hide them),
+  `signed_out`, `signing_in` or `signed_in`. `youtube.status_changed {auth}` reports
+  each change, including Google refusing the account's token.
+- `youtube.list_broadcasts {status?, broadcast_type?, page_token?}` and
+  `youtube.list_streams {page_token?}` read pages of up to 50. Both default to
+  everything, the persistent "Stream now" broadcast included. A stream's key is never
+  reported.
+- `youtube.create_broadcast`, `youtube.bind_broadcast` and
+  `youtube.transition_broadcast` return the broadcast as YouTube left it.
+  `bind_broadcast` without a `stream_id` creates a reusable stream first.
+- An output with the `youtube {broadcast_id}` target publishes to the `rtmps://`
+  ingest of its broadcast's bound stream. While it runs, the engine polls the stream's
+  health and sends `youtube.health_changed` when it changes.
+- A Live API failure is `action_failed`, queries included, and a used-up quota says so
+  in its reason (ADR-0041 §5, kept by ADR-0058).
+
+Values mirrored from YouTube (`life_cycle`, `privacy`, `status`, `health`, `severity`)
+have an `other` value, so a value YouTube adds later still parses. Text from YouTube is
+untrusted and shown as plain text. Chat, the featured message and audience stats come
+later.
 
 ### Errors
 
@@ -715,6 +821,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
 | `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
+| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front; 0.21) | `call` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to
@@ -749,8 +856,13 @@ after 1.0:
   exists (the whole response fails, and `WsControl` ends the session). Whether that
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
-  than 0.13, which sends none, never reads it. The filter edits add `filter` on the same
-  terms. The encoder enums (`VideoCodec`,
+  than 0.13, which sends none, never reads it. 0.19 adds `bus` the same way: only an error answering a bus or send edit
+  (`bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`)
+  names it. An older client's undo of its own `source.delete` restores the source's
+  sends, but if one's bus has since been deleted by another client, the undo fails with
+  `undo_conflict`, which names no entity. 0.21 adds `device` the same way: only an error
+  answering `device.revoke` names it, and 0.22 adds `filter` on the same terms for the
+  filter edits. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
@@ -828,14 +940,57 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   the engine's runtime source sizes, and live geometry values (ADR-0032's `live.set`),
   which need the live-value channel. Both are later minors.
 
-### Binary streams (deferred)
+### Binary streams
 
-Preview video and audio meters
-([ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol)) stay WebSocket binary
-frames, not designed yet except the meter frame's fields. Preview is the M2 low-res
-H.264 stream ([ROADMAP › M2](../../ROADMAP.md#m2)). They will travel with a small fixed
-header (stream ID, stream kind, the `rev` or media timestamp they show) and be opened
-and closed with JSON subscriptions. That header is part of the preview work.
+Preview video travels as WebSocket binary messages, one `BinaryFrame` each, alongside
+the JSON text messages of the same connection (0.20,
+[ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol),
+[ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). Audio meters travel in the JSON
+`meters.tick` event; a binary meter stream would be another kind of the same frame.
+
+- **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,
+  codecs?}` is an action: it opens a stream of the program mix for the calling
+  session only, tagged with the `channel` number the client chose (a `u32`, not an ID:
+  it only tells the session's streams apart in the frame header). The picture is the
+  canvas scaled down to fit `max_width` × `max_height` (default 640 × 360, at most
+  1920 × 1080) with even sides, so it follows `canvas.set_size`. A picture is sent when
+  what the program mix draws changes, at most `fps` times a second (default 15, at
+  most 30), and at least every 2 s as a keyframe. `codecs` lists what the client can
+  decode, most preferred first (default `["h264", "jpeg"]`); the engine uses the first
+  it can encode, and may fall back to a later one if an encoder fails to open, so each
+  frame names its codec. A session has at most 4 streams. `preview.unsubscribe
+  {channel}` closes one (and succeeds for a channel that isn't open); so does the
+  session's end. The stream shows the mix before any master stage, which is the
+  default ARCH asks for; a post-master option comes with that stage. Over MCP, which
+  has no binary channel, `preview.subscribe` fails with `action_failed`.
+- **The frame.** A fixed 32-byte little-endian header, then the payload:
+
+  | Offset | Size | Field |
+  |---|---|---|
+  | 0 | 1 | version, 1 |
+  | 1 | 1 | kind: 1 = preview |
+  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG |
+  | 3 | 1 | flags: bit 0 keyframe, bit 1 end of stream |
+  | 4 | 4 | channel |
+  | 8 | 2 | width |
+  | 10 | 2 | height |
+  | 12 | 4 | reserved, 0 |
+  | 16 | 8 | presentation time in µs since the stream opened (signed) |
+  | 24 | 8 | the `rev` the picture shows |
+
+  An H.264 payload is one access unit in Annex B form, with the parameter sets in band
+  at keyframes, which WebCodecs' `VideoDecoder` takes with no `description`. A JPEG
+  payload is a whole baseline JFIF picture, always a keyframe. An end frame (flag bit
+  1, codec 0) says the engine ended the stream; its payload is the reason as UTF-8, and
+  the channel is free again. A client ignores a frame whose version, kind or codec it
+  doesn't know, and the reserved bytes and spare flag bits.
+- **Overload.** Frames are never buffered without bound. Each hop that queues them (the
+  engine, the server, the WebSocket client) drops a frame that finds its queue full,
+  and every later frame of that channel until a keyframe finds room (`KeyframeGate`),
+  so what a client receives always decodes. The 2 s keyframe bounds the gap.
+- **Compatibility.** The header's version byte changes only with a new protocol major.
+  A new kind, codec or flag is a minor change, and a frame a client can't read is
+  skipped.
 
 `video.snapshot` is not one of those frames. M1a uses it so an agent can check a scene
 over the JSON API and over MCP ([ROADMAP › M1](../../ROADMAP.md#m1),

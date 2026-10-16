@@ -1,8 +1,10 @@
 //! Video capture: displays and windows.
 
+use std::sync::Arc;
+
 use jstream_media::FrameSize;
 
-use crate::{DeviceId, PlatformError, VideoSurface};
+use crate::{DeviceId, GpuContext, PlatformError, VideoSurface};
 
 /// What to capture.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -46,6 +48,18 @@ pub trait Capture: Send + Sync {
     /// [`PlatformError::Unsupported`] when the backend can't capture that kind of
     /// target, and [`PlatformError::Os`] when the OS refuses.
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError>;
+
+    /// This backend on `context`'s device: its captures deliver `VideoSurface::Gpu`
+    /// frames that render samples without a CPU copy (README › GPU frames). `Ok(None)`,
+    /// the default, when the backend has no GPU path; the engine then keeps this
+    /// backend and its CPU frames.
+    ///
+    /// # Errors
+    /// [`PlatformError::InvalidState`] for a context another platform opened.
+    fn on_context(&self, context: &GpuContext) -> Result<Option<Arc<dyn Capture>>, PlatformError> {
+        let _ = context;
+        Ok(None)
+    }
 }
 
 /// One running capture, read by the render thread.

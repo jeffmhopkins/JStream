@@ -23,6 +23,13 @@ arc-swap = { version = "1.9", default-features = false }
 assert_no_alloc = { version = "1", default-features = false, features = ["warn_debug", "warn_release"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
+# CEF's C API for browser sources (ADR-0021, picked by spike S4; ADR-0046), pinned
+# exactly: the version carries the CEF build it was generated from (154.0.34), and its
+# sys crate's build script downloads that exact CEF distribution. No default features:
+# `jstream-browser`'s `helper` feature turns `sandbox` on for CEF's bootstrap layout
+# (ADR-0048), and `build-util`/`resources` are app-bundling helpers. Only that feature
+# pulls it in.
+cef = { version = "=154.5.0", default-features = false }
 # Benchmarks (`benches/` in jstream-render, jstream-audio and jstream-encode), dev-only.
 # No default features: no `rayon` or `plotters`, so no HTML plots; the JSON estimates under
 # `target/criterion` are what the `bench` workflow records. `cargo_bench_support` keeps
@@ -32,6 +39,9 @@ criterion = { version = "~0.7", default-features = false, features = ["cargo_ben
 # Lock-free bounded queues for the audio mixer's commands and the collector (R-RT-003).
 # A send on a bounded channel does not allocate. `std` is the only feature.
 crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
+# Deflate and CRC-32 for the portable Windows zip (`cargo xtask dist`, ADR-0020). Already in
+# the tree through `png`, with the same pure-Rust backend (`miniz_oxide`).
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 futures-core = { version = "0.3", default-features = false }
 # One-shot and unbounded channels for the browser WebSocket client (`jstream-control`'s
 # `ws` feature on wasm32), which has no tokio. Already in the tree through Leptos.
@@ -50,6 +60,7 @@ insta = { version = "1", default-features = false }
 # JavaScript built-ins (`Array`) for the browser WebSocket client. Part of wasm-bindgen.
 js-sys = { version = "0.3", default-features = false, features = ["std"] }
 jstream-audio = { path = "crates/jstream-audio" }
+jstream-browser = { path = "crates/jstream-browser" }
 jstream-control = { path = "crates/jstream-control" }
 jstream-core = { path = "crates/jstream-core" }
 jstream-effects = { path = "crates/jstream-effects" }
@@ -85,6 +96,12 @@ leptos = { version = "0.8", default-features = false, features = ["csr"] }
 # no `bit-set`.
 proptest = { version = "~1.11", default-features = false, features = ["std"] }
 pulldown-cmark = { version = "0.13", default-features = false }
+# The FFT behind the spectrum source (C10): real-input, planned once per source, and
+# allocation-free per frame with caller-owned scratch. Pulls in `rustfft` and its small
+# `num-*`, `primal-check`, `strength_reduce` and `transpose` crates. No default features:
+# the scalar FFT is fast enough for one 2048-point transform a video frame, and leaves
+# out the SIMD paths.
+realfft = { version = "3.5", default-features = false }
 # SHA-256 and the OS random source for OAuth PKCE (`jstream-youtube`). Already in the tree
 # as rustls' crypto provider (R-DEP-006), so this adds no crate; no default features.
 ring = { version = "0.17", default-features = false }

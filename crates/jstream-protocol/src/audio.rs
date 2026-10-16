@@ -18,6 +18,10 @@ pub const MAX_GAIN_DB: f32 = 24.0;
 /// floor. Silence is `muted`, not a gain.
 pub const MIN_GAIN_DB: f32 = -100.0;
 
+/// The most buses a collection holds, the master included: what the engine's mixer
+/// holds. One more `bus.create` is `invalid_argument`.
+pub const MAX_BUSES: usize = 16;
+
 /// Why `gain_db` is not a fader setting the engine accepts, or `None` when it is.
 pub fn gain_db_problem(gain_db: Finite32) -> Option<&'static str> {
     let db = gain_db.get();
@@ -158,9 +162,9 @@ pub struct Loudness {
 
 #[cfg(test)]
 mod tests {
-    use super::{AudioFollow, SourceAudio, gain_db_problem};
+    use super::{AudioFollow, MAX_BUSES, SourceAudio, gain_db_problem};
     use crate::Finite32;
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     #[test]
     fn source_audio_wire_form() {
@@ -178,5 +182,32 @@ mod tests {
         assert_eq!(gain_db_problem(db(-100.0)), None);
         assert!(gain_db_problem(db(24.5)).is_some());
         assert!(gain_db_problem(db(-100.5)).is_some());
+    }
+
+    /// `bus.create`'s description, which clients and agents read, states `MAX_BUSES`.
+    #[test]
+    fn bus_create_states_the_bus_limit() {
+        fn descriptions(value: &Value, out: &mut Vec<String>) {
+            match value {
+                Value::Object(map) => {
+                    if let Some(Value::String(d)) = map.get("description") {
+                        out.push(d.replace('\n', " "));
+                    }
+                    map.values().for_each(|v| descriptions(v, out));
+                }
+                Value::Array(items) => items.iter().for_each(|v| descriptions(v, out)),
+                _ => {}
+            }
+        }
+        let mut all = Vec::new();
+        descriptions(&crate::json_schema(), &mut all);
+        let bus_create: Vec<_> = all
+            .iter()
+            .filter(|d| d.starts_with("Adds a bus,"))
+            .collect();
+        assert!(!bus_create.is_empty());
+        for d in bus_create {
+            assert!(d.contains(&format!("at most {MAX_BUSES} buses")), "{d}");
+        }
     }
 }

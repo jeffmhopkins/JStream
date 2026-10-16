@@ -24,8 +24,9 @@ needs no async runtime from its callers (the native WebSocket client runs its ow
 the browser one runs on the page's event loop).
 
 Contents (a first cut; [Design](#design) explains the choices):
-- **The trait** (`control.rs`): `Control` with `hello`, `call` and `events`, and the
-  `BoxFuture`, `EventStream` and `MaybeSendSync` types that keep it dyn-compatible.
+- **The trait** (`control.rs`): `Control` with `hello`, `call`, `events` and
+  `binary`, and the `BoxFuture`, `EventStream`, `BinaryStream` and `MaybeSendSync`
+  types that keep it dyn-compatible.
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
 - **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`):
@@ -50,7 +51,7 @@ depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md
 
 ### The trait
 
-A `Control` value is one client session. Its three methods mirror the protocol's
+A `Control` value is one client session. Its four methods mirror the protocol's
 envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
 
 - `hello(Hello) -> Welcome`: the handshake. It fixes the session's `client_id`, which
@@ -64,6 +65,15 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
 - `events() -> EventStream`: an independent subscription to every event emitted after
   the call, buffered until read, in emission order. It ends when the session or the
   engine goes away.
+- `binary() -> BinaryStream`: the session's binary channel, the preview frames of its
+  `preview.subscribe` streams (protocol 0.20). A session has one: opening it again
+  ends the stream returned before (in-process it also ends that channel's preview
+  streams; over WebSocket the engine's streams go on into the new one), and
+  `preview.subscribe` fails with
+  `action_failed` until it is open. Unlike events its frames are bounded: a reader
+  that falls behind loses frames up to the next keyframe (`KeyframeGate`), so what it
+  reads decodes. The default implementation is a stream that ends at once, for an
+  implementation with no binary channel (the mock, MCP).
 
 Every method takes `&self`, so a session can be shared as `Arc<dyn Control>` with
 several calls in flight.
@@ -144,7 +154,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
     or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
-    deleting the master, an empty `bus.set_fader`, sends from a `scene` source or a
+    deleting the master or a bus a source's settings refer to (a `bus` reference, as
+    a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
@@ -154,9 +165,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   whether a builtin source has the chain a filter names, stores settings (a source's
   and a filter's) as sent without checking them or filling in defaults (a `null` in a
   patch removes the entry), and doesn't follow settings references when it looks for
-  cycles.
-  `kind.list`, `kind.describe` and `delete.plan` answer `internal`, and its refused
-  deletes carry no `blockers`;
+  cycles. `kind.list` answers with no kinds, `kind.describe` and `delete.plan` answer
+  `internal`, and its refused deletes carry no `blockers`;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
@@ -175,9 +185,14 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `output.status`, but it is not in the collection, so `output.list` and `state.get`
   don't report it and `output.set_key` answers `not_found` for it. It runs no
   encoders, so `output.status` reports no encoder session and zero sessions;
+- the pairing calls (`pairing.start`, `device.list`, `device.revoke`) answered with
+  `unsupported`, as the in-process engine answers them: only a server in front of a
+  session serves them
+  ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md));
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
-  `key`) for an empty, over-long or whitespace key; `output.clear_key` always succeeds.
+  `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII
+  characters; `output.clear_key` always succeeds.
   The keys live in memory, outside the collection: no `rev`, no event, kept when their
   output is deleted. `output.status` reports `key_set` from them, and
   `MockEngine::stream_key` lets a client test check what was stored. Unlike an
@@ -281,7 +296,11 @@ pulls `web-sys`.
   `req_2`, … per session, and the server reports the `state.changed` event a call
   causes with that same ID. The connection thread routes each `response` or `error` to
   its waiting call by request ID (`welcome`, and an error without an ID, answer the
-  oldest pending `hello`) and fans `event`s out to the subscriptions.
+  oldest pending `hello`) and fans `event`s out to the subscriptions. Binary messages
+  (array buffers, in the browser) are parsed as `BinaryFrame`s and queued for the stream `binary()` last opened, at
+  most 16 (`BINARY_BUFFER`), dropping up to a keyframe when full; an unreadable one is
+  skipped. The server opens its own side of the channel after `hello`, so frames
+  arrive once a `preview.subscribe` succeeds.
 - **Failures are `Disconnected`.** An invalid URL (or a `wss://` one, natively), an
   unreachable engine, or a refused upgrade fails `connect`. Natively the reason names
   HTTP 401 for the token and 403 for `Origin` or `Host`; a browser doesn't tell the page
