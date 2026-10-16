@@ -256,8 +256,10 @@ impl Chain {
     /// Brings `input`'s chain in line with `wanted`. When only settings changed, and
     /// none that rebuilds a filter, each changed filter is updated in place, so its
     /// state (a gate's envelope, a delay line) carries on; otherwise the chain is
-    /// rebuilt. Returns why each filter the mixer refused is bypassed, to log: a refusal
-    /// is a runtime error on that filter, never an edit failure (ADR-0026 §6).
+    /// rebuilt. Returns what the mixer refused, to log: a filter it would not add is
+    /// bypassed, and one whose new settings it would not take keeps its old ones and
+    /// is tried again on the next pass. A refusal is a runtime error on that filter,
+    /// never an edit failure (ADR-0026 §6).
     pub(crate) fn apply(&mut self, input: &InputControl, wanted: &[Chained]) -> Vec<String> {
         self.removing.retain(|control| !control.remove());
         let current: Vec<&Chained> = self.filters.iter().map(|(chained, _)| chained).collect();
@@ -281,7 +283,12 @@ impl Chain {
                 if let (Some(control), Some(params)) = (control, params(&new.kind, &new.settings))
                     && let Err(err) = control.set(params)
                 {
-                    refused.push(format!("{} filter: {err}", new.kind));
+                    // `old` stays as it was, so the next pass tries again.
+                    refused.push(format!(
+                        "{} filter keeps its previous settings: {err}",
+                        new.kind
+                    ));
+                    continue;
                 }
                 *old = new.clone();
             }
@@ -299,7 +306,9 @@ impl Chain {
                 .map(|spec| input.add_filter(spec))
                 .and_then(|added| {
                     added
-                        .map_err(|err| refused.push(format!("{} filter: {err}", chained.kind)))
+                        .map_err(|err| {
+                            refused.push(format!("{} filter is bypassed: {err}", chained.kind));
+                        })
                         .ok()
                 });
             self.filters.push((chained.clone(), control));
@@ -526,5 +535,60 @@ mod tests {
 
         assert!(chain.apply(&input, &[]).is_empty());
         assert!(chain.filters.is_empty());
+    }
+
+    #[test]
+    fn refused_settings_are_kept_off_the_record_and_retried() {
+        let config = MixerConfig::default();
+        let block = config.block_frames;
+        let mut mixer = Mixer::new(config).expect("mixer");
+        let format = AudioFormat::new(48_000, ChannelLayout::Stereo, SampleFormat::F32Interleaved)
+            .expect("format");
+        let (_producer, input) = mixer.add_input(format).expect("input");
+        let mut chain = Chain::default();
+        // Tenths of a dB below unity: in range, and a new value at every step.
+        let gain = |step: u32| {
+            [chained(
+                "gain",
+                &[("gain_db", json!(-f64::from(step) / 10.0))],
+            )]
+        };
+        assert!(chain.apply(&input, &gain(0)).is_empty());
+
+        // Nothing mixes, so nothing drains the mixer's bounded command queue: in-place
+        // changes fill it until one is refused.
+        let mut accepted = 0;
+        let (step, reasons) = (1..=200)
+            .find_map(|step| {
+                let refused = chain.apply(&input, &gain(step));
+                if refused.is_empty() {
+                    accepted = step;
+                    None
+                } else {
+                    Some((step, refused))
+                }
+            })
+            .expect("the command queue fills");
+        assert!(
+            matches!(&reasons[..], [reason] if reason.contains("keeps its previous settings")
+                && reason.contains("queue is full")),
+            "{reasons:?}"
+        );
+        assert_eq!(
+            chain.filters[0].0,
+            gain(accepted)[0],
+            "the refused change is not recorded"
+        );
+
+        // Mixing drains the queue, and the next pass applies the same wanted chain.
+        let mut out = vec![0.0; block * 2];
+        mixer.mix(0, &mut out).expect("mix");
+        let again = chain.apply(&input, &gain(step));
+        assert!(again.is_empty(), "{again:?}");
+        assert_eq!(chain.filters[0].0, gain(step)[0]);
+        assert!(
+            chain.apply(&input, &gain(step)).is_empty(),
+            "nothing left to retry"
+        );
     }
 }

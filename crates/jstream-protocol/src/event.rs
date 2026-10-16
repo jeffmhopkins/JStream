@@ -1,7 +1,9 @@
 //! Events: what the server pushes to every connected client after the handshake.
 
+use crate::audio::{BusMeter, SourceMeter};
 use crate::history::HistoryDirection;
 use crate::id::{ClientId, OutputId, RequestId, Rev, SceneId};
+use crate::youtube::{HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -79,6 +81,46 @@ pub enum Event {
         /// Running drop totals.
         drops: DropCounts,
     },
+    /// The engine's YouTube sign-in state changed: a sign-in started, finished or failed,
+    /// the user signed out, or Google stopped accepting the account's token.
+    #[serde(rename = "youtube.status_changed")]
+    YoutubeStatusChanged {
+        /// The new state.
+        auth: YoutubeAuth,
+    },
+    /// What YouTube says about the stream a running `youtube` output sends to changed
+    /// (ADR-0058). The engine polls the stream's health while the output runs and sends
+    /// this when the status, the health or the issues differ from the last report, and
+    /// once on the first reading.
+    #[serde(rename = "youtube.health_changed")]
+    YoutubeHealthChanged {
+        /// The output.
+        output_id: OutputId,
+        /// The broadcast it sends to.
+        broadcast_id: String,
+        /// The stream bound to that broadcast.
+        stream_id: String,
+        /// What YouTube says the stream is doing.
+        status: StreamStatus,
+        /// How healthy what it receives is.
+        health: StreamHealth,
+        /// The problems YouTube found. Omitted when there are none.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        issues: Vec<HealthIssue>,
+    },
+    /// The mixer's levels (ADR-0028): sent about ten times a second while the mixer runs
+    /// (an output is running), and never while it doesn't. Runtime state: a client that
+    /// misses one just shows the next. Until event subscriptions exist, every client
+    /// receives it.
+    #[serde(rename = "meters.tick")]
+    MetersTick {
+        /// Each audio source with a mixer channel, ordered by ID.
+        #[serde(default)]
+        sources: Vec<SourceMeter>,
+        /// Each bus, ordered by ID, the master among them.
+        #[serde(default)]
+        buses: Vec<BusMeter>,
+    },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -94,6 +136,9 @@ impl Event {
             Event::OutputStateChanged { .. } => Some("output.state_changed"),
             Event::EventsDropped { .. } => Some("events.dropped"),
             Event::StatsTick { .. } => Some("stats.tick"),
+            Event::YoutubeStatusChanged { .. } => Some("youtube.status_changed"),
+            Event::YoutubeHealthChanged { .. } => Some("youtube.health_changed"),
+            Event::MetersTick { .. } => Some("meters.tick"),
             Event::StudioChanged { .. } => Some("studio.changed"),
             Event::Unknown => None,
         }

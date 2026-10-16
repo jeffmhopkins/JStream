@@ -9,15 +9,19 @@
 //!
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
+use crate::audio::AudioFollow;
 use crate::encoder::EncoderProfile;
 use crate::filter::{FilterChain, FilterOwner};
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::id::{
-    EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId,
+    BusId, DeviceId, EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId, Rev, SceneId,
+    SourceId,
 };
 use crate::output::{OutputKind, RtmpTarget, SecretString};
+use crate::preview::PreviewCodec;
 use crate::settings::Settings;
+use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -82,7 +86,11 @@ pub enum Edit {
     ///
     /// The item's placement is `geometry` when that is sent, else a legacy placement:
     /// `transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).
-    /// Sending both is `invalid_argument`.
+    /// Sending both is `invalid_argument`. That identity draws the source at its own
+    /// pixel size from the canvas's top-left, so a `display`, `window` or `webcam` larger
+    /// than the canvas shows only its corner: for those, send a `geometry` covering the
+    /// canvas (`center` at half the canvas size, `size` the canvas size, `fit_mode`
+    /// `fit`), as `jstream-cli` does.
     #[serde(rename = "item.add")]
     ItemAdd {
         /// The scene to add to.
@@ -242,7 +250,9 @@ pub enum Edit {
         crop: Crop,
     },
     /// Adds a source to the collection. It appears in no scene until an `item.add`
-    /// places it. Inverse: `source.delete`.
+    /// places it. An audio source (its kind produces audio, or it is a `scene` source)
+    /// starts with its kind's default audio settings, and one that is not a `scene`
+    /// source sends to the master bus at 0 dB (ADR-0028). Inverse: `source.delete`.
     #[serde(rename = "source.create")]
     SourceCreate {
         /// The new source's ID, chosen by the client. Rejected if it exists.
@@ -286,8 +296,8 @@ pub enum Edit {
         /// Parameter ID to new value, or `null` for the default.
         patch: Settings,
     },
-    /// Copies a source under a new ID: a separate instance with the same kind, settings
-    /// and filters (with the same filter IDs), which changes independently from then on. The copy's `duplicated_from`
+    /// Copies a source under a new ID: a separate instance with the same kind, settings,
+    /// filters (with the same filter IDs), audio settings and sends, which changes independently from then on. The copy's `duplicated_from`
     /// names the source it was copied from. Placing the *same* source again is `item.add`
     /// with its existing `source_id`. Inverse: `source.delete` of the copy.
     #[serde(rename = "source.duplicate")]
@@ -303,8 +313,11 @@ pub enum Edit {
     /// or any source's or filter's settings refer to it: remove those items, or clear
     /// those references, first (in the same batch if needed). Deleting a source that
     /// others were copied from is allowed: their `duplicated_from` then reads as absent.
-    /// Inverse: `source.create` with its name, kind, settings and `duplicated_from`, then
-    /// `filter.add` for each of its filters, video chain first, in chain order.
+    /// Its sends go with it. Inverse: `source.create` with its name, kind, settings and
+    /// `duplicated_from`, then `send.remove` of its master send if it had none,
+    /// `send.set` for each send that `source.create` doesn't restore as it was,
+    /// `source.set_audio` if its audio settings were not the defaults, and `filter.add`
+    /// for each of its filters, video chain first, in chain order.
     #[serde(rename = "source.delete")]
     SourceDelete {
         /// The source to delete.
@@ -479,6 +492,96 @@ pub enum Edit {
         /// The profile to delete.
         profile_id: EncoderProfileId,
     },
+    /// Changes some of an audio source's settings (ADR-0028): the fields sent change,
+    /// the others keep their values, and sending none is `invalid_argument`. A source
+    /// without audio is `invalid_argument` on `source_id`. A `scene` source has no fader
+    /// or mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so
+    /// is a gain outside −100 to +24 dB. Inverse: `source.set_audio`
+    /// with the previous values of the fields sent.
+    #[serde(rename = "source.set_audio")]
+    SourceSetAudio {
+        /// The source to change.
+        source_id: SourceId,
+        /// Whether the engine opens the source's audio. Off keeps its sends, inactive.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        /// When the source is heard.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        follow: Option<AudioFollow>,
+        /// The fader, in dB.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gain_db: Option<Finite32>,
+        /// Whether it is muted.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        muted: Option<bool>,
+    },
+    /// Adds a bus, at 0 dB, unmuted, with no sends into it. A collection holds at most
+    /// 16 buses (`MAX_BUSES`), the master included; one more is `invalid_argument`.
+    /// Inverse: `bus.delete`.
+    #[serde(rename = "bus.create")]
+    BusCreate {
+        /// The new bus's ID, chosen by the client. Rejected if it exists, so `master` is
+        /// always taken.
+        bus_id: BusId,
+        /// Display name.
+        name: String,
+    },
+    /// Renames a bus, the master included. Inverse: `bus.rename` back to the previous
+    /// name.
+    #[serde(rename = "bus.rename")]
+    BusRename {
+        /// The bus to rename.
+        bus_id: BusId,
+        /// The new display name.
+        name: String,
+    },
+    /// Changes a bus's fader or mute, the master's included: the fields sent change,
+    /// and sending neither is `invalid_argument`, as is a gain outside −100 to +24 dB.
+    /// Inverse: `bus.set_fader` with the previous values of the fields sent.
+    #[serde(rename = "bus.set_fader")]
+    BusSetFader {
+        /// The bus to change.
+        bus_id: BusId,
+        /// The fader, in dB, applied after the bus's sum.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gain_db: Option<Finite32>,
+        /// Whether the bus is muted.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        muted: Option<bool>,
+    },
+    /// Deletes a bus and every send into it. The master bus can't be deleted
+    /// (`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that
+    /// `invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if
+    /// its fader or mute were not the defaults, then `send.set` for each send it had.
+    #[serde(rename = "bus.delete")]
+    BusDelete {
+        /// The bus to delete.
+        bus_id: BusId,
+    },
+    /// Sends a source into a bus at a gain, post-fader, or changes that send's gain.
+    /// The source must be an audio source that is not a `scene` source, which has no
+    /// sends of its own (`invalid_argument` on `source_id`), and the gain must be from
+    /// −100 to +24 dB. Buses never feed other buses (ADR-0028), so sends can't form a
+    /// cycle. Inverse: `send.remove` for a new send, else `send.set` with the previous
+    /// gain.
+    #[serde(rename = "send.set")]
+    SendSet {
+        /// The source sending.
+        source_id: SourceId,
+        /// The bus it sends into.
+        bus_id: BusId,
+        /// The send's gain, in dB.
+        gain_db: Finite32,
+    },
+    /// Stops a source sending into a bus. No such send is `invalid_argument` on
+    /// `bus_id`. Inverse: `send.set` with its gain.
+    #[serde(rename = "send.remove")]
+    SendRemove {
+        /// The source sending.
+        source_id: SourceId,
+        /// The bus it sends into.
+        bus_id: BusId,
+    },
 }
 
 impl Edit {
@@ -518,6 +621,13 @@ impl Edit {
             Edit::EncoderCreate { .. } => "encoder.create",
             Edit::EncoderUpdate { .. } => "encoder.update",
             Edit::EncoderDelete { .. } => "encoder.delete",
+            Edit::SourceSetAudio { .. } => "source.set_audio",
+            Edit::BusCreate { .. } => "bus.create",
+            Edit::BusRename { .. } => "bus.rename",
+            Edit::BusSetFader { .. } => "bus.set_fader",
+            Edit::BusDelete { .. } => "bus.delete",
+            Edit::SendSet { .. } => "send.set",
+            Edit::SendRemove { .. } => "send.remove",
             Edit::CanvasSetSize { .. } => "canvas.set_size",
         }
     }
@@ -526,9 +636,10 @@ impl Edit {
 /// A command with side effects outside the collection state: never undoable and never
 /// batchable.
 ///
-/// Serialized with an internal `type` tag holding the command name. The response only
-/// says the action was accepted; how it goes is reported by events
-/// (`output.state_changed`).
+/// Serialized with an internal `type` tag holding the command name. The response says
+/// the action was accepted, with an [`ActionResult`](crate::ActionResult) for the
+/// actions that return something (a YouTube sign-in's consent URL, a broadcast); how
+/// it goes is reported by events (`output.state_changed`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[non_exhaustive]
@@ -551,7 +662,7 @@ pub enum Action {
     /// edit: the key is not collection state, so it is never undone. A running output
     /// uses the new key from its next `output.start`. Fails with `not_found` for an
     /// output not in the collection, `invalid_argument` (field `key`) for an empty key,
-    /// one over 1024 bytes or one with whitespace or control characters, and
+    /// one over 1024 bytes or one with whitespace, control or non-ASCII characters, and
     /// `action_failed` when the engine has no credential store or the store refuses.
     #[serde(rename = "output.set_key")]
     OutputSetKey {
@@ -569,6 +680,118 @@ pub enum Action {
         /// The output whose key to remove.
         output_id: OutputId,
     },
+    /// Starts signing in to YouTube with the full `youtube` scope (ADR-0041 §4, kept by ADR-0058) and
+    /// returns Google's consent URL (`ActionResult` `youtube.sign_in`). The client opens
+    /// it in a browser; Google then redirects to a listener the engine opened on
+    /// `127.0.0.1`, and the engine finishes the sign-in, keeps the refresh token in the
+    /// OS credential store and emits `youtube.status_changed` (`signed_in`, or
+    /// `signed_out` when the user declines or the sign-in times out after 5 minutes).
+    /// Sent again while a sign-in waits, it returns the same URL. Sent while signed in,
+    /// it starts a new sign-in, which replaces the account once it finishes. Fails with
+    /// `action_failed` when no YouTube OAuth client is configured.
+    #[serde(rename = "youtube.sign_in")]
+    YoutubeSignIn,
+    /// Signs out of YouTube: removes the account's token from the credential store,
+    /// abandons a sign-in that is waiting, then revokes the token at Google (best
+    /// effort).
+    /// Emits `youtube.status_changed` `signed_out`. Succeeds when already signed out.
+    /// A running `youtube` output keeps its connection. Fails with `action_failed` when
+    /// no YouTube OAuth client is configured or the credential store refuses.
+    #[serde(rename = "youtube.sign_out")]
+    YoutubeSignOut,
+    /// Creates a YouTube broadcast (`liveBroadcasts.insert`) and returns it. JStream
+    /// moves it through its states itself (`youtube.transition_broadcast`), so automatic
+    /// start and stop are off, and its monitor stream is on so `testing` works. Fails
+    /// with `invalid_argument` for an empty title or start time or an `other` privacy,
+    /// and with `action_failed` when not signed in or YouTube refuses, including when
+    /// the day's API quota is used up.
+    #[serde(rename = "youtube.create_broadcast")]
+    YoutubeCreateBroadcast {
+        /// Its title.
+        title: String,
+        /// Its description. Omitted means empty.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        description: String,
+        /// When it is scheduled to start, RFC 3339 (`2026-10-16T19:00:00Z`).
+        scheduled_start_time: String,
+        /// Who can watch it. Omitted means `private`.
+        #[serde(default)]
+        privacy: BroadcastPrivacy,
+        /// Whether it is made for kids. Omitted means `false`.
+        #[serde(default)]
+        made_for_kids: bool,
+    },
+    /// Binds a stream to a broadcast (`liveBroadcasts.bind`) and returns the broadcast.
+    /// A `youtube` output sends to its broadcast's bound stream. With no `stream_id`,
+    /// the engine first creates a reusable stream named after the broadcast. Fails
+    /// with `action_failed` when not signed in or YouTube refuses.
+    #[serde(rename = "youtube.bind_broadcast")]
+    YoutubeBindBroadcast {
+        /// The broadcast.
+        broadcast_id: String,
+        /// The stream to bind, as `youtube.list_streams` reports it. Omitted creates one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stream_id: Option<String>,
+    },
+    /// Moves a broadcast to `testing`, `live` or `complete`
+    /// (`liveBroadcasts.transition`) and returns it. `testing` and `live` need its
+    /// bound stream to be receiving: start its `youtube` output first. Fails with
+    /// `action_failed` when not signed in or YouTube refuses (a transition the
+    /// broadcast can't make, or a stream that isn't sending).
+    #[serde(rename = "youtube.transition_broadcast")]
+    YoutubeTransitionBroadcast {
+        /// The broadcast.
+        broadcast_id: String,
+        /// Where to move it.
+        to: BroadcastTransition,
+    },
+    /// Restarts the master bus's integrated loudness measurement (ADR-0028). Meters are
+    /// runtime state, so this is an action, never an edit. Succeeds, doing nothing, while
+    /// the mixer isn't running.
+    #[serde(rename = "audio.reset_loudness")]
+    AudioResetLoudness {},
+    /// Opens a preview stream of the program mix for this session: low-resolution
+    /// pictures sent as binary frames on `channel`, only to this session (ADR-0045).
+    /// The picture is the canvas scaled down to fit `max_width` × `max_height`, with
+    /// even sides; it follows the canvas when that changes. A picture is sent when what
+    /// the program mix draws changes, at most `fps` times a second, and at least once
+    /// every 2 s (a keyframe), so a client that lost frames recovers. The engine picks
+    /// the first of `codecs` it can encode, and every frame names its codec. The stream
+    /// shows the mix before any master stage. It lasts until `preview.unsubscribe`, the
+    /// session's end, or an end frame (the engine could not go on; the frame says why).
+    ///
+    /// Fails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,
+    /// default 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a
+    /// codec named twice, a `channel` this session already has open (`channel`), or a
+    /// fifth open stream; and with `action_failed` when the session cannot receive
+    /// binary frames (an MCP session) or none of `codecs` can be encoded here.
+    #[serde(rename = "preview.subscribe")]
+    PreviewSubscribe {
+        /// The number this stream's binary frames carry, chosen by the client. Not an
+        /// ID: it only tells this session's streams apart, and can be reused once the
+        /// stream has ended.
+        channel: u32,
+        /// The widest the picture may be, in pixels. Default 640.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_width: Option<u32>,
+        /// The tallest the picture may be, in pixels. Default 360.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_height: Option<u32>,
+        /// Pictures per second, at most. Default 15.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fps: Option<u32>,
+        /// The codecs the client can decode, most preferred first. Empty or omitted
+        /// means `["h264", "jpeg"]`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        codecs: Vec<PreviewCodec>,
+    },
+    /// Closes one of this session's preview streams. No end frame follows; frames
+    /// already sent may still arrive. Succeeds for a channel that is not open.
+    #[serde(rename = "preview.unsubscribe")]
+    PreviewUnsubscribe {
+        /// The channel the stream was opened on.
+        channel: u32,
+    },
     /// Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every
     /// output that shows program) shows it from the next frame. The program scene is
     /// runtime state, not collection state (ADR-0030): the switch changes no `rev`, is
@@ -580,6 +803,27 @@ pub enum Action {
         /// The scene to put on program.
         scene_id: SceneId,
     },
+    /// Opens pairing for one more device (ADR-0044): the server draws a one-time
+    /// pairing code and answers with it, to this client only (a `result` of type
+    /// `pairing.start`). A device that posts the code with a name to `POST
+    /// /api/v1/pair` within 2 minutes gets its own device token. One code is open at a
+    /// time: a new `pairing.start` replaces the one open. A code is single-use and void
+    /// after 5 wrong attempts. The code never appears in a log, an event or any other
+    /// answer (R-SEC-001). Answered by the server that admits clients, not the engine:
+    /// a `Control` with no server in front fails with `unsupported`. Fails with
+    /// `action_failed` when the server listens beyond loopback, since a device token
+    /// travels only over loopback or TLS and the server has no TLS yet.
+    #[serde(rename = "pairing.start")]
+    PairingStart,
+    /// Revokes a paired device: its token stops working at once, and its open
+    /// connections are closed. Fails with `not_found` for a device that isn't paired
+    /// (or whose token lapsed after 30 days unused). Answered by the server, like
+    /// `pairing.start`.
+    #[serde(rename = "device.revoke")]
+    DeviceRevoke {
+        /// The device to revoke, as `device.list` reports it.
+        device_id: DeviceId,
+    },
 }
 
 impl Action {
@@ -590,7 +834,17 @@ impl Action {
             Action::OutputStop { .. } => "output.stop",
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
+            Action::YoutubeSignIn => "youtube.sign_in",
+            Action::YoutubeSignOut => "youtube.sign_out",
+            Action::YoutubeCreateBroadcast { .. } => "youtube.create_broadcast",
+            Action::YoutubeBindBroadcast { .. } => "youtube.bind_broadcast",
+            Action::YoutubeTransitionBroadcast { .. } => "youtube.transition_broadcast",
+            Action::AudioResetLoudness {} => "audio.reset_loudness",
+            Action::PreviewSubscribe { .. } => "preview.subscribe",
+            Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
             Action::SceneSwitch { .. } => "scene.switch",
+            Action::PairingStart => "pairing.start",
+            Action::DeviceRevoke { .. } => "device.revoke",
         }
     }
 }

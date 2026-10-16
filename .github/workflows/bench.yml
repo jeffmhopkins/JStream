@@ -1,0 +1,96 @@
+# Benchmarks (R-RT-005): the criterion benches in jstream-render, jstream-audio and
+# jstream-encode. On `main` (and on demand) they run in full and the results are recorded:
+# criterion's JSON under `target/criterion` is uploaded as an artifact, and the job summary
+# lists each benchmark's mean with the runner it was measured on. A pull request that
+# touches those crates only runs each benchmark once (`--test`), so a bench that panics
+# fails here. Not required (R-GIT-003): shared runners are noisy, and lavapipe numbers are
+# CPU rasterisation, so these record a trend, never a pass/fail budget.
+# Editing this file is a governance change (R-GOV-001).
+
+# Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
+# Dependabot proposes updates (ADR-0056). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
+
+name: bench
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "crates/jstream-render/**"
+      - "crates/jstream-audio/**"
+      - "crates/jstream-encode/**"
+      - "crates/jstream-platform/**"
+      - "crates/jstream-media/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/bench.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-${{ github.event.pull_request.number || github.ref }}
+  # A PR's older run is superseded; every commit on `main` keeps its record.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  BENCH_ARGS: -p jstream-render -p jstream-audio -p jstream-encode --bench composite --bench mix --bench session --locked
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # The render benches need an adapter: lavapipe, as in ci.yml's `test` job.
+      - name: Software Vulkan (lavapipe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+          icd=$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)
+          if [ -z "$icd" ]; then
+            echo "::error::lavapipe ICD not found after installing mesa-vulkan-drivers"
+            ls -la /usr/share/vulkan/icd.d || true
+            exit 1
+          fi
+          echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
+      - name: Run each benchmark once
+        if: github.event_name == 'pull_request'
+        run: cargo bench $BENCH_ARGS -- --test
+      - name: Benchmarks
+        if: github.event_name != 'pull_request'
+        shell: bash   # -eo pipefail: a panicking bench fails the step despite the `tee`
+        run: cargo bench $BENCH_ARGS 2>&1 | tee "$RUNNER_TEMP/bench.txt"
+      - name: Summary
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          {
+            echo "## Benchmarks at ${GITHUB_SHA::12}"
+            echo
+            echo "Measured on a GitHub \`ubuntu-latest\` runner: $(nproc) CPUs, $(lscpu | sed -n 's/^Model name: *//p' | head -n1)."
+            sed -n 's/^jstream-render bench adapter: /Render adapter: /p' "$RUNNER_TEMP/bench.txt" | sort -u
+            echo
+            echo "| Benchmark | Mean | 95% CI |"
+            echo "|---|---|---|"
+            find target/criterion -path '*/new/benchmark.json' | sort | while read -r meta; do
+              dir=$(dirname "$meta")
+              jq -r --slurpfile e "$dir/estimates.json" \
+                '"| `\(.full_id)` | \($e[0].mean.point_estimate / 1000 | . * 10 | round / 10) µs | \($e[0].mean.confidence_interval.lower_bound / 1000 | . * 10 | round / 10)–\($e[0].mean.confidence_interval.upper_bound / 1000 | . * 10 | round / 10) µs |"' \
+                "$meta"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Record the results
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bench-${{ github.sha }}
+          path: |
+            target/criterion
+            ${{ runner.temp }}/bench.txt
+          retention-days: 90

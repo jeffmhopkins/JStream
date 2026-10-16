@@ -184,8 +184,6 @@ impl Runtime {
         }
     }
 
-    /// The pipeline for `shader`, built on first use or when its source changed. A
-    /// shader wgpu refuses is an error, not a panic: a pack's WGSL arrives at run time.
     /// The pipeline for `shader`, built on first use of its label and source. A shader
     /// wgpu refuses is an error, not a panic: a pack's WGSL arrives at run time. The
     /// refusal is kept too, so the shader is not recompiled every frame.
@@ -194,7 +192,17 @@ impl Runtime {
         device: &wgpu::Device,
         shader: ShaderRef<'_>,
     ) -> Result<&wgpu::RenderPipeline, RenderError> {
-        let entries = self.pipelines.entry(shader.label.to_owned()).or_default();
+        // A known label is looked up without allocating its key (`entry` would allocate
+        // one on every draw, and `get_mut` then `entry` does not borrow-check).
+        if !self.pipelines.contains_key(shader.label) {
+            self.pipelines.insert(shader.label.to_owned(), Vec::new());
+        }
+        let Some(entries) = self.pipelines.get_mut(shader.label) else {
+            return Err(RenderError::Invalid {
+                what: "filter shader",
+                detail: format!("{}: pipeline cache entry missing", shader.label),
+            });
+        };
         let index = match entries.iter().position(|c| c.source == shader.source) {
             Some(index) => index,
             None => {

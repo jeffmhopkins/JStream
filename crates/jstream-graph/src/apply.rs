@@ -5,15 +5,16 @@
 //! inverse of a batch is the inverses of its edits in reverse order. Only when every
 //! edit succeeds does the working copy replace the state.
 
+use crate::audio;
 use crate::deps::{self, Node};
 use crate::model::{Chains, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
-use crate::target::{record_path_problem, rtmp_url_problem};
+use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem};
 use crate::touched::Touched;
 use jstream_protocol::{
     Batch, BlendMode, Blocker, Canvas, Crop, Edit, EntityKind, Finite32, GeometryError,
     ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputKind,
     ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference, Rev, RtmpTarget,
-    SceneId, Settings, SourceId, SourceKind,
+    SceneId, Settings, SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -118,7 +119,12 @@ pub(crate) fn invalid(at: usize, name: &str, reason: impl Into<String>) -> Proto
 }
 
 /// The `invalid_argument` that refuses deleting `target` while `blockers` refer to it.
-fn blocked(at: usize, name: &str, target: &Node, blockers: Vec<Blocker>) -> ProtocolError {
+pub(crate) fn blocked(
+    at: usize,
+    name: &str,
+    target: &Node,
+    blockers: Vec<Blocker>,
+) -> ProtocolError {
     let list: Vec<String> = blockers
         .iter()
         .map(|b| format!("{} `{}` ({})", b.entity, b.id, b.field))
@@ -289,6 +295,9 @@ fn apply_edit(
         return applied;
     }
     if let Some(applied) = crate::filter::apply(state, kinds, edit, at) {
+        return applied;
+    }
+    if let Some(applied) = crate::audio::apply(state, edit, at) {
         return applied;
     }
     match edit {
@@ -593,6 +602,7 @@ fn apply_edit(
                     return Err(unsupported(at, "kind", "this source kind"));
                 }
             };
+            let audio = audio::default_audio(kind, kinds);
             let inverse = create_source(
                 state,
                 source_id,
@@ -600,6 +610,7 @@ fn apply_edit(
                 kind,
                 settings,
                 duplicated_from.clone(),
+                audio,
             )?;
             check_reference_cycles(state, source_id, at, "settings")?;
             Ok(inverse)
@@ -625,10 +636,12 @@ fn apply_edit(
                 &kind,
                 settings,
                 Some(source_id.clone()),
+                None,
             )?;
             if let Some(copy) = state.sources.get_mut(new_source_id) {
                 copy.filters = filters;
             }
+            audio::copied(state, source_id, new_source_id);
             Ok(inverse)
         }
         Edit::SourceRename { source_id, name } => {
@@ -659,14 +672,18 @@ fn apply_edit(
                 .sources
                 .remove(source_id)
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+            let restore_audio =
+                audio::deleted(state, kinds, &source.id, &source.kind, source.audio);
+            let restore_filters = crate::filter::restore_all(&source);
             let mut inverse = vec![Edit::SourceCreate {
-                source_id: source.id.clone(),
-                name: source.name.clone(),
-                kind: source.kind.clone(),
-                settings: source.settings.clone(),
-                duplicated_from: source.duplicated_from.clone(),
+                source_id: source.id,
+                name: source.name,
+                kind: source.kind,
+                settings: source.settings,
+                duplicated_from: source.duplicated_from,
             }];
-            inverse.extend(crate::filter::restore_all(&source));
+            inverse.extend(restore_audio);
+            inverse.extend(restore_filters);
             Ok(inverse)
         }
         Edit::OutputCreate { output_id, kind } => {
@@ -836,6 +853,10 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
             Some(problem) => Err(invalid(at, &format!("{name}.url"), problem)),
             None => Ok(()),
         },
+        RtmpTarget::YouTube { broadcast_id } => match broadcast_id_problem(broadcast_id) {
+            Some(problem) => Err(invalid(at, &format!("{name}.broadcast_id"), problem)),
+            None => Ok(()),
+        },
         RtmpTarget::Unknown => Err(invalid(
             at,
             &format!("{name}.type"),
@@ -880,6 +901,7 @@ fn create_source(
     kind: &SourceKind,
     settings: Settings,
     duplicated_from: Option<SourceId>,
+    audio: Option<SourceAudio>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     if state.sources.contains_key(id) {
         return Err(already_exists(EntityKind::Source, id.as_str()));
@@ -893,8 +915,10 @@ fn create_source(
             settings,
             duplicated_from,
             filters: Chains::default(),
+            audio,
         },
     );
+    audio::created(state, id);
     Ok(vec![Edit::SourceDelete {
         source_id: id.clone(),
     }])
@@ -1067,7 +1091,7 @@ fn set_settings(
 }
 
 /// Checks one settings value for `param` of source `source_id`: its type and
-/// constraints, that a referenced scene or source exists (`not_found` if not), and that a
+/// constraints, that a referenced scene, source or bus exists (`not_found` if not), and that a
 /// referenced source produces what the parameter needs. A source may name itself here;
 /// [`check_reference_cycles`] rejects that as a cycle.
 pub(crate) fn check_value(
@@ -1085,6 +1109,11 @@ pub(crate) fn check_value(
     match Reference::from_value(value) {
         Some(Reference::Scene { scene_id }) => {
             find_scene(state, &scene_id)?;
+        }
+        Some(Reference::Bus { bus_id }) => {
+            if state.bus(&bus_id).is_none() {
+                return Err(not_found(EntityKind::Bus, bus_id.as_str()));
+            }
         }
         Some(Reference::Source { source_id: target }) if &target != source_id => {
             let referenced = state

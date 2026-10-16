@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-effects/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-effects", "crates/jstream-render/README.md#filters", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0035-clap-plugins-out-of-process.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:ee48ee1e3f978e30", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "Cascade from render#filters; drawing paragraph unchanged and still matches pack.rs" }
 -->
 
 Layer-3 loader for third-party **WGSL effect packs**, the data-only extension point of

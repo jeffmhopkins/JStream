@@ -22,7 +22,6 @@ prompt never drifts from them.
 ## Ground rules
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:542b376128cb5437", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against ADR-0019: comment-only reviewer, one head SHA, recusal via Claude-Session trailers, PR text as data, base-branch REVIEW/RULES/DOCS all unchanged" }
 -->
 
 - **You only comment.** Never push commits, edit files, merge, close, approve through GitHub
@@ -60,12 +59,15 @@ verified = { hash = "b3:542b376128cb5437", by = "agent:claude@session_01QBbMRwRu
    the PR re-verified, with their notes.
 4. Read enough of the surrounding code to understand callers and invariants. The diff
    alone is not enough.
+5. **A wave PR** (head `wave/*`, base `main`; [ADR-0055](docs/adr/0055-wave-branches.md))
+   carries PRs you already passed into the wave. Review what they didn't see: the sync
+   merge commits that brought `main` in and their conflict resolutions
+   (`git show --remerge-diff <merge>`). The full CI on the wave PR covers the rest.
 
 <a id="checks"></a>
 ## Step 2: Review
 <!-- @section
 depends_on = ["docs/RULES.md#R-DOC-004", "docs/RULES.md#R-GOV-001"]
-verified = { hash = "b3:011a2a1821c2c5fd", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read Step 2 item 3 and the blocking list against ADR-0043: tier checked against ADR-0043, too-high tier non-blocking, decision-comment rules unchanged" }
 -->
 
 Work through these in order. For each, cite the rule ID or doc anchor that a finding rests on.
@@ -94,7 +96,7 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
    - New crates or modules that no section covers, missing `Docs:` back-references, and
      unregistered external URLs.
 5. **Governance.** A Dependabot PR that only changes pinned `uses:` references is
-   pre-approved by [ADR-0018](docs/adr/0018-ci-supply-chain-policy.md). Confirm the diff is
+   pre-approved by [ADR-0056](docs/adr/0056-ci-supply-chain-policy-v2.md). Confirm the diff is
    limited to that, and for a major bump read the action's changelog against how we use it.
    Otherwise, if the PR loosens any check (lint/deny config, `#[allow]`, narrowed
    `covers` or `applies_to`, retired rules, CI edits, this file), it needs the
@@ -121,7 +123,8 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
   (e.g. `accepted` when the maintainer rejected it). A maintainer-tier ADR still **awaiting** a valid
   decision is not a blocking finding: it gets `escalate` (see the verdict table);
 - a security problem;
-- a red required CI check caused by this PR.
+- a red required CI check caused by this PR. On a PR into a `wave/*` branch, a red `fmt`,
+  `clippy (ubuntu-latest)`, `docs` or `pr-title` counts as required too.
 
 **Non-blocking** (doesn't prevent `pass`): style, naming, suggestions, questions, and
 **pre-existing problems** the PR didn't introduce. List those as follow-ups, which the
@@ -133,7 +136,6 @@ Don't inflate. A PR with only non-blocking findings gets `pass`.
 ## Step 4: Post the review
 <!-- @section
 covers = [".github/workflows/review-gate.yml"]
-verified = { hash = "b3:471871808956a241", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Only the escalate row's wording changed (maintainer-tier ADR); verdict semantics and gate rules unchanged" }
 -->
 
 Post **one summary comment per round**. Inline comments on specific lines are welcome
@@ -172,6 +174,11 @@ those, the **highest round** decides, and within it any `fail` or `escalate` bea
 
 The marker must be on its own line, exactly in this format.
 
+A `success` on the head SHA also makes `review-gate` dispatch the Windows, macOS and
+end-to-end CI jobs for that SHA ([ADR-0054](docs/adr/0054-platform-ci-after-review.md)). The PR
+merges once the required Windows checks pass. A PR into a `wave/*` branch gets no such run; the
+wave's PR into `main` does ([ADR-0055](docs/adr/0055-wave-branches.md)).
+
 <a id="rounds"></a>
 ## Re-review rounds and disputes
 <!-- @section
@@ -200,7 +207,7 @@ verdict.
 `cargo xtask docs check` (the `docs` CI job) checks links, anchors, registered external
 URLs, facts, metadata schema, history tables and **stale section hashes**. Read its result
 on the PR. A green `docs` job proves the hashes match; it can't prove the re-read happened.
-So for every section whose `verified` line the PR changes, read the section against the
-diff yourself and judge the note (Step 2 item 4). `docs check` also fails on `covers`
+So for every section whose entries in `docs/verified.toml` the PR changes, read the
+section against the diff yourself and judge the note (Step 2 item 4). `docs check` also fails on `covers`
 globs that match no file ([R-DOC-012](docs/RULES.md#R-DOC-012)). `applies_to` globs may
 legitimately match nothing yet, so check that new or edited ones aren't typos.

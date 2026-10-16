@@ -8,6 +8,7 @@ pub(crate) mod generate;
 mod govern;
 mod hash;
 mod history;
+pub(crate) mod ledger;
 mod merge;
 pub(crate) mod parse;
 mod progress;
@@ -90,6 +91,22 @@ fn load(root: &Path) -> Result<Loaded> {
     })
 }
 
+/// Rewrites every `@generated` block from its source, as `docs generate` does: the ADR
+/// status banners and index, and the README's progress table. Returns what was written
+/// and the problems that stopped a block.
+pub(crate) fn write_generated(root: &Path) -> Result<generate::Generated> {
+    let l = load(root)?;
+    let mut g = generate::generate(&l.docs);
+    let (readme, problems) = progress::generate(root, &l.docs);
+    g.files
+        .extend(readme.map(|(path, line, text)| (path, Some(line), text)));
+    g.problems.extend(problems);
+    for (path, _, text) in &g.files {
+        std::fs::write(root.join(path), text).with_context(|| format!("writing {path}"))?;
+    }
+    Ok(g)
+}
+
 fn read_toml(root: &Path, p: &str) -> Result<toml::Table> {
     let text = std::fs::read_to_string(root.join(p)).with_context(|| format!("reading {p}"))?;
     text.parse().with_context(|| format!("parsing {p}"))
@@ -98,6 +115,7 @@ fn read_toml(root: &Path, p: &str) -> Result<toml::Table> {
 /// Runs every check over the repository at `root` and returns the diagnostics.
 pub(crate) fn check_repo(root: &Path) -> Result<Vec<Diag>> {
     let l = load(root)?;
+    let mut ledger_diags = Vec::new();
     let repo = check::Repo {
         root,
         docs: &l.docs,
@@ -106,8 +124,10 @@ pub(crate) fn check_repo(root: &Path) -> Result<Vec<Diag>> {
         rules_md: std::fs::read_to_string(root.join("docs/RULES.md"))
             .context("reading docs/RULES.md")?,
         files: hash::Files::new(root, &l.files),
+        ledger: check::check_ledger(root, &l.docs, &mut ledger_diags),
     };
     let mut diags = l.parse_diags;
+    diags.extend(ledger_diags);
     diags.extend(check::check(&repo));
     diags.extend(backrefs::check(&repo));
     diags.extend(generate::check(&l.docs));
@@ -182,8 +202,66 @@ fn review(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
     Ok(())
 }
 
+/// String values of `key` in a section's metadata.
+pub(crate) fn strings(meta: &toml::Table, key: &str) -> Vec<String> {
+    meta.get(key)
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A section's key in the ledger and in messages: `DOC-ID#anchor`.
+pub(crate) fn section_key(doc: &parse::Doc, anchor: &str) -> String {
+    format!("{}#{anchor}", doc.meta_str("id").unwrap_or(&doc.path))
+}
+
+/// The ledger keys of every section that needs a stamp: one with `covers` or `depends_on`.
+pub(crate) fn stamped_sections(docs: &[parse::Doc]) -> std::collections::BTreeSet<String> {
+    docs.iter()
+        .flat_map(|d| {
+            d.sections.iter().filter_map(move |s| {
+                let meta = s.meta.as_ref()?;
+                (!strings(meta, "covers").is_empty() || !strings(meta, "depends_on").is_empty())
+                    .then(|| section_key(d, &s.anchor))
+            })
+        })
+        .collect()
+}
+
+/// `text` without the lines at `drop` (0-based), keeping its final newline.
+fn without_lines(text: &str, drop: &[usize]) -> String {
+    let mut out: String = text
+        .lines()
+        .enumerate()
+        .filter(|(k, _)| !drop.contains(k))
+        .map(|(_, l)| format!("{l}\n"))
+        .collect();
+    if !text.ends_with('\n') {
+        out.pop();
+    }
+    out
+}
+
+/// The line of an inline `verified` stamp (from before ADR-0053) in a section's
+/// `@section` block, if it has one.
+fn inline_stamp(doc: &parse::Doc, section: &parse::Section) -> Option<usize> {
+    let (start, end) = section.block?;
+    let lines: Vec<&str> = doc.text.lines().collect();
+    (start + 1..end).find(|&k| {
+        lines[k]
+            .trim_start()
+            .strip_prefix("verified")
+            .is_some_and(|r| r.trim_start().starts_with('='))
+    })
+}
+
 /// `docs verify <DOC-ID#anchor | path#anchor> --by <who> --note <text>`: records that a
-/// section was re-read and still holds, by writing its current hash into `verified`.
+/// section was re-read and still holds, by writing its inputs' current hashes into the
+/// ledger (ADR-0053). It also drops ledger stamps of sections that no longer need one.
 fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
     let note = check_stamp(by, note)?;
     let (doc_ref, anchor) = target
@@ -202,23 +280,17 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
         .iter()
         .find(|s| s.anchor == anchor)
         .with_context(|| format!("no section `{anchor}` in {}", doc.path))?;
-    let (Some(meta), Some((start, end))) = (&section.meta, section.block) else {
+    let Some(meta) = &section.meta else {
         bail!("section `{anchor}` has no `@section` block");
     };
-    let strings = |k: &str| -> Vec<String> {
-        meta.get(k)
-            .and_then(|v| v.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|x| x.as_str().map(str::to_owned))
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
+    let (covers, deps) = (strings(meta, "covers"), strings(meta, "depends_on"));
+    if covers.is_empty() && deps.is_empty() {
+        bail!("section `{anchor}` has no `covers` or `depends_on`, so it has nothing to verify");
+    }
     // Hashes only cover tracked files, so an untracked covered file would make this hash
     // differ from the one CI computes after the commit (review B1 on #10).
     let untracked = git_ls(root, &["--others", "--exclude-standard"])?;
-    let pending = hash::Files::new(root, &untracked).matching(&strings("covers"))?;
+    let pending = hash::Files::new(root, &untracked).matching(&covers)?;
     if !pending.is_empty() {
         bail!(
             "untracked files match this section's `covers`; `git add` them first: {}",
@@ -226,135 +298,111 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
         );
     }
     let files = hash::Files::new(root, &l.files);
-    let h = hash::section_hash(
-        doc,
-        anchor,
-        &strings("covers"),
-        &strings("depends_on"),
-        &files,
-        &by_path,
-    )?;
-    let line = format!(
-        "verified = {{ hash = {}, by = {}, note = {} }}",
-        hash::toml_str(&h),
-        hash::toml_str(by),
-        hash::toml_str(note)
-    );
-
-    let mut lines: Vec<String> = doc.text.lines().map(str::to_owned).collect();
-    match (start + 1..end).find(|&k| lines[k].trim_start().starts_with("verified")) {
-        Some(k) => lines[k] = line,
-        None => lines.insert(end, line),
+    let inputs = hash::inputs(doc, anchor, &covers, &deps, &files, &by_path)?;
+    let key = section_key(doc, anchor);
+    let mut ledger = ledger::Ledger::read(root)?;
+    let stamp = ledger::restamp(ledger.sections.get(&key), &inputs, by, note);
+    let changed = ledger::diff(ledger.sections.get(&key), &inputs);
+    ledger.sections.insert(key.clone(), stamp);
+    let keep = stamped_sections(&l.docs);
+    ledger.prune(&|k| keep.contains(k));
+    ledger.write(root)?;
+    // A branch from before ADR-0053 may still carry the section's inline stamp.
+    if let Some(k) = inline_stamp(doc, section) {
+        std::fs::write(root.join(&doc.path), without_lines(&doc.text, &[k]))
+            .with_context(|| format!("writing {}", doc.path))?;
     }
-    let mut out = lines.join("\n");
-    if doc.text.ends_with('\n') {
-        out.push('\n');
+    if changed.is_empty() {
+        eprintln!("verified {key}: already fresh, nothing to record");
+    } else {
+        eprintln!("verified {key}: {}", changed.join(", "));
     }
-    std::fs::write(root.join(&doc.path), out).with_context(|| format!("writing {}", doc.path))?;
-    eprintln!(
-        "verified {}#{anchor}: {h}",
-        doc.meta_str("id").unwrap_or(&doc.path)
-    );
     Ok(())
 }
 
-/// What `docs rehash` did.
+/// What `docs migrate` did.
 #[derive(Debug, Default, PartialEq, Eq)]
-struct Rehash {
-    /// Sections whose hash was rewritten, as `DOC#anchor`.
-    restamped: Vec<String>,
-    /// Sections already fresh under the current rule.
-    fresh: usize,
-    /// Sections left stale, as `DOC#anchor`: fresh under neither rule.
-    stale: Vec<String>,
+pub(crate) struct Migrate {
+    /// Sections whose inline stamp still held and moved to the ledger, as `DOC#anchor`.
+    pub(crate) moved: Vec<String>,
+    /// Sections whose inline stamp no longer held, so it was dropped, as `DOC#anchor`.
+    pub(crate) stale: Vec<String>,
+    /// Ledger stamps dropped because their section is gone or needs no stamp.
+    pub(crate) pruned: Vec<String>,
 }
 
-/// `docs rehash`: the one-time migration to ADR-0039's hashing rule. A section's stored
-/// hash is replaced by its current-rule hash only when it is what the old rule computes for
-/// this tree (metadata hashed, row references widened to their section), or what the
-/// current rule computes with row references widened (a section verified against a whole
-/// table, then narrowed to its row). Only the `hash` value changes; `by` and `note` stay.
-/// Every decision is made against the unmodified tree before anything is written, so
-/// sections cannot affect each other. A stale section is never written.
-fn rehash(root: &Path) -> Result<Rehash> {
+/// `docs migrate`: moves inline `verified` stamps (from before ADR-0053) into the ledger.
+/// A stamp whose hash still matches the section becomes a ledger stamp of its current
+/// inputs, with its `by` and `note` on the `body` entry. A stamp that no longer matches is
+/// dropped, never moved, so the section is reported stale until someone re-reads it. Every
+/// decision is made against the unmodified tree before anything is written. It also drops
+/// ledger stamps of sections that no longer need one, and rewrites the ledger canonically.
+pub(crate) fn migrate(root: &Path) -> Result<Migrate> {
     let l = load(root)?;
     let by_path: BTreeMap<&str, &parse::Doc> =
         l.docs.iter().map(|d| (d.path.as_str(), d)).collect();
     let files = hash::Files::new(root, &l.files);
     let untracked = git_ls(root, &["--others", "--exclude-standard"])?;
     let untracked = hash::Files::new(root, &untracked);
-    let legacy = hash::Mode {
-        strip_metadata: false,
-        widen_rows: true,
-    };
-    let narrowed = hash::Mode {
-        strip_metadata: true,
-        widen_rows: true,
-    };
-    let mut report = Rehash::default();
-    // Per doc: (line index, stored hash, new hash).
-    let mut edits: BTreeMap<&str, Vec<(usize, String, String)>> = BTreeMap::new();
+    let mut ledger = ledger::Ledger::read(root)?;
+    let before = std::fs::read_to_string(root.join(ledger::PATH)).ok();
+    let mut report = Migrate::default();
+    let mut edits: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
     for doc in &l.docs {
         for s in &doc.sections {
-            let (Some(meta), Some((start, end))) = (&s.meta, s.block) else {
+            let (Some(meta), Some(line)) = (&s.meta, inline_stamp(doc, s)) else {
                 continue;
             };
-            let strings = |k: &str| -> Vec<String> {
-                meta.get(k)
-                    .and_then(|v| v.as_array())
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|x| x.as_str().map(str::to_owned))
-                            .collect()
-                    })
-                    .unwrap_or_default()
+            edits.entry(doc.path.as_str()).or_default().push(line);
+            let key = section_key(doc, &s.anchor);
+            let (covers, deps) = (strings(meta, "covers"), strings(meta, "depends_on"));
+            let stored = meta.get("verified").and_then(|v| v.as_table());
+            let field = |k: &str| {
+                stored
+                    .and_then(|t| t.get(k))
+                    .and_then(|x| x.as_str())
+                    .filter(|x| !x.is_empty())
             };
-            let Some(stored) = meta
-                .get("verified")
-                .and_then(|v| v.get("hash"))
-                .and_then(|h| h.as_str())
-            else {
-                continue;
-            };
-            let (covers, deps) = (strings("covers"), strings("depends_on"));
-            let name = format!("{}#{}", doc.meta_str("id").unwrap_or(&doc.path), s.anchor);
-            let hash_by = |mode| {
-                hash::section_hash_by(mode, doc, &s.anchor, &covers, &deps, &files, &by_path)
-            };
-            let now = hash_by(hash::Mode::CURRENT)?;
-            if stored == now {
-                report.fresh += 1;
-                continue;
-            }
-            let was_fresh = stored == hash_by(legacy)? || stored == hash_by(narrowed)?;
-            // As in `verify`: CI hashes only the committed tree (review B1 on #10).
-            let line = (start + 1..end).find(|&k| {
-                let l = doc.text.lines().nth(k).unwrap_or_default();
-                l.trim_start().starts_with("verified") && l.matches(stored).count() == 1
-            });
-            match line {
-                Some(k) if was_fresh && untracked.matching(&covers)?.is_empty() => {
-                    edits
-                        .entry(doc.path.as_str())
-                        .or_default()
-                        .push((k, stored.to_owned(), now));
-                    report.restamped.push(name);
+            let holds = !(covers.is_empty() && deps.is_empty())
+                && untracked.matching(&covers)?.is_empty()
+                && field("hash")
+                    == Some(
+                        hash::legacy_section_hash(
+                            doc, &s.anchor, &covers, &deps, &files, &by_path,
+                        )?
+                        .as_str(),
+                    );
+            match (holds, field("by"), field("note")) {
+                (true, Some(by), Some(note)) => {
+                    let inputs = hash::inputs(doc, &s.anchor, &covers, &deps, &files, &by_path)?;
+                    let stamp = inputs
+                        .into_iter()
+                        .map(|(k, hash)| {
+                            let body = k == hash::BODY;
+                            let e = ledger::Entry {
+                                hash,
+                                by: body.then(|| by.to_owned()),
+                                note: body.then(|| note.to_owned()),
+                            };
+                            (k, e)
+                        })
+                        .collect();
+                    ledger.sections.insert(key.clone(), stamp);
+                    report.moved.push(key);
                 }
-                _ => report.stale.push(name),
+                _ => report.stale.push(key),
             }
         }
     }
-    for (path, list) in edits {
+    let keep = stamped_sections(&l.docs);
+    report.pruned = ledger.prune(&|k| keep.contains(k));
+    if !edits.is_empty() || before.is_some_and(|b| b != ledger.render()) {
+        ledger.write(root)?;
+    }
+    for (path, lines) in edits {
         let doc = by_path[path];
-        let mut lines: Vec<String> = doc.text.lines().map(str::to_owned).collect();
-        for (k, old, new) in list {
-            lines[k] = lines[k].replacen(&old, &new, 1);
-        }
-        let mut out = lines.join("\n");
-        if doc.text.ends_with('\n') {
-            out.push('\n');
-        }
-        std::fs::write(root.join(path), out).with_context(|| format!("writing {path}"))?;
+        std::fs::write(root.join(path), without_lines(&doc.text, &lines))
+            .with_context(|| format!("writing {path}"))?;
     }
     Ok(report)
 }
@@ -421,17 +469,11 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             let [_] = args else {
                 bail!("usage: cargo xtask docs generate");
             };
-            let l = load(root)?;
-            let mut g = generate::generate(&l.docs);
-            let (readme, problems) = progress::generate(root, &l.docs);
-            g.files
-                .extend(readme.map(|(path, line, text)| (path, Some(line), text)));
-            g.problems.extend(problems);
+            let g = write_generated(root)?;
             for d in &g.problems {
                 eprintln!("{}:{}: {}", d.path, d.line, d.msg);
             }
-            for (path, _, text) in &g.files {
-                std::fs::write(root.join(path), text).with_context(|| format!("writing {path}"))?;
+            for (path, _, _) in &g.files {
                 eprintln!("generated {path}");
             }
             if g.files.iter().any(|(_, line, _)| line.is_none()) {
@@ -510,50 +552,86 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             eprint!("{}", history::render(&log, now));
             Ok(true)
         }
-        Some("rehash") => {
+        Some("migrate") => {
             let [_] = args else {
-                bail!("usage: cargo xtask docs rehash");
+                bail!("usage: cargo xtask docs migrate");
             };
-            let r = rehash(root)?;
-            for s in &r.restamped {
-                eprintln!("restamped {s}");
+            let m = migrate(root)?;
+            for s in &m.moved {
+                eprintln!("moved to {}: {s}", ledger::PATH);
             }
-            for s in &r.stale {
-                eprintln!("stale, left for a re-read: {s}");
+            for s in &m.stale {
+                eprintln!("stale, dropped for a re-read: {s}");
+            }
+            for s in &m.pruned {
+                eprintln!("pruned: {s}");
             }
             eprintln!(
-                "docs rehash: {} restamped, {} already fresh, {} stale",
-                r.restamped.len(),
-                r.fresh,
-                r.stale.len()
+                "docs migrate: {} moved, {} stale, {} pruned",
+                m.moved.len(),
+                m.stale.len(),
+                m.pruned.len()
             );
             Ok(true)
         }
         Some("merge-main") => {
-            let [_] = args else {
-                bail!("usage: cargo xtask docs merge-main");
+            let branch = match args {
+                [_] => merge::BRANCH,
+                [_, flag, b] if flag == "--from" => b.as_str(),
+                _ => bail!("usage: cargo xtask docs merge-main [--from wave/<name>]"),
             };
-            let m = merge::merge_main(root)?;
+            let m = merge::merge_main(root, branch)?;
             for s in &m.stamps {
-                eprintln!("took main's stamp: {s}");
+                eprintln!("took {branch}'s stamp: {s}");
+            }
+            for path in &m.generated {
+                if m.committed {
+                    eprintln!("regenerated after a conflict in its @generated blocks: {path}");
+                } else {
+                    eprintln!(
+                        "took {branch}'s side of the @generated blocks in {path}; run \
+                         `cargo xtask docs generate` once the files below are resolved"
+                    );
+                }
             }
             for (path, why) in &m.refused {
                 eprintln!("left for you: {path}: {why}");
             }
             if !m.committed {
                 eprintln!(
-                    "docs merge-main: stamp-only conflicts are resolved and staged; resolve the \
-                     files above by hand, `git commit`, then run `cargo xtask docs check`"
+                    "docs merge-main: stamp and @generated-block conflicts are resolved and \
+                     staged; resolve the files above by hand, run `cargo xtask docs generate` if \
+                     it named any @generated blocks, `git commit`, then run `cargo xtask docs check`"
                 );
                 return Ok(false);
             }
+            if let Some(mig) = &m.migrated {
+                eprintln!(
+                    "moved this branch's inline stamps to {} and committed: {} moved, {} dropped as stale",
+                    ledger::PATH,
+                    mig.moved.len(),
+                    mig.stale.len()
+                );
+            }
             for s in &m.stale {
                 eprintln!("stale: {s}");
+                for n in m.notes.get(s).into_iter().flatten() {
+                    eprintln!("  this branch's note: {n}");
+                }
+            }
+            if !m.notes.is_empty() {
+                eprintln!(
+                    "a re-verify replaces those notes: write each section's own note, keeping \
+                     what it said about this branch's change and adding what the merge changed \
+                     (docs/DOCS.md#notes)"
+                );
             }
             eprintln!(
-                "docs merge-main: merged {} stamp conflict(s); {} stale section(s) to re-read, \
-                 then `cargo xtask docs verify <DOC#anchor> --by <who> --note \"<what you checked>\"`",
+                "docs merge-main: merged {} stamp conflict(s) and resolved {} @generated conflict(s); {} stale \
+                 section(s) to re-read, then `cargo xtask docs verify <DOC#anchor> --by <who> \
+                 --note \"<what you checked>\"`",
                 m.stamps.len(),
+                m.generated.len(),
                 m.stale.len()
             );
             Ok(true)
@@ -589,7 +667,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             Ok(true)
         }
         _ => bail!(
-            "usage: cargo xtask docs check | generate | progress | verify <DOC#anchor> --by <who> --note <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | merge-main | rehash"
+            "usage: cargo xtask docs check | generate | progress | verify <DOC#anchor> --by <who> --note <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | merge-main [--from wave/<name>] | migrate"
         ),
     }
 }
@@ -688,8 +766,12 @@ mod tests {
         assert!(format!("{err:#}").contains("src/b.rs"), "{err:#}");
         f.git(&["add", "src/b.rs"]);
         verify(&f.0, "T#a", "agent:test", note).expect("all covered files tracked");
-        let written = std::fs::read_to_string(f.0.join("T.md")).expect("invariant: just written");
-        assert!(written.contains("hash = \"b3:"), "{written}");
+        let written =
+            std::fs::read_to_string(f.0.join(ledger::PATH)).expect("invariant: just written");
+        assert!(
+            written.contains("[\"T#a\".\"file:src/b.rs\"]\nstamp = { hash = \"b3:"),
+            "{written}"
+        );
     }
 
     const NOTE: &str = "checked the section text against its inputs in this test";
@@ -797,13 +879,14 @@ mod tests {
     /// finds each review and verification in git, and each body change as a revision.
     #[test]
     fn review_and_log() {
-        let t = "<!-- @doc\nid = \"T\"\nkind = \"guide\"\nreview_every = \"90d\"\n-->\nIntro.\n<a id=\"a\"></a>\n## A\n<!-- @section\n-->\nText.\n";
+        let t = "<!-- @doc\nid = \"T\"\nkind = \"guide\"\nreview_every = \"90d\"\n-->\nIntro.\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
         let adr = "<!-- @doc\nid = \"ADR-0001\"\nkind = \"adr\"\n-->\nDecision.\n";
         let mut files = REGISTRIES.to_vec();
         files.extend([
             ("T.md", t),
             ("ADR.md", adr),
             ("G.md", "<!-- @doc\nid = \"G\"\n-->\n"),
+            ("src/a.rs", "a"),
         ]);
         let f = Fixture::new("review-log", &files);
         let commit = |msg: &str| {
@@ -837,6 +920,7 @@ mod tests {
         commit("docs: verify T#a (#3)");
         let text = std::fs::read_to_string(f.0.join("T.md")).expect("invariant: written");
         f.write("T.md", &text.replace("Text.", "New text."));
+        verify(&f.0, "T#a", "agent:edit", &format!("{NOTE}, edited")).expect("T#a verifies");
         commit("docs: edit T#a (#4)");
         review(&f.0, "T.md", "human:j", &format!("{NOTE}, again")).expect("T reviews again");
         commit("docs: review T again (#5)");
@@ -876,6 +960,7 @@ mod tests {
                 (Some(1), "r1".into()),
                 (Some(3), "agent:test".into()),
                 (Some(4), "r2".into()),
+                (Some(4), "agent:edit".into()),
             ]
         );
         let err = history::log(&f.0, &l.docs, "T#nope", "HEAD").expect_err("no anchor");
@@ -885,9 +970,111 @@ mod tests {
         );
     }
 
-    /// `docs merge-main` in a clone of a fixture `origin`: a conflict between two stamps
-    /// takes main's and the merge commits, with the section reported stale; any other
-    /// conflict is left alone and the merge stays open; a dirty tree is refused.
+    /// A fixture `origin` on `main` and a clone of it, for `docs merge-main`.
+    fn origin_and_clone(name: &str, files: &[(&str, &str)]) -> (Fixture, Fixture) {
+        let origin = Fixture::new(&format!("{name}-origin"), files);
+        origin.git(&["symbolic-ref", "HEAD", "refs/heads/main"]);
+        origin.git(&["config", "user.name", "t"]);
+        origin.git(&["config", "user.email", "t@t"]);
+        origin.git(&["add", "-A"]);
+        origin.git(&["commit", "-q", "-m", "base"]);
+        let work = Fixture(
+            origin
+                .0
+                .with_file_name(format!("xtask-{name}-work-{}", std::process::id())),
+        );
+        let _ = std::fs::remove_dir_all(&work.0);
+        let cloned = Command::new("git")
+            .args(["clone", "-q"])
+            .arg(&origin.0)
+            .arg(&work.0)
+            .status()
+            .is_ok_and(|s| s.success());
+        assert!(cloned, "git clone failed");
+        work.git(&["config", "user.name", "t"]);
+        work.git(&["config", "user.email", "t@t"]);
+        (origin, work)
+    }
+
+    fn commit_all(f: &Fixture, msg: &str) {
+        f.git(&["add", "-A"]);
+        f.git(&["commit", "-q", "-m", msg]);
+    }
+
+    /// ADR-0055: `docs merge-main --from wave/<name>` merges the wave branch a PR targets
+    /// instead of main, and any other branch name is refused.
+    #[test]
+    fn merge_main_from_a_wave_branch() {
+        let mut files = REGISTRIES.to_vec();
+        files.push(("src/a.rs", "a\n"));
+        let (origin, work) = origin_and_clone("merge-wave", &files);
+        origin.git(&["checkout", "-q", "-b", "wave/m1"]);
+        origin.write("src/w.rs", "wave\n");
+        commit_all(&origin, "wave: w");
+        origin.git(&["checkout", "-q", "main"]);
+        for bad in ["dev", "wave/", "-x"] {
+            let err = merge::merge_main(&work.0, bad).expect_err("refused");
+            assert!(format!("{err:#}").contains("can only merge"), "{err:#}");
+        }
+        let m = merge::merge_main(&work.0, "wave/m1").expect("merges");
+        assert!(m.committed && m.refused.is_empty(), "{m:?}");
+        assert!(work.0.join("src/w.rs").exists());
+    }
+
+    /// Two branches that each mark a different roadmap item done and regenerate the README
+    /// conflict only inside its progress block: `docs merge-main` takes the wave's side,
+    /// regenerates the block from the merged `docs/progress.toml` and commits.
+    #[test]
+    fn merge_main_regenerates_conflicting_generated_blocks() {
+        let readme = "<!-- @doc\nid = \"README\"\ntitle = \"R\"\nkind = \"normative\"\nstatus = \"active\"\nreview_every = \"90d\"\n-->\n\n# R\n\n<!-- @generated begin progress -->\n<!-- @generated end progress -->\n";
+        let item = |id: &str, status: &str| {
+            let prs = if status == "done" { "[1]" } else { "[]" };
+            format!(
+                "[[item]]\nid = \"{id}\"\nmilestone = \"M0\"\ntitle = \"{id}\"\nstatus = \"{status}\"\nprs = {prs}\n\n"
+            )
+        };
+        let progress = |a: &str, b: &str| {
+            format!(
+                "[[milestone]]\nid = \"M0\"\ntitle = \"Base\"\nroadmap = \"ROADMAP.md#m0\"\n\n{}{}{}",
+                item("A", a),
+                item("B", b),
+                item("C", "planned")
+            )
+        };
+        let base = progress("planned", "planned");
+        let mut files = REGISTRIES.to_vec();
+        files.extend([("README.md", readme), ("docs/progress.toml", base.as_str())]);
+        let (origin, work) = origin_and_clone("merge-generated", &files);
+        let generated = |f: &Fixture| {
+            let g = write_generated(&f.0).expect("generates");
+            assert!(g.problems.is_empty(), "{:?}", g.problems);
+        };
+        generated(&origin);
+        commit_all(&origin, "main: table");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        origin.git(&["checkout", "-q", "-b", "wave/m1"]);
+        origin.write("docs/progress.toml", &progress("done", "planned"));
+        generated(&origin);
+        commit_all(&origin, "wave: A done");
+        origin.git(&["checkout", "-q", "main"]);
+        work.write("docs/progress.toml", &progress("planned", "done"));
+        generated(&work);
+        commit_all(&work, "work: B done");
+
+        let m = merge::merge_main(&work.0, "wave/m1").expect("merges");
+        assert!(m.committed && m.refused.is_empty(), "{m:?}");
+        assert_eq!(m.generated, vec!["README.md".to_owned()]);
+        let text = std::fs::read_to_string(work.0.join("README.md")).expect("readme");
+        assert!(text.contains("2 of 3 items are merged"), "{text}");
+        assert!(!text.contains("<<<<<<<"), "{text}");
+        assert!(write_generated(&work.0).expect("again").files.is_empty());
+    }
+
+    /// ADR-0053 with `docs merge-main`: two branches that change different covered files
+    /// of one section and re-verify it merge without a conflict, and the section stays
+    /// fresh; changing the same covered file conflicts on its ledger entry, which takes
+    /// main's and leaves the section stale; any other conflict is left alone and the
+    /// merge stays open; a dirty tree is refused.
     #[test]
     fn merge_main_resolves_only_stamp_conflicts() {
         let sec = |id: &str, glob: &str| {
@@ -900,86 +1087,81 @@ mod tests {
         files.extend([
             ("S.md", s.as_str()),
             ("T.md", t.as_str()),
-            ("src/a.rs", "a\n"),
+            ("src/a.rs", "a1\n\n\n\n\na5\n"),
             ("src/b.rs", "b\n"),
             ("lib/c.rs", "c\n"),
         ]);
-        let origin = Fixture::new("merge-main-origin", &files);
-        let commit = |f: &Fixture, msg: &str| {
-            f.git(&["add", "-A"]);
-            f.git(&[
-                "-c",
-                "user.name=t",
-                "-c",
-                "user.email=t@t",
-                "commit",
-                "-q",
-                "-m",
-                msg,
-            ]);
-        };
-        origin.git(&["symbolic-ref", "HEAD", "refs/heads/main"]);
+        let (origin, work) = origin_and_clone("merge-main", &files);
         verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
         verify(&origin.0, "T#a", "agent:test", NOTE).expect("T verifies");
-        commit(&origin, "base");
-        let work = Fixture(
-            origin
-                .0
-                .with_file_name(format!("xtask-merge-main-work-{}", std::process::id())),
-        );
-        let _ = std::fs::remove_dir_all(&work.0);
-        let cloned = Command::new("git")
-            .args(["clone", "-q"])
-            .arg(&origin.0)
-            .arg(&work.0)
-            .status()
-            .is_ok_and(|s| s.success());
-        assert!(cloned, "git clone failed");
-        for f in [&origin, &work] {
-            f.git(&["config", "user.name", "t"]);
-            f.git(&["config", "user.email", "t@t"]);
-        }
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
 
-        // Both sides change a different covered file of S and re-verify it: S's stamp
-        // conflicts, nothing else does.
-        origin.write("src/a.rs", "a main\n");
+        // Different covered files of S: no conflict at all, and S is fresh.
+        origin.write("src/a.rs", "a1 main\n\n\n\n\na5\n");
         verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies on main");
-        commit(&origin, "main: a");
+        commit_all(&origin, "main: a");
         work.write("src/b.rs", "b work\n");
         verify(&work.0, "S#a", "agent:work", NOTE).expect("S verifies on work");
-        commit(&work, "work: b");
+        commit_all(&work, "work: b");
         work.write("src/b.rs", "dirty\n");
-        let err = merge::merge_main(&work.0).expect_err("dirty tree");
+        let err = merge::merge_main(&work.0, "main").expect_err("dirty tree");
         assert!(format!("{err:#}").contains("uncommitted"), "{err:#}");
         work.git(&["checkout", "--", "src/b.rs"]);
-        let m = merge::merge_main(&work.0).expect("merges");
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        assert!(
+            m.committed && m.stamps.is_empty() && m.refused.is_empty(),
+            "{m:?}"
+        );
+        assert!(m.stale.is_empty() && m.migrated.is_none(), "{m:?}");
+        assert!(work.diags("is stale").is_empty());
+
+        // The same covered file, merged cleanly by git: its entry conflicts, takes main's,
+        // and S is stale.
+        origin.write("src/a.rs", "a1 main\n\n\n\n\na5 main\n");
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies on main");
+        commit_all(&origin, "main: a again");
+        work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
+        let work_note = "a1 is the branch's change to a.rs and the text still describes it";
+        verify(&work.0, "S#a", "agent:work", work_note).expect("S verifies on work");
+        commit_all(&work, "work: a");
+        let m = merge::merge_main(&work.0, "main").expect("merges");
         assert!(m.committed, "{m:?}");
         assert_eq!(m.stamps, vec!["S#a".to_owned()]);
-        assert!(m.refused.is_empty(), "{m:?}");
         assert_eq!(m.stale, vec!["S#a".to_owned()]);
-        let text = std::fs::read_to_string(work.0.join("S.md")).expect("invariant: written");
+        // Every note the branch wrote on S's entries since its merge base with main (a.rs
+        // now, b.rs before the first merge) is reported for the re-verify, once each.
+        assert_eq!(
+            m.notes,
+            BTreeMap::from([(
+                "S#a".to_owned(),
+                vec![work_note.to_owned(), NOTE.to_owned()]
+            )])
+        );
+        let ledger =
+            std::fs::read_to_string(work.0.join(ledger::PATH)).expect("invariant: written");
         assert!(
-            text.contains("by = \"agent:main\"") && !text.contains("<<<<<<<"),
-            "{text}"
+            !ledger.contains("<<<<<<<") && ledger.contains("agent:main"),
+            "{ledger}"
         );
         assert_eq!(work.diags("is stale").len(), 1);
 
-        // Now S's text conflicts too (and T's stamp alone): S is refused, T is resolved
-        // and staged, and nothing is committed.
+        // Now S's text conflicts too (and T's entry for lib/c.rs alone): S.md and
+        // lib/c.rs are refused, the ledger is resolved and staged, nothing is committed.
         verify(&work.0, "S#a", "agent:work", NOTE).expect("S re-verifies");
-        commit(&work, "work: re-verify S");
+        commit_all(&work, "work: re-verify S");
         for (f, who) in [(&origin, "main"), (&work, "work")] {
             let text = std::fs::read_to_string(f.0.join("S.md")).expect("invariant: written");
             f.write("S.md", &text.replace("Text.", &format!("Text from {who}.")));
             f.write("lib/c.rs", &format!("c {who}\n"));
-            f.write(&format!("lib/{who}.rs"), "x\n");
             f.git(&["add", "-A"]);
             verify(&f.0, "T#a", &format!("agent:{who}"), NOTE).expect("T verifies");
-            commit(f, who);
+            verify(&f.0, "S#a", &format!("agent:{who}"), NOTE).expect("S verifies");
+            commit_all(f, who);
         }
-        let m = merge::merge_main(&work.0).expect("runs");
+        let m = merge::merge_main(&work.0, "main").expect("runs");
         assert!(!m.committed, "{m:?}");
-        assert_eq!(m.stamps, vec!["T#a".to_owned()]);
+        assert_eq!(m.stamps, vec!["S#a".to_owned(), "T#a".to_owned()]);
         let refused: Vec<&str> = m.refused.iter().map(|(p, _)| p.as_str()).collect();
         assert_eq!(refused, vec!["S.md", "lib/c.rs"], "{m:?}");
         let s = std::fs::read_to_string(work.0.join("S.md")).expect("invariant: written");
@@ -996,10 +1178,83 @@ mod tests {
             String::from_utf8_lossy(&unmerged.stdout),
             "S.md\nlib/c.rs\n"
         );
-        let err = merge::merge_main(&work.0).expect_err("merge in progress");
+        let err = merge::merge_main(&work.0, "main").expect_err("merge in progress");
         assert!(
             format!("{err:#}").contains("already in progress"),
             "{err:#}"
+        );
+    }
+
+    /// ADR-0053 transition: a branch from before the ledger re-stamped a section inline and
+    /// added a new section with an inline stamp; main moved every stamp to the ledger.
+    /// `docs merge-main` takes main's side of the inline conflict, then moves the new
+    /// section's stamp to the ledger in a second commit.
+    #[test]
+    fn merge_main_moves_a_pre_ledger_branch_to_the_ledger() {
+        let inline = |id: &str, glob: &str, text: &str| {
+            format!(
+                "<!-- @doc\nid = \"{id}\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"{glob}\"]\nverified = {{ hash = \"H\", by = \"agent:old\", note = \"note\" }}\n-->\n{text}\n"
+            )
+        };
+        // Writes the pre-ADR-0053 hash into `path`'s inline stamp, as the old verify did.
+        let stamp_inline = |f: &Fixture, path: &str, glob: &str| {
+            let l = load(&f.0).expect("invariant: the fixture is readable");
+            let by_path: BTreeMap<&str, &parse::Doc> =
+                l.docs.iter().map(|d| (d.path.as_str(), d)).collect();
+            let files = hash::Files::new(&f.0, &l.files);
+            let d = by_path[path];
+            let h = hash::legacy_section_hash(d, "a", &[glob.to_owned()], &[], &files, &by_path)
+                .expect("invariant: hashable");
+            let text = d.text.lines().map(|l| {
+                if l.starts_with("verified") {
+                    format!("verified = {{ hash = \"{h}\", by = \"agent:old\", note = \"note\" }}")
+                } else {
+                    l.to_owned()
+                }
+            });
+            f.write(path, &(text.collect::<Vec<_>>().join("\n") + "\n"));
+        };
+        let mut files = REGISTRIES.to_vec();
+        let s = inline("S", "src/**", "Text.");
+        files.extend([("S.md", s.as_str()), ("src/a.rs", "a\n")]);
+        let (origin, work) = origin_and_clone("merge-pre-ledger", &files);
+        stamp_inline(&origin, "S.md", "src/**");
+        commit_all(&origin, "inline stamp");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+
+        migrate(&origin.0).expect("main migrates");
+        commit_all(&origin, "main: ledger");
+        work.write("src/a.rs", "a work\n");
+        stamp_inline(&work, "S.md", "src/**");
+        work.write("N.md", &inline("N", "lib/**", "New."));
+        work.write("lib/n.rs", "n\n");
+        work.git(&["add", "-A"]);
+        stamp_inline(&work, "N.md", "lib/**");
+        commit_all(&work, "work: old-style stamps");
+
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        assert!(m.committed && m.refused.is_empty(), "{m:?}");
+        assert_eq!(m.stamps, vec!["S#a".to_owned()]);
+        let mig = m.migrated.expect("the new section's stamp moved");
+        assert_eq!(mig.moved, vec!["N#a".to_owned()]);
+        assert_eq!(m.stale, vec!["S#a".to_owned()]);
+        for path in ["S.md", "N.md"] {
+            let text = std::fs::read_to_string(work.0.join(path)).expect("invariant: written");
+            assert!(
+                !text.contains("verified") && !text.contains("<<<<<<<"),
+                "{text}"
+            );
+        }
+        assert!(work.diags("inline `verified`").is_empty());
+        let status = Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(&work.0)
+            .output()
+            .expect("invariant: git runs");
+        assert!(
+            status.stdout.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&status.stdout)
         );
     }
 
@@ -1041,100 +1296,66 @@ mod tests {
         );
     }
 
-    /// ADR-0039 migration: `docs rehash` restamps only sections fresh under the old rule
-    /// (or fresh before being narrowed to a row), keeps `by` and `note`, and never writes a
-    /// stale section.
+    /// ADR-0053 migration: `docs migrate` moves an inline stamp that still holds into the
+    /// ledger (its by and note on `body`), drops one that doesn't without moving it, drops
+    /// ledger stamps of sections that are gone, and a second run changes nothing.
     #[test]
-    fn rehash_restamps_fresh_sections_only() {
-        let sec = |id: &str, anchor: &str, meta: &str, text: &str| {
+    fn migrate_moves_holding_inline_stamps_only() {
+        let sec = |id: &str, anchor: &str, text: &str| {
             format!(
-                "<!-- @doc\nid = \"{id}\"\n-->\n<a id=\"{anchor}\"></a>\n## S\n<!-- @section\n{meta}\nverified = {{ hash = \"H-{anchor}\", by = \"agent:orig-{anchor}\", note = \"note {anchor}\" }}\n-->\n{text}\n"
+                "<!-- @doc\nid = \"{id}\"\n-->\n<a id=\"{anchor}\"></a>\n## S\n<!-- @section\ncovers = [\"src/**\"]\nverified = {{ hash = \"H-{anchor}\", by = \"agent:orig-{anchor}\", note = \"note {anchor}\" }}\n-->\n{text}\n"
             )
         };
         let mut files = REGISTRIES.to_vec();
-        let a = sec("A", "a", "covers = [\"src/**\"]", "About src.");
-        let b = sec("B", "b", "covers = [\"A.md\"]", "About A.");
-        let s = sec("S", "s", "covers = [\"src/**\"]", "Stale.");
-        let r = sec("R", "r", "depends_on = [\"M.md#map/a\"]", "Row.");
+        let (a, s) = (sec("A", "a", "About src."), sec("S", "s", "Stale."));
+        let orphan = "# x\n\n[\"GONE#x\".body]\nstamp = { hash = \"b3:1\" }\n";
         files.extend([
             ("src/x.rs", "x"),
-            ("M.md", MAP),
             ("A.md", a.as_str()),
-            ("B.md", b.as_str()),
             ("S.md", s.as_str()),
-            ("R.md", r.as_str()),
+            (ledger::PATH, orphan),
         ]);
-        let f = Fixture::new("rehash", &files);
-        // Stamp each section with its old-rule hash, in dependency order (B covers A.md).
-        let legacy = hash::Mode {
-            strip_metadata: false,
-            widen_rows: true,
-        };
-        for (path, anchor) in [("A.md", "a"), ("B.md", "b"), ("S.md", "s"), ("R.md", "r")] {
-            let l = load(&f.0).expect("invariant: the fixture is readable");
-            let by_path: BTreeMap<&str, &parse::Doc> =
-                l.docs.iter().map(|d| (d.path.as_str(), d)).collect();
-            let d = by_path[path];
-            let meta = d.sections[0]
-                .meta
-                .as_ref()
-                .expect("invariant: has metadata");
-            let get = |k: &str| -> Vec<String> {
-                meta.get(k)
-                    .and_then(|v| v.as_array())
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|x| x.as_str().map(str::to_owned))
-                            .collect()
-                    })
-                    .unwrap_or_default()
-            };
-            let files = hash::Files::new(&f.0, &l.files);
-            let h = hash::section_hash_by(
-                legacy,
-                d,
-                anchor,
-                &get("covers"),
-                &get("depends_on"),
-                &files,
-                &by_path,
-            )
+        let f = Fixture::new("migrate", &files);
+        // A's inline stamp holds (the pre-ADR-0053 hash of the tree); S's does not.
+        let l = load(&f.0).expect("invariant: the fixture is readable");
+        let by_path: BTreeMap<&str, &parse::Doc> =
+            l.docs.iter().map(|d| (d.path.as_str(), d)).collect();
+        let files = hash::Files::new(&f.0, &l.files);
+        let src = vec!["src/**".to_owned()];
+        let h = hash::legacy_section_hash(by_path["A.md"], "a", &src, &[], &files, &by_path)
             .expect("invariant: hashable");
-            f.write(path, &d.text.replace(&format!("H-{anchor}"), &h));
+        f.write("A.md", &a.replace("H-a", &h));
+        assert_eq!(f.diags("inline `verified`").len(), 2);
+        let got = migrate(&f.0).expect("migrate runs");
+        assert_eq!(
+            got,
+            Migrate {
+                moved: vec!["A#a".into()],
+                stale: vec!["S#s".into()],
+                pruned: vec!["GONE#x".into()],
+            }
+        );
+        for path in ["A.md", "S.md"] {
+            let text = std::fs::read_to_string(f.0.join(path)).expect("invariant: written");
+            assert!(!text.contains("verified"), "{text}");
         }
-        // S goes stale under the old rule: its covered code changes after the stamp.
-        f.write("src/x.rs", "x2");
-        let before = std::fs::read_to_string(f.0.join("S.md")).expect("invariant: written");
-        let (a_before, b_before) = (
-            std::fs::read_to_string(f.0.join("A.md")).expect("invariant: written"),
-            std::fs::read_to_string(f.0.join("B.md")).expect("invariant: written"),
-        );
-        let got = rehash(&f.0).expect("rehash runs");
-        assert_eq!(got.restamped, vec!["B#b", "R#r"], "{got:?}");
-        assert_eq!(got.stale, vec!["A#a", "S#s"], "{got:?}");
-        // Stale sections are untouched; restamped ones keep `by` and `note`.
-        assert_eq!(
-            std::fs::read_to_string(f.0.join("S.md")).expect("invariant: written"),
-            before
-        );
-        assert_eq!(
-            std::fs::read_to_string(f.0.join("A.md")).expect("invariant: written"),
-            a_before
-        );
-        let b_after = std::fs::read_to_string(f.0.join("B.md")).expect("invariant: written");
-        assert_ne!(b_after, b_before);
-        assert!(b_after.contains("by = \"agent:orig-b\", note = \"note b\""));
-        let stale: Vec<String> = f.diags("is stale");
-        assert_eq!(stale.len(), 2, "{stale:?}");
+        assert!(f.diags("inline `verified`").is_empty());
+        assert!(f.diags("canonical").is_empty());
+        let stale = f.diags("is stale");
+        assert_eq!(stale.len(), 1, "{stale:?}");
         assert!(
-            stale
-                .iter()
-                .all(|d| d.starts_with("A.md") || d.starts_with("S.md"))
+            stale[0].starts_with("S.md") && stale[0].contains("no stamp"),
+            "{stale:?}"
         );
-        // A second run changes nothing: B and R are now fresh, A and S still refused.
-        let again = rehash(&f.0).expect("rehash runs");
-        assert_eq!((again.restamped.len(), again.fresh), (0, 2), "{again:?}");
-        assert_eq!(again.stale, vec!["A#a", "S#s"]);
+        let led = ledger::Ledger::read(&f.0).expect("invariant: written");
+        let body = &led.sections["A#a"][hash::BODY];
+        assert_eq!(
+            (body.by.as_deref(), body.note.as_deref()),
+            (Some("agent:orig-a"), Some("note a"))
+        );
+        assert_eq!(led.sections["A#a"]["file:src/x.rs"].by, None);
+        let again = migrate(&f.0).expect("migrate runs");
+        assert_eq!(again, Migrate::default());
     }
 
     /// R-DOC-012: unmatched `covers` fail in active docs, warn in drafts, and are skipped

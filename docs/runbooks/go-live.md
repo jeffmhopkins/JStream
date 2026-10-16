@@ -17,7 +17,6 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +35,6 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:8b5ae4cdc1600cc1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; stale through cascade (cli usage); the steps use no filter or opacity command; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -76,7 +74,8 @@ $cli = 'target\release\jstream-cli.exe'
    `& $cli --url ws://127.0.0.1:4460 events`. While the output runs, a `stats.tick` line
    comes about once a second. Its counters are running totals of dropped frames and
    packets since the daemon started, so all zeros is healthy. A counter that keeps
-   climbing is worth an issue.
+   climbing is worth an issue. While the program runs, `meters.tick` lines, the audio
+   levels, come about ten a second as well.
 5. **Go live:** the `output` tool with `{"op": {"type": "output.start", "output_id":
    "live"}}`, or `& $cli --url ws://127.0.0.1:4460 output start live`.
    Check: the events show `output.state_changed` going `starting`, then `active`, and
@@ -99,7 +98,6 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:794e9f89b7a02378", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; stale through cascade; smoke.ps1 unchanged; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
@@ -158,11 +156,14 @@ snapshot and the graceful stop. That is what CI or a Linux machine can run.
 <!-- @section
 -->
 
-Pending. Going live to YouTube with a plain stream key works as above, with YouTube's
-RTMPS server URL from YouTube Studio. The `youtube.*` flows (sign-in with OAuth, then
-creating the broadcast and binding the output through the API) are added here once the
-daemon's YouTube wiring (roadmap item A6) and the YouTube setup flow (Y3, issue #223)
-have landed.
+Going live to YouTube needs no sign-in and no Google OAuth client
+([ADR-0058](../adr/0058-youtube-sign-in-with-a-jstream-client.md)): use a plain stream
+key as above, with YouTube's RTMPS server URL from YouTube Studio, and turn on
+auto-start (and auto-stop) for the stream in YouTube Studio, so the broadcast goes live
+when data arrives and ends when it stops. The optional `youtube.*` flows (sign-in through
+JStream's own OAuth client, then creating the broadcast and binding the output through
+the API) are added here once the daemon's YouTube wiring (roadmap item A6) and the
+YouTube setup flow (Y3, issue #223) have landed.
 
 <a id="results"></a>
 ## Reporting results

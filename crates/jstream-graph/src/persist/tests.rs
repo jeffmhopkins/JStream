@@ -3,9 +3,9 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId, OutputKind,
-    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId, SourceKind,
-    parity,
+    BusId, Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId,
+    OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId,
+    SourceKind, parity,
 };
 use serde_json::{Value, json};
 
@@ -49,6 +49,25 @@ fn kinds() -> Vec<KindDescriptor> {
                 live: true,
             },
         ],
+    });
+    kinds.push(KindDescriptor {
+        kind_id: "scope".into(),
+        category: KindCategory::Source,
+        name: "Scope".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        params: vec![ParamDescriptor {
+            id: "audio".into(),
+            ty: ParamType::Bus,
+            default: Value::Null,
+            label: "Audio".into(),
+            description: None,
+            group: None,
+            advanced: false,
+            visible_if: None,
+            live: false,
+        }],
     });
     kinds
 }
@@ -241,6 +260,97 @@ fn a_file_without_encoder_profiles_loads() {
             .outputs()
             .all(|o| o.encoder_profile().is_none())
     );
+}
+
+/// A file written before sends existed (no `sends`, `buses` or `audio`): each audio
+/// source keeps the master send its creation gives it, at 0 dB, rather than losing it.
+#[test]
+fn a_file_from_before_audio_keeps_the_master_sends() {
+    let file = edit_file(|v| {
+        if let Some(o) = v.as_object_mut() {
+            o.remove("sends");
+            o.remove("buses");
+        }
+        for source in v["sources"].as_array_mut().into_iter().flatten() {
+            source.as_object_mut().map(|o| o.remove("audio"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    let sends: Vec<_> = graph
+        .state()
+        .sends()
+        .map(|(source, bus, gain)| (source.as_str().to_owned(), bus.clone(), gain.get()))
+        .collect();
+    assert_eq!(
+        sends,
+        [
+            ("desk".to_owned(), BusId::master(), 0.0),
+            ("mic".to_owned(), BusId::master(), 0.0),
+            ("mic_copy".to_owned(), BusId::master(), 0.0),
+        ]
+    );
+}
+
+/// A source whose master send was removed saves an empty `sends`, which tells the load
+/// to remove it again.
+#[test]
+fn a_removed_master_send_round_trips() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let applied = graph.apply(
+        &[
+            Edit::SourceCreate {
+                source_id: SourceId::new("mic"),
+                name: "mic".into(),
+                kind: SourceKind::Builtin { kind: "mic".into() },
+                settings: jstream_protocol::Settings::default(),
+                duplicated_from: None,
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("mic"),
+                bus_id: BusId::master(),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let value: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(value["sends"], json!([]));
+    let loaded = load(&json);
+    assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(loaded.as_ref(), Ok(&graph));
+}
+
+/// #362: a source whose settings draw a bus loads: the buses are made before the
+/// sources, so the reference finds its bus.
+#[test]
+fn a_source_drawing_a_bus_round_trips() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let applied = graph.apply(
+        &[
+            Edit::BusCreate {
+                bus_id: BusId::new("vod"),
+                name: "VOD".into(),
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "wave".into(),
+                kind: SourceKind::Builtin {
+                    kind: "scope".into(),
+                },
+                settings: [("audio", json!({"type": "bus", "bus_id": "vod"}))]
+                    .into_iter()
+                    .collect(),
+                duplicated_from: None,
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let loaded = load(&graph.to_collection_json());
+    assert_eq!(loaded.as_ref(), Ok(&graph));
 }
 
 #[test]

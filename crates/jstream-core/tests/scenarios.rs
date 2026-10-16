@@ -27,7 +27,8 @@ use jstream_core::{
 };
 use jstream_encode::{SessionOptions, VideoSession};
 use jstream_platform::fake::{
-    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+    FakeVideoDevices,
 };
 use jstream_platform::media::{
     AudioFormat, ChannelLayout, Codec, ColorInfo, FrameSize, MediaTime, PixelFormat, SampleFormat,
@@ -304,13 +305,13 @@ fn output_call(start: bool) -> Call {
     }
 }
 
-/// The output states among `events`; `stats.tick` is skipped.
+/// The output states among `events`; `stats.tick` and `meters.tick` are skipped.
 fn output_steps(events: Vec<Event>) -> Vec<OutputState> {
     events
         .into_iter()
         .filter_map(|event| match event {
             Event::OutputStateChanged { state, .. } => Some(state),
-            Event::StatsTick { .. } => None,
+            Event::StatsTick { .. } | Event::MetersTick { .. } => None,
             other => panic!("unexpected event {other:?}"),
         })
         .collect()
@@ -357,6 +358,7 @@ fn rt_panic_is_reported() {
         audio: Arc::new(audio.clone()),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()

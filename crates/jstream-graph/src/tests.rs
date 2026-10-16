@@ -2,11 +2,11 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    BlendMode, Canvas, Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId, EntityKind,
-    Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media,
-    OutputId, OutputInfo, OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError,
-    Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SceneRole, Settings, Size,
-    SourceId, SourceKind, Vec2,
+    AudioFollow, BlendMode, BusId, Canvas, Crop, DeleteTarget, Edit, EncoderProfile,
+    EncoderProfileId, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform,
+    KindCategory, KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor,
+    ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget,
+    SceneId, SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -26,8 +26,9 @@ fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
 }
 
 /// The kinds the tests create: `color`, a video kind with a scalar, a reference of each
-/// sort, and an asset; `tone`, an audio kind with no parameters; and the filter kinds
-/// `tint` (video, with a scene reference) and `gain` (audio).
+/// sort, and an asset; `tone`, an audio kind with no parameters; `scope`, a video kind
+/// that draws a bus (as `waveform` and `spectrum` do); and the filter kinds `tint`
+/// (video, with a scene reference) and `gain` (audio).
 fn kinds() -> Vec<KindDescriptor> {
     vec![
         KindDescriptor {
@@ -73,6 +74,15 @@ fn kinds() -> Vec<KindDescriptor> {
             video: false,
             audio: true,
             params: vec![],
+        },
+        KindDescriptor {
+            kind_id: "scope".into(),
+            category: KindCategory::Source,
+            name: "Scope".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params: vec![param("audio", ParamType::Bus, Value::Null)],
         },
         KindDescriptor {
             kind_id: "tint".into(),
@@ -669,6 +679,56 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
     }
 }
 
+/// A YouTube-bound output (ADR-0058) is an RTMP target naming a broadcast: it is
+/// created, retargeted to and from a generic URL, and its broadcast ID is checked.
+#[test]
+fn a_youtube_target_is_stored_retargeted_and_checked() {
+    let youtube = |id: &str| RtmpTarget::YouTube {
+        broadcast_id: id.into(),
+    };
+    let mut graph = Graph::new();
+    apply_ok(
+        &mut graph,
+        vec![Edit::OutputCreate {
+            output_id: OutputId::new("live"),
+            kind: OutputKind::Rtmp {
+                target: youtube("dQw4w9WgXcQ"),
+            },
+        }],
+    );
+    let retarget = apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: target("rtmp://host/live"),
+        }],
+    );
+    assert_eq!(
+        retarget.inverse.edits,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: youtube("dQw4w9WgXcQ"),
+        }]
+    );
+    for id in ["", "a b", "id?x=1", "id/../x", &"x".repeat(129)] {
+        let (field, reason) = invalid_reason(apply_err(
+            &mut graph,
+            vec![Edit::OutputSetTarget {
+                output_id: OutputId::new("live"),
+                target: youtube(id),
+            }],
+        ));
+        assert_eq!(field, "edits.0.target.broadcast_id", "{id:?}: {reason}");
+    }
+    apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: youtube(&"A-z_9".repeat(25)),
+        }],
+    );
+}
+
 #[test]
 fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
     let mut graph = Graph::new();
@@ -1031,9 +1091,9 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId, Finite32, FitMode,
-        ItemGeometry, ItemId, ItemTransform, OutputId, RateControl, Rev, SceneId, SceneRole,
-        Settings, Size, SourceId, SourceKind, Vec2,
+        AudioFollow, BusId, Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId, Finite32,
+        FitMode, ItemGeometry, ItemId, ItemTransform, OutputId, RateControl, Rev, SceneId,
+        SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1079,6 +1139,7 @@ mod property {
                     .map(|(_, f)| (s.id().to_string(), f.id().to_string()))
             })
             .collect();
+        let buses: Vec<String> = state.buses().map(|b| b.id().to_string()).collect();
         let urls = [
             "rtmp://a.example/live",
             "rtmps://b.example:443/live",
@@ -1092,6 +1153,18 @@ mod property {
         let output = |rng: &mut Rng| rng.pick(&outputs).unwrap_or_else(|| pool(rng, "out"));
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let encoder = |rng: &mut Rng| rng.pick(&encoders).unwrap_or_else(|| pool(rng, "enc"));
+        let bus = |rng: &mut Rng| {
+            BusId::new(match rng.below(5) {
+                0 => pool(rng, "bus"),
+                _ => rng.pick(&buses).unwrap_or_else(|| pool(rng, "bus")),
+            })
+        };
+        // Out of the fader's range one time in eight.
+        let gain = |rng: &mut Rng| {
+            Finite32::new([-120.0, -60.0, -12.0, -6.0, -1.5, 0.0, 6.0, 24.0][rng.below(8)])
+                .expect("finite")
+        };
+        let maybe = |rng: &mut Rng| rng.below(2) == 0;
         // Out of range one time in eight.
         let profile = |rng: &mut Rng| {
             let mut profile = EncoderProfile::DEFAULT;
@@ -1148,7 +1221,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(35) {
+        match rng.below(43) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1313,7 +1386,52 @@ mod property {
                 settings: Settings::new(),
                 duplicated_from: Some(SourceId::new(source(rng))),
             },
-            29 => {
+            29 => Edit::SourceCreate {
+                source_id: SourceId::new(pool(rng, "src")),
+                name: "tone".into(),
+                kind: SourceKind::Builtin {
+                    kind: "tone".into(),
+                },
+                settings: Settings::new(),
+                duplicated_from: None,
+            },
+            30 => Edit::SourceSetAudio {
+                source_id: SourceId::new(source(rng)),
+                enabled: maybe(rng).then(|| maybe(rng)),
+                follow: maybe(rng).then(|| {
+                    if maybe(rng) {
+                        AudioFollow::Always
+                    } else {
+                        AudioFollow::WhenShown
+                    }
+                }),
+                gain_db: maybe(rng).then(|| gain(rng)),
+                muted: maybe(rng).then(|| maybe(rng)),
+            },
+            31 => Edit::BusCreate {
+                bus_id: BusId::new(pool(rng, "bus")),
+                name: pool(rng, "name "),
+            },
+            32 => Edit::BusRename {
+                bus_id: bus(rng),
+                name: pool(rng, "name "),
+            },
+            33 => Edit::BusSetFader {
+                bus_id: bus(rng),
+                gain_db: maybe(rng).then(|| gain(rng)),
+                muted: maybe(rng).then(|| maybe(rng)),
+            },
+            34 => Edit::BusDelete { bus_id: bus(rng) },
+            35 | 36 => Edit::SendSet {
+                source_id: SourceId::new(source(rng)),
+                bus_id: bus(rng),
+                gain_db: gain(rng),
+            },
+            37 => Edit::SendRemove {
+                source_id: SourceId::new(source(rng)),
+                bus_id: bus(rng),
+            },
+            38 => {
                 let item = item(rng);
                 Edit::ItemSetOpacity {
                     scene_id: address(rng, &item),
@@ -1321,11 +1439,11 @@ mod property {
                     opacity: opacity(rng),
                 }
             }
-            30 => Edit::ItemSetBlend {
+            39 => Edit::ItemSetBlend {
                 item_id: ItemId::new(item(rng)),
                 blend: blend(rng),
             },
-            31 => Edit::FilterAdd {
+            40 => Edit::FilterAdd {
                 owner: owner(source(rng)),
                 chain: jstream_protocol::FilterChain::Video,
                 filter_id: jstream_protocol::FilterId::new(pool(rng, "f")),
@@ -1334,7 +1452,7 @@ mod property {
                 enabled: (rng.below(3) == 0).then_some(false),
                 index: (rng.below(2) == 0).then(|| index(rng)),
             },
-            32 => {
+            41 => {
                 let (source, filter) = rng
                     .pick(&filters)
                     .unwrap_or_else(|| (source(rng), pool(rng, "f")));
@@ -1458,6 +1576,13 @@ mod property {
             "filter.set_settings",
             "filter.reorder",
             "canvas.set_size",
+            "source.set_audio",
+            "bus.create",
+            "bus.rename",
+            "bus.set_fader",
+            "bus.delete",
+            "send.set",
+            "send.remove",
         ]
         .into();
         assert_eq!(applied_names, all);
@@ -1937,6 +2062,172 @@ fn delete_plan_removes_a_sources_placements_and_clears_references() {
     );
     apply_ok(&mut graph, edits);
     assert!(graph.state().source(&SourceId::new("mic")).is_none());
+}
+
+fn bus_ref(id: &str) -> Value {
+    json!({"type": "bus", "bus_id": id})
+}
+
+/// A `scope` source drawing `bus` (`None`: the program mix).
+fn scope(id: &str, bus: Option<&str>) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: "Scope".into(),
+        kind: SourceKind::Builtin {
+            kind: "scope".into(),
+        },
+        settings: settings(&[("audio", bus.map_or(Value::Null, bus_ref))]),
+        duplicated_from: None,
+    }
+}
+
+fn bus_create(id: &str) -> Edit {
+    Edit::BusCreate {
+        bus_id: BusId::new(id),
+        name: id.into(),
+    }
+}
+
+/// #362: a bus reference names a bus that exists, the master included, as a scene or
+/// source reference does; any other tag is refused.
+#[test]
+fn a_bus_reference_must_name_a_bus() {
+    let mut graph = fixture();
+    assert_eq!(
+        apply_err(&mut graph, vec![scope("wave", Some("ghost"))]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Bus,
+            id: "ghost".into(),
+        }
+    );
+    assert_eq!(
+        invalid_reason(apply_err(
+            &mut graph,
+            vec![Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "Scope".into(),
+                kind: SourceKind::Builtin {
+                    kind: "scope".into(),
+                },
+                settings: settings(&[("audio", source_ref("mic"))]),
+                duplicated_from: None,
+            }],
+        )),
+        (
+            "edits.0.settings.audio".into(),
+            "must be a bus reference or null".into()
+        )
+    );
+    apply_ok(
+        &mut graph,
+        vec![
+            bus_create("vod"),
+            scope("wave", Some("vod")),
+            scope("program", None),
+            scope("master", Some("master")),
+        ],
+    );
+    assert_eq!(
+        graph
+            .state()
+            .source(&SourceId::new("wave"))
+            .and_then(|s| s.settings.get("audio")),
+        Some(&bus_ref("vod"))
+    );
+    assert_eq!(
+        apply_err(
+            &mut graph,
+            vec![set_settings("program", &[("audio", bus_ref("gone"))])]
+        ),
+        ProtocolError::NotFound {
+            entity: EntityKind::Bus,
+            id: "gone".into(),
+        }
+    );
+}
+
+/// #362: a bus a source draws can't be deleted, as a referenced scene or source can't
+/// (ADR-0025): the error lists the settings that hold it, and `delete.plan` clears them
+/// (the source then draws the program mix) before it deletes the bus with its sends.
+#[test]
+fn a_drawn_bus_is_deleted_only_with_its_references_cleared() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![
+            bus_create("vod"),
+            scope("wave", Some("vod")),
+            scope("bars", Some("vod")),
+        ],
+    );
+    let delete = Edit::BusDelete {
+        bus_id: BusId::new("vod"),
+    };
+    let error = apply_err(&mut graph, vec![delete.clone()]);
+    let (field, reason) = invalid_reason(error.clone());
+    assert_eq!(field, "edits.0.bus_id");
+    assert!(
+        reason.contains("bus `vod` is still referred to"),
+        "{reason}"
+    );
+    assert_eq!(
+        blockers(error),
+        vec![
+            blocker(EntityKind::Source, "bars", "settings.audio"),
+            blocker(EntityKind::Source, "wave", "settings.audio"),
+        ]
+    );
+    let edits = plan(
+        &graph,
+        DeleteTarget::Bus {
+            bus_id: BusId::new("vod"),
+        },
+    );
+    assert_eq!(
+        edits,
+        vec![
+            set_settings("bars", &[("audio", Value::Null)]),
+            set_settings("wave", &[("audio", Value::Null)]),
+            delete,
+        ]
+    );
+    let before = graph.clone();
+    let applied = apply_ok(&mut graph, edits);
+    assert!(graph.state().bus(&BusId::new("vod")).is_none());
+    assert_eq!(
+        graph
+            .state()
+            .source(&SourceId::new("wave"))
+            .and_then(|s| s.settings.get("audio")),
+        Some(&Value::Null)
+    );
+    graph
+        .apply(&applied.inverse.edits, Some(applied.rev))
+        .expect("undo applies");
+    assert_eq!(graph.state(), before.state());
+    // The master can't be planned away, and a missing bus is not found.
+    assert_eq!(
+        graph.query(&Query::DeletePlan {
+            target: DeleteTarget::Bus {
+                bus_id: BusId::master(),
+            },
+        }),
+        Some(Err(ProtocolError::invalid_argument(
+            "target.bus_id",
+            "the master bus can't be deleted"
+        )))
+    );
+    assert_eq!(
+        graph.query(&Query::DeletePlan {
+            target: DeleteTarget::Bus {
+                bus_id: BusId::new("nope"),
+            },
+        }),
+        Some(Err(ProtocolError::NotFound {
+            entity: EntityKind::Bus,
+            id: "nope".into(),
+        }))
+    );
 }
 
 #[test]
@@ -3133,3 +3424,161 @@ fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
 }
 
 mod filters;
+
+fn tone_create(id: &str) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: format!("Tone {id}"),
+        kind: SourceKind::Builtin {
+            kind: "tone".into(),
+        },
+        settings: Settings::new(),
+        duplicated_from: None,
+    }
+}
+
+fn db(value: f32) -> Finite32 {
+    Finite32::new(value).expect("finite")
+}
+
+/// ADR-0028's defaults: an audio input follows `always` and sends to the master at
+/// 0 dB, a nested scene follows `when_shown` and sends nowhere, and a kind without
+/// audio has no audio settings.
+#[test]
+fn new_sources_get_their_kinds_audio_defaults() {
+    let mut graph = fixture();
+    apply_ok(&mut graph, vec![tone_create("t")]);
+    let state = graph.state();
+    let audio = |id: &str| {
+        state
+            .source(&SourceId::new(id))
+            .and_then(|s| s.audio().copied())
+    };
+    assert_eq!(audio("t"), Some(SourceAudio::new(AudioFollow::Always)));
+    assert_eq!(audio("sa"), Some(SourceAudio::new(AudioFollow::WhenShown)));
+    assert_eq!(audio("cam"), None);
+    let sends: Vec<_> = state
+        .sends()
+        .map(|(source, bus, gain)| (source.as_str(), bus.as_str(), gain))
+        .collect();
+    assert_eq!(sends, [("t", "master", Finite32::ZERO)]);
+}
+
+/// A copy takes the original's audio settings and sends; deleting a source takes its
+/// sends with it and its inverse puts back exactly what the delete removed.
+#[test]
+fn duplicate_copies_audio_and_delete_restores_it() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![
+            tone_create("t"),
+            Edit::BusCreate {
+                bus_id: BusId::new("vod"),
+                name: "VOD".into(),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("t"),
+                bus_id: BusId::new("vod"),
+                gain_db: db(-3.0),
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("t"),
+                bus_id: BusId::master(),
+            },
+            Edit::SourceSetAudio {
+                source_id: SourceId::new("t"),
+                enabled: Some(false),
+                follow: None,
+                gain_db: Some(db(-6.0)),
+                muted: None,
+            },
+            Edit::SourceDuplicate {
+                source_id: SourceId::new("t"),
+                new_source_id: SourceId::new("t2"),
+                name: "Copy".into(),
+            },
+        ],
+    );
+    let state = graph.state();
+    let (t, t2) = (SourceId::new("t"), SourceId::new("t2"));
+    assert_eq!(
+        state.source(&t2).and_then(|s| s.audio().copied()),
+        state.source(&t).and_then(|s| s.audio().copied())
+    );
+    assert_eq!(state.send(&t2, &BusId::new("vod")), Some(db(-3.0)));
+    assert_eq!(state.send(&t2, &BusId::master()), None);
+
+    let applied = apply_ok(&mut graph, vec![Edit::SourceDelete { source_id: t2 }]);
+    assert_eq!(
+        applied.inverse.edits[1..],
+        [
+            Edit::SendRemove {
+                source_id: SourceId::new("t2"),
+                bus_id: BusId::master(),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("t2"),
+                bus_id: BusId::new("vod"),
+                gain_db: db(-3.0),
+            },
+            Edit::SourceSetAudio {
+                source_id: SourceId::new("t2"),
+                enabled: Some(false),
+                follow: None,
+                gain_db: Some(db(-6.0)),
+                muted: None,
+            },
+        ]
+    );
+}
+
+/// Deleting a bus deletes the sends into it, and its inverse restores the bus, its
+/// fader and the sends.
+#[test]
+fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
+    let mut graph = fixture();
+    let vod = BusId::new("vod");
+    apply_ok(
+        &mut graph,
+        vec![
+            tone_create("t"),
+            Edit::BusCreate {
+                bus_id: vod.clone(),
+                name: "VOD".into(),
+            },
+            Edit::BusSetFader {
+                bus_id: vod.clone(),
+                gain_db: None,
+                muted: Some(true),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("t"),
+                bus_id: vod.clone(),
+                gain_db: db(-3.0),
+            },
+        ],
+    );
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::BusDelete {
+            bus_id: vod.clone(),
+        }],
+    );
+    assert_eq!(graph.state().bus(&vod), None);
+    assert_eq!(graph.state().send(&SourceId::new("t"), &vod), None);
+    assert_eq!(applied.inverse.edits.len(), 3);
+    let error = apply_err(
+        &mut graph,
+        vec![Edit::BusDelete {
+            bus_id: BusId::master(),
+        }],
+    );
+    assert_eq!(
+        invalid_reason(error),
+        (
+            "edits.0.bus_id".to_owned(),
+            "the master bus can't be deleted".to_owned()
+        )
+    );
+}

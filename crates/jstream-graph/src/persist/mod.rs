@@ -13,11 +13,12 @@
 //!
 //! Docs: docs/ARCHITECTURE.md#persistence, docs/RULES.md#R-API-003, crates/jstream-graph/README.md#purpose
 
-use crate::{Graph, Placement};
+use crate::model::MASTER_NAME;
+use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    BlendMode, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
+    BlendMode, BusId, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
     FilterOwner, Finite32, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind,
-    ProtocolError, Rev, SceneId, SceneRole, Settings, SourceId, SourceKind,
+    ProtocolError, Rev, SceneId, SceneRole, Settings, SourceAudio, SourceId, SourceKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -109,6 +110,17 @@ struct File {
     /// without profiles saves as it did before they existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     encoders: Vec<FileEncoder>,
+    /// Audio buses, ordered by ID, the master among them; omitted when the master is
+    /// the only one and has its defaults, so a collection without audio saves as it
+    /// did before buses existed. Missing, the master has its defaults.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    buses: Vec<FileBus>,
+    /// Every send, ordered by bus, then by source. Written whenever there is a send or
+    /// a source with a channel of its own, so a channel source missing from it has had
+    /// its master send removed. Missing (from a file written before sends existed, or
+    /// one with no audio), every channel source keeps its default master send.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sends: Option<Vec<FileSend>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -164,6 +176,9 @@ struct FileSource {
     /// that may name a source since deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     duplicated_from: Option<SourceId>,
+    /// An audio source's audio settings; omitted when they are its kind's defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    audio: Option<SourceAudio>,
     /// Its filter chains (ADR-0026); omitted while both are empty.
     #[serde(default, skip_serializing_if = "FileChains::is_empty")]
     filters: FileChains,
@@ -215,6 +230,23 @@ struct FileOutput {
     /// The output's encoder profile; omitted for the engine's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     encoder_profile: Option<EncoderProfileId>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct FileBus {
+    id: BusId,
+    name: String,
+    gain_db: Finite32,
+    muted: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileSend {
+    source_id: SourceId,
+    bus_id: BusId,
+    gain_db: Finite32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -297,6 +329,9 @@ impl Graph {
                         video: self.file_filters(&source.filters.video),
                         audio: self.file_filters(&source.filters.audio),
                     },
+                    audio: source
+                        .audio
+                        .filter(|a| Some(*a) != audio::default_audio(&source.kind, &self.kinds)),
                 })
                 .collect(),
             outputs: state
@@ -317,6 +352,8 @@ impl Graph {
                     profile: encoder.profile,
                 })
                 .collect(),
+            buses: file_buses(state),
+            sends: file_sends(state),
         };
         let mut json = serde_json::to_string_pretty(&file).expect(
             "invariant: the file holds only strings, finite numbers, bools, and maps with \
@@ -353,6 +390,35 @@ impl Graph {
         }
         graph.rev = file.rev;
         Ok(graph)
+    }
+}
+
+/// The buses as the file saves them: none when the master is the only one and has its
+/// defaults.
+fn file_buses(state: &crate::State) -> Vec<FileBus> {
+    let buses: Vec<FileBus> = state
+        .buses()
+        .map(|bus| FileBus {
+            id: bus.id().clone(),
+            name: bus.name().to_owned(),
+            gain_db: bus.gain_db(),
+            muted: bus.muted(),
+        })
+        .collect();
+    if buses == [default_master()] {
+        Vec::new()
+    } else {
+        buses
+    }
+}
+
+/// The master bus of a new collection, as the file saves it.
+fn default_master() -> FileBus {
+    FileBus {
+        id: BusId::master(),
+        name: MASTER_NAME.to_owned(),
+        gain_db: Finite32::ZERO,
+        muted: false,
     }
 }
 
@@ -405,11 +471,33 @@ fn migrate_with(value: &mut Value, migrations: &[Migration]) -> Result<(), LoadE
     Ok(())
 }
 
+/// The collection's sends for the file: `None` only when there are none and no source
+/// has a channel, so a channel source missing from the list is one whose master send
+/// was removed.
+fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
+    let sends: Vec<FileSend> = state
+        .sends()
+        .map(|(source, bus, gain_db)| FileSend {
+            source_id: source.clone(),
+            bus_id: bus.clone(),
+            gain_db,
+        })
+        .collect();
+    let channels = state
+        .sources
+        .values()
+        .any(|source| audio::has_channel(&source.kind, source.audio.as_ref()));
+    (channels || !sends.is_empty()).then_some(sends)
+}
+
 /// The edits that build `file`'s collection from an empty one, each with the object it
 /// creates for the error message. The canvas comes first (when not the default), then
-/// scenes, empty, in display order and with their roles; then sources, each after the
-/// sources its settings refer to; then every source's filters; then items, encoder profiles, and outputs, each with
-/// its profile.
+/// scenes, empty, in display order and with their roles; then the buses with their
+/// faders, which a source's settings may refer to; then sources, each after the
+/// sources its settings refer to; then every source's filters; then items, encoder
+/// profiles, and outputs, each with its profile; then the sends (the sources made their
+/// default master sends, so when the file lists sends a source without one has it
+/// removed), and each source's audio settings.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -431,6 +519,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             },
         ));
     }
+    rebuild_buses(file, &mut edits);
     let sources: BTreeMap<&SourceId, &FileSource> =
         file.sources.iter().map(|s| (&s.id, s)).collect();
     let mut placed = BTreeSet::new();
@@ -540,6 +629,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             ));
         }
     }
+    rebuild_audio(graph, file, &mut edits);
     Ok(edits)
 }
 
@@ -564,6 +654,94 @@ fn check_kind_version(
         });
     }
     Ok(())
+}
+
+/// Pushes the edits that give the rebuilt collection `file`'s buses and their faders,
+/// before its sources: a bus depends on nothing, and a source's settings may refer to
+/// one (a `waveform`'s `audio`).
+fn rebuild_buses(file: &File, edits: &mut Vec<(String, Edit)>) {
+    let default = default_master();
+    for bus in &file.buses {
+        let object = format!("bus `{}`", bus.id);
+        if bus.id.is_master() {
+            if bus.name != default.name {
+                edits.push((
+                    object.clone(),
+                    Edit::BusRename {
+                        bus_id: bus.id.clone(),
+                        name: bus.name.clone(),
+                    },
+                ));
+            }
+        } else {
+            edits.push((
+                object.clone(),
+                Edit::BusCreate {
+                    bus_id: bus.id.clone(),
+                    name: bus.name.clone(),
+                },
+            ));
+        }
+        if bus.gain_db != default.gain_db || bus.muted != default.muted {
+            edits.push((
+                object,
+                Edit::BusSetFader {
+                    bus_id: bus.id.clone(),
+                    gain_db: Some(bus.gain_db),
+                    muted: Some(bus.muted),
+                },
+            ));
+        }
+    }
+}
+
+/// Pushes the edits that give the rebuilt collection `file`'s sends and source audio
+/// settings, after its sources exist.
+fn rebuild_audio(graph: &Graph, file: &File, edits: &mut Vec<(String, Edit)>) {
+    for source in &file.sources {
+        let object = format!("source `{}`", source.id);
+        let default = audio::default_audio(&source.kind, &graph.kinds);
+        let gets_master = default.is_some() && !matches!(source.kind, SourceKind::Scene { .. });
+        // A file without `sends` predates them (or has no audio): every channel source
+        // keeps the master send its creation gave it.
+        let keeps_master = file.sends.as_ref().is_none_or(|sends| {
+            sends
+                .iter()
+                .any(|send| send.source_id == source.id && send.bus_id.is_master())
+        });
+        if gets_master && !keeps_master {
+            edits.push((
+                object.clone(),
+                Edit::SendRemove {
+                    source_id: source.id.clone(),
+                    bus_id: BusId::master(),
+                },
+            ));
+        }
+        if let Some(audio) = source.audio {
+            let scene = matches!(source.kind, SourceKind::Scene { .. });
+            edits.push((
+                object,
+                Edit::SourceSetAudio {
+                    source_id: source.id.clone(),
+                    enabled: Some(audio.enabled),
+                    follow: Some(audio.follow),
+                    gain_db: (!scene).then_some(audio.gain_db),
+                    muted: (!scene).then_some(audio.muted),
+                },
+            ));
+        }
+    }
+    for send in file.sends.iter().flatten() {
+        edits.push((
+            format!("send from `{}` to `{}`", send.source_id, send.bus_id),
+            Edit::SendSet {
+                source_id: send.source_id.clone(),
+                bus_id: send.bus_id.clone(),
+                gain_db: send.gain_db,
+            },
+        ));
+    }
 }
 
 /// Pushes `source.create` for `source`, after the sources its settings refer to. A

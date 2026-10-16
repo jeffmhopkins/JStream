@@ -3,10 +3,11 @@
 //! (side effects); queries read; events push changes; errors carry stable codes. The JSON
 //! Schema is generated from these types. Layer 1: plain data, WASM-safe, no I/O.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#design, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#design, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md
 
 #![forbid(unsafe_code)]
 
+mod audio;
 mod command;
 mod encoder;
 mod envelope;
@@ -21,11 +22,17 @@ mod kind;
 mod output;
 #[cfg(feature = "fixtures")]
 pub mod parity;
+mod preview;
 mod query;
 mod schema;
 mod settings;
 mod version;
+mod youtube;
 
+pub use audio::{
+    AudioFollow, BusInfo, BusMeter, Loudness, MAX_BUSES, MAX_GAIN_DB, MIN_GAIN_DB, SendInfo,
+    SourceAudio, SourceMeter, gain_db_problem,
+};
 pub use command::{
     Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole,
     SourceKind, Vec2,
@@ -35,8 +42,8 @@ pub use encoder::{
     HardwarePreference, RateControl, VideoCodec, VideoEncoding,
 };
 pub use envelope::{
-    Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request, Response,
-    ServerMessage, Welcome,
+    ActionResult, Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request,
+    Response, ServerMessage, Welcome,
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{DropCounts, Event, OutputState};
@@ -48,18 +55,28 @@ pub use geometry::{
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{
-    ClientId, EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId, RequestId, Rev,
-    SceneId, SourceId,
+    BusId, ClientId, DeviceId, EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId,
+    RequestId, Rev, SceneId, SourceId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
 };
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
-pub use query::{DeleteTarget, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
+pub use preview::{
+    BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
+    PreviewCodec, PreviewSettings, StreamKind,
+};
+pub use query::{
+    DeleteTarget, DeviceInfo, ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo,
+};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};
+pub use youtube::{
+    BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy, BroadcastTransition,
+    BroadcastType, HealthIssue, IssueSeverity, StreamHealth, StreamInfo, StreamStatus, YoutubeAuth,
+};
 
 #[cfg(test)]
 mod fixtures;
