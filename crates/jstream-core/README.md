@@ -688,7 +688,8 @@ waits for a start). The call checks the output is idle,
 takes the publish target, records an in-flight generation, emits `starting`, and
 drops the collection lock before it opens devices or joins anything. When no other
 output is running it opens the program stage and waits,
-up to 10 s, for the render thread to open the software compositor; that bound only
+up to 10 s, for the render thread to open the compositor (hardware first, the software
+adapter as the fallback); that bound only
 keeps a stuck adapter from blocking the call, and the GPU tests raise it because
 lavapipe can open slower than that on a loaded CI runner. When others are running it shares
 theirs. It then gets the encoder session for its key (opening one if no running

@@ -270,10 +270,13 @@ Adapter order when `OpenOptions` asks for software (`OpenOptions::headless`):
 3. `RenderError::NoAdapter` when the instance has none.
 
 When it asks for hardware (`OpenOptions::hardware`, the default, which the engine's
-render and snapshot threads, the tests and the benchmarks use; a software adapter can't
-composite 30 frames a second, #433): the high-performance adapter without
+render and snapshot threads, the tests and the benchmarks use; on WARP a 720p program
+ran at about 10 fps, #433): the high-performance adapter without
 `force_fallback_adapter` first, then the software adapter, then
-`RenderError::NoAdapter`. A machine with no GPU still runs, on lavapipe or WARP.
+`RenderError::NoAdapter`. A hardware adapter whose device refuses to open (limits below
+the defaults, a removed or hung GPU) falls back to the software adapter too, and the
+error names both when that fails as well. A machine with no GPU still runs, on lavapipe
+or WARP.
 
 `Compositor::on_context` does not search. It uses the `GpuContext` it is given.
 

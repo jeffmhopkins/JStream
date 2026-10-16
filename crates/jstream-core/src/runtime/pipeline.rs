@@ -74,8 +74,9 @@ use crate::snapshot::{self, CaptureFrame, GpuKey, Shot};
 const FRAME_NUM: u32 = 1;
 const FRAME_DEN: u32 = 30;
 const SAMPLE_RATE: u32 = 48_000;
-/// How long `output.start` waits for the render thread to open the compositor on the
-/// software adapter, unless the engine was given another bound. It only keeps a stuck
+/// How long `output.start` waits for the render thread to open the compositor (hardware
+/// first, the software adapter as the fallback), unless the engine was given another
+/// bound. It only keeps a stuck
 /// adapter from blocking the call forever; a slower open is not a pipeline fault.
 pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 /// Composite errors in a row that the render thread rides out by repeating the last
@@ -733,7 +734,7 @@ pub(crate) fn parts_from(
 
 /// The wgpu compositor on a hardware adapter, or the software one when there is none
 /// (`OpenOptions::hardware`), reading every frame back to the CPU. The render thread
-/// has a 1/30 s budget, which a software adapter misses at 720p already (#433).
+/// has a 1/30 s budget, which WARP missed at 720p (about 10 fps, #433).
 /// Its [`ResourceCache`] keeps the uploads and nested-scene layers from tick to tick.
 pub(crate) fn gpu_draw() -> OpenDraw {
     Arc::new(|| {
@@ -1963,6 +1964,9 @@ mod tests {
         profile.video.hardware = ProfileHardware::Prefer;
         let config = video_config(size, &profile).expect("prefer");
         assert_eq!(config.hardware, HardwarePreference::Prefer);
+        profile.video.hardware = ProfileHardware::Avoid;
+        let config = video_config(size, &profile).expect("avoid");
+        assert_eq!(config.hardware, HardwarePreference::Avoid);
         profile.video.rate_control = ProfileRate::Unknown;
         assert!(video_config(size, &profile).is_err());
     }
