@@ -40,6 +40,9 @@ jstream-render.workspace = true
 jstream-sources.workspace = true
 # PNG for `video.snapshot` (ADR-0031). Encoding only; deflate stays pure Rust.
 png.workspace = true
+# Settings values: the audio filter kinds' defaults and the mixer kernels read from them
+# (ADR-0025, ADR-0026), and saved collection files in the engine tests.
+serde_json.workspace = true
 thiserror.workspace = true
 # Spans around commands, outputs and sessions (R-RS-005).
 tracing.workspace = true
@@ -53,9 +56,6 @@ jstream-platform = { workspace = true, features = ["fake"] }
 jstream-browser = { workspace = true, features = ["fake"] }
 # `tests/mcp.rs`: an MCP agent driving the real engine through `InProcessControl`.
 jstream-mcp.workspace = true
-# Settings values and saved collection files in the engine tests (`src/tests.rs`,
-# `src/tests/`, `tests/mcp.rs`).
-serde_json.workspace = true
 # The shared parity fixture that `jstream-graph` and the mock are held to.
 jstream-protocol = { workspace = true, features = ["fixtures"] }
 # Decodes the preview stream's JPEGs in its tests; already in the tree for the image

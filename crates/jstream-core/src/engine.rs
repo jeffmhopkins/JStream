@@ -296,8 +296,9 @@ impl Engine {
         self
     }
 
-    /// Gives `browser` sources the browser engine they open their pages in (ADR-0021).
-    /// Without one, a `browser` source shows nothing and logs that no backend is set.
+    /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
+    /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
+    /// that no backend is set; giving one builds the ones already there again.
     /// The host also hands the backend a GPU device (`use_device`): for now one it opens
     /// on the media adapter itself, since the engine doesn't hand out its own yet.
     #[must_use]
