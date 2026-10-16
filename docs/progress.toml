@@ -193,8 +193,9 @@ prs = [166]
 id = "A3"
 milestone = "M1a"
 title = "Daemon goes live on Windows"
-status = "done"
+status = "hardware"
 prs = [226]
+note = "Windows 11 Pro N run (#333)"
 
 [[item]]
 id = "A6"
@@ -258,8 +259,8 @@ id = "A6b"
 milestone = "M1a"
 title = "Daemon YouTube wiring"
 status = "planned"
-note = "draft #312; sign-in needs the OAuth client (ADR-0058)"
-needs = ["build", "maintainer"]
+note = "draft #312; sign-in needs the OAuth client (ADR-0058); Windows run #337"
+needs = ["build", "maintainer", "hardware"]
 
 # M1b
 
@@ -402,8 +403,8 @@ id = "C3"
 milestone = "M1b"
 title = "Display and window capture sources"
 status = "planned"
-note = "draft #365"
-needs = ["build"]
+note = "draft #365; Windows run #378"
+needs = ["build", "hardware"]
 
 [[item]]
 id = "C8"
@@ -554,8 +555,9 @@ prs = [235]
 id = "G3d"
 milestone = "M1c"
 title = "Virtual camera in the UI and the desktop app"
-status = "done"
+status = "hardware"
 prs = [316]
+note = "Windows run (#390)"
 
 [[item]]
 id = "P1"
@@ -821,7 +823,7 @@ milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
 prs = [359]
-note = "effect packs #368; video filters #311, #313, #318"
+note = "effect packs #368; full 3D transforms"
 needs = ["build"]
 
 [[item]]
@@ -846,7 +848,7 @@ milestone = "M3"
 title = "CLAP plugin host"
 status = "planned"
 prs = [272]
-note = "parts 2 and 3 land with wave/m3 (#477); CLAP filters to run; live-audio run (#342)"
+note = "parts 2 and 3 land with wave/m3 (#477); CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run)"
 needs = ["wave", "build", "hardware"]
 
 [[item]]
@@ -861,7 +863,7 @@ id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
 status = "planned"
-note = "parked: the maintainer decides whether it stays in M3"
+note = "the maintainer decides whether it stays in M3; then the macOS ADR"
 needs = ["maintainer", "build"]
 
 [[item]]
@@ -869,5 +871,5 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "planned"
-note = "needs a supported-platforms ADR (maintainer tier)"
+note = "the maintainer decides platform support; then the Linux codec-path ADR"
 needs = ["maintainer", "build"]

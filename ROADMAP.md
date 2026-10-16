@@ -172,8 +172,8 @@ needs, from that file.
 The remaining work lands in this order. A step doesn't wait for the one before it to
 finish: builds, runs and decisions go on side by side, and the order is what lands first.
 
-1. **Land the open waves**, oldest group first (M1, then M2, then M3;
-   [ADR-0055](docs/adr/0055-wave-branches.md)). Items marked *build* finish through review
+1. **Land the open waves** in milestone order, M1, then M2, then M3
+   ([RUNBOOK-WAVES › Landing](docs/runbooks/waves.md#landing)). Items marked *build* finish through review
    into their wave. Items marked *its wave lands* are already in one.
 2. **Windows runs.** Every item marked *Windows run* passes its run on Windows hardware,
    which only the maintainer can do. Items that a later build changes run again.
@@ -181,9 +181,10 @@ finish: builds, runs and decisions go on side by side, and the order is what lan
    - the Google Cloud project and OAuth client for YouTube sign-in
      ([ADR-0058](docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)). Until then
      the daemon's sign-in and the signed-in YouTube features stay hidden;
-   - which platforms besides Windows are supported, in a maintainer-tier ADR: Linux first,
-     and whether macOS stays in M3 or moves to Later.
-4. **Platform crates**: Linux, after its ADR, and macOS if it stays.
+   - which platforms besides Windows are supported (maintainer tier): Linux first, and
+     whether macOS stays in M3 or moves to Later.
+4. **Platform crates**: Linux, after its codec-path ADR, and macOS, if it stays, after
+   its own ADR ([M3](#m3)).
 5. **Release check.** With every item `done`, run the M1, M2 and M3 demos from a clean
    checkout. Whether that becomes a first release, 1.0, is the maintainer's call: 1.0
    removes the deprecated protocol forms

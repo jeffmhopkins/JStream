@@ -3126,7 +3126,7 @@ stamp = { hash = "b3:74359364a23f0470", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:991579db231715d8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }
 
 ["DOCS#ttl"."body"]
-stamp = { hash = "b3:e67dd72e603695c3", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "Re-read against sweep.yml: new Roadmap progress step runs xtask docs progress (full history from fetch-depth 0) into the issue; added its bullet; deny, docs-due, update dry-run, override audit, one pinned issue and not-built list unchanged" }
+stamp = { hash = "b3:b5e19598d2324056", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "the weekly sweep bullet now also says docs progress lists rows whose needs is missing (planned or review) or left over (done), matching progress.rs's stale(); the other sweep bullets are unchanged" }
 
 ["DOCS#ttl"."file:.github/workflows/sweep.yml"]
 stamp = { hash = "b3:397125d6e5564cee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
@@ -3198,7 +3198,7 @@ stamp = { hash = "b3:8b4ecdcf072341c3", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:1fdf8e7084ac49ed", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
 
 ["ROADMAP#endgame"."body"]
-stamp = { hash = "b3:cf92279994a4a99f", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "new section: done means every M0-M3 item in docs/progress.toml is done (merged, Windows run passed); the five steps match the open waves (ADR-0055 order), the hardware items, ADR-0058's OAuth client, the pending supported-platforms ADR, and ADR-0022's 1.0 removal of deprecated forms; the README What's left table it links is generated from needs" }
+stamp = { hash = "b3:ee41237e016997e9", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "round 1: step 1 now cites RUNBOOK-WAVES#landing for milestone order, not ADR-0055, which states none (N4); step 4 names the Linux codec-path ADR and the macOS ADR from M3 and README#platforms, with platform support left to the maintainer (N2); done still means merged with its Windows run passed where it needs one, which the C3, A6b, A3 and G3d rows now match (B1, N6)" }
 
 ["ROADMAP#endgame"."dep:docs/adr/0055-wave-branches.md#decision"]
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "new section: done means every M0-M3 item in docs/progress.toml is done (merged, Windows run passed); the five steps match the open waves (ADR-0055 order), the hardware items, ADR-0058's OAuth client, the pending supported-platforms ADR, and ADR-0022's 1.0 removal of deprecated forms; the README What's left table it links is generated from needs" }

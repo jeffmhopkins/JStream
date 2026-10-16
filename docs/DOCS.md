@@ -463,8 +463,9 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
     `review_every` has passed), and any `cargo xtask docs check` failure on `main`;
   - reports `cargo update --dry-run`: compatible updates, and dependencies held back by a
     version requirement or the toolchain;
-  - lists the entries of `docs/progress.toml` that the merged history contradicts
-    (`cargo xtask docs progress`, [Generated content](#generated));
+  - lists the entries of `docs/progress.toml` that the merged history contradicts, and
+    rows whose `needs` is missing or left over (`cargo xtask docs progress`,
+    [Generated content](#generated));
   - lists every PR merged with `governance-approved` or `review-override` in the past
     eight days (the override audit, [R-GOV-002](RULES.md#R-GOV-002));
   - **rewrites one pinned issue, "Weekly sweep"**, instead of opening new ones, and
