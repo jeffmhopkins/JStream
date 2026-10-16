@@ -1323,7 +1323,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:0bca1913ca49b58e", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
+stamp = { hash = "b3:17aed3ae77964fce", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data-directory bullet and Dependencies (paths beside jstream-browser) hold; #298's browser bullet (CEF only in the sandboxed helper, files beside the exe) holds; its 'cache in the data directory's cef folder, else the log directory's' now matches serve.rs calling jstream_platform::paths::data_dir, fixed after Windows clippy; holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
@@ -1353,7 +1353,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:0bca1913ca49b58e", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291) and this PR's serve.rs doc edit: serve.rs still builds a live engine on Windows that with the cef feature opens browser sources; the crate map's apps row now says the daemon always links jstream-browser, which matches its Cargo.toml" }
+stamp = { hash = "b3:17aed3ae77964fce", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data-directory log default and the e2e canvas-first test (#433) stand beside the wave's text; serve.rs's Windows CEF wiring now reads the data folder from jstream_platform::paths (P1 removed logs::data_dir); nothing in the purpose changes; holds" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
