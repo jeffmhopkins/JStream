@@ -706,7 +706,7 @@ prs = [361]
 id = "Q5"
 milestone = "M2"
 title = "Threat model"
-status = "review"
+status = "done"
 prs = [358]
 
 [[item]]
@@ -746,8 +746,9 @@ status = "planned"
 id = "C9"
 milestone = "M2"
 title = "Media file source"
-status = "review"
-prs = [245]
+status = "hardware"
+prs = [245, 322]
+note = "media file hardware tests (#382)"
 
 [[item]]
 id = "W1"

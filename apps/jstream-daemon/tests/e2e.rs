@@ -21,8 +21,8 @@ use jstream_control::{Control, EventStream, WsConfig, WsControl};
 use jstream_core::{AuditFile, Engine, LivePublish, OpenPublish, PublishError, connect_rtmp};
 use jstream_media::{ChannelLayout, FrameSize, Timebase};
 use jstream_platform::fake::{
-    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
-    MemoryKeyStore,
+    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+    FakeVideoDevices, MemoryKeyStore,
 };
 use jstream_platform::{Backends, StreamKeyStore};
 use jstream_server::{Connector, Server, ServerConfig, Token};
@@ -76,6 +76,7 @@ impl Fakes {
             codecs: Arc::new(FakeCodecs),
             gpu: Arc::new(FakeGpuInterop),
             vcam: None,
+            media: Arc::new(FakeMediaDecoders::new()),
         }
     }
 

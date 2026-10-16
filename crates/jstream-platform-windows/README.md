@@ -245,6 +245,41 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Not yet:** every MJPEG frame is decoded, including ones the mailbox then replaces
     before render takes them.
 
+- **`MfMediaDecoders`** (`MediaDecoders`), local media files through the Media
+  Foundation Source Reader (`decode/`,
+  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)):
+  - **Opening:** `MFCreateSourceReaderFromURL` on the file's host path, with the
+    `\\?\` prefix `canonicalize` adds removed, since the source resolver would read it
+    as a URL scheme. Advanced video processing is on, so the reader converts the
+    decoder's YUV to RGB32 and deinterlaces; `HardwarePreference::Prefer` also turns on
+    hardware decoders, `Avoid` leaves them off, and `Require` is `Unsupported`, because
+    the reader doesn't say which decoder it picked. Only the first video stream is
+    selected, and the first audio stream too when `MediaDecoderConfig::audio` asks for
+    it. The file plays what Media Foundation does: MP4, MOV, MKV and WebM, and
+    H.264, HEVC, VP9 and AV1 where the OS has the decoder (Store extensions for the
+    last three). A missing file is `NotFound`; a container or codec the OS can't read
+    is `Unsupported`.
+  - **Frames:** each RGB32 sample is copied into packed RGBA8 (or BGRA8) with alpha
+    255, top row first, through `IMF2DBuffer::Lock2D` when the buffer has it (which
+    gives the real pitch, negative for a bottom-up picture) and the type's default
+    stride otherwise. The picture is cropped to the type's minimum display aperture,
+    so a decoder that pads 1080 rows to 1088 shows 1080. A frame's `pts` is the
+    sample's time, in 100 ns, on the file's timeline. A media type change mid-stream
+    re-reads the shape. Colour is BT.709 full range, as RGB.
+  - **Audio:** the reader decodes to float PCM at the stream's own rate
+    (`MFAudioFormat_Float`), in the stream's channel count when that is mono, stereo or
+    6 (read as 5.1), else asking the decoder for stereo. A stream it can't select, or
+    decode either way, is left unselected and `info().audio` is `None`, so the video still plays.
+    Each sample is copied out as whole frames of little-endian `f32`, its `pts` the
+    sample's time. A format change mid-stream is `Unsupported`, since the engine's
+    mixer input was made for the first.
+  - **Seeking** sets the reader's position in 100 ns units, for both streams; the
+    reader restarts video at the key frame before it.
+  - **Threads:** `open` joins the MTA for its calls; each open file holds Media
+    Foundation started and the MTA alive (`MfStarted`), so the thread that reads it,
+    the source's decode thread, uses the free-threaded reader as an implicit MTA member.
+  - **Not yet:** frames on the GPU (they follow the zero-copy work).
+
 - **`WindowsGpu`** (`GpuInterop`, [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)
   step 2, plus the D3D11 device that steps 1 and 5 will use; ported from spike S1):
   - **`open_device`** opens the DX12 wgpu device on the media adapter. That is the
@@ -347,7 +382,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     Media Foundation backend before any check can run. That binary must delay-load each
     DLL its backends import (MSVC `/DELAYLOAD:<dll>` with `delayimp.lib`) for the check
     to report anything: `mfplat.dll` for `MfCodecs`; `mfplat.dll`, `mf.dll` and
-    `mfreadwrite.dll` for `MfVideoDevices`; `mfplat.dll` for `MfMjpegDecoder`;
+    `mfreadwrite.dll` for `MfVideoDevices`; `mfplat.dll` and `mfreadwrite.dll` for
+    `MfMediaDecoders`; `mfplat.dll` for `MfMjpegDecoder`;
     `mfplat.dll` and `mfsensorgroup.dll` for `WindowsVcam`. The check itself never imports Media Foundation.
 
 - **`register_vcam`** and **`vcam_registration`**, the virtual camera's registration
@@ -378,7 +414,9 @@ of both kinds, blob limits, zeroing), the virtual camera's format and frame chec
 the Media Foundation check's decision (edition kinds and the advice for each) and the
 video-device helpers (subtypes and frame rates to formats, repeats left out, colour
 fallbacks, NV12 and I420 copies, YUY2 to NV12, short buffers, audio pairing by container)
-run on every platform. The QPC clock test, the start-race test (a destroyed message-only
+and the media-file helpers (RGB32 rows to RGBA and BGRA, top-down and bottom-up,
+cropping to an aperture, short buffers, packed sizes and rates, 100 ns times, the
+verbatim path prefix) run on every platform. The QPC clock test, the start-race test (a destroyed message-only
 window maps to `NotFound`), the credential limits check, the credential round trip (a
 uniquely named credential written, replaced, read and deleted in the real store, a
 non-UTF-8 one refused on read, deleted again on failure), the same through
@@ -405,7 +443,11 @@ checks that a second producer is refused and that the block is stopped after `st
 video-device tests list devices, formats and paired audio, capture an uncompressed format
 and the largest MJPEG format for two seconds each (checking size, format and `pts`), open
 a device twice (shared or `Busy`), and refuse an unknown device or format; an unplug test
-runs only when `JSTREAM_UNPLUG_TEST` is set. Run them on a Windows machine with a
+runs only when `JSTREAM_UNPLUG_TEST` is set. The media-file tests play the video file
+`JSTREAM_TEST_MEDIA` names (over two seconds long): thirty frames in order, opaque and of
+the stream's size, a seek to the middle landing at or before it, a seek past the end
+ending the stream, and the errors for a missing file, a file that isn't media and an
+unsupported pixel format. Run them on a Windows machine with a
 microphone, speakers, a display, a webcam and a DX12 GPU with a hardware H.264 encoder:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`. The
 virtual-camera test also needs the `jstream-vcam-windows` DLL registered

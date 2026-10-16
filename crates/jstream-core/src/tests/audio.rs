@@ -1,25 +1,34 @@
 //! Audio sources (C5): while an output runs, each audio-only source in the collection is
 //! one mixer input, added when the source is created and removed when it is deleted. A
 //! source that can't be recorded is unavailable and doesn't fail the output; a failed
-//! stream is reopened, and an application is found again when it restarts.
+//! stream is reopened, and an application is found again when it restarts. A media
+//! file's sound (C9b) is one more input, fed while the program shows the file.
 
-use super::{batch, block_on, connected, drain, edits, output_call, output_state};
+use super::{add, batch, block_on, connected, create, drain, edits, output_call, output_state};
 use crate::audio_sources::AudioStatus;
 use crate::runtime::cpu_draw;
 use crate::{Engine, RecordingPublish};
 use jstream_control::Control;
-use jstream_media::{ChannelLayout, FrameSize, Timebase};
+use jstream_media::{AudioFormat, ChannelLayout, FrameSize, SampleFormat, Timebase};
 use jstream_platform::fake::{
-    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    FakeAudio, FakeAudioIo, FakeCapture, FakeClip, FakeClock, FakeCodecs, FakeGpuInterop,
+    FakeMediaDecoders, FakeVideoDevices,
 };
 use jstream_platform::{AudioInputTarget, AudioProcess, Backends};
-use jstream_protocol::{Batch, Edit, Event, OutputId, OutputState, Settings, SourceId, SourceKind};
+use jstream_protocol::{
+    AssetRoot, Batch, Edit, Event, ItemId, OutputId, OutputState, Reference, Settings, SourceId,
+    SourceKind,
+};
 use serde_json::json;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 fn engine(audio: &FakeAudioIo, clock: &FakeClock) -> Engine {
+    engine_with(audio, clock, FakeMediaDecoders::new())
+}
+
+fn engine_with(audio: &FakeAudioIo, clock: &FakeClock, media: FakeMediaDecoders) -> Engine {
     let backends = Backends {
         clock: Arc::new(clock.clone()),
         video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
@@ -31,6 +40,7 @@ fn engine(audio: &FakeAudioIo, clock: &FakeClock) -> Engine {
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
         vcam: None,
+        media: Arc::new(media),
     };
     Engine::new()
         .with_output(OutputId::new("yt"))
@@ -262,6 +272,240 @@ fn a_settings_change_reopens_the_input_and_stopping_clears_the_status() {
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(eventually(|| audio.open_streams() == 0));
     assert_eq!(status(&engine, "mic"), None);
+}
+
+/// Shows or hides the item that places the media file.
+fn show_clip(control: &crate::InProcessControl, visible: bool) {
+    batch(
+        control,
+        Batch::single(Edit::ItemSetVisible {
+            item_id: ItemId::new("i1"),
+            scene_id: None,
+            visible,
+        }),
+    )
+    .expect("shown or hidden");
+}
+
+/// Moves the clock on by `ms` in 20 ms steps, re-planning at each as the program mix
+/// does, so the file's frames are taken and its decoder reads on.
+fn run_for(engine: &Engine, clock: &FakeClock, ms: u64) {
+    for _ in 0..ms / 20 {
+        clock.advance(20_000);
+        engine.replan();
+        thread::sleep(Duration::from_millis(2));
+    }
+}
+
+#[test]
+fn a_media_files_sound_is_mixed_while_the_program_shows_it() {
+    let dir = std::env::temp_dir().join(format!("jstream-core-media-audio-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a folder");
+    let path = dir.join("clip.mp4");
+    std::fs::write(&path, b"fake").expect("the file");
+    let path = path.canonicalize().expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        &path,
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 25).expect("a time base"),
+            frames: 25,
+            key_every: 5,
+            audio: Some(FakeAudio {
+                format: AudioFormat::new(
+                    44_100,
+                    ChannelLayout::Stereo,
+                    SampleFormat::F32Interleaved,
+                )
+                .expect("a format"),
+                block_frames: 1024,
+                blocks: 43,
+            }),
+        },
+    );
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine_with(&audio, &clock, media.clone());
+    let control = connected(&engine);
+    let mut events = control.events();
+    let file = Reference::Asset {
+        root: AssetRoot::Absolute,
+        path: path.to_string_lossy().into_owned(),
+    };
+    let video: Settings = Settings(
+        [
+            ("file", file.to_value()),
+            ("loop", json!(true)),
+            ("speed", json!(1.0)),
+            ("restart_on_show", json!(false)),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_owned(), v))
+        .collect(),
+    );
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            Edit::SourceCreate {
+                source_id: SourceId::new("clip"),
+                name: "clip".into(),
+                kind: SourceKind::Builtin {
+                    kind: "media".into(),
+                },
+                settings: video,
+                duplicated_from: None,
+            },
+            add("a", "i1", "clip"),
+        ]),
+    )
+    .expect("a scene showing the file");
+    assert!(engine.settle_sources(), "the file opened");
+    // Not mixed while no output runs.
+    assert_eq!(status(&engine, "clip"), None);
+
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(eventually(
+        || status(&engine, "clip") == Some(AudioStatus::Recording)
+    ));
+    // A video doesn't replace the default microphone and desktop audio.
+    assert!(
+        inputs(&audio)
+            == names(&[
+                AudioInputTarget::DefaultInput,
+                AudioInputTarget::DefaultOutputLoopback
+            ]),
+        "{:?}",
+        inputs(&audio)
+    );
+    let packets = |engine: &Engine| engine.audio_packets(&SourceId::new("clip")).unwrap_or(0);
+    assert!(
+        eventually(|| {
+            run_for(&engine, &clock, 100);
+            packets(&engine) >= 20
+        }),
+        "the file's sound reaches its mixer input: {}",
+        packets(&engine)
+    );
+
+    // The count once two reads a reconcile pass apart agree.
+    let settled = |engine: &Engine| {
+        let mut last = packets(engine);
+        for _ in 0..20 {
+            thread::sleep(Duration::from_millis(700));
+            let now = packets(engine);
+            if now == last {
+                return now;
+            }
+            last = now;
+        }
+        panic!("the count never settled: {last}");
+    };
+
+    // Hidden, it is silent: once what was handed on ahead is counted, no more comes.
+    show_clip(&control, false);
+    run_for(&engine, &clock, 200);
+    let hidden = settled(&engine);
+    run_for(&engine, &clock, 400);
+    assert_eq!(settled(&engine), hidden, "nothing while hidden");
+
+    // Shown again, it is heard again.
+    show_clip(&control, true);
+    assert!(
+        eventually(|| {
+            run_for(&engine, &clock, 100);
+            packets(&engine) > hidden + 10
+        }),
+        "heard again: {} after {hidden}",
+        packets(&engine)
+    );
+
+    // The routing (D5) finds its input as an audio source's: it is metered.
+    let metered = |events: &mut jstream_control::EventStream| {
+        engine.emit_meters_tick();
+        drain(events)
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::MetersTick { sources, .. } => Some(
+                    sources
+                        .into_iter()
+                        .map(|s| s.source_id.as_str().to_owned())
+                        .collect::<Vec<_>>(),
+                ),
+                _ => None,
+            })
+            .expect("a meters.tick while the program runs")
+    };
+    assert_eq!(metered(&mut events), ["clip"]);
+    // Its audio off, its input closes; on again, it opens again.
+    let set_audio = |enabled: bool| {
+        batch(
+            &control,
+            Batch::single(Edit::SourceSetAudio {
+                source_id: SourceId::new("clip"),
+                enabled: Some(enabled),
+                follow: None,
+                gain_db: None,
+                muted: None,
+            }),
+        )
+        .expect("source.set_audio");
+    };
+    set_audio(false);
+    assert!(eventually(|| status(&engine, "clip").is_none()));
+    assert!(metered(&mut events).is_empty());
+    set_audio(true);
+    assert!(eventually(
+        || status(&engine, "clip") == Some(AudioStatus::Recording)
+    ));
+    assert_eq!(metered(&mut events), ["clip"]);
+
+    // Deleting the source removes its input.
+    batch(
+        &control,
+        edits(vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("i1"),
+            },
+            delete("clip"),
+        ]),
+    )
+    .expect("deleted");
+    assert!(eventually(|| status(&engine, "clip").is_none()));
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(eventually(|| audio.open_streams() == 0));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_program_mix_feeds_the_audio_scope_while_an_output_runs() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let scope = engine.audio_scope();
+    let mut window = [0.0f32; 256];
+    assert_eq!(
+        scope.latest(&mut window),
+        (0, 0),
+        "no mix before an output runs"
+    );
+
+    // The default microphone and desktop inputs each deliver a steady 0.25: the scope
+    // sees their mix (the mixer's latency and resampler settle first).
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(
+        eventually(|| {
+            audio.deliver(480, 0.25);
+            clock.advance(10_000);
+            let (_, rate) = scope.latest(&mut window);
+            rate == 48_000 && window.iter().any(|&s| s > 0.1)
+        }),
+        "the scope saw no audio: {window:?}"
+    );
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
 
 /// The routing (D5) finds the inputs the program stage opens: an audio source that

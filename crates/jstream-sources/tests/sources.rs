@@ -34,6 +34,8 @@ fn ctx(collection: &Path) -> Context {
             app: None,
         },
         limits: Limits::default(),
+        audio: None,
+        media: None,
     }
 }
 
@@ -89,7 +91,9 @@ fn the_registry_describes_every_builtin_kind_in_order() {
             "display",
             "image",
             "media",
+            "spectrum",
             "text",
+            "waveform",
             "webcam",
             "window"
         ]

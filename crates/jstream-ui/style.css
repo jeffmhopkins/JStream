@@ -112,6 +112,110 @@ input {
 }
 .placeholder { color: var(--muted); }
 
+/* A failed call, over the bottom right corner until dismissed. */
+.problem-bar {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 10;
+  max-width: 28rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--problem);
+  border-radius: 8px;
+  color: var(--problem);
+}
+
+/* Panels. */
+.muted { color: var(--muted); }
+.panel + .panel { margin-top: 1.25rem; }
+.panel .problem { margin: 0.25rem 0 0; font-size: 0.85rem; }
+.panel button, .inspector button { padding: 0.15rem 0.45rem; }
+select, textarea {
+  font: inherit;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+textarea { width: 100%; min-height: 4rem; resize: vertical; }
+
+.rows { list-style: none; margin: 0 0 0.5rem; padding: 0; }
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.25rem;
+  border-radius: 6px;
+}
+.row:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.row.selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.row .row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  border: none;
+  background: none;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.row .row-main .muted { font-size: 0.8rem; }
+.row.hidden .row-main { opacity: 0.5; }
+.row .rename { flex: 1; min-width: 0; padding: 0.15rem 0.35rem; }
+.row .row-tools { display: flex; gap: 2px; visibility: hidden; }
+.row:hover .row-tools, .row.selected .row-tools, .row:focus-within .row-tools { visibility: visible; }
+.row .row-tools button, .row .eye { border-color: transparent; background: none; font-size: 0.75rem; }
+.row .row-tools button:hover:not(:disabled) { border-color: var(--line); }
+.add { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.add input { flex: 1; min-width: 6rem; }
+.add select { flex-basis: 100%; }
+
+.confirm {
+  margin: 0 0 0.5rem;
+  padding: 0.6rem;
+  border: 1px solid var(--problem);
+  border-radius: 8px;
+}
+.confirm p { margin: 0 0 0.5rem; }
+.confirm button { margin-right: 0.35rem; }
+button.danger { background: var(--problem); border-color: var(--problem); color: #fff; }
+
+.tabs { display: flex; gap: 0.25rem; margin-bottom: 0.75rem; }
+.tabs [aria-selected="true"] { border-color: var(--accent); color: var(--accent); }
+
+.source-title { margin: 0; font-weight: 600; }
+.source-title + .muted { margin: 0 0 0.75rem; }
+.section { margin: 0 0 0.75rem; padding: 0; border: none; }
+.section legend, .section summary { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.4rem; }
+.field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 0 0.35rem;
+  margin-bottom: 0.6rem;
+}
+.field label { display: grid; gap: 0.25rem; }
+.field .label { color: var(--muted); font-size: 0.85rem; }
+.field .control { display: flex; gap: 0.35rem; align-items: center; min-width: 0; }
+.field .control input, .field .control select { flex: 1; min-width: 0; }
+.field .control input[type="checkbox"] { flex: none; width: auto; }
+.field .control input[type="color"] { flex: none; width: 2.5rem; padding: 0.1rem; }
+.field .control input[type="range"] { padding: 0; }
+.field .control .asset-root { flex: none; width: 7rem; }
+.field .unit { color: var(--muted); font-size: 0.8rem; }
+.field .reset { border-color: transparent; background: none; }
+.field .problem { grid-column: 1 / -1; }
+.readonly { font-size: 0.8rem; word-break: break-all; }
+
+
 /* The canvas view (canvas/mod.rs). Hosts' CSP refuses inline style attributes, so the
    views set every static style through a class here. */
 .canvas-view {
