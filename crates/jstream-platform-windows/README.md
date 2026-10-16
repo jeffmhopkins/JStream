@@ -271,8 +271,16 @@ The code is ported from spikes S1 to S3. This first cut has:
     6 (read as 5.1), else asking the decoder for stereo. A stream it can't select, or
     decode either way, is left unselected and `info().audio` is `None`, so the video still plays.
     Each sample is copied out as whole frames of little-endian `f32`, its `pts` the
-    sample's time. A format change mid-stream is `Unsupported`, since the engine's
-    mixer input was made for the first.
+    sample's time counted in frames at the stream's rate. The reader leaves in the
+    encoder's priming and padding, which a looping file heard as a 25-40 ms hole at
+    each wrap (#445), so `decode/gapless.rs` cuts them: the priming is
+    `MF_SD_AUDIO_ENCODER_DELAY` when the source reports it, else 1024 frames for AAC
+    (FFmpeg's, whose edit list Media Foundation doesn't apply), else none; the padding
+    is `MF_SD_AUDIO_ENCODER_PADDING`, for which the last block is held back until the
+    end of the stream shows it is the last; and nothing past `MF_PD_DURATION` is kept.
+    Times then count from the content's first frame. A seek forgets a held block. A
+    format change mid-stream is `Unsupported`, since the engine's mixer input was made
+    for the first.
   - **Seeking** sets the reader's position in 100 ns units, for both streams; the
     reader restarts video at the key frame before it. A time past the end, which the
     reader refuses with `MF_E_INVALID_POSITION`, leaves both streams ended until the
