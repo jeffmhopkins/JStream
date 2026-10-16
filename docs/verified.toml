@@ -1008,7 +1008,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:f4df86b55f90ceae", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, ingest resolved outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs; tests.rs adds mod youtube; the wave's new stop text (the deadline checked before each send) and its 50 ms StalledPeer test sit beside it unchanged; holds" }
+stamp = { hash = "b3:00c1d96c79f24c4b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3's Design additions (YouTube actions with no engine lock, the sign-in and LiveClient mutexes after the start lock) sit apart from #458's: the stop-drain paragraph (each count takes what it counts off the queue; abandon held over the latch), the drop-table Stop drain row and the abandon, video, audio lock order still match pipeline.rs, which Y3 left untouched. Tests pass after the merge." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -1080,7 +1080,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:551f904f38d8f63a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1. pipeline.rs: the RTMP stop-drain paragraph says output_loop checks the deadline before each of a pass's video and audio sends, matching its two checks; tests.rs: StalledPeer's stalled sends drop to 50 ms and it still ignores stop_by, and Design doesn't describe the fake's timing; the rest is wave/m1's text, unchanged by this PR" }
+stamp = { hash = "b3:f1ff92f8048bf21e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Round-2 fix for B2: the RTMP stop-drain paragraph now says no packet is counted twice because each count takes what it counts off the queue (try_recv in discard), and that the abandon lock, held by the counting side and by the stop over its latch, keeps a thread count wholly in or out of the final tick. pipeline.rs's Queues::abandon field doc says the same. The drop table and the Locking order (abandon, video, audio) are unchanged and still match. tests.rs: only N1's removed assertion." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1104,7 +1104,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:1d96c0a4f96940c7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, ingest resolved outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs; tests.rs adds mod youtube; the wave's new stop text (the deadline checked before each send) and its 50 ms StalledPeer test sit beside it unchanged; holds" }
+stamp = { hash = "b3:8abaa727b4a71f8a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3's Design additions (YouTube actions with no engine lock, the sign-in and LiveClient mutexes after the start lock) sit apart from #458's: the stop-drain paragraph (each count takes what it counts off the queue; abandon held over the latch), the drop-table Stop drain row and the abandon, video, audio lock order still match pipeline.rs, which Y3 left untouched. Tests pass after the merge." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's browser paragraph says a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser and the new tests/audio.rs case; the wave's B7 opacity/blend/filter text is in other paragraphs; holds" }
@@ -1137,7 +1137,7 @@ stamp = { hash = "b3:1cb3f432ff4f8d5d", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:97c448bb25c6d46c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:24c680e7b2e95291", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: the YouTube bullet (with_youtube; YoutubeSetup::built_in from jstream-youtube's constants, None while empty; YoutubeSetup::new as a developer override; one LiveClient, opaque TOKEN_ACCOUNT, sign-in thread, youtube outputs reading the bound ingest, the health thread) and the builder list (with_youtube beside the wave's with_browser and youtube_chat preset) match youtube.rs, engine.rs and lib.rs; tests.rs adds mod youtube beside windows_gpu; tests/youtube.rs as listed; holds" }
+stamp = { hash = "b3:217f59dd4251efa7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3 added the YouTube bullets, tests and youtube.rs and did not touch pipeline.rs or the Drop-counts bullet, which still says the output source counts the output thread's drops or what the stop drops for it when it leaves the thread behind (Running::drop -> Queues::abandon). The Tests list keeps #458's left-behind test beside Y3's src/tests/youtube.rs. clippy and cargo test -p jstream-core (178 passed) after the merge." }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1194,7 +1194,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:551f904f38d8f63a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1: the Tests bullet's stalled-stop test (a peer that stops reading while a stop's deadline runs out) still describes tests.rs with StalledPeer's 50 ms send; nothing here names the pipeline's per-send deadline check" }
+stamp = { hash = "b3:f1ff92f8048bf21e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Round-2 fix for B1: the Drop-counts bullet now says the output source counts what the output thread drops or what the stop drops for it when it leaves that thread behind, matching Running::drop -> Queues::abandon adding to output_drops. pipeline.rs changed only in the Queues::abandon field doc (B2). tests.rs: the new test's closing tick comparison was removed (N1, it could not fail since the source is latched) and its doc says so; the Tests list still names the left-behind count correctly. clippy and the test pass." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1218,7 +1218,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:1d96c0a4f96940c7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: tests.rs adds mod youtube (tests/youtube.rs: sign-in, broadcasts, youtube outputs, health, the empty built-in client) beside the wave's windows_gpu module and its 50 ms stalled-peer test; the YouTube bullet and builder list still match youtube.rs, engine.rs and lib.rs; holds" }
+stamp = { hash = "b3:8abaa727b4a71f8a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3 added the YouTube bullets, tests and youtube.rs and did not touch pipeline.rs or the Drop-counts bullet, which still says the output source counts the output thread's drops or what the stop drops for it when it leaves the thread behind (Running::drop -> Queues::abandon). The Tests list keeps #458's left-behind test beside Y3's src/tests/youtube.rs. clippy and cargo test -p jstream-core (178 passed) after the merge." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
@@ -1269,7 +1269,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:551f904f38d8f63a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1: the output pipeline's threads, program stage and output thread muxing still match pipeline.rs; the added mid-pass deadline check is a stop-drain detail covered in Design, not here" }
+stamp = { hash = "b3:f1ff92f8048bf21e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "pipeline.rs changed only in the Queues::abandon field doc (wording of what the abandon lock guarantees). The Runtime section describes threads, the drain and jstream-stats and makes no claim about stop-drain counting, so it holds." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1287,7 +1287,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:d7c604129bdde866", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:f4df86b55f90ceae", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: stale via core#design, which adds the YouTube engine section (built-in client or developer override) and, from the wave, the per-send stop deadline; the daemon, now with the wave's CEF browser wiring, doesn't call with_youtube, so nothing it says about YouTube changes; holds" }
+stamp = { hash = "b3:00c1d96c79f24c4b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through core#design after merging wave/m1. The daemon's Design cites core Design for sessions, backends, placeholder outputs, audit and collection; Y3's YouTube text and #458's stop-drain wording change none of those claims." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
