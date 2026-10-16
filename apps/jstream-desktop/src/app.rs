@@ -95,7 +95,12 @@ pub fn start(options: &Options, exe_dir: Option<&Path>, data: Option<&Path>) -> 
         let logs = data.join("logs");
         let audit = jstream_core::AuditFile::open(&logs)
             .with_context(|| format!("could not open the audit log in `{}`", logs.display()))?;
-        let engine = host::engine(&data.join(COLLECTION), data, Arc::new(audit), !options.no_vcam)?;
+        let engine = host::engine(
+            &data.join(COLLECTION),
+            data,
+            Arc::new(audit),
+            !options.no_vcam,
+        )?;
         Host::start(engine, ui::ORIGIN)
     })();
     let vcam = host::vcam_status(exe_dir, !options.no_vcam);
