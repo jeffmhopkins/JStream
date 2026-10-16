@@ -43,9 +43,11 @@ state machine. Contents:
   history and the subscribers behind one lock, and the drop ledger behind another, and executes
   batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
 - **YouTube** (`youtube.rs`, [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)):
-  `with_youtube(YoutubeSetup)` gives the engine the user's own Google OAuth client
-  (JStream ships none, so a host calls it only when the user configured one), the HTTPS
-  transport and the `OAuthTokenStore`. It holds one `jstream-youtube` `LiveClient`
+  `with_youtube(YoutubeSetup)` gives the engine a Google OAuth client, the HTTPS
+  transport and the `OAuthTokenStore`. `YoutubeSetup::built_in` uses JStream's built-in
+  client (`jstream_youtube::BUILT_IN_CLIENT_ID`, ADR-0058), and is `None` while that is
+  empty, as it is until the maintainer fills it in; `YoutubeSetup::new` takes another
+  client, for a developer override. It holds one `jstream-youtube` `LiveClient`
   (one account, its refresh token stored under the fixed opaque ID `TOKEN_ACCOUNT`, so
   no email or other personal detail names the credential) and runs the `youtube.*`
   actions and queries with no engine lock held. `youtube.sign_in` asks for the full
@@ -302,7 +304,7 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **YouTube** actions and queries (`youtube.*`) run with no engine lock held, since
   most call the Live API (see *YouTube* under *Outputs*). Without `with_youtube`,
   YouTube's API features are off: `youtube.status` answers `unavailable` and the others
-  `action_failed` saying no OAuth client is configured, and clients hide them.
+  `action_failed` saying the build has no OAuth client, and clients hide them.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -700,8 +702,9 @@ plus the video sessions and hardware sessions open
 guess a hardware cap. A hardware session limit fails the start with the encoder's own
 error for now, not a session-limit code.
 
-**YouTube.** `with_youtube(YoutubeSetup)` gives the engine the user's own Google OAuth
-client (JStream embeds none; without one YouTube's API features are off), the HTTPS
+**YouTube.** `with_youtube(YoutubeSetup)` gives the engine a Google OAuth client
+(JStream's built-in one, empty for now, or a developer's override; without one
+YouTube's API features are off), the HTTPS
 transport and an `OAuthTokenStore` (`youtube.rs`,
 [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)). JStream holds one
 account: its refresh token sits under the fixed account ID `TOKEN_ACCOUNT`

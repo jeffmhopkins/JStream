@@ -5044,7 +5044,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "oneOf": [
         {
           "const": "unavailable",
-          "description": "No Google OAuth client is configured, so YouTube's API features are off (JStream\nships none; the user brings their own). Clients hide YouTube's sign-in and\nbroadcast controls; the YouTube actions and queries fail with `action_failed`.",
+          "description": "The engine has no Google OAuth client (as in a build whose built-in client is\nstill empty), so YouTube's API features are off. Clients hide YouTube's sign-in and\nbroadcast controls; the YouTube actions and queries fail with `action_failed`.",
           "type": "string"
         },
         {

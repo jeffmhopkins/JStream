@@ -631,7 +631,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   and `youtube.health_changed` (a running YouTube output's stream health); and the RTMP
   target `youtube { broadcast_id }`, which `output.start` resolves to the bound stream's
   `rtmps://` ingest and key through the Live API. All of these need a Google OAuth
-  client the user configured themselves (JStream embeds none); without one
+  client: the one built into JStream (ADR-0058, empty until the maintainer fills it
+  in) or a developer's override; without one
   `youtube.status` reports `unavailable`, the rest fail with `action_failed`, and
   clients hide them. Streaming to YouTube with a stream key needs none of this. Planned
   for M3:
@@ -686,9 +687,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
-  as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
-  schema is generated from the protocol.
+  (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  schema is generated from the protocol. The protocol's `youtube.*` ops get no tool and
+  its `youtube.*` events stay out of the `events` feed: YouTube is for people, through
+  the UI (ADR-0058 §3, proposed in #435).
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -697,7 +699,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   about ten a second while the mixer runs, is kept the same way, as `meters`.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 192 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 180 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

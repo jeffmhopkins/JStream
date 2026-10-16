@@ -172,12 +172,13 @@ impl Engine {
         self
     }
 
-    /// Gives the engine YouTube (ADR-0041): the user's own Google OAuth client, the
-    /// HTTPS transport and the store for the account's refresh token. The host calls this
-    /// only when the user configured a client; JStream embeds none. The YouTube actions
+    /// Gives the engine YouTube (ADR-0041): a Google OAuth client, the HTTPS transport
+    /// and the store for the account's refresh token. The host passes
+    /// [`YoutubeSetup::built_in`] when the build has a built-in client (ADR-0058), or a
+    /// developer's override built with [`YoutubeSetup::new`]. The YouTube actions
     /// and queries then work, and an output with a `youtube` target can start. Without
     /// it, YouTube's API features are off: `youtube.status` reports `unavailable`, the
-    /// other YouTube calls fail with `action_failed` saying no client is configured, and
+    /// other YouTube calls fail with `action_failed` saying the build has no client, and
     /// clients hide them. Reads the store once, here: a token kept by an earlier sign-in
     /// signs the engine in. Configure this before [`connect`](Self::connect).
     #[must_use]

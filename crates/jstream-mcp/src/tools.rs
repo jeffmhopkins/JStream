@@ -94,8 +94,13 @@ pub(crate) struct Tools {
     owners: BTreeMap<String, String>,
 }
 
+/// The nouns whose ops are for people only, so no tool carries them and a call naming
+/// one is an unknown op (ADR-0058 §3: YouTube is for people, not agents). The protocol
+/// keeps them for the UI.
+pub(crate) const PEOPLE_ONLY: [&str; 1] = ["youtube"];
+
 impl Tools {
-    /// Generates the tools from the protocol schema.
+    /// Generates the tools from the protocol schema, without the [`PEOPLE_ONLY`] ops.
     pub(crate) fn generate() -> Tools {
         let schema = json_schema();
         let empty = Map::new();
@@ -119,6 +124,9 @@ impl Tools {
                     continue;
                 };
                 let noun = name.split_once('.').map_or(name, |(noun, _)| noun);
+                if PEOPLE_ONLY.contains(&noun) {
+                    continue;
+                }
                 let op = Op {
                     name: name.to_owned(),
                     class,
@@ -140,14 +148,6 @@ impl Tools {
         }
         tools.sort_by(|a, b| a.name.cmp(&b.name));
         Tools { tools, owners }
-    }
-
-    /// These tools without the one named `name`, so `tools/list` leaves it out and a
-    /// call of it is an unknown tool. Its ops stay owned by it, so a misrouted op still
-    /// names it.
-    pub(crate) fn without(mut self, name: &str) -> Tools {
-        self.tools.retain(|t| t.name != name);
-        self
     }
 
     /// The MCP `Tool` objects, for `tools/list`.
@@ -544,15 +544,38 @@ pub(crate) fn check_tool_names_are_valid() {
         }
     }
     // Every edit, action, query and history op in the schema reaches exactly one group
-    // tool.
+    // tool, except the people-only ones, which reach none.
     let schema = json_schema();
     let defs = schema["$defs"].as_object().cloned().unwrap_or_default();
-    let in_schema: usize = ["Edit", "Action", "Query", "HistoryOp"]
+    let names: Vec<String> = ["Edit", "Action", "Query", "HistoryOp"]
         .iter()
-        .map(|def| variants(&defs, def).count())
-        .sum();
-    assert!(in_schema > 0);
-    assert_eq!(tools.owners.len(), in_schema, "an op has no tool, or two");
+        .flat_map(|def| variants(&defs, def))
+        .filter_map(|v| {
+            v.pointer("/properties/type/const")?
+                .as_str()
+                .map(str::to_owned)
+        })
+        .collect();
+    let people_only = names
+        .iter()
+        .filter(|name| {
+            PEOPLE_ONLY
+                .iter()
+                .any(|noun| name.starts_with(&format!("{noun}.")))
+        })
+        .count();
+    assert!(people_only > 0, "the people-only nouns name no op");
+    assert!(
+        tools
+            .tools
+            .iter()
+            .all(|t| !PEOPLE_ONLY.contains(&t.name.as_str()))
+    );
+    assert_eq!(
+        tools.owners.len(),
+        names.len() - people_only,
+        "an op has no tool, or two"
+    );
 }
 
 #[cfg(test)]

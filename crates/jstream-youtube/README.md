@@ -46,6 +46,10 @@ Contents:
   `refresh` gets a new access token and reports a rotated refresh token; `revoke` signs
   out. Access tokens record their expiry (timed from when the request was sent) and the
   scopes granted.
+  - **The built-in client** (ADR-0058 §1): `BUILT_IN_CLIENT_ID` and
+    `BUILT_IN_CLIENT_SECRET` are the "Desktop app" client JStream ships. Both are empty
+    until the maintainer gives their values, and while the ID is empty a build has no
+    client and the engine keeps YouTube's API features off.
   - **Scopes** (ADR-0041 §4): `Scope::Readonly` (`youtube.readonly`) for listing and
     stream health, `Scope::Manage` (`youtube`) for creating, binding and transitioning.
     The Live API reference pages list exactly these: the list methods accept either

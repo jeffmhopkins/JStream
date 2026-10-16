@@ -28,7 +28,8 @@ use jstream_youtube::live::{
     NewBroadcast, NewStream, PageRequest, Privacy, StreamFilter, Transition,
 };
 use jstream_youtube::{
-    HttpTransport, LiveClient, LoopbackRedirect, MAX_REMOTE_TEXT, OAuthClient, Scope, YoutubeError,
+    BUILT_IN_CLIENT_ID, BUILT_IN_CLIENT_SECRET, HttpTransport, LiveClient, LoopbackRedirect,
+    MAX_REMOTE_TEXT, OAuthClient, Scope, YoutubeError,
 };
 use std::collections::BTreeMap;
 use std::fmt;
@@ -57,11 +58,13 @@ pub(crate) type Emit = Arc<dyn Fn(Event) + Send + Sync>;
 
 /// Why a YouTube call fails when the engine has no YouTube setup.
 pub const NO_YOUTUBE_CLIENT: &str =
-    "YouTube's API features are off: no Google OAuth client is configured";
+    "YouTube's API features are off: this build has no Google OAuth client";
 
-/// What the host gives the engine for YouTube: the user's own Google OAuth client, the
-/// HTTPS transport, and where the refresh token is kept. JStream ships no client, so a
-/// host builds this only from a client the user configured.
+/// What the host gives the engine for YouTube: the Google OAuth client, the HTTPS
+/// transport, and where the refresh token is kept. The client is JStream's built-in one
+/// ([`built_in`](Self::built_in), ADR-0058), or another one a developer overrides it
+/// with ([`new`](Self::new)). While the built-in client is empty a host has no setup to
+/// give, and YouTube's API features stay hidden.
 pub struct YoutubeSetup {
     client_id: String,
     client_secret: Option<Secret>,
@@ -83,8 +86,37 @@ impl fmt::Debug for YoutubeSetup {
 }
 
 impl YoutubeSetup {
-    /// The user's Google OAuth client (`client_id`, and its secret if it has one; an
-    /// installed app's can't really be kept secret, but it never prints), the transport
+    /// JStream's built-in client ([`jstream_youtube::BUILT_IN_CLIENT_ID`]), with the
+    /// transport and token store as in [`new`](Self::new). `None` while the built-in
+    /// client is empty, as it is until the maintainer fills it in (ADR-0058 §1).
+    pub fn built_in(
+        transport: Arc<dyn HttpTransport>,
+        tokens: Arc<dyn OAuthTokenStore>,
+    ) -> Option<Self> {
+        Self::from_constants(
+            BUILT_IN_CLIENT_ID,
+            BUILT_IN_CLIENT_SECRET,
+            transport,
+            tokens,
+        )
+    }
+
+    /// A setup from a client ID and secret as constants hold them: `None` for an empty
+    /// ID, and no secret for an empty one.
+    pub(crate) fn from_constants(
+        client_id: &str,
+        client_secret: &str,
+        transport: Arc<dyn HttpTransport>,
+        tokens: Arc<dyn OAuthTokenStore>,
+    ) -> Option<Self> {
+        (!client_id.is_empty()).then(|| {
+            let secret = (!client_secret.is_empty()).then(|| Secret::new(client_secret));
+            Self::new(client_id, secret, transport, tokens)
+        })
+    }
+
+    /// A Google OAuth client (`client_id`, and its secret if it has one; an installed
+    /// app's can't really be kept secret, but it never prints), the transport
     /// every Google call goes through (`jstream_youtube::HttpsTransport` in the app),
     /// and the store that keeps the refresh token.
     pub fn new(

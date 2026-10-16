@@ -80,6 +80,17 @@ impl fmt::Display for Scope {
     }
 }
 
+/// The ID of the Google OAuth client JStream ships (ADR-0058 §1): a "Desktop app"
+/// client in the maintainer's Google Cloud project. It is empty until the maintainer
+/// gives its values, and while it is, JStream has no built-in client and YouTube's API
+/// features stay hidden. Only the maintainer's values go here (ADR-0058 §2).
+pub const BUILT_IN_CLIENT_ID: &str = "";
+
+/// The built-in client's secret, empty if it has none. Google treats an installed app's
+/// secret as non-confidential, but it is still handled as a [`Secret`] so it never
+/// prints.
+pub const BUILT_IN_CLIENT_SECRET: &str = "";
+
 /// The app's OAuth client, as registered in Google Cloud ("Desktop app" type).
 ///
 /// Google issues installed apps a client secret too. It can't be kept secret in a

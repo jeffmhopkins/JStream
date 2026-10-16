@@ -26,4 +26,7 @@ pub use http::HttpTransport;
 pub use https::{DEFAULT_TIMEOUT, HttpsTransport, MAX_BODY_BYTES};
 pub use live::LiveClient;
 pub use loopback::LoopbackRedirect;
-pub use oauth::{AccessToken, Grant, OAuthClient, PendingAuthorization, Refreshed, Scope};
+pub use oauth::{
+    AccessToken, BUILT_IN_CLIENT_ID, BUILT_IN_CLIENT_SECRET, Grant, OAuthClient,
+    PendingAuthorization, Refreshed, Scope,
+};

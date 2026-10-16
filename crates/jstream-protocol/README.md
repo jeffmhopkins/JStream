@@ -671,8 +671,9 @@ YouTube command is an action or a query, so agents reach them over MCP too (0.20
   token goes to the OS credential store. Sent again while a sign-in waits, it returns
   the same URL.
 - `youtube.sign_out` revokes the token and forgets it.
-- `youtube.status` reports `auth`: `unavailable` (no Google OAuth client is configured, so
-  YouTube's API features are off and clients hide them; the user brings their own),
+- `youtube.status` reports `auth`: `unavailable` (the engine has no Google OAuth client, as
+  in a build whose built-in client is still empty, so YouTube's API features are off
+  and clients hide them),
   `signed_out`, `signing_in` or `signed_in`. `youtube.status_changed {auth}` reports
   each change, including Google refusing the account's token.
 - `youtube.list_broadcasts {status?, broadcast_type?, page_token?}` and

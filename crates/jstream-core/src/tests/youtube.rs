@@ -185,6 +185,43 @@ fn without_a_setup_youtube_is_unavailable() {
     assert_eq!(code(&err), Some("action_failed"));
 }
 
+/// The built-in client is empty until the maintainer fills it in (ADR-0058 §1), so a
+/// build has no setup and YouTube stays unavailable. Filled-in constants make one,
+/// with no secret when the secret constant is empty.
+#[test]
+fn the_built_in_client_is_empty_so_youtube_is_unavailable() {
+    let transport = FakeTransport::new();
+    let tokens = MemoryTokenStore::new();
+    let built_in = YoutubeSetup::built_in(Arc::new(transport.clone()), Arc::new(tokens.clone()));
+    assert!(built_in.is_none(), "the built-in client is filled in");
+
+    let filled = |secret: &str| {
+        YoutubeSetup::from_constants(
+            "1234-fixture.apps.googleusercontent.com",
+            secret,
+            Arc::new(transport.clone()),
+            Arc::new(tokens.clone()),
+        )
+        .map(|setup| format!("{setup:?}"))
+    };
+    let with_secret = filled("fixture-secret").expect("a client ID makes a setup");
+    assert!(with_secret.contains("1234-fixture.apps.googleusercontent.com"));
+    assert!(!with_secret.contains("fixture-secret"), "{with_secret}");
+    assert!(
+        with_secret.contains("client_secret: Some("),
+        "{with_secret}"
+    );
+    let without = filled("").expect("a client ID makes a setup");
+    assert!(without.contains("client_secret: None"), "{without}");
+    let none = YoutubeSetup::from_constants(
+        "",
+        "fixture-secret",
+        Arc::new(transport.clone()),
+        Arc::new(tokens.clone()),
+    );
+    assert!(none.is_none());
+}
+
 /// A refresh token kept by an earlier sign-in signs the engine in. The first call
 /// refreshes it, and the list asks for every state and type (persistent "Stream now"
 /// broadcasts included, review N5 on #167).
