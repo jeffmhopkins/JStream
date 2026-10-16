@@ -141,7 +141,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:112f148ae88f982d" }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:49324e4ee28be6df", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
+stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "E3c over wave/m1's E3b text: the one-scene paragraph adds that step 5's encoder side is built (Codecs::on_context, H.264 copying each NV12 target on D3D11 with fences both ways, VideoSession::open_on with CPU fallback) and that nothing writes encode targets yet; steps 1-6 and E3b's capture import text unchanged" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -152,8 +152,11 @@ stamp = { hash = "b3:e413bab2e84c75e1" }
 ["ARCH#gpu-pipeline"."file:crates/jstream-platform-windows/src/gpu/d3d.rs"]
 stamp = { hash = "b3:74636e2565276acc" }
 
+["ARCH#gpu-pipeline"."file:crates/jstream-platform-windows/src/gpu/encode.rs"]
+stamp = { hash = "b3:a962082ddbf74417" }
+
 ["ARCH#gpu-pipeline"."file:crates/jstream-platform-windows/src/gpu/mod.rs"]
-stamp = { hash = "b3:1f10a420e9f6a9bc" }
+stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/Cargo.toml"]
 stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
@@ -1431,7 +1434,7 @@ stamp = { hash = "b3:c605dc3799e8d4cc" }
 stamp = { hash = "b3:08d1db37fb68e030" }
 
 ["CRATE-jstream-encode#design"."body"]
-stamp = { hash = "b3:469ca075b74bfbaf", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Performance bullet matches benches/session.rs" }
+stamp = { hash = "b3:9abb2b5acc27b6d8", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (70d5ce5) into #325: re-read E3c's GPU frames subsection and Not yet beside main's benchmarks (benches/session.rs) text; both hold" }
 
 ["CRATE-jstream-encode#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -1454,8 +1457,11 @@ stamp = { hash = "b3:6cf396d8a1731016" }
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/fanout.rs"]
 stamp = { hash = "b3:876cc2224e1406f8" }
 
+["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/gpu_tests.rs"]
+stamp = { hash = "b3:3e1983696eb83d1b", by = "agent:claude", note = "gpu_tests.rs changed only its module doc (review N3): it now says a machine with no wgpu adapter skips the tests except on CI, where that fails, matching context()'s assert and this README's test sentence; no code change" }
+
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/lib.rs"]
-stamp = { hash = "b3:69895501654ddc46" }
+stamp = { hash = "b3:dca502d9616aae14" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/registry.rs"]
 stamp = { hash = "b3:6a8de9fcad8ead85" }
@@ -1467,10 +1473,10 @@ stamp = { hash = "b3:55ea3a587b34caad" }
 stamp = { hash = "b3:df3b8e35c3661ab4" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/video.rs"]
-stamp = { hash = "b3:21668f51b28f0233" }
+stamp = { hash = "b3:6c1b99c4b8c63792" }
 
 ["CRATE-jstream-encode#purpose"."body"]
-stamp = { hash = "b3:1ac237caa31707d0", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale via ARCH data-model; no encode text concerns audio routing; holds" }
+stamp = { hash = "b3:9f95f4d2d15eb904", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (6b987c5) into #325: stamp-only conflict; re-read E3c's open_on/VideoPath/wgpu dev-dep/gpu_tests text against #219's D5 restamp; applied review N1 (skips only the tests that need a context); holds" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-encode"]
 stamp = { hash = "b3:984f333744172f87" }
@@ -1490,8 +1496,11 @@ stamp = { hash = "b3:6cf396d8a1731016" }
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/fanout.rs"]
 stamp = { hash = "b3:876cc2224e1406f8" }
 
+["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/gpu_tests.rs"]
+stamp = { hash = "b3:3e1983696eb83d1b", by = "agent:claude", note = "gpu_tests.rs changed only its module doc (review N3): it now says a machine with no wgpu adapter skips the tests except on CI, where that fails, matching context()'s assert and this README's test sentence; no code change" }
+
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/lib.rs"]
-stamp = { hash = "b3:69895501654ddc46" }
+stamp = { hash = "b3:dca502d9616aae14" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/registry.rs"]
 stamp = { hash = "b3:6a8de9fcad8ead85" }
@@ -1503,7 +1512,7 @@ stamp = { hash = "b3:55ea3a587b34caad" }
 stamp = { hash = "b3:df3b8e35c3661ab4" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/video.rs"]
-stamp = { hash = "b3:21668f51b28f0233" }
+stamp = { hash = "b3:6c1b99c4b8c63792" }
 
 ["CRATE-jstream-graph#purpose"."body"]
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
@@ -1782,13 +1791,13 @@ stamp = { hash = "b3:4a6d6e6f01f968f4" }
 stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 
 ["CRATE-jstream-platform#gpu-frames"."body"]
-stamp = { hash = "b3:76df49408e9eabb9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; frames are delivered and composited, encoders don't take them yet, on_context default method text matches capture.rs; holds" }
+stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
 stamp = { hash = "b3:de3f5e959909dcd3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the crate map: only the outputs row and ADR-0051 rows changed; GPU frames talks about platform, render and encoders, whose rows and layers are unchanged" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:49324e4ee28be6df", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; frames are delivered and composited, encoders don't take them yet, on_context default method text matches capture.rs; holds" }
+stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via the crate map (new jstream-browser row, CEF off the platform-windows row) and R-UNSAFE-001 (adds jstream-browser); the GPU frame design is untouched, and the browser backend's shared-texture copy uses GpuFrame as described; holds" }
@@ -1797,7 +1806,7 @@ stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:3356d3703539746c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture bullet's on_context (default None) matches capture.rs, Not-yet says the engine composites GPU frames but encoders and vcam don't take them; holds" }
+stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "E3c over wave/m1's E3b text: FrameSync::platform bullet (None by default) matches gpu.rs; Codecs::on_context bullet (Ok(None) default) matches codec.rs; Not yet now lists the vcam on GPU frames, video_devices and vendor-ID encoder matching, and no longer lists encoders taking GPU frames" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: stale only via jstream-media#purpose, whose only change is its codec citation moving to ADR-0051; this section's backend traits text cites neither ADR; holds" }
@@ -1836,7 +1845,7 @@ stamp = { hash = "b3:d0428542e93b8a89", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:34c4d1c416af47c3" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/codec.rs"]
-stamp = { hash = "b3:f7ce23061cfbb76d" }
+stamp = { hash = "b3:64d00588cf8e082d" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/error.rs"]
 stamp = { hash = "b3:7d8f9a5250232107" }
@@ -1845,7 +1854,7 @@ stamp = { hash = "b3:7d8f9a5250232107" }
 stamp = { hash = "b3:f0faa7b84c4c4c37" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/gpu.rs"]
-stamp = { hash = "b3:7711b9f3083b64e2" }
+stamp = { hash = "b3:2552398d7fe9d54c" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/id.rs"]
 stamp = { hash = "b3:8019c83df5cad30a" }
@@ -1869,10 +1878,10 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:a7c9e7bbf0b3064e", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU path bullet's Capture::on_context answered by on_gpu matches wgc.rs, open-questions text on encoders still open for E3c; holds" }
+stamp = { hash = "b3:574e358c2bd2905b", by = "agent:claude", note = "E3c over wave/m1's E3b text: CPU/GPU H.264 path bullets (MFTEnum2 with the context LUID, MF_SA_D3D11_AWARE, DXGI device manager; 8-sample allocator and Busy; copy waits on the context fence, then signals the release fence) match codec/h264.rs and gpu/encode.rs; WindowsGpu's two fences and the release-value lock; GPU encode test paragraph; Not yet drops encoders; open question answered via Codecs::on_context. Dep: platform #purpose now adds the Codecs::on_context and FrameSync::platform bullets, which this README's MfCodecs GPU path implements as stated; E3b's WgcCapture::on_gpu capture text is unchanged" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:3356d3703539746c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU path bullet's Capture::on_context answered by on_gpu matches wgc.rs, open-questions text on encoders still open for E3c; holds" }
+stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "E3c over wave/m1's E3b text: CPU/GPU H.264 path bullets (MFTEnum2 with the context LUID, MF_SA_D3D11_AWARE, DXGI device manager; 8-sample allocator and Busy; copy waits on the context fence, then signals the release fence) match codec/h264.rs and gpu/encode.rs; WindowsGpu's two fences and the release-value lock; GPU encode test paragraph; Not yet drops encoders; open question answered via Codecs::on_context. Dep: platform #purpose now adds the Codecs::on_context and FrameSync::platform bullets, which this README's MfCodecs GPU path implements as stated; E3b's WgcCapture::on_gpu capture text is unchanged" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:43948c5058fe4611", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via its crate-map row, which drops the CEF browser backend (now in jstream-browser), and R-UNSAFE-001 (adds jstream-browser); this README never described CEF, its text holds" }
@@ -1938,13 +1947,13 @@ stamp = { hash = "b3:bcbc90e406de91b4" }
 stamp = { hash = "b3:0b4fe8918cdd233a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/h264.rs"]
-stamp = { hash = "b3:a5e1bd2cf0f9cd5e" }
+stamp = { hash = "b3:6bff7e228d42f94e" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mf.rs"]
-stamp = { hash = "b3:c5d1fa497918f58d" }
+stamp = { hash = "b3:b132c98638f816bf" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mod.rs"]
-stamp = { hash = "b3:e7ff5e49bb280c63" }
+stamp = { hash = "b3:e1512215aea9ec3b" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/com.rs"]
 stamp = { hash = "b3:c237392a0b5423fa" }
@@ -1958,8 +1967,11 @@ stamp = { hash = "b3:e413bab2e84c75e1" }
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/gpu/d3d.rs"]
 stamp = { hash = "b3:74636e2565276acc" }
 
+["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/gpu/encode.rs"]
+stamp = { hash = "b3:a962082ddbf74417" }
+
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/gpu/mod.rs"]
-stamp = { hash = "b3:1f10a420e9f6a9bc" }
+stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/lib.rs"]
 stamp = { hash = "b3:9c4ac5054362a8e3" }
@@ -2220,13 +2232,13 @@ stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:7bb23bacf002a8e0", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
-stamp = { hash = "b3:76df49408e9eabb9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
+stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "Deps: platform gpu-frames and ARCH gpu-pipeline gained E3c's encoder text (Codecs::on_context, release fence, open_on); render still composites on the context and writes no NV12 encode target, so this section is unaffected" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-render"]
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:49324e4ee28be6df", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
+stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "Deps: platform gpu-frames and ARCH gpu-pipeline gained E3c's encoder text (Codecs::on_context, release fence, open_on); render still composites on the context and writes no NV12 encode target, so this section is unaffected" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2718,10 +2730,10 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
 ["CRATE-jstream-youtube#purpose"."body"]
-stamp = { hash = "b3:86f8b58afedd27a5", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the intro calls this crate the optional half of ADR-0051; the Not yet list now also names the settings where a user enters their own client ID and secret, kept by the host in the OS credential store (ADR-0051 §2, round 3 N8), since this crate takes them only as a ClientId and a Secret; scope and quota citations and the error.rs and oauth.rs comments cite ADR-0041 §4/§5 kept by ADR-0051 §2-3; lib.rs Docs line and crate-map row point at ADR-0051; holds" }
+stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: stale via platform#purpose only; Secret and OAuthTokenStore text unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:3356d3703539746c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (#376) into #219: stale via platform#purpose only (Capture::on_context added); youtube text names neither; holds" }
+stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "Dep: platform #purpose gained the Codecs::on_context and FrameSync::platform bullets and a new Not yet; youtube still uses jstream-platform only for Secret, so this section is unaffected" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:52b27d1ffa7b6a0b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the intro calls this crate the optional half of ADR-0051 (§2: the user's own client, which this crate takes as a ClientId and a Secret; where the host keeps them, the OS credential store per §2, is the host's job); scope and quota citations, and the error.rs and oauth.rs comments, cite ADR-0041 §4/§5 kept by ADR-0051 §2-3; lib.rs Docs line and crate-map row point at ADR-0051; holds" }
