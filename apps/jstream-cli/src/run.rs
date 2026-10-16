@@ -10,8 +10,9 @@ use crate::block::{block_on, next_event};
 use crate::exit::{self, CliError};
 use crate::mcp;
 use jstream_control::protocol::{
-    Action, Call, CallResult, Event, Hello, ItemInfo, OutputInfo, OutputKind, PROTOCOL_VERSION,
-    QueryResult, Response, RtmpTarget, SecretString, SourceInfo, SourceKind, Welcome,
+    Action, ActionResult, Call, CallResult, Event, Hello, ItemInfo, OutputInfo, OutputKind,
+    PROTOCOL_VERSION, QueryResult, Response, RtmpTarget, SecretString, SourceInfo, SourceKind,
+    Welcome,
 };
 use jstream_control::{Control, ControlError, EventStream, WsConfig, WsControl};
 use serde_json::json;
@@ -89,8 +90,11 @@ fn read_token(path: Option<String>) -> Result<String, CliError> {
 const MAX_KEY_INPUT: u64 = 4096;
 
 /// Reads the stream key for `output set-key`: the file's text, or else all of `input`
-/// (stdin), without surrounding whitespace (a key has none, and a file or a pipe usually
-/// ends with a newline). At most [`MAX_KEY_INPUT`] bytes are read. No message repeats
+/// (stdin), without a leading byte-order mark (Windows PowerShell 5.1 writes one on a
+/// pipe, and Notepad's "UTF-8 with BOM" starts a file with one, #438) and without
+/// surrounding whitespace (a key has none, and a file or a pipe usually ends with a
+/// newline). At most [`MAX_KEY_INPUT`] bytes are read. A key with a control or
+/// non-ASCII character is refused: no streaming service issues one. No message repeats
 /// any of what was read.
 fn read_key(key_file: Option<&str>, input: &mut dyn BufRead) -> Result<SecretString, CliError> {
     let mut text = String::new();
@@ -114,12 +118,18 @@ fn read_key(key_file: Option<&str>, input: &mut dyn BufRead) -> Result<SecretStr
             "{source} holds more than {MAX_KEY_INPUT} bytes, which is not a stream key"
         )));
     }
-    let key = text.trim();
+    let key = text.strip_prefix('\u{FEFF}').unwrap_or(&text).trim();
     if key.is_empty() {
         return Err(CliError::Usage(match key_file {
             Some(path) => format!("the key file `{path}` is empty"),
             None => "no stream key on stdin: pipe it in, or pass `--key-file <path>`".into(),
         }));
+    }
+    if key.chars().any(|c| c.is_control() || !c.is_ascii()) {
+        return Err(CliError::Usage(format!(
+            "{source} holds a stream key with a control or non-ASCII character, which no \
+             streaming service accepts (the key is not shown)"
+        )));
     }
     Ok(SecretString::new(key))
 }
@@ -285,6 +295,31 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
         Action::SceneSwitch { scene_id } => {
             writeln!(out, "{} accepted for {scene_id} ({id})", action.name())?;
         }
+        Action::DeviceRevoke { device_id } => {
+            writeln!(out, "device {device_id} revoked ({id})")?;
+        }
+        Action::PairingStart => match &response.result {
+            CallResult::Action {
+                result:
+                    Some(ActionResult::PairingStart {
+                        code,
+                        expires_in_secs,
+                    }),
+            } => {
+                // The code is the answer: printed for the user to type on the device,
+                // never logged (R-SEC-001).
+                writeln!(out, "pairing code: {}", code.expose())?;
+                writeln!(
+                    out,
+                    "enter it on the device within {expires_in_secs} s; it works once"
+                )?;
+            }
+            _ => writeln!(
+                out,
+                "{} accepted, but no code came back ({id})",
+                action.name()
+            )?,
+        },
         other => writeln!(out, "{} accepted ({id})", other.name())?,
     }
     Ok(())
@@ -343,6 +378,26 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
         QueryResult::OutputList { rev, outputs } => {
             writeln!(out, "rev {rev}")?;
             write_outputs(out, "", outputs)?;
+        }
+        QueryResult::DeviceList { devices } => {
+            if devices.is_empty() {
+                writeln!(out, "no paired devices")?;
+                return Ok(());
+            }
+            let rows = devices.iter().map(|device| {
+                vec![
+                    device.device_id.to_string(),
+                    device.name.clone(),
+                    device.paired_at.to_string(),
+                    device.last_used_at.to_string(),
+                ]
+            });
+            table(
+                out,
+                "",
+                &["ID", "NAME", "PAIRED (UNIX S)", "LAST USED (UNIX S)"],
+                rows.collect(),
+            )?;
         }
         QueryResult::StudioGet { program_scene } => match program_scene {
             Some(scene_id) => writeln!(out, "program: {scene_id}")?,

@@ -12,13 +12,13 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0058-youtube-sign-in-with-a-jstream-client.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
 first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, written in Rust
 as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) requires and needed for the
-generic RTMP/RTMPS output of [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md). The
+generic RTMP/RTMPS output of [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md). The
 second is the **recording file sink** in the `record` module (below). The `Output` trait
 comes later. The virtual-camera output is not here: it runs in `jstream-core`'s runtime
 ([jstream-core › Runtime](../jstream-core/README.md#runtime)). Its JStream dependencies are `jstream-media`
@@ -111,10 +111,12 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   attempt runs on its own short-lived thread, one at a time, and every call only
   checks whether one has finished or is due, so the caller's thread never waits for
   a reconnect. While the link is down, media is dropped and counted (`ReconnectStats`),
-  never queued ([R-RT-004](../../docs/RULES.md#R-RT-004)). The last `onMetaData`, AVC
-  sequence header and AAC sequence header are kept as they pass through. After a
-  reconnect, video and audio are dropped (and counted) until the next video keyframe;
-  `onMetaData` and the AVC sequence header go out just before it, and the AAC
+  never queued ([R-RT-004](../../docs/RULES.md#R-RT-004)). The last `onMetaData`, video
+  sequence header (AVC, or the enhanced RTMP `SequenceStart` of HEVC and AV1; never an
+  end of sequence) and AAC sequence header are kept as they pass through. After a
+  reconnect, video and audio are dropped (and counted) until the next video keyframe
+  (coded frames only: an AVC or enhanced RTMP end-of-sequence tag is not one);
+  `onMetaData` and the video sequence header go out just before it, and the AAC
   sequence header just before the next audio packet, each at that packet's
   timestamp. An audio-only stream resumes at once. Timestamps continue from the lost
   session. `state()` is `Active`, `Reconnecting` or `Failed`, which a host maps onto
@@ -191,8 +193,9 @@ trade-off: on Windows the local `ROOT` store is filled on demand by Windows Upda
 root no Windows program has needed yet may be missing (see
 [Open questions](#open-questions)).
 
-**Not yet:** enhanced RTMP (HEVC/AV1), AMF3 payloads, and the signed ("complex")
-handshake.
+**Not yet:** enhanced RTMP (HEVC/AV1) end to end (`connect` doesn't advertise a
+`fourCcList`; the reconnect resync already understands enhanced tags), AMF3 payloads,
+and the signed ("complex") handshake.
 
 **Tests** are hermetic ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): exact handshake
 and chunk bytes, chunking across chunk-size boundaries, extended timestamps, and full
@@ -210,7 +213,11 @@ attempt, the drop counts, the re-sent headers and the resume at the keyframe on 
 second connection, and the state sequence; a write that fails over an in-memory pipe
 (the failed packet counted, audio-only resuming at once); giving up after
 `max_attempts` and at the outage limit; a session that drops again at once
-continuing its outage, and one that stayed up starting a new one. Nothing contacts a
+continuing its outage, and one that stayed up starting a new one; an HEVC and an AV1
+stream of enhanced RTMP tags, and an AVC stream, re-sending their sequence header and
+resuming at the keyframe after a drop, with an end of sequence dropped rather than
+kept as the header or taken as the keyframe.
+Nothing contacts a
 real ingest server or reads the OS trust store. AMF0 tests live
 in `jstream-mux`. Recorder tests write to a directory under the system temp dir:
 the finished file matches `Fmp4Writer`'s output byte for byte, with the AVC

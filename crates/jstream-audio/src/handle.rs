@@ -328,7 +328,8 @@ pub struct InputStats {
     /// Device frames lost in gaps the clock agreed with, replaced by silence.
     pub gap_frames: u64,
     /// Restarts of the position mapping: backwards or overlong position jumps, gaps the
-    /// clock disagreed with, and runs of timestamp outliers.
+    /// clock disagreed with, runs of timestamp outliers, and a discontinuity whose stamp
+    /// is more than 20 ms off the fitted clock line.
     pub resets: u64,
     /// Times the input was re-placed on the engine time line after its first anchor
     /// (after resets, discontinuities and timing errors beyond 20 ms).

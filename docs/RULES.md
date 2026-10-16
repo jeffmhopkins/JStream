@@ -27,7 +27,9 @@ enforced_by = ["review"]
 applies_to = ["crates/**"]
 -->
 Every capability is first a command, query, event or stream in `jstream-protocol`.
-UI, MCP and CLI are built on the protocol, never beside it. There are no UI-only features.
+UI, MCP and CLI are built on the protocol, never beside it. There are no UI-only features,
+except YouTube's account features (the `youtube.*` commands, queries and events), which
+[ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) keeps from agents.
 
 <a id="R-ARCH-002"></a>
 ### R-ARCH-002: Crate layering
@@ -492,7 +494,8 @@ Protocol commands are named `noun.verb` in snake_case (`scene.create`). MCP tool
 match `^[a-zA-Z0-9_-]{1,128}$` ([Anthropic tool use](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use)),
 which rules out the protocol's `.`. So the tools are generated from the protocol and grouped
 by noun ([ARCH › MCP](ARCHITECTURE.md#mcp)): each command or query `noun.verb` is an `op` of
-the tool named after its noun (`scene`), and reaches exactly one tool. Tool names are
+the tool named after its noun (`scene`), and reaches exactly one tool. The one exception is
+the `youtube` noun, whose ops reach no tool ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). Tool names are
 unique. IDs are opaque strings.
 
 <a id="R-API-003"></a>
@@ -543,7 +546,8 @@ token (even on localhost), except `POST /api/v1/pair` while a pairing code is op
 ([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
 device token, never the control token, as the `__Host-jstream_device` cookie. Every
 listener validates the `Host` header, and
-the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
+the `Origin` header when one is present. A device token is accepted only over loopback
+or TLS. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>

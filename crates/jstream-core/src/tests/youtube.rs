@@ -1,4 +1,4 @@
-//! YouTube in the engine (ADR-0041): the sign-in, the broadcast actions and queries,
+//! YouTube in the engine (ADR-0058): the sign-in, the broadcast actions and queries,
 //! and a `youtube` output publishing to its broadcast's ingest, all on
 //! `jstream-youtube`'s `FakeTransport` and its JSON fixtures (R-TEST-004).
 
@@ -39,7 +39,7 @@ const NEW_STREAM: &str = include_str!("../../../jstream-youtube/fixtures/stream_
 const HEALTH: &str = include_str!("../../../jstream-youtube/fixtures/stream_health.json");
 const QUOTA: &str = include_str!("../../../jstream-youtube/fixtures/error_quota.json");
 
-/// The token endpoint's answer to a sign-in with the full scope (ADR-0041 §4).
+/// The token endpoint's answer to a sign-in with the full scope (ADR-0041 §4, kept by ADR-0058).
 const EXCHANGE: &str = r#"{
   "access_token": "ya29.a0AfH6SMfixture-access-1",
   "expires_in": 3599,
@@ -263,7 +263,7 @@ fn a_stored_token_signs_the_engine_in_and_lists_broadcasts() {
     assert_eq!(list.query("maxResults").as_deref(), Some("50"));
 }
 
-/// `youtube.sign_in` returns the consent URL for the full scope alone (ADR-0041 §4), the
+/// `youtube.sign_in` returns the consent URL for the full scope alone (ADR-0041 §4, kept by ADR-0058), the
 /// browser's redirect finishes it, and the refresh token reaches only the store under
 /// the opaque account ID (review N8 on #167), never an event or a response.
 #[test]
@@ -619,7 +619,7 @@ fn broadcast_actions_return_the_broadcast() {
     assert_eq!(transition.query("broadcastStatus").as_deref(), Some("live"));
 }
 
-/// A used-up quota is a protocol error that says so (ADR-0041 §5). A refresh token
+/// A used-up quota is a protocol error that says so (ADR-0041 §5, kept by ADR-0058). A refresh token
 /// Google no longer accepts signs the engine out and leaves the store.
 #[test]
 fn quota_and_revoked_tokens_are_reported() {

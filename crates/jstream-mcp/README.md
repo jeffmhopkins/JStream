@@ -59,14 +59,15 @@ takes it as its `op` argument. A command added to the protocol becomes an op wit
 change here, and a new noun becomes a new tool. The generated list is in the snapshot
 below; its shape is the following. The protocol's `youtube.*` ops get no tool, and a
 call naming one is an unknown op, so none reaches the engine: YouTube is for people,
-through the UI (ADR-0058 §3). For the same reason an `output.create` or
+through the UI ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
+For the same reason an `output.create` or
 `output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
 `batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
 target stays open to agents), and the `events` feed drops `youtube.*` events. `describe_api` still returns the whole schema, YouTube included.
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `video` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -84,6 +85,13 @@ names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-ro
 [`schema/tools.snap`](schema/tools.snap): a protocol change shows up there as the tool
 diff agents will see. After an intended change, regenerate it with
 `INSTA_UPDATE=always cargo test -p jstream-mcp` and review the diff.
+
+The `pairing` and `device` tools (protocol 0.21) need no code here either: the session
+`jstream-server` hands this crate answers them
+([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), so an agent can
+pair and revoke devices as any client can (ADR-0006), and gets `unsupported` from a
+session with no server in front. A `pairing.start` result carries the code, the one
+place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 ### MCP revisions
 
@@ -122,6 +130,7 @@ batches (MCP removed them in 2025-06-18).
 | The arguments don't fit the tool, or an `events` cursor is past the newest event | the same, with the protocol's `malformed` code and the reason |
 | The connection to the engine was lost during the call | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again ([Session and identity](#design)). |
 | `hello` failed with a lost connection | the same `disconnected` code, saying the call was not sent and that the MCP server must be restarted for a new session, with its own undo history |
+| `hello` wasn't answered within 3 s | the same `disconnected` code, saying the call was not sent and that the next call sends `hello` again ([Session and identity](#design)) |
 | Unknown tool, or a `tools/call` without `name` or with non-object `arguments` | JSON-RPC `-32602` |
 | Unparseable JSON / not a valid request / unknown method | `-32700` / `-32600` / `-32601` |
 
@@ -155,7 +164,10 @@ session must open before the agent goes idle, not at its first tool call. If tha
 engine that accepted the connection and then hangs doesn't hold `initialize` until it
 closes), the request still succeeds, and a client that skips both (a stateless
 client going straight to `tools/call`) gets its `hello` before the next tool call that
-needs the engine, which reports a failure. Later names don't change the session.
+needs the engine, which reports a failure. That `hello` has the same 3 s bound: if it
+runs out, the call isn't sent and fails with `disconnected`, and the call after it sends
+`hello` again (if the engine closed the connection meanwhile, that call reports a lost
+connection, as below). Later names don't change the session.
 `describe_api`, argument errors and `events` reads never call the engine
 ([Events](#design)).
 

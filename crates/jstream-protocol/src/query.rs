@@ -1,11 +1,13 @@
 //! Queries: reads with no effect on state, and their results.
 
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
-use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
+use crate::command::{BlendMode, Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
+use crate::filter::FilterChains;
+use crate::finite::Finite32;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
-use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{DeviceId, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::output::OutputInfo;
 use crate::settings::Settings;
@@ -121,6 +123,12 @@ pub enum Query {
         /// What to delete.
         target: DeleteTarget,
     },
+    /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
+    /// paired and was last used, never its token. Answered by the server that admits
+    /// clients, not the engine: a `Control` with no server in front fails with
+    /// `unsupported`.
+    #[serde(rename = "device.list")]
+    DeviceList,
 }
 
 /// What a `delete.plan` deletes: a scene or a source.
@@ -160,6 +168,7 @@ impl Query {
             Query::YoutubeListStreams { .. } => "youtube.list_streams",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
+            Query::DeviceList => "device.list",
         }
     }
 }
@@ -343,10 +352,17 @@ pub enum QueryResult {
         /// the batch is refused if the state changed since.
         rev: Rev,
         /// The edits, in order: `item.remove` for the items that place a deleted source,
-        /// `source.set_settings` setting each reference to a deleted object to `null`,
-        /// `source.delete` for the `scene` sources that show a deleted scene, and last the
+        /// `source.set_settings` and `filter.set_settings` setting each reference to a
+        /// deleted object to `null`, `source.delete` for the `scene` sources that show a deleted scene, and last the
         /// delete of the target itself.
         edits: Vec<Edit>,
+    },
+    /// The result of `device.list`. Devices are not collection state, so it carries no
+    /// `rev`.
+    #[serde(rename = "device.list")]
+    DeviceList {
+        /// The paired devices, ordered by ID.
+        devices: Vec<DeviceInfo>,
     },
 }
 
@@ -370,8 +386,24 @@ impl QueryResult {
             QueryResult::YoutubeListStreams { .. } => "youtube.list_streams",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::DeviceList { .. } => "device.list",
         }
     }
+}
+
+/// One paired device, as `device.list` reports it. Its token is never reported.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DeviceInfo {
+    /// The device's ID, which `device.revoke` takes.
+    pub device_id: DeviceId,
+    /// The name it gave when it paired. The audit log names its sessions
+    /// `device:<name>`.
+    pub name: String,
+    /// When it paired, in seconds since the Unix epoch (UTC).
+    pub paired_at: u64,
+    /// When its token was last presented, in seconds since the Unix epoch (UTC), to the
+    /// hour. A token unused for 30 days lapses and the device is dropped.
+    pub last_used_at: u64,
 }
 
 /// One scene in a `scene.list` result.
@@ -407,6 +439,9 @@ pub struct SourceInfo {
     /// placing this source can go back to placing the original with `item.set_source`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicated_from: Option<SourceId>,
+    /// Its filter chains (ADR-0026). Omitted while both are empty.
+    #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
+    pub filters: FilterChains,
     /// Its audio settings, for an audio source: one whose kind produces audio, or a
     /// `scene` source. Omitted for every other source, and by a server older than 0.19.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -453,4 +488,15 @@ pub struct ItemInfo {
     pub crop: Crop,
     /// Whether it is drawn.
     pub visible: bool,
+    /// Its alpha multiplier, from 0 to 1. Missing (from a server older than this field)
+    /// parses as 1.
+    #[serde(default = "opaque")]
+    pub opacity: Finite32,
+    /// How it composites onto what is below it. Missing parses as `normal`.
+    #[serde(default)]
+    pub blend: BlendMode,
+}
+
+fn opaque() -> Finite32 {
+    Finite32::ONE
 }

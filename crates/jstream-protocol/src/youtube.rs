@@ -1,8 +1,8 @@
-//! YouTube (ADR-0041): the account's sign-in state, broadcasts and streams as the engine
+//! YouTube (ADR-0058): the account's sign-in state, broadcasts and streams as the engine
 //! reports them, the health of a live stream, and the results the YouTube actions return.
 //!
 //! JStream signs in to one Google account at a time, once, with the full `youtube`
-//! scope (ADR-0041 §4). No token ever travels in the protocol (R-SEC-001): a sign-in
+//! scope (ADR-0041 §4, kept by ADR-0058). No token ever travels in the protocol (R-SEC-001): a sign-in
 //! returns the consent URL, and the redirect it leads to completes the sign-in inside
 //! the engine. A stream's key never travels either: starting a YouTube-bound output reads
 //! it from the API and hands it straight to the RTMPS connection.
@@ -232,43 +232,4 @@ pub struct StreamInfo {
     pub status: StreamStatus,
     /// How healthy what it receives is.
     pub health: StreamHealth,
-}
-
-/// What an action returns beyond being accepted. Serialized with an internal `type`
-/// tag repeating the action's name; most actions return none.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "type")]
-#[non_exhaustive]
-pub enum ActionResult {
-    /// The result of `youtube.sign_in`.
-    #[serde(rename = "youtube.sign_in")]
-    YoutubeSignIn {
-        /// Google's consent page. The client opens it in a browser; once the user
-        /// agrees, Google redirects to the engine, which finishes the sign-in and emits
-        /// `youtube.status_changed`.
-        url: String,
-    },
-    /// The result of `youtube.create_broadcast`: the new broadcast.
-    #[serde(rename = "youtube.create_broadcast")]
-    YoutubeCreateBroadcast {
-        /// The broadcast, as YouTube created it.
-        broadcast: BroadcastInfo,
-    },
-    /// The result of `youtube.bind_broadcast`: the broadcast with its new stream.
-    #[serde(rename = "youtube.bind_broadcast")]
-    YoutubeBindBroadcast {
-        /// The broadcast after the bind.
-        broadcast: BroadcastInfo,
-    },
-    /// The result of `youtube.transition_broadcast`.
-    #[serde(rename = "youtube.transition_broadcast")]
-    YoutubeTransitionBroadcast {
-        /// The broadcast after the transition. Its lifecycle may still be moving
-        /// (`test_starting`, `live_starting`).
-        broadcast: BroadcastInfo,
-    },
-    /// A result this version of the protocol doesn't know, from a newer server.
-    #[serde(other)]
-    #[schemars(skip)]
-    Unknown,
 }

@@ -18,6 +18,15 @@ use std::sync::Arc;
 /// The kind's ID.
 const BROWSER: &str = "browser";
 
+/// Whether sources of `kind` open their page in the injected [`BrowserBackend`]
+/// (`browser` and its presets), so a host that sets the backend late must build them
+/// again.
+///
+/// [`BrowserBackend`]: crate::BrowserBackend
+pub fn opens_browser(kind: &str) -> bool {
+    kind == BROWSER || kind == crate::youtube_chat::KIND
+}
+
 /// The longest `url` setting, in characters.
 const MAX_URL_CHARS: u32 = 8192;
 
@@ -91,50 +100,61 @@ impl SourceKind for BrowserKind {
     }
 
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
-        let size = frame_size(settings, &ctx.limits)?;
-        let location = location(settings, ctx)?;
-        let fps = setting(settings, "fps")?
-            .as_u64()
-            .and_then(|v| u32::try_from(v).ok())
-            .filter(|v| (1..=MAX_FPS).contains(v))
-            .ok_or_else(|| SourceError::Setting {
-                param: "fps".into(),
-                reason: format!("must be a whole number from 1 to {MAX_FPS}"),
-            })?;
-        let css = css(settings)?.to_owned();
-        let backend = ctx
-            .browser
-            .as_ref()
-            .ok_or(SourceError::NoBackend { backend: "browser" })?;
-        // The transparent stand-in `frame` returns (see `BrowserSource::frame`), made
-        // before the page opens so a size the limits refuse opens nothing.
-        let blank = Arc::new(crate::color::rgba_frame(
-            size,
-            vec![
-                0;
-                usize::try_from(u64::from(size.width()) * u64::from(size.height()) * 4).map_err(
-                    |_| jstream_media::MediaError::Overflow {
-                        what: "a browser frame",
-                    }
-                )?
-            ],
-            MediaTime::zero(Timebase::MILLIS),
-        )?);
-        let page = backend.open(&PageSpec {
-            location,
-            size,
-            fps,
-            css,
-        })?;
-        let audio: Arc<dyn SourceAudio> = Arc::new(PageAudioOf(Arc::clone(page.audio())));
-        Ok(Box::new(BrowserSource {
-            descriptor: self.0.clone(),
-            settings: settings.clone(),
-            page,
-            blank,
-            audio,
-        }))
+        open(&self.0, settings, ctx, location(settings, ctx)?)
     }
+}
+
+/// Opens a page at `location` with the `width`, `height`, `fps` and `css` settings: a
+/// `browser` source, or a kind built on one (`youtube_chat`). `descriptor` is the
+/// kind's, for telling live changes from restarts.
+pub(crate) fn open(
+    descriptor: &KindDescriptor,
+    settings: &Settings,
+    ctx: &Context,
+    location: PageLocation,
+) -> Result<Box<dyn Source>, SourceError> {
+    let size = frame_size(settings, &ctx.limits)?;
+    let fps = setting(settings, "fps")?
+        .as_u64()
+        .and_then(|v| u32::try_from(v).ok())
+        .filter(|v| (1..=MAX_FPS).contains(v))
+        .ok_or_else(|| SourceError::Setting {
+            param: "fps".into(),
+            reason: format!("must be a whole number from 1 to {MAX_FPS}"),
+        })?;
+    let css = css(settings)?.to_owned();
+    let backend = ctx
+        .browser
+        .as_ref()
+        .ok_or(SourceError::NoBackend { backend: "browser" })?;
+    // The transparent stand-in `frame` returns (see `BrowserSource::frame`), made
+    // before the page opens so a size the limits refuse opens nothing.
+    let blank = Arc::new(crate::color::rgba_frame(
+        size,
+        vec![
+            0;
+            usize::try_from(u64::from(size.width()) * u64::from(size.height()) * 4).map_err(
+                |_| jstream_media::MediaError::Overflow {
+                    what: "a browser frame",
+                }
+            )?
+        ],
+        MediaTime::zero(Timebase::MILLIS),
+    )?);
+    let page = backend.open(&PageSpec {
+        location,
+        size,
+        fps,
+        css,
+    })?;
+    let audio: Arc<dyn SourceAudio> = Arc::new(PageAudioOf(Arc::clone(page.audio())));
+    Ok(Box::new(BrowserSource {
+        descriptor: descriptor.clone(),
+        settings: settings.clone(),
+        page,
+        blank,
+        audio,
+    }))
 }
 
 /// Where the page loads from: the `file` asset when it is set, else the `url`.

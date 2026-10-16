@@ -2649,6 +2649,7 @@ dependencies = [
  "jstream-mux",
  "jstream-outputs",
  "jstream-platform",
+ "jstream-platform-windows",
  "jstream-protocol",
  "jstream-render",
  "jstream-sources",
@@ -2657,6 +2658,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "tracing",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -2720,6 +2722,7 @@ dependencies = [
  "criterion",
  "jstream-platform",
  "thiserror 2.0.21",
+ "wgpu",
 ]
 
 [[package]]

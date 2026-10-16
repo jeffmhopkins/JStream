@@ -88,7 +88,7 @@ pub enum RtmpTarget {
         /// credential: `user:password@`, a `?query` or a `#fragment`.
         url: String,
     },
-    /// A YouTube broadcast (ADR-0041): on `output.start` the engine reads the
+    /// A YouTube broadcast (ADR-0058): on `output.start` the engine reads the
     /// broadcast's bound stream from the Live API and publishes to that stream's
     /// `rtmps://` ingest address with its key. The key comes from YouTube, so
     /// `output.set_key` isn't needed. The start fails with `action_failed` when the
@@ -122,12 +122,14 @@ pub struct OutputInfo {
     pub encoder_profile: Option<EncoderProfileId>,
 }
 
-/// A secret string, such as a stream key, sent by a client to the engine.
+/// A secret string, such as a stream key sent by a client to the engine, or the
+/// pairing code a server answers `pairing.start` with.
 ///
 /// On the wire it is a plain JSON string. In Rust it never prints: its `Debug` is
 /// `"***"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).
 /// A value that is not a string fails to parse with a message that doesn't repeat it.
-/// The engine never sends one back (R-SEC-001).
+/// The engine never sends one back, and a pairing code travels only in that one answer
+/// (R-SEC-001).
 #[derive(Clone, PartialEq, Eq, JsonSchema)]
 #[schemars(transparent)]
 pub struct SecretString(String);

@@ -43,7 +43,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace or control characters, and\n`action_failed` when the engine has no credential store or the store refuses.",
+          "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace, control or non-ASCII characters, and\n`action_failed` when the engine has no credential store or the store refuses.",
           "properties": {
             "key": {
               "$ref": "#/$defs/SecretString",
@@ -84,7 +84,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Starts signing in to YouTube with the full `youtube` scope (ADR-0041 §4) and\nreturns Google's consent URL (`ActionResult` `youtube.sign_in`). The client opens\nit in a browser; Google then redirects to a listener the engine opened on\n`127.0.0.1`, and the engine finishes the sign-in, keeps the refresh token in the\nOS credential store and emits `youtube.status_changed` (`signed_in`, or\n`signed_out` when the user declines or the sign-in times out after 5 minutes).\nSent again while a sign-in waits, it returns the same URL. Sent while signed in,\nit starts a new sign-in, which replaces the account once it finishes. Fails with\n`action_failed` when no YouTube OAuth client is configured.",
+          "description": "Starts signing in to YouTube with the full `youtube` scope (ADR-0041 §4, kept by ADR-0058) and\nreturns Google's consent URL (`ActionResult` `youtube.sign_in`). The client opens\nit in a browser; Google then redirects to a listener the engine opened on\n`127.0.0.1`, and the engine finishes the sign-in, keeps the refresh token in the\nOS credential store and emits `youtube.status_changed` (`signed_in`, or\n`signed_out` when the user declines or the sign-in times out after 5 minutes).\nSent again while a sign-in waits, it returns the same URL. Sent while signed in,\nit starts a new sign-in, which replaces the account once it finishes. Fails with\n`action_failed` when no YouTube OAuth client is configured.",
           "properties": {
             "type": {
               "const": "youtube.sign_in",
@@ -208,6 +208,80 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Opens a preview stream of the program mix for this session: low-resolution\npictures sent as binary frames on `channel`, only to this session (ADR-0045).\nThe picture is the canvas scaled down to fit `max_width` × `max_height`, with\neven sides; it follows the canvas when that changes. A picture is sent when what\nthe program mix draws changes, at most `fps` times a second, and at least once\nevery 2 s (a keyframe), so a client that lost frames recovers. The engine picks\nthe first of `codecs` it can encode, and every frame names its codec. The stream\nshows the mix before any master stage. It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nfifth open stream; and with `action_failed` when the session cannot receive\nbinary frames (an MCP session) or none of `codecs` can be encoded here.",
+          "properties": {
+            "channel": {
+              "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "codecs": {
+              "description": "The codecs the client can decode, most preferred first. Empty or omitted\nmeans `[\"h264\", \"jpeg\"]`.",
+              "items": {
+                "$ref": "#/$defs/PreviewCodec"
+              },
+              "type": "array"
+            },
+            "fps": {
+              "description": "Pictures per second, at most. Default 15.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "max_height": {
+              "description": "The tallest the picture may be, in pixels. Default 360.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "max_width": {
+              "description": "The widest the picture may be, in pixels. Default 640.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "preview.subscribe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Closes one of this session's preview streams. No end frame follows; frames\nalready sent may still arrive. Succeeds for a channel that is not open.",
+          "properties": {
+            "channel": {
+              "description": "The channel the stream was opened on.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "preview.unsubscribe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every\noutput that shows program) shows it from the next frame. The program scene is\nruntime state, not collection state (ADR-0030): the switch changes no `rev`, is\nnever undone, and emits `studio.changed`, which `studio.get` reads back. Switching\nto the scene already on program succeeds and emits nothing. Fails with\n`not_found` for a scene not in the collection.",
           "properties": {
             "scene_id": {
@@ -224,14 +298,70 @@ source: crates/jstream-protocol/src/fixtures.rs
             "scene_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
+          "properties": {
+            "type": {
+              "const": "pairing.start",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Revokes a paired device: its token stops working at once, and its open\nconnections are closed. Fails with `not_found` for a device that isn't paired\n(or whose token lapsed after 30 days unused). Answered by the server, like\n`pairing.start`.",
+          "properties": {
+            "device_id": {
+              "$ref": "#/$defs/DeviceId",
+              "description": "The device to revoke, as `device.list` reports it."
+            },
+            "type": {
+              "const": "device.revoke",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "device_id"
+          ],
+          "type": "object"
         }
       ]
     },
     "ActionResult": {
-      "description": "What an action returns beyond being accepted. Serialized with an internal `type`\ntag repeating the action's name; most actions return none.",
+      "description": "What an action answered, for the few actions whose answer carries data. Its `type`\ntag repeats the action's name.",
       "oneOf": [
         {
-          "description": "The result of `youtube.sign_in`.",
+          "description": "The answer to `pairing.start`: the one-time pairing code, sent to the client that\nstarted pairing and to no one else (ADR-0044).",
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/SecretString",
+              "description": "The code: 8 characters of Crockford's base32 alphabet, written `XXXX-XXXX`.\nThe host shows it; the device posts it to `POST /api/v1/pair`. Never logged."
+            },
+            "expires_in_secs": {
+              "description": "How long the code stays open, in seconds (120).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "pairing.start",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "code",
+            "expires_in_secs"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The answer to `youtube.sign_in`.",
           "properties": {
             "type": {
               "const": "youtube.sign_in",
@@ -249,7 +379,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The result of `youtube.create_broadcast`: the new broadcast.",
+          "description": "The answer to `youtube.create_broadcast`: the new broadcast.",
           "properties": {
             "broadcast": {
               "$ref": "#/$defs/BroadcastInfo",
@@ -267,7 +397,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The result of `youtube.bind_broadcast`: the broadcast with its new stream.",
+          "description": "The answer to `youtube.bind_broadcast`: the broadcast with its new stream.",
           "properties": {
             "broadcast": {
               "$ref": "#/$defs/BroadcastInfo",
@@ -285,7 +415,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The result of `youtube.transition_broadcast`.",
+          "description": "The answer to `youtube.transition_broadcast`.",
           "properties": {
             "broadcast": {
               "$ref": "#/$defs/BroadcastInfo",
@@ -387,6 +517,56 @@ source: crates/jstream-protocol/src/fixtures.rs
         "edits"
       ],
       "type": "object"
+    },
+    "BlendMode": {
+      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers. The compositor blends in linear light and draws\n`normal` only so far; the engine rejects every other mode with `invalid_argument`\nuntil it draws it, so a client can read the list without the engine claiming it.",
+      "oneOf": [
+        {
+          "const": "normal",
+          "description": "Source-over: the item covers what is below it, by its alpha.",
+          "type": "string"
+        },
+        {
+          "const": "additive",
+          "description": "Adds the item's colour to what is below it.",
+          "type": "string"
+        },
+        {
+          "const": "multiply",
+          "description": "Multiplies the colours, which darkens.",
+          "type": "string"
+        },
+        {
+          "const": "screen",
+          "description": "The inverse of multiplying the inverses, which lightens.",
+          "type": "string"
+        },
+        {
+          "const": "overlay",
+          "description": "Multiply or screen, depending on the colour below.",
+          "type": "string"
+        },
+        {
+          "const": "darken",
+          "description": "The darker of the two colours, per channel.",
+          "type": "string"
+        },
+        {
+          "const": "lighten",
+          "description": "The lighter of the two colours, per channel.",
+          "type": "string"
+        },
+        {
+          "const": "difference",
+          "description": "The absolute difference of the colours.",
+          "type": "string"
+        },
+        {
+          "const": "exclusion",
+          "description": "Like difference, with lower contrast.",
+          "type": "string"
+        }
+      ]
     },
     "Blocker": {
       "description": "One reference that stops a `scene.delete` or `source.delete`: the object that refers\nto the target, and the field of that object that holds the reference.\n\n```json\n{\"entity\": \"source\", \"id\": \"webcam\", \"field\": \"settings.mask\"}\n```",
@@ -776,7 +956,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The action was accepted. Its progress is reported by events.",
+          "description": "The action was accepted. Its progress is reported by events. An action whose\nanswer carries data (`pairing.start`, `youtube.sign_in` and the YouTube broadcast\nactions) has it in `result`; the others omit it.",
           "properties": {
             "kind": {
               "const": "action",
@@ -791,7 +971,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "What the action returns, for the actions that return something\n(`youtube.sign_in`, the YouTube broadcast actions). Omitted for the others,\nand missing from a server older than 0.20."
+              "description": "What the action answered, tagged by the action's name, for the actions that\nanswer something. Absent for every other action, and from a server older\nthan 0.21."
             }
           },
           "required": [
@@ -992,6 +1172,42 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "DeviceId": {
+      "description": "A paired device: one browser or other client admitted with its own device token\n(ADR-0044). Assigned by the server when the device pairs.",
+      "type": "string"
+    },
+    "DeviceInfo": {
+      "description": "One paired device, as `device.list` reports it. Its token is never reported.",
+      "properties": {
+        "device_id": {
+          "$ref": "#/$defs/DeviceId",
+          "description": "The device's ID, which `device.revoke` takes."
+        },
+        "last_used_at": {
+          "description": "When its token was last presented, in seconds since the Unix epoch (UTC), to the\nhour. A token unused for 30 days lapses and the device is dropped.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The name it gave when it paired. The audit log names its sessions\n`device:<name>`.",
+          "type": "string"
+        },
+        "paired_at": {
+          "description": "When it paired, in seconds since the Unix epoch (UTC).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "device_id",
+        "name",
+        "paired_at",
+        "last_used_at"
+      ],
+      "type": "object"
+    },
     "DropCounts": {
       "description": "Running totals of frames and packets the pipeline has dropped since the engine\nstarted (R-RT-004).\n\nEach field sums one kind of drop across every stage that counts it. A stage that\ndoes not count that kind contributes nothing. Totals only grow: a client computes\nan interval by subtracting the previous tick.\n\nSilence a stage inserts to cover a gap (an audio underrun, a device gap, encoder\ngap-fill) is not a drop and is not included.\n\nA missing field parses as 0, so a counter added in a later minor version can be left\nout by an older sender (R-API-001). Unknown fields are ignored.",
       "properties": {
@@ -1144,6 +1360,17 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.\n\nThe item's placement is `geometry` when that is sent, else a legacy placement:\n`transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).\nSending both is `invalid_argument`.",
           "properties": {
+            "blend": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BlendMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The initial blend mode, checked like `item.set_blend`'s. Omitted means\n`normal`."
+            },
             "geometry": {
               "anyOf": [
                 {
@@ -1158,6 +1385,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             "item_id": {
               "$ref": "#/$defs/ItemId",
               "description": "The new item's ID, chosen by the client. Rejected if it exists."
+            },
+            "opacity": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The initial opacity, checked like `item.set_opacity`'s. Omitted means 1."
             },
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -1192,7 +1430,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, and its placement in the field matching\nits form (`transform` or `geometry`), then `item.reorder` to its old stacking\nposition (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
+          "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, and `item.set_visible` if it was hidden.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -1338,6 +1576,63 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "item_id",
             "visible"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by\n`opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items\nare added at 1. Inverse: `item.set_opacity` with the previous value.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to change."
+            },
+            "opacity": {
+              "$ref": "#/$defs/Finite32",
+              "description": "The alpha multiplier, from 0 (invisible) to 1 (as the source draws it)."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+            },
+            "type": {
+              "const": "item.set_opacity",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id",
+            "opacity"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Changes how an item composites onto what is below it (ADR-0023 §1). A mode the\ncompositor doesn't draw yet is `invalid_argument`, so stored state never claims\nsomething that isn't drawn; today that is every mode but `normal`. Inverse:\n`item.set_blend` with the previous mode.",
+          "properties": {
+            "blend": {
+              "$ref": "#/$defs/BlendMode",
+              "description": "The new blend mode. Items are added with `normal`."
+            },
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to change."
+            },
+            "type": {
+              "const": "item.set_blend",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id",
+            "blend"
           ],
           "type": "object"
         },
@@ -1513,7 +1808,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Copies a source under a new ID: a separate instance with the same kind,\nsettings, audio settings and sends, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
+          "description": "Copies a source under a new ID: a separate instance with the same kind, settings,\nfilters (with the same filter IDs), audio settings and sends, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
           "properties": {
             "name": {
               "description": "The copy's display name.",
@@ -1541,7 +1836,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Deleting a source that others were\ncopied from is allowed: their `duplicated_from` then reads as absent. Its sends go\nwith it. Inverse: `source.create` with its name, kind, settings and\n`duplicated_from`, then `send.remove` of its master send if it had none,\n`send.set` for each send that `source.create` doesn't restore as it was, and\n`source.set_audio` if its audio settings were not the defaults.",
+          "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's or filter's settings refer to it: remove those items, or clear\nthose references, first (in the same batch if needed). Deleting a source that\nothers were copied from is allowed: their `duplicated_from` then reads as absent.\nIts sends go with it. Inverse: `source.create` with its name, kind, settings and\n`duplicated_from`, then `send.remove` of its master send if it had none,\n`send.set` for each send that `source.create` doesn't restore as it was,\n`source.set_audio` if its audio settings were not the defaults, and `filter.add`\nfor each of its filters, video chain first, in chain order.",
           "properties": {
             "source_id": {
               "$ref": "#/$defs/SourceId",
@@ -1555,6 +1850,168 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Adds a filter to one of a source's chains (ADR-0026). Rejected with `not_found` if\nthe owner doesn't exist, `already_exists` if it has a filter with this ID, and\n`invalid_argument` if the source has no such chain, the chain is full\n([`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS)), `kind` is not a filter kind of\nthat chain (`video_filter` or `audio_filter`), a setting fails its descriptor as in\n`source.create`, a reference in the settings would close a cycle, or `index` is\npast the end. Inverse: `filter.remove`.",
+          "properties": {
+            "chain": {
+              "$ref": "#/$defs/FilterChain",
+              "description": "Which chain."
+            },
+            "enabled": {
+              "description": "Whether it runs. Omitted means enabled.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "filter_id": {
+              "$ref": "#/$defs/FilterId",
+              "description": "The new filter's ID, chosen by the client, unique within its owner."
+            },
+            "index": {
+              "description": "Its position in the chain, counted from the first filter (0). Must be at most\nthe number of filters already in the chain. Omitted means last.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "kind": {
+              "description": "The filter's kind, as `kind.list` reports it.",
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/$defs/FilterOwner",
+              "description": "What owns the chain."
+            },
+            "settings": {
+              "$ref": "#/$defs/Settings",
+              "description": "Initial settings, checked against the kind's descriptor and completed with its\ndefaults, as `source.create`'s are. Omitted means all defaults."
+            },
+            "type": {
+              "const": "filter.add",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "owner",
+            "chain",
+            "filter_id",
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes a filter from its chain. Inverse: `filter.add` with its chain, kind,\nsettings, `enabled: false` if it was disabled, and its index.",
+          "properties": {
+            "filter_id": {
+              "$ref": "#/$defs/FilterId",
+              "description": "The filter to remove."
+            },
+            "owner": {
+              "$ref": "#/$defs/FilterOwner",
+              "description": "What owns the filter."
+            },
+            "type": {
+              "const": "filter.remove",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "owner",
+            "filter_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Turns a filter on or off. A disabled filter stays in its chain and keeps its\nsettings, and is bypassed. Inverse: `filter.set_enabled` with the previous value.",
+          "properties": {
+            "enabled": {
+              "description": "Whether it runs.",
+              "type": "boolean"
+            },
+            "filter_id": {
+              "$ref": "#/$defs/FilterId",
+              "description": "The filter to change."
+            },
+            "owner": {
+              "$ref": "#/$defs/FilterOwner",
+              "description": "What owns the filter."
+            },
+            "type": {
+              "const": "filter.set_enabled",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "owner",
+            "filter_id",
+            "enabled"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Changes some of a filter's settings, with `source.set_settings`'s rules: each entry\nis checked against the kind's descriptor, `null` resets a parameter to its default\n(a reference to none), and a reference that would make a cycle is\n`invalid_argument` naming it. Inverse: `filter.set_settings` with the patched\nparameters' previous values.",
+          "properties": {
+            "filter_id": {
+              "$ref": "#/$defs/FilterId",
+              "description": "The filter to change."
+            },
+            "owner": {
+              "$ref": "#/$defs/FilterOwner",
+              "description": "What owns the filter."
+            },
+            "patch": {
+              "$ref": "#/$defs/Settings",
+              "description": "Parameter ID to new value, or `null` for the default."
+            },
+            "type": {
+              "const": "filter.set_settings",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "owner",
+            "filter_id",
+            "patch"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Moves a filter to another position in its own chain. Inverse: `filter.reorder`\nback to its previous index.",
+          "properties": {
+            "filter_id": {
+              "$ref": "#/$defs/FilterId",
+              "description": "The filter to move."
+            },
+            "index": {
+              "description": "The new position, counted from the first filter (0). Must be less than the\nnumber of filters in its chain, else `invalid_argument`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "owner": {
+              "$ref": "#/$defs/FilterOwner",
+              "description": "What owns the filter."
+            },
+            "type": {
+              "const": "filter.reorder",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "owner",
+            "filter_id",
+            "index"
           ],
           "type": "object"
         },
@@ -2091,8 +2548,18 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         },
         {
+          "const": "filter",
+          "description": "A filter in a source's chain (0.22, ADR-0026). Its ID is unique within the\nsource. Only an error answering a filter edit names it, so a client older than\n0.22, which sends none, never reads it.",
+          "type": "string"
+        },
+        {
           "const": "bus",
           "description": "An audio bus.",
+          "type": "string"
+        },
+        {
+          "const": "device",
+          "description": "A paired device (0.21). Only an error answering `device.revoke` names it, so a\nclient older than 0.21, which sends none, never reads it.",
           "type": "string"
         }
       ]
@@ -2314,7 +2781,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "What YouTube says about the stream a running `youtube` output sends to changed\n(ADR-0041). The engine polls the stream's health while the output runs and sends\nthis when the status, the health or the issues differ from the last report, and\nonce on the first reading.",
+          "description": "What YouTube says about the stream a running `youtube` output sends to changed\n(ADR-0058). The engine polls the stream's health while the output runs and sends\nthis when the status, the health or the issues differ from the last report, and\nonce on the first reading.",
           "properties": {
             "broadcast_id": {
               "description": "The broadcast it sends to.",
@@ -2401,6 +2868,95 @@ source: crates/jstream-protocol/src/fixtures.rs
         "event"
       ],
       "type": "object"
+    },
+    "FilterChain": {
+      "description": "Which of an owner's chains a filter is on. Every owner has at most these two, so the\nset is closed.",
+      "oneOf": [
+        {
+          "const": "video",
+          "description": "The video chain: `video_filter` kinds. A source has one if its kind produces\nvideo.",
+          "type": "string"
+        },
+        {
+          "const": "audio",
+          "description": "The audio chain: `audio_filter` kinds, run before the source's fader\n(ADR-0028). A source has one if its kind produces audio and it is not a `scene`\nsource.",
+          "type": "string"
+        }
+      ]
+    },
+    "FilterChains": {
+      "description": "A source's two chains, each first filter first.",
+      "properties": {
+        "audio": {
+          "description": "The audio chain. Omitted when empty.",
+          "items": {
+            "$ref": "#/$defs/FilterInfo"
+          },
+          "type": "array"
+        },
+        "video": {
+          "description": "The video chain. Omitted when empty.",
+          "items": {
+            "$ref": "#/$defs/FilterInfo"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "FilterId": {
+      "description": "A filter in one of a source's chains. Unique within its source, not across\nsources, so a duplicated source keeps its filters' IDs (ADR-0026).",
+      "type": "string"
+    },
+    "FilterInfo": {
+      "description": "One filter, as `source.list` and `state.get` report it.",
+      "properties": {
+        "enabled": {
+          "description": "Whether it runs. A disabled filter is bypassed and keeps its settings.",
+          "type": "boolean"
+        },
+        "filter_id": {
+          "$ref": "#/$defs/FilterId",
+          "description": "Its ID, unique within its source."
+        },
+        "kind": {
+          "description": "Its kind, as `kind.list` reports it.",
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/Settings",
+          "description": "Its settings: every parameter of its kind. Omitted for a kind without\nparameters."
+        }
+      },
+      "required": [
+        "filter_id",
+        "kind",
+        "enabled"
+      ],
+      "type": "object"
+    },
+    "FilterOwner": {
+      "description": "What owns a filter chain. Serialized with an internal `type` tag. Only sources own\nchains so far; buses, scenes and outputs will be further variants.",
+      "oneOf": [
+        {
+          "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "Finite32": {
       "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
@@ -2664,6 +3220,11 @@ source: crates/jstream-protocol/src/fixtures.rs
     "ItemInfo": {
       "description": "One item, a placement of a source in a scene, as `item.list` and `state.get` report\nit. It carries every property an edit can set.",
       "properties": {
+        "blend": {
+          "$ref": "#/$defs/BlendMode",
+          "default": "normal",
+          "description": "How it composites onto what is below it. Missing parses as `normal`."
+        },
         "crop": {
           "$ref": "#/$defs/Crop",
           "description": "How much of the source it cuts off."
@@ -2682,6 +3243,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         "item_id": {
           "$ref": "#/$defs/ItemId",
           "description": "The item's ID."
+        },
+        "opacity": {
+          "$ref": "#/$defs/Finite32",
+          "default": 1.0,
+          "description": "Its alpha multiplier, from 0 to 1. Missing (from a server older than this field)\nparses as 1."
         },
         "placement": {
           "$ref": "#/$defs/PlacementForm",
@@ -3308,6 +3874,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "PreviewCodec": {
+      "description": "How a preview stream's pictures are encoded.",
+      "oneOf": [
+        {
+          "const": "h264",
+          "description": "H.264 access units in Annex B form (start codes, parameter sets in band), for\nWebCodecs' `VideoDecoder` with no `description`. A frame is a keyframe exactly\nwhen its header says so.",
+          "type": "string"
+        },
+        {
+          "const": "jpeg",
+          "description": "One baseline JPEG per frame, every one a keyframe. The fallback when the engine\nhas no H.264 encoder or the client can't decode H.264.",
+          "type": "string"
+        }
+      ]
+    },
     "ProtocolVersion": {
       "description": "A protocol version: `major.minor`. Patch releases never change the wire format, so\nthey are not part of it.",
       "properties": {
@@ -3582,6 +4163,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "target"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it\npaired and was last used, never its token. Answered by the server that admits\nclients, not the engine: a `Control` with no server in front fails with\n`unsupported`.",
+          "properties": {
+            "type": {
+              "const": "device.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         }
@@ -4068,7 +4662,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "The result of `delete.plan`.",
           "properties": {
             "edits": {
-              "description": "The edits, in order: `item.remove` for the items that place a deleted source,\n`source.set_settings` setting each reference to a deleted object to `null`,\n`source.delete` for the `scene` sources that show a deleted scene, and last the\ndelete of the target itself.",
+              "description": "The edits, in order: `item.remove` for the items that place a deleted source,\n`source.set_settings` and `filter.set_settings` setting each reference to a\ndeleted object to `null`, `source.delete` for the `scene` sources that show a deleted scene, and last the\ndelete of the target itself.",
               "items": {
                 "$ref": "#/$defs/Edit"
               },
@@ -4087,6 +4681,27 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "rev",
             "edits"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `device.list`. Devices are not collection state, so it carries no\n`rev`.",
+          "properties": {
+            "devices": {
+              "description": "The paired devices, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/DeviceInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "device.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "devices"
           ],
           "type": "object"
         }
@@ -4222,7 +4837,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A YouTube broadcast (ADR-0041): on `output.start` the engine reads the\nbroadcast's bound stream from the Live API and publishes to that stream's\n`rtmps://` ingest address with its key. The key comes from YouTube, so\n`output.set_key` isn't needed. The start fails with `action_failed` when the\nengine isn't signed in to YouTube, the broadcast has no bound stream\n(`youtube.bind_broadcast`), or YouTube refuses. The engine rejects, with\n`invalid_argument`, an ID that is empty, longer than 128 bytes or has characters\nother than ASCII letters, digits, `-` and `_`.",
+          "description": "A YouTube broadcast (ADR-0058): on `output.start` the engine reads the\nbroadcast's bound stream from the Live API and publishes to that stream's\n`rtmps://` ingest address with its key. The key comes from YouTube, so\n`output.set_key` isn't needed. The start fails with `action_failed` when the\nengine isn't signed in to YouTube, the broadcast has no bound stream\n(`youtube.bind_broadcast`), or YouTube refuses. The engine rejects, with\n`invalid_argument`, an ID that is empty, longer than 128 bytes or has characters\nother than ASCII letters, digits, `-` and `_`.",
           "properties": {
             "broadcast_id": {
               "description": "The broadcast's ID, as `youtube.list_broadcasts` reports it.",
@@ -4320,7 +4935,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "SecretString": {
-      "description": "A secret string, such as a stream key, sent by a client to the engine.\n\nOn the wire it is a plain JSON string. In Rust it never prints: its `Debug` is\n`\"***\"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).\nA value that is not a string fails to parse with a message that doesn't repeat it.\nThe engine never sends one back (R-SEC-001).",
+      "description": "A secret string, such as a stream key sent by a client to the engine, or the\npairing code a server answers `pairing.start` with.\n\nOn the wire it is a plain JSON string. In Rust it never prints: its `Debug` is\n`\"***\"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).\nA value that is not a string fails to parse with a message that doesn't repeat it.\nThe engine never sends one back, and a pairing code travels only in that one answer\n(R-SEC-001).",
       "type": "string"
     },
     "SendInfo": {
@@ -4486,6 +5101,10 @@ source: crates/jstream-protocol/src/fixtures.rs
             }
           ],
           "description": "The source this one was copied from by `source.duplicate`, while that source\nexists. Omitted if it was not copied, or its original has been deleted. An item\nplacing this source can go back to placing the original with `item.set_source`."
+        },
+        "filters": {
+          "$ref": "#/$defs/FilterChains",
+          "description": "Its filter chains (ADR-0026). Omitted while both are empty."
         },
         "kind": {
           "$ref": "#/$defs/SourceKind",
@@ -5010,6 +5629,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The call is valid, but whoever answered it doesn't serve it: `pairing.start`,\n`device.list` and `device.revoke` sent to an engine with no server in front.\nRetrying won't help.",
+          "properties": {
+            "call": {
+              "description": "The call's name (`pairing.start`).",
+              "type": "string"
+            },
+            "code": {
+              "const": "unsupported",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "call"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The engine hit a bug or an unexpected condition. The request may be retried.",
           "properties": {
             "code": {
@@ -5080,5 +5717,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.20"
+  "title": "JStream protocol 0.23"
 }

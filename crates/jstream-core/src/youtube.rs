@@ -1,4 +1,4 @@
-//! YouTube in the engine (ADR-0041): the sign-in, the account's [`LiveClient`], the
+//! YouTube in the engine (ADR-0058): the sign-in, the account's [`LiveClient`], the
 //! broadcast actions and queries, the ingest a `youtube` output publishes to, and the
 //! health poll while one runs.
 //!
@@ -691,7 +691,7 @@ impl Youtube {
 }
 
 /// A `jstream-youtube` error as a protocol error. Quota errors say so first
-/// (ADR-0041 §5).
+/// (ADR-0041 §5, kept by ADR-0058).
 fn failed(err: YoutubeError) -> ProtocolError {
     let reason = if err.is_quota() {
         format!("YouTube's API quota is used up: {err}")
