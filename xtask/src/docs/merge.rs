@@ -7,8 +7,12 @@
 //! be re-read anyway; which entry the merge keeps doesn't matter, only that the section is
 //! reported as stale. A branch from before ADR-0053 also conflicts on the inline
 //! `verified` lines main moved to the ledger; main's side (no line) is taken the same way,
-//! and inline stamps the branch added are then moved by `docs migrate`. Every other
-//! conflict is left untouched for a person.
+//! and inline stamps the branch added are then moved by `docs migrate`.
+//!
+//! A conflict wholly inside `@generated` blocks, such as two PRs each regenerating the
+//! README's progress table, is resolved by taking that branch's side and rewriting every
+//! block from the merged sources, as `docs generate` would (ADR-0038). Every other conflict
+//! is left untouched for a person.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -29,6 +33,9 @@ pub(crate) struct Merge {
     pub(crate) stamps: Vec<String>,
     /// What `docs migrate` did after the merge, when the branch still had inline stamps.
     pub(crate) migrated: Option<super::Migrate>,
+    /// Files whose conflict was only inside `@generated` blocks, rewritten from the merged
+    /// sources.
+    pub(crate) generated: Vec<String>,
     /// Conflicted files left for a person, with the reason.
     pub(crate) refused: Vec<(String, String)>,
     /// Whether the merge was committed.
@@ -124,7 +131,11 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
                     if path == ledger::PATH {
                         resolve_ledger(&text)
                     } else {
-                        resolve(path, &text)
+                        resolve(path, &text).or_else(|why| {
+                            let text = resolve_generated(path, &text).map_err(|_| why)?;
+                            report.generated.push(path.to_owned());
+                            Ok((text, Vec::new()))
+                        })
                     }
                 })
         } else {
@@ -141,6 +152,17 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
     }
     report.stamps.sort();
     report.stamps.dedup();
+    if report.refused.is_empty() && !report.generated.is_empty() {
+        let g = super::write_generated(root)?;
+        for d in &g.problems {
+            report
+                .refused
+                .push((d.path.clone(), format!("`docs generate`: {}", d.msg)));
+        }
+        for (path, _, _) in &g.files {
+            git_ok(root, &["add", "--", path])?;
+        }
+    }
     if report.refused.is_empty() {
         git_ok(root, &["commit", "-q", "--no-edit"])?;
         report.committed = true;
@@ -305,6 +327,45 @@ fn resolve(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
     Ok((theirs, stamps))
 }
 
+/// Resolves every conflict in `text` (the conflicted contents of `path`) to the merged
+/// branch's side, provided each conflict on both sides lies strictly inside a
+/// `@generated` block that `docs generate` writes. The caller then rewrites the blocks from the merged sources, so the
+/// side taken doesn't matter. Returns the resolved text, or why the file is left alone.
+fn resolve_generated(path: &str, text: &str) -> Result<String, String> {
+    if !is_tracked(path) {
+        return Err("not a tracked doc".to_owned());
+    }
+    let (ours, theirs, hunks) = sides(text)?;
+    for (side, is_main) in [(&ours, false), (&theirs, true)] {
+        // Only blocks a generator owns: a conflict in any other block would keep the
+        // merged branch's side with nothing to rewrite it.
+        let names = [
+            super::generate::STATUS_BLOCK,
+            super::generate::INDEX_BLOCK,
+            super::progress::BLOCK,
+        ];
+        let mut inside = Vec::new();
+        let mut open = false;
+        for line in side.lines() {
+            let line = line.trim_end();
+            if names.iter().any(|n| line == super::generate::end(n)) {
+                open = false;
+            }
+            inside.push(open);
+            if names.iter().any(|n| line == super::generate::begin(n)) {
+                open = true;
+            }
+        }
+        for h in &hunks {
+            let (a, b) = if is_main { h.theirs } else { h.ours };
+            if (a..b).any(|k| !inside.get(k).copied().unwrap_or(false)) {
+                return Err("a conflict outside `@generated` blocks".to_owned());
+            }
+        }
+    }
+    Ok(theirs)
+}
+
 /// Sections whose ledger stamp doesn't match their inputs, or that need one and have
 /// none, as `DOC#anchor`.
 pub(crate) fn stale_sections(root: &Path) -> Result<Vec<String>> {
@@ -361,6 +422,34 @@ mod tests {
             "||||||| base\nverified = { hash = \"b3:0\", by = \"a:z\", note = \"base\" }\n=======\n",
         );
         assert_eq!(resolve("T.md", &diff3).expect("diff3").0, out);
+    }
+
+    #[test]
+    fn generated_only_conflicts_take_main() {
+        let block = |o: &str, t: &str| {
+            format!(
+                "# R\n\n<!-- @generated begin progress -->\n| a |\n<<<<<<< HEAD\n{o}=======\n{t}>>>>>>> origin/wave/m1\n<!-- @generated end progress -->\n\nAfter.\n"
+            )
+        };
+        let text = block("7 left.\n", "8 left.\n");
+        assert_eq!(
+            resolve_generated("README.md", &text).expect("generated-only"),
+            "# R\n\n<!-- @generated begin progress -->\n| a |\n8 left.\n<!-- @generated end progress -->\n\nAfter.\n"
+        );
+        let outside = text.replace(
+            "\nAfter.\n",
+            "\n<<<<<<< HEAD\nOurs.\n=======\nMain.\n>>>>>>> m\n",
+        );
+        let marker = "# R\n\n<<<<<<< HEAD\n<!-- @generated begin progress -->\n=======\n>>>>>>> m\nx\n<!-- @generated end progress -->\n";
+        let unowned = text.replace("progress -->", "other -->");
+        for (path, text) in [
+            ("README.md", unowned.as_str()),
+            ("README.md", outside.as_str()),
+            ("README.md", marker),
+            ("a.rs", text.as_str()),
+        ] {
+            assert!(resolve_generated(path, text).is_err(), "{text}");
+        }
     }
 
     #[test]
