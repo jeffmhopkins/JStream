@@ -746,12 +746,10 @@ async fn pairs_a_device_that_survives_a_restart() {
     .expect("applied");
     drop(device);
     drop(control);
+    // The audit writer thread appends the batch's line just after the answer. Wait for
+    // it: off Unix `stop` kills the daemon, which loses a line still in the queue.
+    audit_with(&logs, "\"client_name\":\"device:Tablet\"");
     stop(&mut daemon);
-    let audit = std::fs::read_to_string(logs.join("audit.jsonl")).expect("the audit log");
-    assert!(
-        audit.contains("\"client_name\":\"device:Tablet\""),
-        "{audit}"
-    );
     for file in log_files(&logs) {
         let log = std::fs::read_to_string(file).expect("readable");
         assert!(
@@ -770,6 +768,19 @@ async fn pairs_a_device_that_survives_a_restart() {
     timely(device.hello(hello())).await.expect("welcome");
     drop(again);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The audit log in `logs` once it contains `needle`, polled for up to ten seconds.
+fn audit_with(logs: &Path, needle: &str) -> String {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let audit = std::fs::read_to_string(logs.join("audit.jsonl")).unwrap_or_default();
+        if audit.contains(needle) || Instant::now() >= deadline {
+            assert!(audit.contains(needle), "{audit}");
+            return audit;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 /// Standard base64 of `text`, for `Basic` credentials.
