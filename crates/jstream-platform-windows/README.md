@@ -274,7 +274,9 @@ The code is ported from spikes S1 to S3. This first cut has:
     sample's time. A format change mid-stream is `Unsupported`, since the engine's
     mixer input was made for the first.
   - **Seeking** sets the reader's position in 100 ns units, for both streams; the
-    reader restarts video at the key frame before it.
+    reader restarts video at the key frame before it. A time past the end, which the
+    reader refuses with `MF_E_INVALID_POSITION`, leaves both streams ended until the
+    next seek.
   - **Threads:** `open` joins the MTA for its calls; each open file holds Media
     Foundation started and the MTA alive (`MfStarted`), so the thread that reads it,
     the source's decode thread, uses the free-threaded reader as an implicit MTA member.
