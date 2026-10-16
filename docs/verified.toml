@@ -783,7 +783,7 @@ stamp = { hash = "b3:64d21faa19974bc3" }
 stamp = { hash = "b3:1300403d18de6566" }
 
 ["CRATE-jstream-browser#purpose"."body"]
-stamp = { hash = "b3:596754035fe308a2", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (C8b2 #289): the hardware check now also reports refused requests; this PR's 'once the engine hands out its device' clause kept, matching the Hosts item" }
+stamp = { hash = "b3:95a127b76c07f710", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 into #442. Body: the merged text keeps #442's Ctrl-C bullet (on_console_stop handler registered on the jstream-cef thread after initialize, Ctrl-C/Ctrl-Break stop there, other events go on to Chromium's) beside wave/m1's RequestPolicy bullet, the OnBeforeResourceLoad sentence and page_check's refused-request report; both match their code. cef/mod.rs: #442's on_console_stop field and handler registration coexist with wave/m1's policy and denial_logged PageShared fields, as described. cargo clippy -p jstream-browser and the daemon's console_stop test pass." }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
 stamp = { hash = "b3:9ab86379e5804d87", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH browser-source (daemon now wires it too); purpose speaks of 'the host' generically and holds" }
@@ -807,7 +807,7 @@ stamp = { hash = "b3:9ee2b7ba834e8404", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:260bce29e6e7c9ae", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/mod.rs"]
-stamp = { hash = "b3:efdd7afd1b1a0f83", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
+stamp = { hash = "b3:331f39299aa11dec", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 into #442. Body: the merged text keeps #442's Ctrl-C bullet (on_console_stop handler registered on the jstream-cef thread after initialize, Ctrl-C/Ctrl-Break stop there, other events go on to Chromium's) beside wave/m1's RequestPolicy bullet, the OnBeforeResourceLoad sentence and page_check's refused-request report; both match their code. cef/mod.rs: #442's on_console_stop field and handler registration coexist with wave/m1's policy and denial_logged PageShared fields, as described. cargo clippy -p jstream-browser and the daemon's console_stop test pass." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/fake.rs"]
 stamp = { hash = "b3:e4729bc158373b96", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
@@ -825,7 +825,7 @@ stamp = { hash = "b3:8ac270a94f116ebd", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:c38bcef596eeb573", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1: stale only via the browser README's seam paragraph; helper main.rs, build.rs and manifest unchanged, text holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:crates/jstream-browser/README.md#purpose"]
-stamp = { hash = "b3:596754035fe308a2", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the browser Purpose's hardware-check sentence only (C8b2's refused requests plus this PR's device clause); the helper's purpose holds" }
+stamp = { hash = "b3:95a127b76c07f710", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale only through its dependency on jstream-browser#purpose, whose merge added the request policy and kept #442's Ctrl-C handler. Neither concerns the helper exe: it is still browser_subprocess_path, a GUI-subsystem exe whose main is run_subprocess, built with the cef feature only." }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:1bfce7186129692b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the ARCH apps/* row only (daemon also links jstream-browser); this section names hosts generically and holds" }
@@ -1257,7 +1257,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:da512084cc099d9b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (pairing, #265): the device file and listening bullets sit beside this PR's browser sources bullet; bind takes the device file and UI dir; matches serve.rs, token.rs and Cargo.toml" }
+stamp = { hash = "b3:9270b9fdcb090be2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Body: the Signals bullet (Chromium's console handler would end the process; the daemon sets CefConfig::on_console_stop to console_stop, wake-up kept when nothing waits) matches serve.rs, which wave/m1 left as #442 has it. Cargo.toml: #442's tokio feature change is intact after the merge. The Browser sources bullet still matches serve.rs's cef_browser. clippy -p jstream-daemon clean and the console_stop test passes." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:da0ec8a527633884", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). dep core#design: this PR only adds the stop-drain sentence (a deadline check before each send), and the daemon's Design names no output stop timing, so nothing it relies on changed" }
@@ -1269,7 +1269,7 @@ stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade fro
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
-stamp = { hash = "b3:75c75e5a697ef09f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1: browser sources paragraph and deps match serve.rs and Cargo.toml; the Windows dox clippy now runs in after-review.yml" }
+stamp = { hash = "b3:42ef272e984e2608", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Body: the Signals bullet (Chromium's console handler would end the process; the daemon sets CefConfig::on_console_stop to console_stop, wake-up kept when nothing waits) matches serve.rs, which wave/m1 left as #442 has it. Cargo.toml: #442's tokio feature change is intact after the merge. The Browser sources bullet still matches serve.rs's cef_browser. clippy -p jstream-daemon clean and the console_stop test passes." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
@@ -1290,7 +1290,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:d97c9bd2c8e9366b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (pairing, #265): the device file and listening bullets sit beside this PR's browser sources bullet; bind takes the device file and UI dir; matches serve.rs, token.rs and Cargo.toml" }
+stamp = { hash = "b3:23fe409cd19ae656", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Body: the Signals bullet (Chromium's console handler would end the process; the daemon sets CefConfig::on_console_stop to console_stop, wake-up kept when nothing waits) matches serve.rs, which wave/m1 left as #442 has it. Cargo.toml: #442's tokio feature change is intact after the merge. The Browser sources bullet still matches serve.rs's cef_browser. clippy -p jstream-daemon clean and the console_stop test passes." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
@@ -1320,7 +1320,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:d97c9bd2c8e9366b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (pairing, #265): Contents gains Paired devices beside this PR's Serving bullet (browser sources under cef); the ARCH apps/* row (daemon always links jstream-browser) holds against Cargo.toml; checked against serve.rs, token.rs and main.rs" }
+stamp = { hash = "b3:23fe409cd19ae656", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "serve.rs after merging wave/m1 is #442's version (wave/m1 did not change it): cef_browser sets on_console_stop = console_stop, and console_stop/console_stopped wake the shutdown through a static Notify. Purpose still describes the daemon's serving and graceful stop correctly; the console_stop_before_waiting_still_stops test passes." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
