@@ -225,7 +225,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:9ce5bf1045fb545e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:c9a7a8554fcba0ee", by = "agent:claude", note = "tools.snap differs only in the edit tool's item.add description text carried from the protocol doc; tool set and shapes unchanged." }
+stamp = { hash = "b3:3563747f7c7d0197", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: tools.snap's two item.add descriptions gain main's #450 text on canvas-covering geometry; the tool set is the wave's (no youtube tool, ADR-0058) and no tool's shape changes; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -348,13 +348,13 @@ stamp = { hash = "b3:53d3b4c71dc51648", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:a847dcc5ef533c7d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:4bf356ec16414ec2", by = "agent:claude", note = "protocol.snap and command.rs differ only in item.add's description (advice to send a covering fit geometry); no wire change, section holds." }
+stamp = { hash = "b3:6150770efd14577a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: main's #450 adds only doc text to item.add (send a canvas-covering fit geometry for display, window and webcam items), with its protocol.snap description; no wire change, so the wave's 0.23 (Y3) and the version history stand; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:88b397d3add42204", by = "agent:claude", note = "protocol.snap and command.rs differ only in item.add's description (advice to send a covering fit geometry); no wire change, section holds." }
+stamp = { hash = "b3:a0ee1b3c6453026c", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: main's #450 adds only doc text to item.add (send a canvas-covering fit geometry for display, window and webcam items), with its protocol.snap description; no wire change, so the wave's 0.23 (Y3) and the version history stand; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -864,7 +864,7 @@ stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:513b26286e4094af" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:0b8291d83ee35dde", by = "agent:claude", note = "New bullet on fitting capture items matches run.rs fit_captures (CAPTURE_KINDS, one lazy state.get, unknown source and zero canvas left to the engine) and the tests in run/tests.rs; other bullets unaffected by args.rs's help-text line." }
+stamp = { hash = "b3:2980eba909dcd34e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: main's 'new capture items fit the canvas' entry joins the wave's Y3 write_response note; its item.add doc pointer matches the merged protocol command.rs; #450's tests now fill the wave's opacity, blend and filters fields; holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -879,10 +879,10 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:307fba64af3b4d48", by = "agent:claude", note = "New bullet on fitting capture items matches run.rs fit_captures (CAPTURE_KINDS, one lazy state.get, unknown source and zero canvas left to the engine) and the tests in run/tests.rs; other bullets unaffected by args.rs's help-text line." }
+stamp = { hash = "b3:180f43478e1f562c", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: main's 'new capture items fit the canvas' entry joins the wave's Y3 write_response note; its item.add doc pointer matches the merged protocol command.rs; #450's tests now fill the wave's opacity, blend and filters fields; holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:ded121d3052b780a", by = "agent:claude", note = "New bullet on fitting capture items matches run.rs fit_captures (CAPTURE_KINDS, one lazy state.get, unknown source and zero canvas left to the engine) and the tests in run/tests.rs; other bullets unaffected by args.rs's help-text line." }
+stamp = { hash = "b3:f392adb5e22e5634", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: main's 'new capture items fit the canvas' entry joins the wave's Y3 write_response note; its item.add doc pointer matches the merged protocol command.rs; #450's tests now fill the wave's opacity, blend and filters fields; holds" }
 
 ["CRATE-jstream-cli#purpose"."body"]
 stamp = { hash = "b3:d796b16e2013c42c", by = "agent:claude", note = "Running bullet now says an edit batch may read state.get first to fit capture items; args.rs gains a usage note, run.rs fit_captures/state, run/tests.rs three fit tests; the rest of the contents list holds." }
@@ -891,7 +891,7 @@ stamp = { hash = "b3:d796b16e2013c42c", by = "agent:claude", note = "Running bul
 stamp = { hash = "b3:1bfce7186129692b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the ARCH apps/* row only (daemon's jstream-browser link); the CLI's purpose doesn't touch it and holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:0b8291d83ee35dde", by = "agent:claude", note = "Running bullet now says an edit batch may read state.get first to fit capture items; args.rs gains a usage note, run.rs fit_captures/state, run/tests.rs three fit tests; the rest of the contents list holds." }
+stamp = { hash = "b3:2980eba909dcd34e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: Running now says an edit batch may read state.get first to fit new capture items (main's #450), beside the wave's pairing and Y3 text (an action with a result prints as JSON); run.rs's merged imports and fit_captures match; holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -906,16 +906,16 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:307fba64af3b4d48", by = "agent:claude", note = "Running bullet now says an edit batch may read state.get first to fit capture items; args.rs gains a usage note, run.rs fit_captures/state, run/tests.rs three fit tests; the rest of the contents list holds." }
+stamp = { hash = "b3:180f43478e1f562c", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: Running now says an edit batch may read state.get first to fit new capture items (main's #450), beside the wave's pairing and Y3 text (an action with a result prints as JSON); run.rs's merged imports and fit_captures match; holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:ded121d3052b780a", by = "agent:claude", note = "Running bullet now says an edit batch may read state.get first to fit capture items; args.rs gains a usage note, run.rs fit_captures/state, run/tests.rs three fit tests; the rest of the contents list holds." }
+stamp = { hash = "b3:f392adb5e22e5634", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: Running now says an edit batch may read state.get first to fit new capture items (main's #450), beside the wave's pairing and Y3 text (an action with a result prints as JSON); run.rs's merged imports and fit_captures match; holds" }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:538a9fe44872c91d", by = "agent:claude", note = "Edits paragraph now describes item.add of display/window/webcam fitting the canvas (batch canvas.set_size else state.get) and others staying legacy 1:1; matches run.rs fit_captures and the USAGE note added in args.rs." }
+stamp = { hash = "b3:bcbdad685ad8815a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: item.add's fit of display, window and webcam items to the canvas (#450) and the usage text in args.rs stand beside the wave's Y3 text (no YouTube-bound output or YouTube actions at 0.23) and B7's item fields; fit_captures leaves opacity and blend as sent; holds" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:0b8291d83ee35dde", by = "agent:claude", note = "Edits paragraph now describes item.add of display/window/webcam fitting the canvas (batch canvas.set_size else state.get) and others staying legacy 1:1; matches run.rs fit_captures and the USAGE note added in args.rs." }
+stamp = { hash = "b3:2980eba909dcd34e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: item.add's fit of display, window and webcam items to the canvas (#450) and the usage text in args.rs stand beside the wave's Y3 text (no YouTube-bound output or YouTube actions at 0.23) and B7's item fields; fit_captures leaves opacity and blend as sent; holds" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
 stamp = { hash = "b3:16e79b530b6f8e0a" }
@@ -924,7 +924,7 @@ stamp = { hash = "b3:16e79b530b6f8e0a" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:307fba64af3b4d48", by = "agent:claude", note = "Edits paragraph now describes item.add of display/window/webcam fitting the canvas (batch canvas.set_size else state.get) and others staying legacy 1:1; matches run.rs fit_captures and the USAGE note added in args.rs." }
+stamp = { hash = "b3:180f43478e1f562c", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: item.add's fit of display, window and webcam items to the canvas (#450) and the usage text in args.rs stand beside the wave's Y3 text (no YouTube-bound output or YouTube actions at 0.23) and B7's item fields; fit_captures leaves opacity and blend as sent; holds" }
 
 ["CRATE-jstream-control#design"."body"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -1002,7 +1002,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:4e3e5143a4067a68", by = "agent:claude", note = "B1: vcam paragraph now names both fit cases (canvas changed after stage open, or odd edge rounded down by output_size)" }
+stamp = { hash = "b3:416feb24dc3cf2c4", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the render thread paragraph now joins #434 (draws at the canvas from output_size, the capture keeps its own size and is scaled) with E3b (device chosen at open; a GpuFrame is sampled in place and held until a CPU capture is drawn instead); CPU captures, NV12 included, convert only on ticks whose shot shows the capture; compose uses shows_capture with CaptureImage; matches pipeline.rs and snapshot.rs; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -1041,7 +1041,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:874f20bbb059161f", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:d0b00c05fbe6e45a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the render thread paragraph now joins #434 (draws at the canvas from output_size, the capture keeps its own size and is scaled) with E3b (device chosen at open; a GpuFrame is sampled in place and held until a CPU capture is drawn instead); CPU captures, NV12 included, convert only on ticks whose shot shows the capture; compose uses shows_capture with CaptureImage; matches pipeline.rs and snapshot.rs; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1074,7 +1074,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:a165614228aedf88", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:80b68d1d901b2999", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the render thread paragraph now joins #434 (draws at the canvas from output_size, the capture keeps its own size and is scaled) with E3b (device chosen at open; a GpuFrame is sampled in place and held until a CPU capture is drawn instead); CPU captures, NV12 included, convert only on ticks whose shot shows the capture; compose uses shows_capture with CaptureImage; matches pipeline.rs and snapshot.rs; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1092,13 +1092,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:592c3b9f41754a4c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:211c895e1ad53b28", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:b3f8a6543cd7d21a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the render thread paragraph now joins #434 (draws at the canvas from output_size, the capture keeps its own size and is scaled) with E3b (device chosen at open; a GpuFrame is sampled in place and held until a CPU capture is drawn instead); CPU captures, NV12 included, convert only on ticks whose shot shows the capture; compose uses shows_capture with CaptureImage; matches pipeline.rs and snapshot.rs; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:552e5c6151ade75e", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:83b3d880a9de5b69", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the render thread paragraph now joins #434 (draws at the canvas from output_size, the capture keeps its own size and is scaled) with E3b (device chosen at open; a GpuFrame is sampled in place and held until a CPU capture is drawn instead); CPU captures, NV12 included, convert only on ticks whose shot shows the capture; compose uses shows_capture with CaptureImage; matches pipeline.rs and snapshot.rs; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's browser paragraph says a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser and the new tests/audio.rs case; the wave's B7 opacity/blend/filter text is in other paragraphs; holds" }
@@ -1110,7 +1110,7 @@ stamp = { hash = "b3:0a4ad5a1d04d5f8d", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/gpu_capture.rs"]
-stamp = { hash = "b3:7044ce3554a51e59", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
+stamp = { hash = "b3:7b7f938f8a215faf", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the render thread paragraph now joins #434 (draws at the canvas from output_size, the capture keeps its own size and is scaled) with E3b (device chosen at open; a GpuFrame is sampled in place and held until a CPU capture is drawn instead); CPU captures, NV12 included, convert only on ticks whose shot shows the capture; compose uses shows_capture with CaptureImage; matches pipeline.rs and snapshot.rs; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/history.rs"]
 stamp = { hash = "b3:c9688aabcb558c82" }
@@ -1131,7 +1131,7 @@ stamp = { hash = "b3:1cb3f432ff4f8d5d", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:97c448bb25c6d46c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:e694bb9fbdaed47b", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:3047be79a671413b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the tests list now names both the wave's GPU-capture render test and main's #433 tests (output size follows the canvas, captures converted to RGBA8 at their own size and only on ticks that show them); engine.rs passes the canvas to parts_from, gpu_capture.rs's test passes one too; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1155,7 +1155,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:874f20bbb059161f", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:d0b00c05fbe6e45a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the tests list now names both the wave's GPU-capture render test and main's #433 tests (output size follows the canvas, captures converted to RGBA8 at their own size and only on ticks that show them); engine.rs passes the canvas to parts_from, gpu_capture.rs's test passes one too; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1188,7 +1188,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:a165614228aedf88", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:80b68d1d901b2999", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the tests list now names both the wave's GPU-capture render test and main's #433 tests (output size follows the canvas, captures converted to RGBA8 at their own size and only on ticks that show them); engine.rs passes the canvas to parts_from, gpu_capture.rs's test passes one too; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1206,13 +1206,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:592c3b9f41754a4c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:211c895e1ad53b28", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:b3f8a6543cd7d21a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the tests list now names both the wave's GPU-capture render test and main's #433 tests (output size follows the canvas, captures converted to RGBA8 at their own size and only on ticks that show them); engine.rs passes the canvas to parts_from, gpu_capture.rs's test passes one too; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:552e5c6151ade75e", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:83b3d880a9de5b69", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the tests list now names both the wave's GPU-capture render test and main's #433 tests (output size follows the canvas, captures converted to RGBA8 at their own size and only on ticks that show them); engine.rs passes the canvas to parts_from, gpu_capture.rs's test passes one too; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
@@ -1224,7 +1224,7 @@ stamp = { hash = "b3:0a4ad5a1d04d5f8d", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/gpu_capture.rs"]
-stamp = { hash = "b3:7044ce3554a51e59", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
+stamp = { hash = "b3:7b7f938f8a215faf", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the tests list now names both the wave's GPU-capture render test and main's #433 tests (output size follows the canvas, captures converted to RGBA8 at their own size and only on ticks that show them); engine.rs passes the canvas to parts_from, gpu_capture.rs's test passes one too; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/history.rs"]
 stamp = { hash = "b3:c9688aabcb558c82" }
@@ -1251,7 +1251,7 @@ stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:993e780364d6f4d3" }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:934e43398b16a688", by = "agent:claude", note = "Re-read Runtime: render thread composites at the canvas size and scales the capture (#433)" }
+stamp = { hash = "b3:b6aabd587acedc6f", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against the merged pipeline.rs: the stage composites at the canvas size (#434) and the capture path text (E3b: platform context, Capture::on_context, fallbacks, drop order) holds; OpenedCapture no longer carries a size; holds" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:74397f35965002f4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 (#320 only adds the jstream-outputs crate-map row; merge-main took wave stamps that predate this PR): stale via ARCH#threading's Preview row only (not a real-time thread); section text is main's; holds" }
@@ -1263,7 +1263,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:a165614228aedf88", by = "agent:claude", note = "Re-read Runtime: render thread composites at the canvas size and scales the capture (#433)" }
+stamp = { hash = "b3:80b68d1d901b2999", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against the merged pipeline.rs: the stage composites at the canvas size (#434) and the capture path text (E3b: platform context, Capture::on_context, fallbacks, drop order) holds; OpenedCapture no longer carries a size; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1890,7 +1890,7 @@ stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
+stamp = { hash = "b3:9ea156087d880269", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: main's data-folder bullet (paths.rs, P1, ADR-0020) joins the wave's Capture::on_context, Codecs::on_context and FrameSync::platform text and its narrowed Not yet (only the virtual camera lacks GPU frames); all match the merged sources; holds" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for a dependency change that only swapped the ADR-0051 link for ADR-0058 (and, for protocol, marked YouTube UI-only); this section makes no YouTube or OAuth claim that changes; OAuthTokenStore still holds the Google refresh token" }
@@ -1965,10 +1965,10 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:54752a7a73020412", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
+stamp = { hash = "b3:0bbb91aba2b2de79", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: rewrote the CPU path bullet for both sides: the CPU encoder takes NV12, RGBA or BGRA (main's #425 Nv12Packer, now Input::Cpu in h264.rs) beside E3c's GPU path through Codecs::on_context, which still takes only NV12 encode targets; codec/mod.rs's doc says the same; the tests line names both; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via jstream-platform#purpose's new Data folder bullet; this crate's portable-install mentions (key store, Moved registration) agree with paths' marker semantics; holds" }
+stamp = { hash = "b3:9ea156087d880269", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: rewrote the CPU path bullet for both sides: the CPU encoder takes NV12, RGBA or BGRA (main's #425 Nv12Packer, now Input::Cpu in h264.rs) beside E3c's GPU path through Codecs::on_context, which still takes only NV12 encode targets; codec/mod.rs's doc says the same; the tests line names both; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:43948c5058fe4611", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via its crate-map row, which drops the CEF browser backend (now in jstream-browser), and R-UNSAFE-001 (adds jstream-browser); this README never described CEF, its text holds" }
@@ -2034,13 +2034,13 @@ stamp = { hash = "b3:bcbc90e406de91b4" }
 stamp = { hash = "b3:0b4fe8918cdd233a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/h264.rs"]
-stamp = { hash = "b3:40424fccd7d72dde", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
+stamp = { hash = "b3:ed934317c2576158", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: rewrote the CPU path bullet for both sides: the CPU encoder takes NV12, RGBA or BGRA (main's #425 Nv12Packer, now Input::Cpu in h264.rs) beside E3c's GPU path through Codecs::on_context, which still takes only NV12 encode targets; codec/mod.rs's doc says the same; the tests line names both; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mf.rs"]
 stamp = { hash = "b3:b132c98638f816bf" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mod.rs"]
-stamp = { hash = "b3:41b4f0c62b4c4b54", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
+stamp = { hash = "b3:2ce2daeb81aabf91", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: rewrote the CPU path bullet for both sides: the CPU encoder takes NV12, RGBA or BGRA (main's #425 Nv12Packer, now Input::Cpu in h264.rs) beside E3c's GPU path through Codecs::on_context, which still takes only NV12 encode targets; codec/mod.rs's doc says the same; the tests line names both; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/com.rs"]
 stamp = { hash = "b3:c237392a0b5423fa" }
@@ -2148,13 +2148,13 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:a847dcc5ef533c7d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:4bf356ec16414ec2", by = "agent:claude", note = "Only the item.add doc string changed in command.rs and protocol.snap (description text); the omitted-placement default is unchanged, design holds." }
+stamp = { hash = "b3:6150770efd14577a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: protocol.snap and command.rs change only item.add's description (#450); no type, field or version changes, so the design's 0.23 text holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:88b397d3add42204", by = "agent:claude", note = "Only the item.add doc string changed in command.rs and protocol.snap (description text); the omitted-placement default is unchanged, design holds." }
+stamp = { hash = "b3:a0ee1b3c6453026c", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: protocol.snap and command.rs change only item.add's description (#450); no type, field or version changes, so the design's 0.23 text holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2226,7 +2226,7 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:88b397d3add42204", by = "agent:claude", note = "command.rs change is doc-only: item.add's doc adds advice to send a canvas-covering fit geometry for display/window/webcam; no type or wire change, purpose holds." }
+stamp = { hash = "b3:a0ee1b3c6453026c", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: command.rs gains only #450's item.add doc text on canvas-covering geometry for capture items; the purpose's 0.23 version history from the wave (Y3, B7, pairing, preview) holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2868,7 +2868,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:17f96763b6619765", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via jstream-platform#purpose's new paths/data-folder bullet; the token store seam it describes is unchanged; holds" }
+stamp = { hash = "b3:9ea156087d880269", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: stale only via jstream-platform's purpose, which gains the paths module; this crate still uses only OAuthTokenStore from it, as its purpose says; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:311cefe9eebe1f9a", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
@@ -3162,16 +3162,16 @@ stamp = { hash = "b3:74397f35965002f4", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = '''P1 merge of main: daemon usage gained main's --ui-dir/Web UI text plus P1's portable data folder; prerequisites use the default %APPDATA%\JStream layout and no UI flag; holds''' }
+stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: daemon Usage now carries main's data-directory default (P1) beside the wave's pairing device file; the prerequisites use neither and the token folder step still holds; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:538a9fe44872c91d", by = "agent:claude", note = "Re-read: smoke.ps1 steps add no items; the CLI usage change does not affect them." }
+stamp = { hash = "b3:bcbdad685ad8815a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage (Y3's no YouTube-bound outputs; #450's capture fit) and daemon Usage (P1's data directory, the wave's device file); smoke.ps1 uses a generic RTMP output, adds no items and passes --token-file and --log-dir in its run folder; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main: smoke.ps1 still passes --token-file and --log-dir in its run folder and no --ui-dir, so neither main's UI flag nor P1's data-folder default reaches it; holds" }
+stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage (Y3's no YouTube-bound outputs; #450's capture fit) and daemon Usage (P1's data directory, the wave's device file); smoke.ps1 uses a generic RTMP output, adds no items and passes --token-file and --log-dir in its run folder; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -3180,10 +3180,10 @@ stamp = { hash = "b3:a560da0e5768f43e" }
 stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:538a9fe44872c91d", by = "agent:claude", note = "Re-read: the steps use no item.add; the CLI usage change (capture items fit the canvas) does not affect any command here." }
+stamp = { hash = "b3:bcbdad685ad8815a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage with the wave's Y3 change (no YouTube-bound output in the CLI, 0.23) and main's #450 (new capture items fit the canvas), and daemon Usage with P1's data directory; the steps stream to a generic RTMP URL with the control token, add no items, and their token and log paths are the data directory's; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = '''P1 merge of main: daemon usage gained --ui-dir (not used by these steps) and P1's portable data folder; steps run target\release with no marker, so the %APPDATA%\JStream\logs check holds''' }
+stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage with the wave's Y3 change (no YouTube-bound output in the CLI, 0.23) and main's #450 (new capture items fit the canvas), and daemon Usage with P1's data directory; the steps stream to a generic RTMP URL with the control token, add no items, and their token and log paths are the data directory's; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from CLI Usage (pair/device; #440's set-key BOM and non-ASCII refusal) and server Design (pairing; Admitted's binary forward): no step pairs a device, every command uses the control token, and a key typed or piped per the steps passes #440's check; holds" }
