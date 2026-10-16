@@ -176,8 +176,8 @@ pub enum EntityKind {
     Encoder,
     /// An audio bus.
     Bus,
-    /// A paired device (0.20). Only an error answering `device.revoke` names it, so a
-    /// client older than 0.20, which sends none, never reads it.
+    /// A paired device (0.21). Only an error answering `device.revoke` names it, so a
+    /// client older than 0.21, which sends none, never reads it.
     Device,
 }
 

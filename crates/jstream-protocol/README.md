@@ -93,10 +93,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.20 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.21 because of
   pairing (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
   `unsupported` error and the `device` entity kind,
-  [ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)); 0.19 added
+  [ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)); 0.19 added
   audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
   `audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
   `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
@@ -205,7 +205,7 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
   storing a stream key, OAuth, switching the program scene). Never undoable or
   batchable. The response says the action was accepted, and carries an
   `ActionResult` only for an action that answers with data (`pairing.start`'s code,
-  0.20; every other action omits `result`); progress arrives as events
+  0.21; every other action omits `result`); progress arrives as events
   (`output.state_changed`).
 
 The classification rule: **if the command's whole effect is a change to the collection
@@ -334,9 +334,22 @@ never a type per kind.
   edits.N.settings.<id>` (or `edits.N.patch.<id>`). Values are never clamped. A
   reference to a missing scene or source is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
-  `collection` and `app` are relative, with `/` separators and no `..` segment, drive
-  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows); an
-  asset that doesn't exist yet is accepted.
+  `collection` and `app` are relative, with `/` separators and no empty or `..` segment,
+  drive letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
+  Under `absolute` the path is `/…`, `\…`, `C:\…` or `C:/…`, with no `..` segment, no
+  second leading separator (`\\host\share`, `//host/share`, `\\.\…` and `\\?\…` name
+  a UNC share or a device, and opening one on Windows hands the engine's credentials to
+  that host), no `:` but the drive letter's, and no `?` or `*` (Win32 never allows
+  them in a file name, and `\??\UNC\…` or `\??\GLOBALROOT\Device\…` is an NT object
+  path that reaches the same hosts and devices). Under every root, the last component
+  must not name a DOS device, which Win32 opens in place of a file in any folder: a
+  stem (the name before the first `.`, without trailing spaces, in any case) of `CON`,
+  `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`,
+  `CONIN$` or `CONOUT$`. So `C:\x\nul`, `\CON .png` and `/x/aux.txt` are refused under
+  `absolute`, and `CON.png` and `media/nul` under `collection` or `app` (joined to the
+  root folder, they still open the device), while `CONSOLE.png` or `COM10.png` is not.
+  Earlier components may use these names: Win32 fails to open such a path, and elsewhere
+  they are ordinary folders. An asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
@@ -468,7 +481,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   Added in 0.16.
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
-  collection state, so no `rev`. Added in 0.20 (see *Pairing* below).
+  collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
 - `delete.plan {target}`: the batch that deletes a scene or source (`target` is
   `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
   everything that refers to it, as `edits` and the `rev` it was planned at, or
@@ -495,13 +508,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   accept an answer of that size: `jstream-control`'s WebSocket client keeps
   tungstenite's default limits, which are well above it.
 
-**Pairing** (0.20, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
+**Pairing** (0.21, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
 `pairing.start` opens a one-time code and answers it in `result`
 (`{"type":"pairing.start","code":"XXXX-XXXX","expires_in_secs":120}`), `device.list`
 lists the paired devices, and `device.revoke {device_id}` forgets one (`not_found` with
 entity `device` for an unknown one). They concern whom a listener admits, so the server
 in front of the engine answers them
-([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md),
+([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md),
 [jstream-server › Design](../jstream-server/README.md#design)); a `Control` with no
 server in front answers `unsupported`. The code is a `SecretString`: it never prints,
 and nothing but this answer carries it ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
@@ -669,7 +682,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
 | `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
-| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front; 0.20) | `call` |
+| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front; 0.21) | `call` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to
@@ -704,7 +717,7 @@ after 1.0:
   exists (the whole response fails, and `WsControl` ends the session). Whether that
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
-  than 0.13, which sends none, never reads it. 0.20 adds `device` the same way: only an
+  than 0.13, which sends none, never reads it. 0.21 adds `device` the same way: only an
   error answering `device.revoke` names it. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.

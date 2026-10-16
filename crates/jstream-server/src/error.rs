@@ -22,6 +22,13 @@ pub enum ServerError {
         /// What is wrong with it.
         reason: &'static str,
     },
+    /// A configured connection limit or timeout is zero, so the server would refuse or
+    /// drop everything.
+    #[error("invalid server config: `{field}` must be greater than zero")]
+    InvalidLimit {
+        /// The [`ServerConfig`](crate::ServerConfig) field.
+        field: &'static str,
+    },
     /// The configured UI directory is missing or isn't a directory.
     #[error("unusable UI directory `{}`: {source}", dir.display())]
     UiDir {

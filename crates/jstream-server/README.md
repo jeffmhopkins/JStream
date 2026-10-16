@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Admitted session** (`admitted.rs`): the `Control` wrapper every connection and MCP
   session gets, which answers `pairing.start`, `device.list` and `device.revoke` itself
   unless `ServerConfig::pairing` is off
-  ([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)).
+  ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)).
 - **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
   an accepted upgrade request in time.
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every request passes
@@ -146,6 +146,10 @@ the default:
 | `max_connections` | 32 open WebSocket connections | An upgrade that passes the checks above gets 503 and no session. The slot is taken just before the upgrade and freed when the connection ends. |
 | `header_read_timeout` | 10 s from accept to an accepted upgrade request | The connection is dropped, unanswered. |
 | `handshake_timeout` | 10 s from accept to a successful `hello` | The connection is closed with close code 1008 (see *Sessions*). |
+
+`Server::bind` refuses a zero limit or timeout, and a zero `max_mcp_sessions` or
+`mcp_idle_timeout` (see *MCP over streamable HTTP*), with `ServerError::InvalidLimit` before opening the
+socket, since the server would refuse or drop everything.
 
 The header-read timeout is kept on the socket, by the listener (`listener.rs`), since
 hyper's own isn't reachable through `axum::serve`: until the upgrade handler accepts a
@@ -271,7 +275,7 @@ its own from a short code instead of the control token.
   `tests::pairing_codes_and_device_tokens_are_never_logged` checks this.
 
 These three calls are answered by the server, not the engine
-([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)): see *Sessions*.
+([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)): see *Sessions*.
 
 ### The pairing page and the device cookie
 
@@ -325,7 +329,8 @@ task speaks the envelope
   first handshake (`unsupported_version`) is answered and the connection closed (close
   code 1008), as the envelope says. A connection whose handshake hasn't succeeded within
   `handshake_timeout` of being accepted is closed with code 1008 too (`no handshake in
-  time`).
+  time`), including one whose `hello` arrived in time but that the engine hasn't
+  answered by then: the wait for the engine's answer races the same deadline.
 - Each `request` is forwarded to `Control::call` and may stay in flight while others
   run; answers go back as they complete, carrying the client's request ID. A request
   before `hello` is answered by the session itself (`handshake_required`).
@@ -361,11 +366,18 @@ task speaks the envelope
 
 `serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
 open connection (close code 1001), so their clients' pending and later calls fail with
-`Disconnected` and their event streams end. Whenever the server closes a connection,
-it first ends the session's event subscription, then sends what the outbox still holds
-before the close frame. A client that doesn't take them within a short timeout
-(`CLOSE_TIMEOUT`) is dropped without one, so a client that stopped reading can't keep
-its connection or session open.
+`Disconnected` and their event streams end. A connection handles nothing it reads once
+the server is shutting down, so a call sent after the shutdown is never answered. It
+returns once every WebSocket connection has finished closing (as below), so a host that
+exits right after it doesn't cut a close short. Whenever the server closes a
+connection, it first ends the session's event subscription, then sends what the outbox
+still holds before the close frame, then reads and drops what the client still sends
+until the client's own close frame or the end of the stream, and only then closes the
+socket. Closing it with client data unread would make the kernel reset the connection,
+and on macOS and Windows a reset discards what the client hasn't read yet, the close
+frame and last replies included. A client that doesn't finish this within a short
+timeout (`CLOSE_TIMEOUT`) is dropped, so a client that stopped reading can't keep its
+connection or session open, nor hold up the shutdown.
 
 ### MCP over streamable HTTP
 

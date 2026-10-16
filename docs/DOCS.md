@@ -58,8 +58,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `cargo xtask docs log` derives a doc's or section's history from git, and
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
-  `origin/main`, resolves conflicts that are only between stamps, moves inline stamps a
-  branch from before ADR-0053 still has, and lists the sections left stale.
+  `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
+  that are only between stamps, moves inline stamps a branch from before ADR-0053 still
+  has, and lists the sections left stale.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -305,10 +306,13 @@ cargo xtask docs review ARCH \
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
 cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
 cargo xtask docs merge-main                    # merge origin/main; stamp-only conflicts take main's
+cargo xtask docs merge-main --from wave/m1     # the same for a PR into a wave (ADR-0055)
 cargo xtask docs migrate                       # move inline stamps to the ledger (below)
 ```
 
-`docs merge-main` fetches and merges `origin/main` into a clean working tree. Every
+`docs merge-main` fetches and merges `origin/main` into a clean working tree. With
+`--from wave/<name>` it merges that wave branch instead, and "main's side" below means the
+wave's ([runbook](runbooks/waves.md#current)). Every
 conflict in the ledger takes main's side: a merge never leaves a section falsely fresh,
 and a conflict usually leaves it stale, for a re-read. The result must parse, and is
 rewritten in canonical form. In a doc, a conflict whose two sides are only inline `verified` lines
@@ -655,8 +659,8 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
 - **Clients** ([R-ARCH-003](RULES.md#R-ARCH-003)): `jstream-ui`, `jstream-mcp`,
   `jstream-server` and `jstream-cli` never reach `jstream-core`, directly or through other
   members. The finding shows the path.
-- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform and vcam crates
-  on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
+- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam and browser
+  crates on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
   member that declares `false`, every library and binary crate root must carry
   `#![forbid(unsafe_code)]` (alone or among other lints, possibly wrapped over several
   lines) among its leading inner attributes: only whitespace, comments and other inner
@@ -668,7 +672,10 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
   heuristic: a build-dependency on `cc`, `cmake`, `autotools` or `nasm-rs`, or on a build
   helper that has one of them as a normal dependency, one level down (`cxx-build` → `cc`).
   Deeper chains, and build scripts that run a compiler without those crates, are not
-  detected; the `deny.toml` bans and review cover them.
+  detected; the `deny.toml` bans and review cover them. The graph is the one default
+  features resolve, so a package that only an off-by-default feature reaches (CEF's
+  `cef-dll-sys`, behind `jstream-browser`'s `cef` feature) isn't checked: its allowlist
+  entry records the decision, and `cargo deny check --all-features` still sees it.
 - **Workspace dependencies** ([R-DEP-003](RULES.md#R-DEP-003)): every entry in a member's
   `[dependencies]`, `[dev-dependencies]` and `[build-dependencies]` tables, including
   `[target.<cfg>.…]` ones, is `<dep>.workspace = true`, with its version in the root

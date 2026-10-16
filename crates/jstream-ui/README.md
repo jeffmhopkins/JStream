@@ -72,8 +72,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   token in the subprotocol, which `jstream-server` accepts
   ([jstream-server › Design](../jstream-server/README.md#design)). After a disconnect the form
   shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
-  a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin
-  and an unreachable engine read the same.
+  a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin,
+  an unreachable engine and a URL the page's policy blocks read the same.
 - **The session.** `Session::connect` opens `jstream-control`'s `WsControl` and says
   `hello`. The open session is provided as Leptos context (`SessionContext`), so a
   panel calls the engine with `session.control.call(…)` and never sees the socket. The

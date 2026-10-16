@@ -34,6 +34,7 @@ fn ctx(collection: &Path) -> Context {
             app: None,
         },
         limits: Limits::default(),
+        ..Context::default()
     }
 }
 
@@ -84,6 +85,7 @@ fn the_registry_describes_every_builtin_kind_in_order() {
         [
             "app_audio",
             "audio_input",
+            "browser",
             "color",
             "desktop_audio",
             "display",

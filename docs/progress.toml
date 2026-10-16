@@ -216,8 +216,9 @@ prs = [173]
 id = "E3b"
 milestone = "M1a"
 title = "Render takes GPU frames"
-status = "review"
+status = "hardware"
 prs = [219]
+note = "windows_gpu hardware test (#334)"
 
 [[item]]
 id = "Y1"
@@ -695,6 +696,20 @@ status = "review"
 prs = [309]
 
 [[item]]
+id = "Q4"
+milestone = "M2"
+title = "Performance benchmarks"
+status = "review"
+prs = [361]
+
+[[item]]
+id = "Q5"
+milestone = "M2"
+title = "Threat model"
+status = "review"
+prs = [358]
+
+[[item]]
 id = "T1"
 milestone = "M2"
 title = "Studio mode and transitions"
@@ -773,6 +788,7 @@ id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
+prs = [359]
 
 [[item]]
 id = "3D1"

@@ -478,7 +478,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "What the action answered, tagged by the action's name, for the actions that\nanswer something. Absent for every other action, and from a server older\nthan 0.20."
+              "description": "What the action answered, tagged by the action's name, for the actions that\nanswer something. Absent for every other action, and from a server older\nthan 0.21."
             }
           },
           "required": [
@@ -1820,7 +1820,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "device",
-          "description": "A paired device (0.20). Only an error answering `device.revoke` names it, so a\nclient older than 0.20, which sends none, never reads it.",
+          "description": "A paired device (0.21). Only an error answering `device.revoke` names it, so a\nclient older than 0.21, which sends none, never reads it.",
           "type": "string"
         }
       ]
@@ -4466,5 +4466,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.20"
+  "title": "JStream protocol 0.21"
 }

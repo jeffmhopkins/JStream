@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0046"
+id = "ADR-0057"
 title = "The server answers the credential calls, and actions may answer with data"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0046: The server answers the credential calls, and actions may answer with data
+# ADR-0057: The server answers the credential calls, and actions may answer with data
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -46,7 +46,7 @@ ADR-0044 leaves open, both architecture, so agent tier
   the code and its lifetime. Every other action omits it, so their wire form is
   unchanged. Classification is unchanged too: `pairing.start` and `device.revoke` are
   actions (side effects, never undone or batched), `device.list` is a query. All of it
-  ships as protocol 0.20, an additive minor ([R-API-001](../RULES.md#R-API-001)).
+  ships as protocol 0.21, an additive minor ([R-API-001](../RULES.md#R-API-001)).
 
 <a id="consequences"></a>
 ## Consequences
