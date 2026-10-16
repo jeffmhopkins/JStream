@@ -20,6 +20,7 @@ impl WaveformKind {
     pub(crate) fn new() -> Self {
         Self(KindDescriptor {
             params: vec![
+                audio_param(),
                 param("width", "Width", size(), json!(640)),
                 param("height", "Height", size(), json!(160)),
                 live(param(
@@ -71,6 +72,20 @@ impl SourceKind for WaveformKind {
             columns: vec![(0.0, 0.0); usize::try_from(width).unwrap_or(1).min(MAX_SIDE)],
         };
         create(&self.0, settings, ctx, scope)
+    }
+}
+
+/// The `audio` parameter both kinds share: which mix they draw (#362). Changing it
+/// makes a new source, which reads the other scope.
+pub(super) fn audio_param() -> ParamDescriptor {
+    ParamDescriptor {
+        description: Some(
+            "What it draws. None draws the program mix: the master after its filters, as \
+             the outputs hear it. A bus draws that bus after its fader, before the \
+             master's filters. Either is silent while no output runs."
+                .into(),
+        ),
+        ..param("audio", "Audio", ParamType::Bus, serde_json::Value::Null)
     }
 }
 

@@ -1,6 +1,6 @@
 //! The `Source` and `SourceKind` seams, and what a source is created with.
 
-use crate::{AudioScope, MediaAudio, SourceError};
+use crate::{AudioScopes, MediaAudio, SourceError};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::MediaDecoders;
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
@@ -105,9 +105,9 @@ pub struct Context {
     pub assets: AssetRoots,
     /// Size limits for decoded assets.
     pub limits: Limits,
-    /// The program mix's audio, which the `waveform` and `spectrum` sources draw.
-    /// `None` draws silence.
-    pub audio: Option<Arc<AudioScope>>,
+    /// The audio the `waveform` and `spectrum` sources draw: the program mix's scope
+    /// and each bus's, looked up by their `audio` setting. `None` draws silence.
+    pub audio: Option<Arc<AudioScopes>>,
     /// The platform's media files (ADR-0031): what the `media` kind demuxes and decodes
     /// with. `None` until the host injects the platform's backends; `media` sources
     /// then fail with [`SourceError::NoBackend`].

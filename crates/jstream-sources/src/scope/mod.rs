@@ -1,8 +1,10 @@
 //! The audio the `waveform` and `spectrum` sources draw (ADR-0031's audio → render data
-//! path): [`AudioScope`], a lock-free ring of the latest samples of one mix, and what
-//! both kinds share.
+//! path): [`AudioScope`], a lock-free ring of the latest samples of one mix,
+//! [`AudioScopes`], the lookup that finds a source's scope (the program mix's, or a
+//! bus's), and what both kinds share.
 //!
-//! The mixer thread pushes each block it mixes. A source reads the latest window when
+//! The mixer thread pushes each block it mixes, and each block of every bus a source
+//! draws. A source reads the latest window when
 //! its [`Painter`] draws a frame, on the thread that paints (in the engine, the
 //! `jstream-sources` thread, holding no engine lock), so the analysis (the FFT included)
 //! never runs on the mixer thread, and the push neither locks nor allocates
@@ -19,7 +21,8 @@ use crate::color::{parse_color, rgba_frame};
 use crate::source::{at_millis, changed_non_live, millis, setting};
 use crate::{Context, Limits, Painter, Source, SourceError};
 use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
-use jstream_protocol::{KindDescriptor, Settings};
+use jstream_protocol::{BusId, KindDescriptor, Reference, Settings};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering, fence};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -136,6 +139,85 @@ impl std::fmt::Debug for AudioScope {
     }
 }
 
+/// Where the `waveform` and `spectrum` sources find the audio they draw (their `audio`
+/// setting, #362): the program mix's scope, which always exists, and one scope per bus
+/// that a source draws, made when it is first asked for. The engine keeps one, feeds
+/// the program scope and [`buses`](Self::buses)' from the mixer thread, and calls
+/// [`retain`](Self::retain) with the buses the collection's sources draw.
+///
+/// Its lock is taken only to find, make or drop a bus's scope, on the threads that
+/// create sources or apply edits, never by the mixer thread: that thread gets each
+/// scope's handle through the engine's lock-free hand-off and only pushes into it.
+#[derive(Debug, Default)]
+pub struct AudioScopes {
+    program: Arc<AudioScope>,
+    buses: Mutex<BTreeMap<BusId, Arc<AudioScope>>>,
+}
+
+impl AudioScopes {
+    /// A lookup with an empty program scope and no bus scopes.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// A lookup whose program scope is `program`.
+    pub fn with_program(program: Arc<AudioScope>) -> Self {
+        Self {
+            program,
+            buses: Mutex::default(),
+        }
+    }
+
+    /// The program mix's scope: the master after its chain, as the outputs hear it.
+    pub fn program(&self) -> &Arc<AudioScope> {
+        &self.program
+    }
+
+    /// Bus `bus`'s scope, made now if no source has drawn the bus since the last
+    /// [`retain`](Self::retain) that dropped it.
+    pub fn bus(&self, bus: &BusId) -> Arc<AudioScope> {
+        Arc::clone(lock(&self.buses).entry(bus.clone()).or_default())
+    }
+
+    /// The scope a source drawing `bus` reads: the program mix's for `None`.
+    pub fn scope(&self, bus: Option<&BusId>) -> Arc<AudioScope> {
+        match bus {
+            None => Arc::clone(&self.program),
+            Some(bus) => self.bus(bus),
+        }
+    }
+
+    /// Keeps a scope for each bus in `drawn`, making the missing ones, and drops the
+    /// others: a source still holding a dropped one draws silence once it stands still.
+    pub fn retain(&self, drawn: &BTreeSet<BusId>) {
+        let mut buses = lock(&self.buses);
+        buses.retain(|bus, _| drawn.contains(bus));
+        for bus in drawn {
+            buses.entry(bus.clone()).or_default();
+        }
+    }
+
+    /// Every bus scope, ordered by bus ID.
+    pub fn buses(&self) -> Vec<(BusId, Arc<AudioScope>)> {
+        lock(&self.buses)
+            .iter()
+            .map(|(bus, scope)| (bus.clone(), Arc::clone(scope)))
+            .collect()
+    }
+}
+
+/// The bus a scope source's `audio` setting names: `None` for `null`, the program mix.
+fn drawn_bus(settings: &Settings) -> Result<Option<BusId>, SourceError> {
+    let value = setting(settings, "audio")?;
+    if value.is_null() {
+        return Ok(None);
+    }
+    match Reference::from_value(value) {
+        Some(Reference::Bus { bus_id }) => Ok(Some(bus_id)),
+        _ => Err(bad("audio", "must be a bus reference or null")),
+    }
+}
+
 /// The ring slot of sample `n`.
 fn slot(n: u64) -> usize {
     // CAPACITY is a power of two well inside `usize`.
@@ -240,9 +322,11 @@ fn create<S: Scope>(
     scope: S,
 ) -> Result<Box<dyn Source>, SourceError> {
     let size = frame_size(settings, &ctx.limits)?;
+    let bus = drawn_bus(settings)?;
+    let feed = ctx.audio.as_ref().map(|scopes| scopes.scope(bus.as_ref()));
     let mut drawing = Drawing {
         scope,
-        feed: Feed::new(ctx.audio.clone()),
+        feed: Feed::new(feed),
         frames: Frames::new(size)?,
         window: vec![0.0; WINDOW],
         spans: vec![(0, 0); size.width() as usize],

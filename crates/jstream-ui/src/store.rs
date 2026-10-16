@@ -8,9 +8,9 @@
 use crate::session::Session;
 use jstream_control::ControlError;
 use jstream_control::protocol::{
-    Batch, Call, CallResult, Canvas, DeleteTarget, Edit, Event, ItemId, ItemInfo, KindDescriptor,
-    KindSummary, OutputInfo, Query, QueryResult, Rev, SceneId, SceneInfo, SceneRole, SourceId,
-    SourceInfo, SourceKind,
+    Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, ItemId, ItemInfo,
+    KindDescriptor, KindSummary, OutputInfo, Query, QueryResult, Rev, SceneId, SceneInfo,
+    SceneRole, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -29,6 +29,9 @@ pub struct Collection {
     pub scenes: Vec<SceneInfo>,
     /// Every output, ordered by ID.
     pub outputs: Vec<OutputInfo>,
+    /// Every audio bus, ordered by ID, the master among them: what a `bus` parameter
+    /// picks from.
+    pub buses: Vec<BusInfo>,
 }
 
 impl Collection {
@@ -41,6 +44,7 @@ impl Collection {
                 sources,
                 scenes,
                 outputs,
+                buses,
                 ..
             } => Some(Collection {
                 rev,
@@ -48,6 +52,7 @@ impl Collection {
                 sources,
                 scenes,
                 outputs,
+                buses,
             }),
             _ => None,
         }

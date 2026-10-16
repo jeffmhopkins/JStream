@@ -6,7 +6,7 @@
 //! References are tagged objects ([`Reference`]), so the graph finds every reference in
 //! any map without reading the kind's descriptor.
 
-use crate::id::{SceneId, SourceId};
+use crate::id::{BusId, SceneId, SourceId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -48,7 +48,7 @@ impl Settings {
     }
 
     /// Every typed reference in the map, with the parameter that holds it, ordered by
-    /// parameter ID. A value whose tag isn't `scene`, `source` or `asset`, or that
+    /// parameter ID. A value whose tag isn't `scene`, `source`, `bus` or `asset`, or that
     /// doesn't parse as one, is not a reference.
     pub fn references(&self) -> impl Iterator<Item = (&str, Reference)> {
         self.iter()
@@ -64,9 +64,10 @@ impl<K: Into<String>> FromIterator<(K, Value)> for Settings {
 
 /// A typed reference held by a settings value.
 ///
-/// Scene and source references are dependency edges: the graph rejects a reference that
-/// would make a cycle, and refuses to delete what is referenced. Asset references name
-/// files, which are outside the collection state, so they are not edges.
+/// Scene, source and bus references are dependency edges: the graph rejects a reference
+/// that would make a cycle, and refuses to delete what is referenced. A bus depends on
+/// nothing, so a bus reference never closes a cycle. Asset references name files, which
+/// are outside the collection state, so they are not edges.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -80,6 +81,11 @@ pub enum Reference {
     Source {
         /// The source referred to.
         source_id: SourceId,
+    },
+    /// A bus (the audio a `waveform` or `spectrum` source draws). Since 0.20.
+    Bus {
+        /// The bus referred to.
+        bus_id: BusId,
     },
     /// A file: a root and a path under it.
     Asset {
@@ -95,11 +101,11 @@ pub enum Reference {
 }
 
 impl Reference {
-    /// The reference a settings value holds, if it is an object tagged `scene`, `source`
-    /// or `asset` that parses as one.
+    /// The reference a settings value holds, if it is an object tagged `scene`, `source`,
+    /// `bus` or `asset` that parses as one.
     pub fn from_value(value: &Value) -> Option<Reference> {
         let tag = value.as_object()?.get("type")?.as_str()?;
-        if !matches!(tag, "scene" | "source" | "asset") {
+        if !matches!(tag, "scene" | "source" | "bus" | "asset") {
             return None;
         }
         serde_json::from_value(value.clone()).ok()
@@ -127,7 +133,7 @@ pub enum AssetRoot {
 #[cfg(test)]
 mod tests {
     use super::{AssetRoot, Reference, Settings};
-    use crate::id::SceneId;
+    use crate::id::{BusId, SceneId};
     use serde_json::json;
 
     #[test]
@@ -135,6 +141,7 @@ mod tests {
         let settings: Settings = [
             ("color", json!("#ff0000")),
             ("mask", json!({"type": "scene", "scene_id": "m"})),
+            ("audio", json!({"type": "bus", "bus_id": "vod"})),
             (
                 "file",
                 json!({"type": "asset", "root": "collection", "path": "a/b.png"}),
@@ -148,6 +155,12 @@ mod tests {
         assert_eq!(
             found,
             vec![
+                (
+                    "audio",
+                    Reference::Bus {
+                        bus_id: BusId::new("vod")
+                    }
+                ),
                 (
                     "file",
                     Reference::Asset {

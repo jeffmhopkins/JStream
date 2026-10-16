@@ -211,6 +211,8 @@ pub enum ParamType {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         media: Option<Media>,
     },
+    /// A bus reference (`{"type":"bus","bus_id":…}`) or `null`. Since 0.20.
+    Bus,
     /// A type this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a descriptor from a newer server.
     #[serde(other)]
@@ -239,17 +241,17 @@ pub enum Media {
 }
 
 impl ParamDescriptor {
-    /// Whether the parameter holds a reference (asset, scene or source), and so accepts
-    /// `null` for "no reference".
+    /// Whether the parameter holds a reference (asset, scene, source or bus), and so
+    /// accepts `null` for "no reference".
     pub fn is_reference(&self) -> bool {
         matches!(
             self.ty,
-            ParamType::Asset { .. } | ParamType::Scene | ParamType::Source { .. }
+            ParamType::Asset { .. } | ParamType::Scene | ParamType::Source { .. } | ParamType::Bus
         )
     }
 
     /// Checks `value` against this parameter's type and constraints, reading nothing
-    /// else: whether a referenced scene or source exists (and what it produces) is the
+    /// else: whether a referenced scene, source or bus exists (and what it produces) is the
     /// graph's check. `null` passes only for a reference parameter. Values are never
     /// clamped. The error is the reason, for an `invalid_argument` that names the
     /// parameter.
@@ -318,6 +320,10 @@ impl ParamDescriptor {
                 None | Some(Reference::Source { .. }) => Ok(()),
                 Some(_) => Err("must be a source reference or null".into()),
             },
+            ParamType::Bus => match reference(value, "bus")? {
+                None | Some(Reference::Bus { .. }) => Ok(()),
+                Some(_) => Err("must be a bus reference or null".into()),
+            },
             ParamType::Unknown => Err("has a type this engine can't check".into()),
         }
     }
@@ -364,6 +370,11 @@ impl ParamDescriptor {
                 "type": "object",
                 "properties": {"type": {"const": "source"}, "source_id": {"type": "string"}},
                 "required": ["type", "source_id"],
+            })),
+            ParamType::Bus => null_or(json!({
+                "type": "object",
+                "properties": {"type": {"const": "bus"}, "bus_id": {"type": "string"}},
+                "required": ["type", "bus_id"],
             })),
             ParamType::Unknown => json!({}),
         };
@@ -606,6 +617,16 @@ mod tests {
                 .is_err()
         );
         assert!(scene.check(&json!("s")).is_err());
+
+        let bus = param("audio", ParamType::Bus, Value::Null);
+        assert!(bus.is_reference());
+        assert!(bus.check(&Value::Null).is_ok());
+        assert!(bus.check(&json!({"type": "bus", "bus_id": "vod"})).is_ok());
+        assert!(
+            bus.check(&json!({"type": "source", "source_id": "vod"}))
+                .is_err()
+        );
+        assert!(bus.check(&json!("vod")).is_err());
 
         let file = param(
             "file",

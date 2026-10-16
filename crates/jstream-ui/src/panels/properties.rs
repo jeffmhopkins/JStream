@@ -534,6 +534,19 @@ fn input_for(
                 })
             })
         }
+        ParamType::Bus => reference_select(value, send, move || {
+            studio.collection.with(|c| {
+                c.iter()
+                    .flat_map(|c| &c.buses)
+                    .map(|b| {
+                        let r = Reference::Bus {
+                            bus_id: b.bus_id.clone(),
+                        };
+                        (r.to_value(), b.name.clone())
+                    })
+                    .collect()
+            })
+        }),
         // A type this UI doesn't know: shown, not editable.
         _ => view! { <code class="readonly">{text}</code> }.into_any(),
     }

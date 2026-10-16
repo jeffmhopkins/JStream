@@ -97,11 +97,13 @@ the batch **touched**.
   resets a parameter to its default) and its inverse is the patch of the old values.
   `source.rename` renames. `source.create` rejects a `duplicated_from` naming the new
   source itself, and accepts one naming a missing source, as `source.delete`'s inverse
-  may need after the original went first. A reference to a missing scene or source is `not_found`, and
+  may need after the original went first. A reference to a missing scene, source or
+  bus is `not_found`, and
   a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
-  places the source or a setting refers to it, and `scene.delete` while a `scene`
-  source shows the scene or a setting refers to it. The `invalid_argument` lists every
+  places the source or a setting refers to it, `scene.delete` while a `scene`
+  source shows the scene or a setting refers to it, and `bus.delete` while a setting
+  refers to the bus (a `waveform` or `spectrum` drawing it, #362). The `invalid_argument` lists every
   blocker in `blockers` (`deps::blockers`, the reverse of the cycle check's edges): the
   item (`source_id`), the `scene` source (`kind.scene_id`) or the setting
   (`settings.<param>`). The client removes them first, in the same batch if it likes,
@@ -146,8 +148,8 @@ the batch **touched**.
   `send.remove` of the default master send for whatever differs from the defaults.
   `source.set_audio` needs an audio source and at least one field, and refuses a
   `scene` source's `gain_db` or `muted`. `bus.create` checks the ID, the name and the
-  bus limit; `bus.delete` refuses the master and removes the bus's sends, and its
-  inverse is `bus.create`, `bus.set_fader` if the fader differed, and the sends.
+  bus limit; `bus.delete` refuses the master and a bus a setting refers to (above),
+  and removes the bus's sends, and its inverse is `bus.create`, `bus.set_fader` if the fader differed, and the sends.
   `send.set` and `send.remove` check the source, then the bus (`not_found`), then that
   the source has a channel (a `scene` source sends nothing of its own). Every gain is
   checked with the protocol's `gain_db_problem` (−100 to +24 dB). A send always runs
@@ -167,7 +169,9 @@ the batch **touched**.
   §1 applies once they do).
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
-  scenes and sources its settings refer to. Asset references are not edges. Every edit
+  scenes, sources and buses its settings refer to. A bus depends on nothing, so an
+  edge into one never closes a cycle; it only holds the bus against `bus.delete`.
+  Asset references are not edges. Every edit
   that adds an edge runs the cycle check: `item.add`, `item.move`, `item.set_source`
   (from the item's scene to its new source), `source.create` and
   `source.set_settings`; `source.duplicate` copies outgoing edges onto a source nothing
@@ -186,7 +190,8 @@ target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the 
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
 to `null` (one `source.set_settings` per source), and the target's own delete comes
-last. Sources come ordered by ID, scenes in
+last. A bus's plan only clears references (its `bus.delete` takes its sends); the
+master's is `invalid_argument`. Sources come ordered by ID, scenes in
 display order, items bottom first, outputs, encoder profiles and buses ordered by
 ID, and sends by bus and then source. `state.get` carries the canvas, the buses and
 the sends, and an audio source's info its `audio`. A geometry item reads its `geometry`, and the deprecated `transform` view the
@@ -219,10 +224,11 @@ the engine's; this crate does no I/O.
   own objects, so a newer field is never silently dropped by the next save.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
-  graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
-  sources its settings refer to), then items in their placement form with their crop
-  and visibility, then encoder profiles, then outputs with their profiles, then the
-  buses (the master renamed or faded as saved), each source's audio and the sends
+  graph with the caller's kinds: the canvas size, scenes with their roles, then the
+  buses (the master renamed or faded as saved), which a source's settings may refer to,
+  then sources (each after the sources its settings refer to), then items in their
+  placement form with their crop and visibility, then encoder profiles, then outputs
+  with their profiles, then each source's audio and the sends
   (with a `send.remove` of a default master send the file doesn't list; a file
   without `sends`, such as one saved before sends existed, keeps every default master
   send). A
@@ -248,7 +254,9 @@ delete rejection by references, roles, moves and the grouping and ungrouping bat
 `scene_id` addressing, output URL checks and the refused delete of a running
 output, encoder edits and their inverses (a profile freed and deleted in one batch), audio
 defaults by kind, a duplicate's audio and a delete's restore, a bus deleted with its
-sends and undone exactly, exact inverses,
+sends and undone exactly, bus references (#362: `a_bus_reference_must_name_a_bus`,
+`a_drawn_bus_is_deleted_only_with_its_references_cleared`, and in `persist/tests.rs`
+`a_source_drawing_a_bus_round_trips`), exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a

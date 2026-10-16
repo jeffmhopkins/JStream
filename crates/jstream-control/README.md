@@ -134,7 +134,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
     or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
-    deleting the master, an empty `bus.set_fader`, sends from a `scene` source or a
+    deleting the master or a bus a source's settings refer to (a `bus` reference, as
+    a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB.
 
   Error messages may differ; clients match on codes and fields. The mock describes no

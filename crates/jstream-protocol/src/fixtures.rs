@@ -431,6 +431,11 @@ pub(crate) fn queries() -> Vec<Query> {
                 source_id: SourceId::new("src_cam"),
             },
         },
+        Query::DeletePlan {
+            target: DeleteTarget::Bus {
+                bus_id: BusId::new("bus_vod"),
+            },
+        },
     ]
 }
 
@@ -550,6 +555,7 @@ fn color_kind() -> KindDescriptor {
                 Value::Null,
             ),
             param("any", ParamType::Source { media: None }, Value::Null),
+            param("audio", ParamType::Bus, Value::Null),
         ],
     }
 }
