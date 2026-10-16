@@ -104,10 +104,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name> [role:scene|role:group]`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings, encoder profiles and `source.create`'s
-  `duplicated_from`. `source.set_settings`,
-  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
-  and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
+  protocol is supported except settings, encoder profiles, `source.create`'s
+  `duplicated_from` and the filter edits. `source.set_settings`,
+  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`,
+  `output.set_encoder` and the `filter.*` edits need a JSON argument form the CLI
+  doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
   default encoder (MCP and the WebSocket API take them). `item.add` sends neither
   placement, so its item is a legacy one; place it with `item.set_geometry <item-id>
@@ -124,7 +125,10 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   the item's own scene, which omitting it already means. Protocol 0.19's audio edits
   (`source.set_audio`, `bus.*`, `send.*`), `bus.list` and `audio.reset_loudness` are not
   in the CLI either.
-  `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
+  `item.set_source <item-id> <source-id>` switches an item to another source.
+  `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
+  item's opacity and blend mode; the engine accepts only `normal` until it draws the
+  others. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),

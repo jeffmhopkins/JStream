@@ -29,9 +29,9 @@ Contents (a first cut; [Design](#design) explains the choices):
   types that keep it dyn-compatible.
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
-- **Mock** (`mock.rs`, feature `mock`): `MockEngine` and `MockControl`, an in-memory
-  implementation for developing and testing clients without the engine, which
-  they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
+- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`):
+  `MockEngine` and `MockControl`, an in-memory implementation for developing and
+  testing clients without the engine, which they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
   implementation; its tests hold it to the mock's answers.
 - **WebSocket client** (feature `ws`): `WsControl`, the `Control` trait over the
   engine's WebSocket API, natively (`ws.rs`) and in the browser (`ws_web.rs`, `wasm32`);
@@ -140,6 +140,13 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
     naming a missing output, then a missing profile;
+  - an `opacity` outside 0 to 1 and a blend mode other than `normal`, in `item.add`,
+    `item.set_opacity` and `item.set_blend`;
+  - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
+    a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
+    `scene` source, a full chain and an index out of range. `source.duplicate` copies
+    the chains and `source.delete`'s inverse re-adds them; a reference in a filter's
+    settings blocks deleting its target, as a source's own does;
   - audio (`mock/audio.rs`, ADR-0028): each audio source's `SourceAudio` with its kind's
     defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
@@ -148,11 +155,13 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     source with no audio, removing a missing send, and gains outside −100 to +24 dB.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
-  kinds, so it accepts any non-empty builtin kind; `MockEngine::with_kinds` only tells
-  it which kinds have audio, and whether video too, for their audio defaults (a kind it
-  wasn't told about has no audio). It stores settings as sent without
-  checking them or filling in defaults (a `null` in a `source.set_settings` patch
-  removes the entry), and doesn't follow settings references when it looks for cycles.
+  kinds, so it accepts any non-empty builtin kind and any filter kind;
+  `MockEngine::with_kinds` only tells it which kinds have audio, and whether video too,
+  for their audio defaults (a kind it wasn't told about has no audio). It doesn't check
+  whether a builtin source has the chain a filter names, stores settings (a source's
+  and a filter's) as sent without checking them or filling in defaults (a `null` in a
+  patch removes the entry), and doesn't follow settings references when it looks for
+  cycles.
   `kind.list`, `kind.describe` and `delete.plan` answer `internal`, and its refused
   deletes carry no `blockers`;
 - every collection query, answered from that state with the results
@@ -160,13 +169,13 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
   scene), `output.list`, `encoder.list` and `bus.list` (ordered by ID), each at the
   current `rev`.
-  So it keeps everything an edit sets: the canvas, source names, kinds and settings,
-  each item's placement (its transform, or its geometry and the transform view of it),
-  crop and visibility, each scene's role and each item's scene after an `item.move`,
-  each output's kind, target and encoder profile, each profile, each source's audio,
-  and the buses and sends. `video.snapshot` is not one of those reads: the mock has no
-  compositor and answers it with `internal`, as it does for any protocol variant it
-  does not implement;
+  So it keeps everything an edit sets: the canvas, source names, kinds, settings and
+  filter chains, each item's placement (its transform, or its geometry and the
+  transform view of it), crop, visibility, opacity and blend, each scene's role and
+  each item's scene after an `item.move`, each output's kind, target and encoder
+  profile, each profile, each source's audio, and the buses and sends.
+  `video.snapshot` is not one of those reads: the mock has no compositor and answers
+  it with `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
@@ -191,13 +200,14 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - per-client undo and redo (`history.undo`, `history.redo`,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Each batch is a step built
   from the same inverse edits `jstream-graph` returns: a removed item comes back at its
-  index with its placement in its own form (transform or geometry), crop and
-  visibility, a deleted scene at its position with its role and items, `item.move`
+  index with its placement in its own form (transform or geometry), crop, visibility,
+  opacity and blend, a deleted scene at its position with its role and items, `item.move`
   back to the item's previous scene and index, `scene.set_role` back to the previous
   role, a deleted source with its
-  settings and `duplicated_from`, `item.set_source` back to the item's previous source,
-  a deleted bus with its fader and sends, a deleted source's audio and sends, and each
-  audio edit back to the values it replaced; a placement, crop or
+  settings, `duplicated_from` and filters, each filter edit to the chain as it was,
+  `item.set_source` back to the item's previous source, a deleted bus with its fader
+  and sends, a deleted source's audio and sends, and each audio edit back to the values
+  it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
   back with its encoder profile, encoder profile edits undo to the profile as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
@@ -232,8 +242,9 @@ The mock re-implements these checks and reads rather than calling
 for dev-dependencies, so the dependency would need a layering change. The duplication
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
-its outputs, the exact answer to every read of it, and the exact error for batches
-rejected against it, RTMP URL, recording path and audio rejections included. The mock's
+its outputs and a filter chain, the exact answer to every read of it, and the exact
+error for batches rejected against it, RTMP URL, recording path, filter and audio
+rejections included. The mock's
 undo test tears that collection down in one batch and checks that undo gives back
 exactly the fixture's state, which `jstream-graph`'s inverse property test guarantees
 for the graph.
