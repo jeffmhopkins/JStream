@@ -831,7 +831,11 @@ on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode
 on D3D11 into a texture of their own, fence-synchronized both ways, and
 `jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
 ([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
-Nothing writes the encode targets yet. Still outside this crate: the render
+Nothing writes the encode targets yet. Built-in video filters are kinds with
+descriptors whose passes `apply_filter` draws from one premultiplied `Rgba16Float` image
+into another, of the size the filter reports
+([jstream-render › Filters](../crates/jstream-render/README.md#filters)); the chain
+runtime that runs a source's video chain before placement is not built yet. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
 the output path below.
 
