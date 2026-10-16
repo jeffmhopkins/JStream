@@ -657,7 +657,8 @@ prs = [254]
 id = "U3c"
 milestone = "M2"
 title = "Mixer panel"
-status = "planned"
+status = "review"
+prs = [308]
 
 [[item]]
 id = "U4"

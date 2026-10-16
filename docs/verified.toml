@@ -2424,7 +2424,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:afe0c93fed5dda24", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401 and the jstream-control Mock change: Scenes and sources now says the mock lists no kinds and a failed kind.list offers none but shows its error like any failed call (problem bar, per Routing); rest unchanged." }
+stamp = { hash = "b3:9e452bd61511986b", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401 and the jstream-control Mock change: Scenes and sources now says the mock lists no kinds and a failed kind.list offers none but shows its error like any failed call (problem bar, per Routing); rest unchanged." }
@@ -2459,8 +2459,11 @@ stamp = { hash = "b3:b0fabe46ab68dffb" }
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/confirm.rs"]
 stamp = { hash = "b3:a465bc7057b65d15", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
 
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mixer.rs"]
+stamp = { hash = "b3:a107eaa05e9d2e99", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
+
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:a2e053a57a1580a2", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:81728ddff971bf23" }
@@ -2481,10 +2484,10 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:78cd518298c93fde", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401 and the jstream-control Mock change: Scenes and sources now says the mock lists no kinds and a failed kind.list offers none but shows its error like any failed call (problem bar, per Routing); rest unchanged." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:125bc106442671d6", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+stamp = { hash = "b3:4dcd7fc3a18b6bdc", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:1ff80710c34616bc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: Store bullet now lists list_kinds among the call helpers; Studio's fields (kinds, last failed call) unchanged." }
+stamp = { hash = "b3:4103ec17da961792", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -2516,8 +2519,11 @@ stamp = { hash = "b3:b0fabe46ab68dffb" }
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/confirm.rs"]
 stamp = { hash = "b3:a465bc7057b65d15", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
 
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mixer.rs"]
+stamp = { hash = "b3:a107eaa05e9d2e99", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }
+
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:a2e053a57a1580a2", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:81728ddff971bf23" }
