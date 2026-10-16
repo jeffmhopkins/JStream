@@ -975,7 +975,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:20f2449e3033bc78", by = "agent:claude", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.21 text. From wave/m1: #251's preview text sits beside it unchanged, and #444's 'whitespace, control or non-ASCII characters' key sentence matches engine.rs's check; holds" }
+stamp = { hash = "b3:8b8c774733d41d22", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's change is the browser paragraph saying a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser; the wave's preview-stream and session changes sit in other paragraphs; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:4080e464df74e92b", by = "agent:claude", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.21 text. From wave/m1: #251's preview text sits beside it unchanged, and #444's 'whitespace, control or non-ASCII characters' key sentence matches engine.rs's check; holds" }
@@ -1014,7 +1014,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:aa79271f68956f42", by = "agent:claude", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.21 text. From wave/m1: #251's preview text sits beside it unchanged, and #444's 'whitespace, control or non-ASCII characters' key sentence matches engine.rs's check; holds" }
+stamp = { hash = "b3:c5e4383c41566843", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's change is the browser paragraph saying a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser; the wave's preview-stream and session changes sit in other paragraphs; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1095,7 +1095,7 @@ stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:f16b463f8715a669", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:e7f03228acaa1be4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): E3b's GPU capture text merged; preview bullet holds (own headless compositor, snapshot::compose with no capture)" }
+stamp = { hash = "b3:d1b4b2721998d53b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#251 preview streams, #265 pairing): this PR's only change here is with_browser naming the youtube_chat preset among the sources that open pages through it; the builder list still matches engine.rs beside the wave's preview additions; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1119,7 +1119,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:aa79271f68956f42", by = "agent:claude", note = "Pairing: engine.rs answers the three credential calls `unsupported` (served_by_the_server) and uses CallResult::action(), as do tests.rs and tests/audio_routing.rs; the merge moved #251's two preview.subscribe/unsubscribe answers to Action { result: None }, and #444 adds the non-ASCII key refusal with a test; Purpose unaffected; holds" }
+stamp = { hash = "b3:c5e4383c41566843", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#251 preview streams, #265 pairing): this PR's only change here is with_browser naming the youtube_chat preset among the sources that open pages through it; the builder list still matches engine.rs beside the wave's preview additions; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1236,7 +1236,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:a984c6e7ba2e3698", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:20f2449e3033bc78", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
+stamp = { hash = "b3:8b8c774733d41d22", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from core design: its youtube_chat browser rebuild and the wave's preview streams don't change what the daemon says about core (one Engine, a session per connection, the Windows backends); holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
