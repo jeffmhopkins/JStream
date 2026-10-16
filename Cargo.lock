@@ -2653,6 +2653,7 @@ dependencies = [
  "jstream-protocol",
  "jstream-render",
  "jstream-sources",
+ "jstream-youtube",
  "png 0.18.1",
  "serde_json",
  "thiserror 2.0.21",
@@ -2668,6 +2669,7 @@ dependencies = [
  "blake3",
  "futures-util",
  "getrandom 0.4.3",
+ "jstream-browser",
  "jstream-control",
  "jstream-core",
  "jstream-media",
@@ -6984,6 +6986,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "blake3",
+ "flate2",
  "globset",
  "pulldown-cmark",
  "serde_json",

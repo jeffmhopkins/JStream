@@ -4,12 +4,13 @@
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
-/// The Media Foundation DLLs the backends import from, as in the daemon's build script.
+// `MEDIA_FOUNDATION`: the DLLs to delay-load, shared with `tests/delay_load.rs`.
 #[cfg(windows)]
-const MEDIA_FOUNDATION: [&str; 3] = ["mfplat.dll", "mf.dll", "mfreadwrite.dll"];
+include!("media_foundation.rs");
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=media_foundation.rs");
     #[cfg(windows)]
     {
         tauri_build::build();

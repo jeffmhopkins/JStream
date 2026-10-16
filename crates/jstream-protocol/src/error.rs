@@ -174,6 +174,10 @@ pub enum EntityKind {
     Output,
     /// An encoder profile.
     Encoder,
+    /// A filter in a source's chain (0.22, ADR-0026). Its ID is unique within the
+    /// source. Only an error answering a filter edit names it, so a client older than
+    /// 0.22, which sends none, never reads it.
+    Filter,
     /// An audio bus.
     Bus,
     /// A paired device (0.21). Only an error answering `device.revoke` names it, so a
@@ -189,6 +193,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Source => "source",
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
+            EntityKind::Filter => "filter",
             EntityKind::Bus => "bus",
             EntityKind::Device => "device",
         })

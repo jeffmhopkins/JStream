@@ -162,6 +162,8 @@ fn when_shown_audio_follows_the_program() {
                 source_id: SourceId::new("clip"),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
         ]),
     )
@@ -187,6 +189,8 @@ fn when_shown_audio_follows_the_program() {
             source_id: SourceId::new("clip"),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         }]),
     )
     .expect("placed in b");

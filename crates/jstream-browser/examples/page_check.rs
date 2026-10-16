@@ -1,16 +1,24 @@
-//! The browser source's hardware check (Windows, feature `cef`): opens a page through
-//! the CEF backend on the engine's own GPU device and media clock, as the daemon will,
-//! and reports what arrives.
+//! The browser source's hardware check (Windows, features `cef` and `helper`): opens a
+//! page through the CEF backend on the engine's own GPU device and media clock, as the
+//! daemon does, and reports what arrives. The page runs in the sandboxed browser helper.
 //!
 //! ```text
-//! cargo run --release -p jstream-browser --features cef --example page_check -- [--seconds 20] [--size 1920x1080] [--fps 60] [--url https://…]
+//! cargo build --release -p jstream-browser-helper --features cef
+//! cargo run --release -p jstream-browser --features cef,helper --example page_check -- [--seconds 20] [--size 1920x1080] [--fps 60] [--url https://…]
 //! ```
+//!
+//! The first command builds the helper's DLL and puts CEF's runtime files in
+//! `target\release`. The check then lays the helper out there as it ships: CEF's
+//! `bootstrap.exe` copied as `jstream-browser-helper.exe`, and the DLL copied as
+//! `jstream-browser-helper.dll`.
 //!
 //! The built-in test page is transparent, moves a box on every frame, and plays 440 Hz
 //! on the left and 660 Hz on the right at -12 dBFS. Halfway through, the check gives the
 //! page new custom CSS that sets `--jstream-tone: 880` on `:root`; the page reads that
-//! property and moves its right channel to 880 Hz, which shows the CSS reached it. Then
-//! the page is closed and the backend dropped, which shuts CEF down.
+//! property and moves its right channel to 880 Hz, which shows the CSS reached it. The
+//! page also loads one image beside it and one from the folder above, which its request
+//! policy refuses, so the check reports one refused request. Then the page is closed and
+//! the backend dropped, which shuts the helper down.
 
 #[cfg(windows)]
 fn main() -> std::process::ExitCode {
@@ -41,6 +49,7 @@ mod windows_check {
     const TEST_PAGE: &str = r#"<!doctype html>
 <html><head><meta charset="utf-8"><title>JStream page check</title></head>
 <body>
+<img src="inside.svg"><img src="../outside.svg">
 <div id="box" style="position:absolute;width:120px;height:120px;background:rgba(255,0,0,0.5)"></div>
 <script>
 const box = document.getElementById('box');
@@ -70,6 +79,9 @@ setInterval(() => {
 </script>
 </body></html>
 "#;
+
+    /// A small image for the page to load.
+    const SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>"#;
 
     struct Args {
         seconds: f64,
@@ -199,6 +211,34 @@ setInterval(() => {
         }
     }
 
+    /// Puts the helper together in the build's folder (`target\release`, above this
+    /// example's own): the bootstrap exe from the CEF distribution the build used, and
+    /// the helper's DLL under the bootstrap's name. Returns the helper exe.
+    fn lay_out_helper() -> Result<std::path::PathBuf, String> {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let mut dir = exe.parent().ok_or("the check has no folder")?;
+        if dir.ends_with("examples") {
+            dir = dir.parent().ok_or("the examples folder has no parent")?;
+        }
+        let dll = dir.join("jstream_browser_helper.dll");
+        if !dll.is_file() {
+            return Err(format!(
+                "{} is missing: build it first with `cargo build --release -p \
+                 jstream-browser-helper --features cef`",
+                dll.display()
+            ));
+        }
+        let bootstrap = cef::sys::get_cef_dir()
+            .ok_or("the CEF distribution wasn't found")?
+            .join("bootstrap.exe");
+        let helper = dir.join("jstream-browser-helper.exe");
+        std::fs::copy(&bootstrap, &helper)
+            .map_err(|e| format!("copying {}: {e}", bootstrap.display()))?;
+        std::fs::copy(&dll, dir.join("jstream-browser-helper.dll"))
+            .map_err(|e| format!("copying {}: {e}", dll.display()))?;
+        Ok(helper)
+    }
+
     pub(super) fn main() -> ExitCode {
         let args = match parse() {
             Ok(a) => a,
@@ -220,7 +260,7 @@ setInterval(() => {
         let clock = Arc::new(QpcClock::new().map_err(|e| e.to_string())?);
         let gpu = WindowsGpu::new()
             .open_device()
-            .map_err(|e| format!("opening the engine's GPU device: {e}"))?;
+            .map_err(|e| format!("opening the GPU device: {e}"))?;
         line(format_args!(
             "engine device: {} ({:?})",
             gpu.adapter().get_info().name,
@@ -228,6 +268,7 @@ setInterval(() => {
         ));
         let state = std::env::temp_dir().join("jstream-page-check");
         let mut config = CefConfig::beside_exe(&state).map_err(|e| e.to_string())?;
+        config.helper = lay_out_helper()?;
         config.log_file = Some(state.join("cef.log"));
         line(format_args!(
             "helper: {}, CEF log: {}",
@@ -240,9 +281,14 @@ setInterval(() => {
         let location = match &args.url {
             Some(url) => PageLocation::web(url).map_err(|e| e.to_string())?,
             None => {
-                let path = state.join("page-check.html");
-                std::fs::create_dir_all(&state).map_err(|e| e.to_string())?;
+                // The page sits in a folder of its own, so `../outside.svg` is outside it.
+                let folder = state.join("page");
+                let path = folder.join("page-check.html");
+                std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
                 std::fs::write(&path, TEST_PAGE).map_err(|e| e.to_string())?;
+                for image in [folder.join("inside.svg"), state.join("outside.svg")] {
+                    std::fs::write(image, SVG).map_err(|e| e.to_string())?;
+                }
                 PageLocation::File(path)
             }
         };
@@ -256,7 +302,7 @@ setInterval(() => {
         let started = Instant::now();
         let mut page = backend.open(&spec).map_err(|e| e.to_string())?;
         line(format_args!(
-            "CEF started and the page was asked for in {:.0} ms",
+            "the helper and CEF started and the page opened in {:.0} ms",
             started.elapsed().as_secs_f64() * 1e3
         ));
 
@@ -330,12 +376,16 @@ setInterval(() => {
             "audio packets dropped while attaching: {}",
             page.audio().dropped()
         ));
+        line(format_args!(
+            "requests refused: {} (the built-in page expects 1: ../outside.svg)",
+            page.denied_requests()
+        ));
 
         let closing = Instant::now();
         drop(page);
         drop(backend);
         line(format_args!(
-            "page closed and CEF shut down in {:.0} ms",
+            "page closed and the helper exited in {:.0} ms",
             closing.elapsed().as_secs_f64() * 1e3
         ));
         if seen.frames == 0 {

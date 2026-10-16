@@ -224,6 +224,7 @@ fn handshake_list_and_call_round_trip() {
             "device",
             "encoder",
             "events",
+            "filter",
             "history",
             "item",
             "kind",
@@ -271,7 +272,7 @@ fn handshake_list_and_call_round_trip() {
                       "transform": {"position": {"x": 0.0, "y": 0.0},
                                     "scale": {"x": 1.0, "y": 1.0}, "rotation_deg": 0.0},
                       "crop": {"left": 0, "top": 0, "right": 0, "bottom": 0},
-                      "visible": true});
+                      "visible": true, "opacity": 1.0, "blend": "normal"});
     let sources = f.call_tool("source", json!({"op": {"type": "source.list"}}));
     assert_eq!(
         ok(&sources)["result"]["result"],
@@ -412,7 +413,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(21));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(22));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -482,6 +483,40 @@ fn tool_list_snapshot() {
     }, {
         insta::assert_snapshot!("tools", text);
     });
+}
+
+/// YouTube is for people, through the UI (ADR-0058 §3): no `youtube` tool is listed,
+/// and a `youtube.*` op is unknown to every tool, so it never reaches the engine.
+#[test]
+fn no_youtube_tool_and_no_youtube_op() {
+    let f = fixture();
+    f.initialize();
+    let names: Vec<String> = f.legacy(1, "tools/list", json!({}))["tools"]
+        .as_array()
+        .expect("tools")
+        .iter()
+        .filter_map(|t| t["name"].as_str().map(str::to_owned))
+        .collect();
+    assert!(!names.iter().any(|n| n == "youtube"));
+    let call = f
+        .send(
+            &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params":
+            {"name": "youtube", "arguments": {"op": {"type": "youtube.status"}}}}),
+        )
+        .expect("answered");
+    assert_eq!(
+        rpc_error(&call),
+        (-32602, "Unknown tool: youtube".to_owned())
+    );
+    let misrouted = f.call_tool("output", json!({"op": {"type": "youtube.status"}}));
+    let error = tool_error(&misrouted);
+    assert_eq!(error["code"], "malformed");
+    assert!(
+        error["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("unknown op `youtube.status`")),
+        "{error}"
+    );
 }
 
 #[test]
