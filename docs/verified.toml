@@ -1323,7 +1323,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:2b83d70dc8bb9855", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the new sentence that the app sets no device file, so a device paired from it (ADR-0044) lasts only until exit and, like the token, is accepted only on loopback, matches the desktop ServerConfig (no device_file, loopback bind) and gate.rs devices_allowed; rechecked after merging wave/m1; rechecked after merging wave/m1, with pairing moved to protocol 0.21 (0.20 is #251) and its ADR renumbered 0057; holds" }
+stamp = { hash = "b3:fbe6bb6a62714731", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#265 pairing): the wave's pairing sentence in the engine bullet beside G3d's virtual camera bullet; holds" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -2565,7 +2565,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:5510e827f0205b81", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the sentence that the server side is built and the UI's pairing form isn't, now linking ADR-0047, still holds since this PR adds no UI code; cascade from control Design; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:0a224451e8995c1a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#265 pairing): the wave's pairing status in Connecting beside G3d's virtual camera text in Outputs; holds" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:4080e464df74e92b", by = "agent:claude", note = "Pairing: the sentence that the server side is built and the UI's pairing form isn't, linking ADR-0047, still holds since this PR adds no UI code; cascade from control Design, whose #251 binary stream and #444 key wording the UI text doesn't restate; holds" }
