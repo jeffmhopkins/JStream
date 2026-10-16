@@ -398,8 +398,9 @@ status = "planned"
 id = "C8"
 milestone = "M1b"
 title = "Browser source (CEF)"
-status = "review"
+status = "hardware"
 prs = [283, 289, 298]
+note = "Windows run #341"
 
 [[item]]
 id = "D1"
