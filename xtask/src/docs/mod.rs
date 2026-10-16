@@ -91,6 +91,22 @@ fn load(root: &Path) -> Result<Loaded> {
     })
 }
 
+/// Rewrites every `@generated` block from its source, as `docs generate` does: the ADR
+/// status banners and index, and the README's progress table. Returns what was written
+/// and the problems that stopped a block.
+pub(crate) fn write_generated(root: &Path) -> Result<generate::Generated> {
+    let l = load(root)?;
+    let mut g = generate::generate(&l.docs);
+    let (readme, problems) = progress::generate(root, &l.docs);
+    g.files
+        .extend(readme.map(|(path, line, text)| (path, Some(line), text)));
+    g.problems.extend(problems);
+    for (path, _, text) in &g.files {
+        std::fs::write(root.join(path), text).with_context(|| format!("writing {path}"))?;
+    }
+    Ok(g)
+}
+
 fn read_toml(root: &Path, p: &str) -> Result<toml::Table> {
     let text = std::fs::read_to_string(root.join(p)).with_context(|| format!("reading {p}"))?;
     text.parse().with_context(|| format!("parsing {p}"))
@@ -453,17 +469,11 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             let [_] = args else {
                 bail!("usage: cargo xtask docs generate");
             };
-            let l = load(root)?;
-            let mut g = generate::generate(&l.docs);
-            let (readme, problems) = progress::generate(root, &l.docs);
-            g.files
-                .extend(readme.map(|(path, line, text)| (path, Some(line), text)));
-            g.problems.extend(problems);
+            let g = write_generated(root)?;
             for d in &g.problems {
                 eprintln!("{}:{}: {}", d.path, d.line, d.msg);
             }
-            for (path, _, text) in &g.files {
-                std::fs::write(root.join(path), text).with_context(|| format!("writing {path}"))?;
+            for (path, _, _) in &g.files {
                 eprintln!("generated {path}");
             }
             if g.files.iter().any(|(_, line, _)| line.is_none()) {
@@ -574,13 +584,24 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             for s in &m.stamps {
                 eprintln!("took {branch}'s stamp: {s}");
             }
+            for path in &m.generated {
+                if m.committed {
+                    eprintln!("regenerated after a conflict in its @generated blocks: {path}");
+                } else {
+                    eprintln!(
+                        "took {branch}'s side of the @generated blocks in {path}; run \
+                         `cargo xtask docs generate` once the files below are resolved"
+                    );
+                }
+            }
             for (path, why) in &m.refused {
                 eprintln!("left for you: {path}: {why}");
             }
             if !m.committed {
                 eprintln!(
-                    "docs merge-main: stamp-only conflicts are resolved and staged; resolve the \
-                     files above by hand, `git commit`, then run `cargo xtask docs check`"
+                    "docs merge-main: stamp and @generated-block conflicts are resolved and \
+                     staged; resolve the files above by hand, run `cargo xtask docs generate` if \
+                     it named any @generated blocks, `git commit`, then run `cargo xtask docs check`"
                 );
                 return Ok(false);
             }
@@ -594,11 +615,23 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             }
             for s in &m.stale {
                 eprintln!("stale: {s}");
+                for n in m.notes.get(s).into_iter().flatten() {
+                    eprintln!("  this branch's note: {n}");
+                }
+            }
+            if !m.notes.is_empty() {
+                eprintln!(
+                    "a re-verify replaces those notes: write each section's own note, keeping \
+                     what it said about this branch's change and adding what the merge changed \
+                     (docs/DOCS.md#notes)"
+                );
             }
             eprintln!(
-                "docs merge-main: merged {} stamp conflict(s); {} stale section(s) to re-read, \
-                 then `cargo xtask docs verify <DOC#anchor> --by <who> --note \"<what you checked>\"`",
+                "docs merge-main: merged {} stamp conflict(s) and resolved {} @generated conflict(s); {} stale \
+                 section(s) to re-read, then `cargo xtask docs verify <DOC#anchor> --by <who> \
+                 --note \"<what you checked>\"`",
                 m.stamps.len(),
+                m.generated.len(),
                 m.stale.len()
             );
             Ok(true)
@@ -988,6 +1021,55 @@ mod tests {
         assert!(work.0.join("src/w.rs").exists());
     }
 
+    /// Two branches that each mark a different roadmap item done and regenerate the README
+    /// conflict only inside its progress block: `docs merge-main` takes the wave's side,
+    /// regenerates the block from the merged `docs/progress.toml` and commits.
+    #[test]
+    fn merge_main_regenerates_conflicting_generated_blocks() {
+        let readme = "<!-- @doc\nid = \"README\"\ntitle = \"R\"\nkind = \"normative\"\nstatus = \"active\"\nreview_every = \"90d\"\n-->\n\n# R\n\n<!-- @generated begin progress -->\n<!-- @generated end progress -->\n";
+        let item = |id: &str, status: &str| {
+            let prs = if status == "done" { "[1]" } else { "[]" };
+            format!(
+                "[[item]]\nid = \"{id}\"\nmilestone = \"M0\"\ntitle = \"{id}\"\nstatus = \"{status}\"\nprs = {prs}\n\n"
+            )
+        };
+        let progress = |a: &str, b: &str| {
+            format!(
+                "[[milestone]]\nid = \"M0\"\ntitle = \"Base\"\nroadmap = \"ROADMAP.md#m0\"\n\n{}{}{}",
+                item("A", a),
+                item("B", b),
+                item("C", "planned")
+            )
+        };
+        let base = progress("planned", "planned");
+        let mut files = REGISTRIES.to_vec();
+        files.extend([("README.md", readme), ("docs/progress.toml", base.as_str())]);
+        let (origin, work) = origin_and_clone("merge-generated", &files);
+        let generated = |f: &Fixture| {
+            let g = write_generated(&f.0).expect("generates");
+            assert!(g.problems.is_empty(), "{:?}", g.problems);
+        };
+        generated(&origin);
+        commit_all(&origin, "main: table");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        origin.git(&["checkout", "-q", "-b", "wave/m1"]);
+        origin.write("docs/progress.toml", &progress("done", "planned"));
+        generated(&origin);
+        commit_all(&origin, "wave: A done");
+        origin.git(&["checkout", "-q", "main"]);
+        work.write("docs/progress.toml", &progress("planned", "done"));
+        generated(&work);
+        commit_all(&work, "work: B done");
+
+        let m = merge::merge_main(&work.0, "wave/m1").expect("merges");
+        assert!(m.committed && m.refused.is_empty(), "{m:?}");
+        assert_eq!(m.generated, vec!["README.md".to_owned()]);
+        let text = std::fs::read_to_string(work.0.join("README.md")).expect("readme");
+        assert!(text.contains("2 of 3 items are merged"), "{text}");
+        assert!(!text.contains("<<<<<<<"), "{text}");
+        assert!(write_generated(&work.0).expect("again").files.is_empty());
+    }
+
     /// ADR-0053 with `docs merge-main`: two branches that change different covered files
     /// of one section and re-verify it merge without a conflict, and the section stays
     /// fresh; changing the same covered file conflicts on its ledger entry, which takes
@@ -1040,12 +1122,22 @@ mod tests {
         verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies on main");
         commit_all(&origin, "main: a again");
         work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
-        verify(&work.0, "S#a", "agent:work", NOTE).expect("S verifies on work");
+        let work_note = "a1 is the branch's change to a.rs and the text still describes it";
+        verify(&work.0, "S#a", "agent:work", work_note).expect("S verifies on work");
         commit_all(&work, "work: a");
         let m = merge::merge_main(&work.0, "main").expect("merges");
         assert!(m.committed, "{m:?}");
         assert_eq!(m.stamps, vec!["S#a".to_owned()]);
         assert_eq!(m.stale, vec!["S#a".to_owned()]);
+        // Every note the branch wrote on S's entries since its merge base with main (a.rs
+        // now, b.rs before the first merge) is reported for the re-verify, once each.
+        assert_eq!(
+            m.notes,
+            BTreeMap::from([(
+                "S#a".to_owned(),
+                vec![work_note.to_owned(), NOTE.to_owned()]
+            )])
+        );
         let ledger =
             std::fs::read_to_string(work.0.join(ledger::PATH)).expect("invariant: written");
         assert!(

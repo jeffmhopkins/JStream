@@ -14,6 +14,8 @@ unsafe_allowed = false
 [dependencies]
 anyhow.workspace = true
 blake3.workspace = true
+# `dist`: deflate and CRC-32 for the portable zip (ADR-0020).
+flate2.workspace = true
 globset.workspace = true
 pulldown-cmark.workspace = true
 serde_json.workspace = true

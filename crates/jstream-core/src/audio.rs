@@ -13,19 +13,37 @@
 //! scene on program (`crate::activity`), so a `when_shown` source is heard only while
 //! the Program mix shows it. The engine syncs again when program changes.
 //!
+//! The `waveform` and `spectrum` sources that draw a bus (#362) or another source
+//! (#459) get its scope from the engine's [`AudioScopes`]. Each sync keeps a scope for
+//! every bus a source's settings refer to and every source a scope source's
+//! `audio_source` names, drops the others, and hands the mixer thread the list of what
+//! feeds each ([`ScopeTaps`], through `arc-swap`, so the thread never waits on the
+//! engine): a bus's mixer bus, or a drawn source's mixer input, whose block is that
+//! source after its fader and activity gain. A drawn source that is muted, whose audio
+//! is off, or that has no mixer input now (its stream isn't open) is fed silence, so
+//! it draws what the audience hears from it.
+//!
 //! The audio sources' inputs are opened and closed by the program stage
 //! (`crate::audio_sources`, which opens none for a source whose audio is off); this
 //! module only sets them up. Not yet: filters: the mixer has filter chains (D7b), but
 //! the collection has no filters to route into them until they reach the protocol.
 
 use crate::activity::activity_gains;
+use arc_swap::ArcSwap;
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{BusControl, InputControl, MeterReading, MixerControl};
 use jstream_graph::State;
-use jstream_protocol::{BusId, BusMeter, Finite32, Loudness, SceneId, SourceId, SourceMeter};
-use std::collections::BTreeMap;
+use jstream_protocol::{
+    BusId, BusMeter, Finite32, Loudness, Reference, SceneId, SourceId, SourceKind, SourceMeter,
+};
+use jstream_sources::{AudioScope, AudioScopes};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+
+// The mixer has a bus slot for every bus a collection may hold, and no more: the
+// engine's limit and the protocol's are one number (#372).
+const _: () = assert!(jstream_audio::MAX_BUSES == jstream_protocol::MAX_BUSES);
 
 /// The program mixer's controls, while it runs.
 #[derive(Default)]
@@ -45,6 +63,8 @@ struct Attached {
     /// sync tries again.
     removing: Vec<BusControl>,
     meters: Arc<MasterMeters>,
+    scopes: Arc<AudioScopes>,
+    taps: Arc<ScopeTaps>,
 }
 
 /// What the program stage hands the engine when its mixer opens.
@@ -52,6 +72,121 @@ pub(crate) struct MixerHandles {
     pub(crate) control: MixerControl,
     pub(crate) master: BusControl,
     pub(crate) meters: Arc<MasterMeters>,
+    /// The engine's scopes, whose bus scopes the mixer thread feeds.
+    pub(crate) scopes: Arc<AudioScopes>,
+    /// Where the mixer thread reads which mixer bus feeds which scope.
+    pub(crate) taps: Arc<ScopeTaps>,
+}
+
+/// One bus or source scope the mixer thread feeds: after each block, the block `feed`
+/// names goes into `scope`.
+#[derive(Debug)]
+pub(crate) struct ScopeTap {
+    pub(crate) feed: TapFeed,
+    pub(crate) scope: Arc<AudioScope>,
+}
+
+/// Where a [`ScopeTap`]'s blocks come from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TapFeed {
+    /// A mixer bus, after its fader ([`jstream_audio::Mixer::bus_block`]).
+    Bus(jstream_audio::BusId),
+    /// A source's mixer input, after its fader, mute and activity gain, before its
+    /// sends ([`jstream_audio::Mixer::input_block`]).
+    Input(jstream_audio::InputId),
+    /// Silence: a drawn source that is muted, off, or has no mixer input.
+    Silence,
+}
+
+/// The bus scopes the mixer thread feeds, handed over as an immutable list through
+/// `arc-swap`, as the render snapshot is: the engine stores a new list under the
+/// collection lock, and the mixer thread loads it without any lock, keeps a counted
+/// reference, and hands the list it lets go of to the collector (R-RT-003).
+#[derive(Debug, Default)]
+pub(crate) struct ScopeTaps {
+    current: ArcSwap<Vec<ScopeTap>>,
+}
+
+impl ScopeTaps {
+    /// Stores `taps`, unless they feed exactly the scopes the current list feeds.
+    fn publish(&self, taps: Vec<ScopeTap>) {
+        let current = self.current.load();
+        let same = current.len() == taps.len()
+            && current
+                .iter()
+                .zip(&taps)
+                .all(|(a, b)| a.feed == b.feed && Arc::ptr_eq(&a.scope, &b.scope));
+        if !same {
+            self.current.store(Arc::new(taps));
+        }
+    }
+
+    /// The current list.
+    #[cfg(test)]
+    pub(crate) fn current(&self) -> Arc<Vec<ScopeTap>> {
+        self.current.load_full()
+    }
+
+    /// The current list, for the mixer thread's [`TapReader`].
+    pub(crate) fn reader(self: &Arc<Self>) -> TapReader {
+        TapReader {
+            held: self.current.load_full(),
+            taps: Arc::clone(self),
+        }
+    }
+}
+
+/// The mixer thread's handle on [`ScopeTaps`]: the list it holds.
+pub(crate) struct TapReader {
+    taps: Arc<ScopeTaps>,
+    held: Arc<Vec<ScopeTap>>,
+}
+
+impl TapReader {
+    /// The current list. When the engine stored a new one since the last call, this
+    /// adopts it and returns the one it held, for the caller to hand to the collector;
+    /// otherwise it only compares a pointer. Never locks, waits or allocates.
+    pub(crate) fn adopt(&mut self) -> (&[ScopeTap], Option<Arc<Vec<ScopeTap>>>) {
+        let guard = self.taps.current.load();
+        let mut old = None;
+        if !Arc::ptr_eq(&self.held, &guard) {
+            // The guard becomes a counted reference that `held` keeps, so it is never the
+            // last one dropped here.
+            old = Some(std::mem::replace(
+                &mut self.held,
+                arc_swap::Guard::into_inner(guard),
+            ));
+        }
+        (&self.held, old)
+    }
+
+    /// Lets go of the list: the caller hands it to the collector.
+    pub(crate) fn into_held(self) -> Arc<Vec<ScopeTap>> {
+        self.held
+    }
+}
+
+/// Every bus a source's settings refer to: the buses whose scopes are drawn.
+fn drawn_buses(state: &State) -> BTreeSet<BusId> {
+    state
+        .sources()
+        .flat_map(|source| source.settings().references())
+        .filter_map(|(_, reference)| match reference {
+            Reference::Bus { bus_id } => Some(bus_id),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Every source a scope source's `audio_source` draws (#459).
+fn drawn_sources(state: &State) -> BTreeSet<SourceId> {
+    state
+        .sources()
+        .filter_map(|source| match source.kind() {
+            SourceKind::Builtin { kind } => jstream_sources::drawn_source(kind, source.settings()),
+            _ => None,
+        })
+        .collect()
 }
 
 impl AudioRouting {
@@ -73,6 +208,8 @@ impl AudioRouting {
             buses: BTreeMap::new(),
             removing: Vec::new(),
             meters: mixer.meters,
+            scopes: mixer.scopes,
+            taps: mixer.taps,
         });
         self.sync(state, program, inputs);
         self.attaches
@@ -89,11 +226,11 @@ impl AudioRouting {
         }
     }
 
-    /// Brings the mixer in line with `state`: adds and removes buses, and sets every
+    /// Brings the mixer in line with `state`: adds and removes buses, sets every
     /// fader, mute and send, those of the audio sources' `inputs` (which the program
     /// stage opens and closes, `crate::audio_sources`) included, and each input's
-    /// activity gain for `program` on the Program mix. Does nothing while no mixer
-    /// runs.
+    /// activity gain for `program` on the Program mix, and points the mixer thread at
+    /// the buses sources draw. Does nothing while no mixer runs.
     pub(crate) fn sync(
         &mut self,
         state: &State,
@@ -137,6 +274,37 @@ impl AudioRouting {
             control.set_gain_db(bus.gain_db().get());
             control.set_muted(bus.muted());
         }
+        // The scopes of the buses sources draw, each fed from its mixer bus once the
+        // mixer holds it, and of the sources they draw, each fed from its input.
+        attached.scopes.retain(&drawn_buses(state));
+        attached.scopes.retain_sources(&drawn_sources(state));
+        let buses = attached
+            .scopes
+            .buses()
+            .into_iter()
+            .filter_map(|(id, scope)| {
+                let bus = if id.is_master() {
+                    attached.master.id()
+                } else {
+                    attached.buses.get(&id)?.id()
+                };
+                Some(ScopeTap {
+                    feed: TapFeed::Bus(bus),
+                    scope,
+                })
+            });
+        let sources = attached.scopes.sources().into_iter().map(|(id, scope)| {
+            let audible = state
+                .source(&id)
+                .and_then(|s| s.audio())
+                .is_some_and(|audio| audio.enabled && !audio.muted);
+            let feed = match inputs.get(&id) {
+                Some(input) if audible => TapFeed::Input(input.id()),
+                _ => TapFeed::Silence,
+            };
+            ScopeTap { feed, scope }
+        });
+        attached.taps.publish(buses.chain(sources).collect());
         let activity = activity_gains(state, program);
         // An input whose source went, or has no audio now, stops being routed.
         for (id, input) in inputs {
@@ -328,7 +496,7 @@ impl MasterMetering {
 
 #[cfg(test)]
 mod tests {
-    use super::{AudioRouting, MasterMetering, MixerHandles};
+    use super::{AudioRouting, MasterMetering, MixerHandles, ScopeTaps};
     use jstream_audio::{Mixer, MixerConfig};
     use jstream_graph::Graph;
     use jstream_media::{AudioFormat, ChannelLayout, SampleFormat};
@@ -337,6 +505,7 @@ mod tests {
         SourceKind,
     };
     use std::collections::BTreeMap;
+    use std::sync::Arc;
 
     fn db(v: f32) -> Finite32 {
         Finite32::new(v).expect("finite")
@@ -394,6 +563,8 @@ mod tests {
                 control: mixer.control(),
                 master: mixer.bus(),
                 meters,
+                scopes: Arc::default(),
+                taps: Arc::new(ScopeTaps::default()),
             },
             graph.state(),
             None,

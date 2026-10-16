@@ -100,9 +100,8 @@ prs = [24, 53]
 id = "C7"
 milestone = "M0"
 title = "Spike S4: CEF browser source"
-status = "hardware"
+status = "done"
 prs = [178, 190]
-note = "S4 spike run"
 
 [[item]]
 id = "I3"
@@ -216,9 +215,8 @@ prs = [173]
 id = "E3b"
 milestone = "M1a"
 title = "Render takes GPU frames"
-status = "hardware"
+status = "done"
 prs = [219]
-note = "windows_gpu hardware test (#334)"
 
 [[item]]
 id = "Y1"
@@ -245,7 +243,7 @@ prs = [214]
 id = "Y3"
 milestone = "M1a"
 title = "YouTube in the engine"
-status = "review"
+status = "done"
 prs = [223]
 
 [[item]]
@@ -337,7 +335,7 @@ prs = [211]
 id = "B7"
 milestone = "M1b"
 title = "Opacity, blend, filters"
-status = "review"
+status = "done"
 prs = [252]
 
 [[item]]
@@ -400,7 +398,9 @@ status = "planned"
 id = "C8"
 milestone = "M1b"
 title = "Browser source (CEF)"
-status = "planned"
+status = "hardware"
+prs = [283, 289, 298]
+note = "#341"
 
 [[item]]
 id = "D1"
@@ -455,7 +455,7 @@ prs = [240]
 id = "D6"
 milestone = "M1b"
 title = "when_shown activity gain"
-status = "review"
+status = "done"
 prs = [299]
 
 [[item]]
@@ -528,23 +528,29 @@ prs = [194]
 id = "G3b"
 milestone = "M1c"
 title = "VirtualCam output kind"
-status = "hardware"
+status = "done"
 prs = [213, 297]
-note = "camera run on Windows 11"
 
 [[item]]
 id = "G3c"
 milestone = "M1c"
 title = "--register-vcam"
-status = "hardware"
+status = "done"
 prs = [235]
-note = "registration check with UAC"
+
+[[item]]
+id = "G3d"
+milestone = "M1c"
+title = "Virtual camera in the UI and the desktop app"
+status = "done"
+prs = [316]
 
 [[item]]
 id = "P1"
 milestone = "M1c"
 title = "Portable Windows zip"
-status = "planned"
+status = "done"
+prs = [271]
 
 # M1d
 
@@ -601,13 +607,14 @@ prs = [146]
 id = "Q1"
 milestone = "M1d"
 title = "Fuzz and property tests"
-status = "planned"
+status = "done"
+prs = [277]
 
 [[item]]
 id = "Q2"
 milestone = "M1d"
 title = "Headless end-to-end test"
-status = "review"
+status = "done"
 prs = [269]
 
 # M2
@@ -630,21 +637,21 @@ prs = [248]
 id = "U2"
 milestone = "M2"
 title = "Serve the UI"
-status = "review"
+status = "done"
 prs = [246, 247]
 
 [[item]]
 id = "U2b"
 milestone = "M2"
 title = "Device pairing"
-status = "review"
-prs = [265]
+status = "done"
+prs = [265, 288]
 
 [[item]]
 id = "U3a"
 milestone = "M2"
 title = "Scenes, sources, properties"
-status = "review"
+status = "done"
 prs = [256]
 
 [[item]]
@@ -658,7 +665,8 @@ prs = [254]
 id = "U3c"
 milestone = "M2"
 title = "Mixer panel"
-status = "planned"
+status = "done"
+prs = [308]
 
 [[item]]
 id = "U4"
@@ -677,36 +685,35 @@ status = "planned"
 id = "U1"
 milestone = "M2"
 title = "Preview stream"
-status = "review"
+status = "done"
 prs = [251]
 
 [[item]]
 id = "U5"
 milestone = "M2"
 title = "Tauri desktop app"
-status = "hardware"
+status = "done"
 prs = [258]
-note = "desktop app check"
 
 [[item]]
 id = "Q3"
 milestone = "M2"
 title = "UI end-to-end tests"
-status = "review"
+status = "done"
 prs = [309]
 
 [[item]]
 id = "Q4"
 milestone = "M2"
 title = "Performance benchmarks"
-status = "review"
+status = "done"
 prs = [361]
 
 [[item]]
 id = "Q5"
 milestone = "M2"
 title = "Threat model"
-status = "review"
+status = "done"
 prs = [358]
 
 [[item]]
@@ -746,14 +753,16 @@ status = "planned"
 id = "C9"
 milestone = "M2"
 title = "Media file source"
-status = "review"
-prs = [245]
+status = "hardware"
+prs = [245, 322]
+note = "media file hardware tests (#382)"
 
 [[item]]
 id = "W1"
 milestone = "M2"
 title = "Audio waveform and spectrum sources"
-status = "planned"
+status = "done"
+prs = [315, 460, 463, 466]
 
 [[item]]
 id = "K1"
@@ -765,7 +774,7 @@ status = "planned"
 id = "K2"
 milestone = "M2"
 title = "Keyframe scenes: model and evaluator"
-status = "review"
+status = "done"
 prs = [350]
 
 # M3
@@ -781,7 +790,7 @@ prs = [163]
 id = "E3c"
 milestone = "M3"
 title = "Encode from GPU frames"
-status = "review"
+status = "done"
 prs = [325]
 
 [[item]]
@@ -802,14 +811,15 @@ prs = [359]
 id = "3D1"
 milestone = "M3"
 title = "3D transforms: rendering ADR and spike"
-status = "review"
+status = "done"
 prs = [360]
 
 [[item]]
 id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
-status = "planned"
+status = "review"
+prs = [363, 375]
 
 [[item]]
 id = "CL1"

@@ -1,8 +1,8 @@
 //! Media Foundation codecs: the [`Codecs`](jstream_platform::Codecs) backend.
 //!
 //! It has the AAC encoder (`aac`) and the H.264, HEVC and AV1 encoders (`video`), from
-//! CPU NV12 frames, or from encode targets on the GPU once the backend is on a GPU
-//! context (`Codecs::on_context`). HEVC and AV1 run where the GPU (or an installed
+//! CPU NV12, RGBA or BGRA frames, or from encode targets on the GPU once the backend is on
+//! a GPU context (`Codecs::on_context`). HEVC and AV1 run where the GPU (or an installed
 //! software MFT) offers them. Video decoders follow; until then they report
 //! `Unsupported`.
 
@@ -271,7 +271,13 @@ mod device_tests {
         }
     }
 
-    fn encode_two_seconds(codec: Codec, hardware: jstream_platform::HardwarePreference) {
+    /// Encodes 60 frames of a moving gradient in `codec` from `format` frames (NV12, or
+    /// the compositor's RGBA that the engine's pipeline hands the encoder).
+    fn encode_two_seconds(
+        codec: Codec,
+        hardware: jstream_platform::HardwarePreference,
+        format: jstream_platform::media::PixelFormat,
+    ) {
         use jstream_platform::media::{
             ColorInfo, FrameSize, PixelFormat, VideoFrame, VideoFrameInfo,
         };
@@ -283,7 +289,7 @@ mod device_tests {
             .video_encoder(&VideoEncoderConfig {
                 codec,
                 size,
-                input_format: PixelFormat::Nv12,
+                input_format: format,
                 frame_period: Timebase::new(1, 30).expect("30 fps"),
                 rate_control: RateControl::Cbr { kbps: 3000 },
                 keyframe_interval: 30,
@@ -300,16 +306,18 @@ mod device_tests {
         for i in 0..60i64 {
             let info = VideoFrameInfo {
                 size,
-                format: PixelFormat::Nv12,
+                format,
                 color: ColorInfo::default(),
                 pts: MediaTime::new(i * 3000, tb),
             };
             let mut frame = VideoFrame::zeroed(info).expect("frame");
-            // A moving gradient, so the encoder has something to code.
+            // A moving gradient, so the encoder has something to code: grey in each
+            // byte of an RGBA pixel, or the luma of NV12 with neutral chroma.
+            let bytes_per_px = if format == PixelFormat::Nv12 { 1 } else { 4 };
             for y in 0..720u32 {
                 if let Some(row) = frame.row_mut(0, y) {
                     for (x, p) in row.iter_mut().enumerate() {
-                        *p = (x as i64 + y as i64 + i * 4) as u8;
+                        *p = ((x / bytes_per_px) as i64 + y as i64 + i * 4) as u8;
                     }
                 }
             }
@@ -351,25 +359,57 @@ mod device_tests {
     #[test]
     #[ignore = "needs Media Foundation's software H.264 encoder"]
     fn encodes_h264_in_software() {
-        encode_two_seconds(Codec::H264, jstream_platform::HardwarePreference::Avoid);
+        use jstream_platform::media::PixelFormat;
+        encode_two_seconds(
+            Codec::H264,
+            jstream_platform::HardwarePreference::Avoid,
+            PixelFormat::Nv12,
+        );
+    }
+
+    /// #424: the engine's pipeline encodes the compositor's RGBA frames.
+    #[test]
+    #[ignore = "needs Media Foundation's software H.264 encoder"]
+    fn encodes_h264_from_rgba() {
+        use jstream_platform::media::PixelFormat;
+        encode_two_seconds(
+            Codec::H264,
+            jstream_platform::HardwarePreference::Avoid,
+            PixelFormat::Rgba8,
+        );
     }
 
     #[test]
     #[ignore = "needs a GPU with a hardware H.264 encoder"]
     fn encodes_h264_in_hardware() {
-        encode_two_seconds(Codec::H264, jstream_platform::HardwarePreference::Require);
+        use jstream_platform::media::PixelFormat;
+        encode_two_seconds(
+            Codec::H264,
+            jstream_platform::HardwarePreference::Require,
+            PixelFormat::Rgba8,
+        );
     }
 
     #[test]
     #[ignore = "needs a GPU with a hardware HEVC encoder"]
     fn encodes_hevc_in_hardware() {
-        encode_two_seconds(Codec::Hevc, jstream_platform::HardwarePreference::Require);
+        use jstream_platform::media::PixelFormat;
+        encode_two_seconds(
+            Codec::Hevc,
+            jstream_platform::HardwarePreference::Require,
+            PixelFormat::Rgba8,
+        );
     }
 
     #[test]
     #[ignore = "needs a GPU with a hardware AV1 encoder (NVIDIA RTX 40, AMD RX 7000, Intel Arc or newer)"]
     fn encodes_av1_in_hardware() {
-        encode_two_seconds(Codec::Av1, jstream_platform::HardwarePreference::Require);
+        use jstream_platform::media::PixelFormat;
+        encode_two_seconds(
+            Codec::Av1,
+            jstream_platform::HardwarePreference::Require,
+            PixelFormat::Rgba8,
+        );
     }
 
     /// Clears an NV12 encode target's planes to `luma` and neutral chroma, hands it back
