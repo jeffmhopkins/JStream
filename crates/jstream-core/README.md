@@ -1372,10 +1372,10 @@ platform's `GpuInterop` for its device. With one, the render thread's compositor
 the render thread samples where they are, with no CPU copy, and counts
 (`OutputStats::gpu_captures`). Each fallback is logged and keeps the output running on
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
-opens its own device, hardware adapter first with the software one as the fallback), a backend with no GPU path or one that
-refuses the context, and a GPU capture that does not start. The render loop drops the
-held frame, the compositor and the capture stream before the context, so the
-platform's state goes first as `GpuContext` requires.
+opens its own device, hardware adapter first with the software one as the fallback), a
+backend with no GPU path or one that refuses the context, and a GPU capture that does
+not start. The render loop drops the held frame, the compositor and the capture stream
+before the context, so the platform's state goes first as `GpuContext` requires.
 
 The mixer thread polls the media clock and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs, the pages' audio and the media files' sound (see *Audio

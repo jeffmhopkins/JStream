@@ -186,8 +186,8 @@ Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene on
 that device when the engine has one, sampling capture frames there, and opens its own
-(hardware adapter first, the
-software one as the fallback) when it does not; it does not write the NV12 encode target.
+(hardware adapter first, the software one as the fallback) when it does not; it does not
+write the NV12 encode target.
 Windows' H.264 encoder takes encode targets on the context it reached through
 `Codecs::on_context`; the engine does not write or push them yet.
 

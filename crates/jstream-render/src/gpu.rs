@@ -62,10 +62,13 @@ impl Gpu {
         };
         // On Windows a hardware adapter is D3D12 first: the platform's capture, interop
         // and encoders are D3D11/D3D12, and wgpu's own pick there was Vulkan (#433). A
-        // D3D12 device that won't open goes on to the other backends.
+        // D3D12 device that won't open goes on to the other backends, and so does WARP
+        // (the D3D12 pick when there is no D3D12 GPU), so a GPU reachable only through
+        // another backend still comes first.
         if cfg!(windows)
             && !options.software
             && let Ok(adapter) = request(&instance(wgpu::Backends::DX12), false)
+            && adapter.get_info().device_type != wgpu::DeviceType::Cpu
         {
             match Self::from_adapter(adapter) {
                 Ok(gpu) => return Ok(gpu),

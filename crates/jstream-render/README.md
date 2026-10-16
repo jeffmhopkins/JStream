@@ -288,13 +288,14 @@ When it asks for hardware (`OpenOptions::hardware`, the default, which the engin
 render, snapshot and preview threads, the tests and the benchmarks use; on WARP a 720p
 program ran at about 10 fps, #433): on Windows, a D3D12 hardware adapter first, since
 the platform's capture, interop and encoders are D3D11/D3D12 and wgpu's own pick on a
-Radeon 780M was Vulkan (a D3D12 device that won't open is logged and skipped); then,
-everywhere, the high-performance adapter without `force_fallback_adapter`, then the
-software adapter, then `RenderError::NoAdapter`. A hardware adapter whose device
-refuses to open (limits below the defaults, a removed or hung GPU) falls back to the
-software adapter too, and the error names both when that fails as well. When the pick
-already was the software adapter (no GPU), its device error is returned without a
-second try. A machine with no GPU still runs, on lavapipe or WARP.
+Radeon 780M was Vulkan (a D3D12 device that won't open is logged and skipped, and WARP,
+which D3D12 offers when it has no GPU, is skipped too); then, everywhere, the
+high-performance adapter without `force_fallback_adapter`, then the software adapter,
+then `RenderError::NoAdapter`. A hardware adapter whose device refuses to open (limits
+below the defaults, a removed or hung GPU) falls back to the software adapter too, and
+the error names both when that fails as well. When the pick already was the software
+adapter (no GPU), its device error is returned without a second try. A machine with no
+GPU still runs, on lavapipe or WARP.
 
 `Compositor::on_context` does not search. It uses the `GpuContext` it is given.
 
