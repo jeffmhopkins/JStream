@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:4af553d43149d3ce", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the platform row lists wave/m2's MediaDecoders (media files) with main's paths (P1); jstream-sources' jstream-meta summary is main's (YouTube chat cites ADR-0058) and it now depends on both jstream-platform (media decoders, GPU frames, audio, with its fake for tests) and main's jstream-browser (L3, below sources' L4); main's jstream-browser, outputs and apps rows stand; lint-deps passes; holds" }
+stamp = { hash = "b3:09ef8698ef5f632f", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; the jstream-effects row now says it draws through jstream-render's filter harness with no GPU device of its own, matching its Cargo.toml (L3, depends on protocol and render L2); lint-deps passes" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -48,7 +48,7 @@ stamp = { hash = "b3:e5fef95eb12cb895" }
 stamp = { hash = "b3:5e5f89a77f45e286", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: jstream-core now depends on jstream-youtube (layer 2 under core's layer 5); core's row and Cargo metadata need no change for that; lint-deps passes; holds" }
 
 ["ARCH#crate-map"."file:crates/jstream-effects/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:100b037ae75599a7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
+stamp = { hash = "b3:3effb533ae8ee473", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; the jstream-effects row now says it draws through jstream-render's filter harness with no GPU device of its own, matching its Cargo.toml (L3, depends on protocol and render L2); lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-encode/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:8b934df550ca875e" }
@@ -144,7 +144,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:08b1996e8e9f44f5", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: model/mod.rs now takes MAX_BUSES from the protocol (wave/m2 #372); the built-so-far text has main's filter chains, opacity/blend and YouTube broadcast_id beside wave/m2's color, image, media, text, waveform and spectrum kinds; edited it to also list main's browser and youtube_chat kinds (through the host's browser backend), say a page's audio and a media file's sound are mixer inputs of their source routed the same way, and add wave/m2's bus references (typed in settings, blocking bus deletion, never closing a cycle)" }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "E3c over wave/m1's E3b text: the one-scene paragraph adds that step 5's encoder side is built (Codecs::on_context, H.264 copying each NV12 target on D3D11 with fences both ways, VideoSession::open_on with CPU fallback) and that nothing writes encode targets yet; steps 1-6 and E3b's capture import text unchanged" }
+stamp = { hash = "b3:3423ee88f7d053e3", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; edited 'still outside this crate' to say loading effect packs is jstream-effects' and render draws them; steps 1-5 untouched" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -162,10 +162,10 @@ stamp = { hash = "b3:a962082ddbf74417" }
 stamp = { hash = "b3:8f6c25a84d2e8a73" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/Cargo.toml"]
-stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
+stamp = { hash = "b3:18846eee0f8db3cf", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:47d78ccae6c3ccc8", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: stale via the render README file (main's benchmarks paragraph); re-read the as-built paragraph and steps 1-6, still match render and core; holds" }
+stamp = { hash = "b3:ab3398a093bbbcc1", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of V1: re-read; the 'still outside this crate' sentence (loading packs elsewhere, drawn here) holds alongside the wave's built-in filter sentence" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
@@ -180,10 +180,79 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:705e6506274fa233", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
+stamp = { hash = "b3:a46736412c5810fb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
+stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/mod.rs"]
+stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/external.rs"]
+stamp = { hash = "b3:380b8a512d3ac1ab", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; edited 'still outside this crate' to say loading effect packs is jstream-effects' and render draws them; steps 1-5 untouched" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/mod.rs"]
+stamp = { hash = "b3:c92fef4810923685", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of V1: re-read; the 'still outside this crate' sentence (loading packs elsewhere, drawn here) holds alongside the wave's built-in filter sentence" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
+stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/chroma_key.wgsl"]
+stamp = { hash = "b3:88a6dd167acd83f0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/color_correction.rs"]
+stamp = { hash = "b3:d309a355707cf542", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/color_correction.wgsl"]
+stamp = { hash = "b3:9b2962abbc752d3a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/color_key.wgsl"]
+stamp = { hash = "b3:fced012701216c58", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/keys.rs"]
+stamp = { hash = "b3:ea8cc0a37df47bed", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/keys.wgsl"]
+stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/luma_key.wgsl"]
+stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/mod.rs"]
+stamp = { hash = "b3:038f4594124689a2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
+stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
+stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
+stamp = { hash = "b3:854ea81f4391fad7", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/scroll.wgsl"]
+stamp = { hash = "b3:9e2d383b65689730", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/sharpen.rs"]
+stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/sharpen.wgsl"]
+stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/params.rs"]
+stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pass.rs"]
+stamp = { hash = "b3:2c5a58c2f08c2db4", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; edited 'still outside this crate' to say loading effect packs is jstream-effects' and render draws them; steps 1-5 untouched" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/prelude.wgsl"]
+stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/testing.rs"]
+stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/gpu.rs"]
 stamp = { hash = "b3:f1de9efc6510e1ea" }
@@ -192,7 +261,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:e2eefb59f2b0e692", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:0ed7d39913b73022" }
+stamp = { hash = "b3:62431045a2096f1e", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; edited 'still outside this crate' to say loading effect packs is jstream-effects' and render draws them; steps 1-5 untouched" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -204,7 +273,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
+stamp = { hash = "b3:bcf5059924ff7b21", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#mcp"."body"]
 stamp = { hash = "b3:a054a6de381d4a36", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
@@ -297,7 +366,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:a147f13398625f6e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: wave/m2's #460 bus references (delete.plan with a bus target, bus.delete blockers) stay at 0.24, matching version.rs, now beside main's 0.20 preview, 0.21 pairing, 0.22 opacity/blend/filter chains and 0.23 YouTube bullets; the merged protocol, control mock and server sources and both snapshots match; holds" }
+stamp = { hash = "b3:8db796891a33db7e", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Against wave/m1-2, main adds protocol 0.24's bus to delete.plan's batch and the bus.delete refusal when a setting draws the bus, beside wave/m1-2's #288 text (a server that pairs nothing answers unsupported, device tokens on loopback or TLS, the /pair page and device cookie, ADR-0047). Both hold together." }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -420,25 +489,25 @@ stamp = { hash = "b3:1485046c80293f0f", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:5af36d33e764350b", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:7f7d94eae0af4bdc", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:b40149170c54dd7d", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:3c14853c445bd4f4", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:632bb2cf7d3c6cb2", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:ac3b48c1e839ddbd", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:a86c4597e7e99d59", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:1acf6822677de4e7", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -446,8 +515,14 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 ["ARCH#protocol"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
+["ARCH#protocol"."file:crates/jstream-server/src/pair.html"]
+stamp = { hash = "b3:31924fc017e3dee1", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
+
 ["ARCH#protocol"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:e3e01039aa2838d5", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
+
+["ARCH#protocol"."file:crates/jstream-server/src/pair_page.rs"]
+stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/preview.rs"]
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
@@ -456,10 +531,10 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:991aaa6de3af3ecf", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:98577fac192b3f87", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
-stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#repo-layout"."body"]
 stamp = { hash = "b3:a667852c45363c39", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: xtask line lists dist (the portable zip) in place of release, matching xtask/src/main.rs's new dist dispatch and usage entry" }
@@ -942,7 +1017,7 @@ stamp = { hash = "b3:180f43478e1f562c", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the mock bullets carry main's binary channel, opacity/blend and filter checks, pairing answered unsupported and kind.list with no kinds, beside wave/m2's refusal of deleting a bus a source's settings refer to; ARCH#protocol's 0.24 bus references and main's 0.20-0.23 bullets need nothing more here (the mock still answers delete.plan with internal and no blockers); fixed 'three methods' to four, since the trait lists binary too" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a147f13398625f6e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the mock bullets carry main's binary channel, opacity/blend and filter checks, pairing answered unsupported and kind.list with no kinds, beside wave/m2's refusal of deleting a bus a source's settings refer to; ARCH#protocol's 0.24 bus references and main's 0.20-0.23 bullets need nothing more here (the mock still answers delete.plan with internal and no blockers); fixed 'three methods' to four, since the trait lists binary too" }
+stamp = { hash = "b3:8db796891a33db7e", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. ARCH#protocol, against wave/m1-2, gains main's protocol 0.24 bus additions (delete.plan's batch can delete a bus; a bus.delete refused because a setting draws the bus, as waveform and spectrum's audio setting holds) beside wave/m1-2's #288 text (a server that pairs nothing answers unsupported, a device token on loopback or a TLS listener, the /pair page and __Host-jstream_device cookie, ADR-0047). This section's text touches neither change and still holds." }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1014,7 +1089,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:ff127ae33472bb22", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's Audio routing source-scopes bullet (retain_sources, fed from Mixer::input_block while unmuted/on/open, else a preallocated zero block; matches audio.rs lines building ScopeTap with TapFeed) and Live sources (audio_source else audio), beside main's browser/with_browser, filters (Audio sources paragraph), opacity in Snapshots, Source::sound (media) and LiveSources::audio/Source::audio (pages), GPU capture and output_size. Edited: Dependencies now say arc-swap carries the list of bus and source scopes; the Pipeline paragraph said output.start waits for the software compositor, now its compositor on the platform's GPU context or the software adapter (pipeline.rs OPEN_TIMEOUT/OpenDraw); removed a doubled blank line. Not run here: cargo test." }
+stamp = { hash = "b3:91438278ef587390", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: re-read the Video codecs paragraph against pipeline.rs video_codec (protocol names only H.264) and sink.rs (HEVC/AV1 as enhanced RTMP with config from the first keyframe, MP4 H.264 only); rest of Design untouched by F6; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
@@ -1023,7 +1098,7 @@ stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:5596095b513e1bb1", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a147f13398625f6e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
+stamp = { hash = "b3:8db796891a33db7e", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. ARCH#protocol, against wave/m1-2, gains main's protocol 0.24 bus additions (delete.plan's batch can delete a bus; a bus.delete refused because a setting draws the bus, as waveform and spectrum's audio setting holds) beside wave/m1-2's #288 text (a server that pairs nothing answers unsupported, a device token on loopback or a TLS listener, the /pair page and __Host-jstream_device cookie, ADR-0047). This section's text touches neither change and still holds." }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1086,7 +1161,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:ac708c2187006d79", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's Audio routing source-scopes bullet (retain_sources, fed from Mixer::input_block while unmuted/on/open, else a preallocated zero block; matches audio.rs lines building ScopeTap with TapFeed) and Live sources (audio_source else audio), beside main's browser/with_browser, filters (Audio sources paragraph), opacity in Snapshots, Source::sound (media) and LiveSources::audio/Source::audio (pages), GPU capture and output_size. Edited: Dependencies now say arc-swap carries the list of bus and source scopes; the Pipeline paragraph said output.start waits for the software compositor, now its compositor on the platform's GPU context or the software adapter (pipeline.rs OPEN_TIMEOUT/OpenDraw); removed a doubled blank line. Not run here: cargo test." }
+stamp = { hash = "b3:5e4005615457a02a", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: re-read the Video codecs paragraph against pipeline.rs video_codec (protocol names only H.264) and sink.rs (HEVC/AV1 as enhanced RTMP with config from the first keyframe, MP4 H.264 only); rest of Design untouched by F6; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1095,7 +1170,7 @@ stamp = { hash = "b3:cd76a871c2ae751d" }
 stamp = { hash = "b3:02b869c8bda6a835", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: audio.rs keeps a scope per source a waveform/spectrum audio_source draws (retain_sources), fed from Mixer::input_block while the source is unmuted, on and has an input, else silence; pipeline.rs's mixer loop pushes input blocks or a preallocated zero block; render.rs Garbage::Scopes doc; tests in tests/audio.rs, audio_routing.rs, collection.rs. Added the source-scopes bullet to Audio routing and updated Live sources; the rest of Design is unaffected. Core tests pass." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/sink.rs"]
-stamp = { hash = "b3:9597d8d3fe05859a" }
+stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: re-read the Video codecs paragraph against pipeline.rs video_codec (protocol names only H.264) and sink.rs (HEVC/AV1 as enhanced RTMP with config from the first keyframe, MP4 H.264 only); rest of Design untouched by F6; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/vcam.rs"]
 stamp = { hash = "b3:20b9282859764b8b" }
@@ -1200,7 +1275,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:ac708c2187006d79", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466) into m2-sync: kept #459's facts (audio.rs routes source scopes via TapFeed::Input/Silence and drawn_sources, pipeline.rs pushes input_block or silence; tests a_source_a_source_draws_feeds_its_scope_after_its_fader in tests/audio.rs, a_drawn_source_gets_a_scope_fed_from_its_mixer_input in tests/audio_routing.rs, a_source_drawing_a_source_round_trips in tests/collection.rs, all present with the described assertions) beside main's browser/youtube_chat with_browser, audio filters (filters.rs), item opacity in snapshot.rs (opacity_blends_items_and_nested_scenes_in_linear_light) and Source::sound for media vs Source::audio for pages. Fixed a merge artifact: a blank line splitting the Tests bullet before 'stream-key actions'. Not run here: cargo test." }
+stamp = { hash = "b3:5e4005615457a02a", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: re-read Contents and Tests against pipeline.rs (video_codec feeds video_config, which keeps #424's RGBA input, and stream_info) and sink.rs (FLV tagger by codec, MP4 refusal and their unit tests); holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1209,7 +1284,7 @@ stamp = { hash = "b3:cd76a871c2ae751d" }
 stamp = { hash = "b3:02b869c8bda6a835", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: audio.rs routes source scopes (TapFeed::Input/Silence, drawn_sources), pipeline.rs pushes input_block or silence, render.rs doc only; new tests a_source_a_source_draws_feeds_its_scope_after_its_fader (tests/audio.rs), a_drawn_source_gets_a_scope_fed_from_its_mixer_input (tests/audio_routing.rs), a_source_drawing_a_source_round_trips (tests/collection.rs). Edited the live-sources, audio-routing and test-list bullets to name source scopes and these tests. jstream-core tests pass." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/sink.rs"]
-stamp = { hash = "b3:9597d8d3fe05859a" }
+stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: re-read Contents and Tests against pipeline.rs (video_codec feeds video_config, which keeps #424's RGBA input, and stream_info) and sink.rs (FLV tagger by codec, MP4 refusal and their unit tests); holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/vcam.rs"]
 stamp = { hash = "b3:20b9282859764b8b" }
@@ -1275,7 +1350,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:ac708c2187006d79", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's mixer-thread text (each drawn bus's and source's block into its scope, replaced lists of bus and source scopes to the collector; matches pipeline.rs mixer_loop with TapFeed::Bus/Input/Silence and render.rs Garbage::Scopes) beside main's capture path (GpuInterop, Capture::on_context, gpu_captures), canvas-sized output and the #385 stop count. Edited: the mixer's own collector also frees each removed input's own block (retire.rs Retired::Block). Not run here: cargo test." }
+stamp = { hash = "b3:5e4005615457a02a", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: runtime text names no codec beyond H.264 and AAC sessions, which still holds since profiles select only H.264; pipeline.rs and sink.rs changes are codec choice only; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1284,19 +1359,19 @@ stamp = { hash = "b3:cd76a871c2ae751d" }
 stamp = { hash = "b3:02b869c8bda6a835", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: pipeline.rs's mixer loop now feeds each drawn source's scope from Mixer::input_block (or a zero block kept from its start for a muted/off/unopened source) beside bus scopes; render.rs's Garbage::Scopes now also carries source scopes. Edited the mixer-thread and collector sentences; threads, locks and collector hand-off otherwise unchanged. Core tests pass." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/sink.rs"]
-stamp = { hash = "b3:9597d8d3fe05859a" }
+stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: runtime text names no codec beyond H.264 and AAC sessions, which still holds since profiles select only H.264; pipeline.rs and sink.rs changes are codec choice only; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/vcam.rs"]
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:be7eddc231af3bee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet now says live and rtmp live in live.rs in the library target and that serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) is moved verbatim, so the rest of the bullet and Live on Windows still hold. serve.rs keeps engine, windows_backends, cef_browser, browse, bind and signals as described. Dependencies unchanged: the lib uses only core, platform and protocol" }
+stamp = { hash = "b3:158201aa4402aac8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet says live and rtmp live in live.rs in the library target, serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) moved verbatim. wave/m1-2 added to the Server bullet that ServerConfig::tls stays off so the pairing page and device cookie (ADR-0047) wait on TLS and /pair is 404; serve.rs's bind still sets only bind, mcp, device_file and ui_dir, so that holds beside #278's text. tests: cargo test -p jstream-daemon (lib 3, bin 26, tests/daemon.rs 9, tests/e2e.rs 1, all passed), clippy -D warnings, cargo doc -D warnings" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:ff127ae33472bb22", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): stale only via core#design. Re-read the whole section; the core facts it relies on (one Engine, connect per session, placeholder outputs without backends, with_publish_opener/output_kind, with_browser after with_backends, AuditFile, with_collection_file) are unchanged by #466 (scopes only) and by this merge's core edits; serve.rs wiring and MfMediaDecoders/cef/device file text from the earlier sync still hold. No edit." }
+stamp = { hash = "b3:91438278ef587390", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: stale only via core#design's Video codecs paragraph; daemon design names no codec choice; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
+stamp = { hash = "b3:712b0bc27a27658a", by = "agent:claude", note = "ADR-0047: the daemon leaves ServerConfig::tls off and pairing on, so its server answers the credential calls, /pair is 404 and device tokens work on loopback only, as Design's pairing text says; matches serve.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #291's CEF browser sources and the jstream-platform data directory are beside this text and change nothing about pairing; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -1392,7 +1467,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:69eee667f84adbfe", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the wave's vcam, delay-load and media_foundation.rs text is unchanged by this PR; the browser-sources bullet still matches host.rs/browser.rs (backend on the media clock, device from WindowsGpu::open_device, CEF only in the sandboxed helper started on the first page)" }
+stamp = { hash = "b3:42693e57e0ab79dd", by = "agent:claude", note = "ADR-0047: Design says the desktop turns pairing off, so its server answers no credential call (they reach the session as unsupported), the UI's pairing panel stays hidden, and there is no /pair page or device cookie; matches host.rs:57 and the server's pairing switch. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's vcam text and #291's browser wiring sit beside it without touching the server config; holds" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1422,7 +1497,7 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the browser bullet no longer says a cef build links libcef.dll at load time; with ADR-0048 CEF runs only in the helper, which starts on the first page, so a missing helper or CEF files fail that source, as browser.rs's doc now says; the device and clock text holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:06716d0fec03e3e5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: only host.rs's doc comment changed, naming the daemon's live::live in live.rs instead of serve::live; 'the same wiring as the daemon' in The engine behind the API still holds, no code changed" }
+stamp = { hash = "b3:ab73046e3af60ffe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: only host.rs's doc comment changed, naming the daemon's live::live in live.rs instead of serve::live. wave/m1-2 rewrote 'The engine behind the API' to say the server pairs no device (ServerConfig::pairing off, unsupported answers, no pairing page or cookie), matching host.rs; 'the same wiring as the daemon (OS backends, keys in Credential Manager, an RTMP(S) publish opener)' still holds. tests: cargo test -p jstream-daemon (lib 3, bin 26, tests/daemon.rs 9, tests/e2e.rs 1, all passed), clippy -D warnings, cargo doc -D warnings; jstream-desktop not built here" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's paths-based data folder and #298's browser bullet (CEF only in the sandboxed helper, a missing helper fails the source, not the app) match lib.rs and browser.rs; Design names no data module; holds" }
@@ -1461,7 +1536,7 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the apps/* row still says the desktop links sources and jstream-browser with cef; browser.rs now drives the sandboxed helper (its doc names ADR-0048 and says the app doesn't link CEF), and the Browser sources bullet still describes it; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:06716d0fec03e3e5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: only host.rs's doc comment changed, pointing the daemon wiring it mirrors at apps/jstream-daemon/src/live.rs (moved from serve.rs); the Engine host bullet ('wired as the daemon's is') still holds, no code changed" }
+stamp = { hash = "b3:ab73046e3af60ffe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: only host.rs's doc comment changed, pointing the daemon wiring it mirrors at apps/jstream-daemon/src/live.rs (moved from serve.rs). wave/m1-2 set config.pairing = false in host.rs (ADR-0047); the Engine host bullet ('wired as the daemon's is') still holds since that concerns backends, key store and opener, not pairing. tests: cargo test -p jstream-daemon (lib 3, bin 26, tests/daemon.rs 9, tests/e2e.rs 1, all passed), clippy -D warnings, cargo doc -D warnings; jstream-desktop not built here (Windows-only window, not in this branch's crate list)" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1 removes data.rs (lib.rs keeps the wave's cef-gated browser module, drops data); the contents list and tests (delay-load test kept, data-folder test gone) match; #298's not-yet line keeps browser sources off by default; holds" }
@@ -1497,10 +1572,13 @@ stamp = { hash = "b3:99e633ebddadb039" }
 stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (declared governance change); Data folder text says both hosts find it through jstream-platform paths, matching main.rs and Cargo.toml (jstream-platform now a common dependency)" }
 
 ["CRATE-jstream-effects#purpose"."body"]
-stamp = { hash = "b3:dfe4bf2f20a9f63e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: shader-path bullet now names every rule check_shader_path enforces (.wgsl, then check_asset_path under collection: no empty or .. segment, drive letter, leading /, backslash, :, or DOS device last component) and links the protocol Rejections bullet; rest of purpose unchanged and still holds" }
+stamp = { hash = "b3:3466907ce4516fb9", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 B3: re-read the whole section; restored the wave's shader-path bullet (asset-path rules under the collection root, DOS device names refused, symlink out refused), which matches manifest.rs check_shader_path; the dependency and Drawing paragraphs still match pack.rs" }
+
+["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
+stamp = { hash = "b3:1798b46dd4b634e7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 cascade from render#filters after the V1 merge: re-read; the Drawing paragraph's ExternalFilter/FILTER_PRELUDE claims still match render" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
-stamp = { hash = "b3:43d3c8a43e07d1d8" }
+stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199" }
@@ -1521,19 +1599,16 @@ stamp = { hash = "b3:d8bdadac3cc97bf5" }
 stamp = { hash = "b3:b65c103b271db580" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/pack.rs"]
-stamp = { hash = "b3:9bd6619c606101df" }
+stamp = { hash = "b3:1c71d7ffba81c34d", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/shader.rs"]
 stamp = { hash = "b3:3ae83479a3f82d0e" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/tests.rs"]
-stamp = { hash = "b3:cf107bf4051a2857" }
+stamp = { hash = "b3:e6d9d1baef424463", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/watch.rs"]
 stamp = { hash = "b3:c605dc3799e8d4cc" }
-
-["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/tests/fixtures/host-prelude.wgsl"]
-stamp = { hash = "b3:08d1db37fb68e030" }
 
 ["CRATE-jstream-encode#design"."body"]
 stamp = { hash = "b3:9abb2b5acc27b6d8", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (70d5ce5) into #325: re-read E3c's GPU frames subsection and Not yet beside main's benchmarks (benches/session.rs) text; both hold" }
@@ -1902,10 +1977,10 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:4af553d43149d3ce", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale only through ARCH crate-map, whose platform row now lists wave/m2's MediaDecoders beside main's paths; the row still says the crate holds GpuInterop with wgpu types, which is all this section relies on, and the merge changes no GPU-frame code; holds" }
+stamp = { hash = "b3:09ef8698ef5f632f", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 cascade from ARCH#crate-map: re-read; only the effects row changed, which doesn't bear on GPU frames or the platform's wgpu types; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
+stamp = { hash = "b3:3423ee88f7d053e3", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 cascade from ARCH#crate-map: re-read; only the effects row changed, which doesn't bear on GPU frames or the platform's wgpu types; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:c66590fe31f34aee", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via the crate map's jstream-browser and helper rows and R-UNSAFE-001, which adds jstream-browser-helper; the GPU frame design is untouched (the engine side still imports shared textures as GpuFrame); holds" }
@@ -1992,7 +2067,7 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:7218055676be610a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the purpose now has wave/m2's MfMediaDecoders bullet (opening, RGB32 frames with the aperture crop, float audio with the gapless.rs cut, seeking, MfStarted threads), its delay-load DLLs and helper tests beside main's GPU capture through Capture::on_context, the H.264 CPU path from NV12/RGBA/BGRA and E3c's GPU path through Codecs::on_context with the release fence; edited the tests to name the gapless helper tests and the audio media-file test (media_file_decodes_audio_in_order_and_seeks_it), and the not-yet line to say the missing decoders are MfCodecs' packet-level ones, since media files now decode; jstream-platform's purpose dep re-read; holds" }
+stamp = { hash = "b3:7856668901dc2751", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: re-read MfCodecs bullets against codec/video.rs: one session for H.264/HEVC/AV1 via Format, CPU path takes NV12/RGBA/BGRA through Nv12Packer (#424) for every codec, software MFT H.264 only, shared bullets and test list say video encoders, HEVC/AV1 hardware tests from RGBA; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:1bd5aa9423b56b1b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the purpose now has wave/m2's MfMediaDecoders bullet (opening, RGB32 frames with the aperture crop, float audio with the gapless.rs cut, seeking, MfStarted threads), its delay-load DLLs and helper tests beside main's GPU capture through Capture::on_context, the H.264 CPU path from NV12/RGBA/BGRA and E3c's GPU path through Codecs::on_context with the release fence; edited the tests to name the gapless helper tests and the audio media-file test (media_file_decodes_audio_in_order_and_seeks_it), and the not-yet line to say the missing decoders are MfCodecs' packet-level ones, since media files now decode; jstream-platform's purpose dep re-read; holds" }
@@ -2060,14 +2135,14 @@ stamp = { hash = "b3:bcbc90e406de91b4" }
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/aac.rs"]
 stamp = { hash = "b3:0b4fe8918cdd233a" }
 
-["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/h264.rs"]
-stamp = { hash = "b3:ed934317c2576158", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: rewrote the CPU path bullet for both sides: the CPU encoder takes NV12, RGBA or BGRA (main's #425 Nv12Packer, now Input::Cpu in h264.rs) beside E3c's GPU path through Codecs::on_context, which still takes only NV12 encode targets; codec/mod.rs's doc says the same; the tests line names both; holds" }
-
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mf.rs"]
 stamp = { hash = "b3:b132c98638f816bf" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mod.rs"]
-stamp = { hash = "b3:2ce2daeb81aabf91", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: rewrote the CPU path bullet for both sides: the CPU encoder takes NV12, RGBA or BGRA (main's #425 Nv12Packer, now Input::Cpu in h264.rs) beside E3c's GPU path through Codecs::on_context, which still takes only NV12 encode targets; codec/mod.rs's doc says the same; the tests line names both; holds" }
+stamp = { hash = "b3:c2e6e562b0ab09bc", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: re-read MfCodecs bullets against codec/video.rs: one session for H.264/HEVC/AV1 via Format, CPU path takes NV12/RGBA/BGRA through Nv12Packer (#424) for every codec, software MFT H.264 only, shared bullets and test list say video encoders, HEVC/AV1 hardware tests from RGBA; holds" }
+
+["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/video.rs"]
+stamp = { hash = "b3:3128d2bbed1cee78", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 on wave/m1-2: re-read MfCodecs bullets against codec/video.rs: one session for H.264/HEVC/AV1 via Format, CPU path takes NV12/RGBA/BGRA through Nv12Packer (#424) for every codec, software MFT H.264 only, shared bullets and test list say video encoders, HEVC/AV1 hardware tests from RGBA; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/com.rs"]
 stamp = { hash = "b3:c237392a0b5423fa" }
@@ -2346,10 +2421,79 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:705e6506274fa233", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
+stamp = { hash = "b3:a46736412c5810fb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
+stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/mod.rs"]
+stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/external.rs"]
+stamp = { hash = "b3:380b8a512d3ac1ab", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; still no file or network I/O, and the steady render path is untouched (the filter cache is outside it)" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/mod.rs"]
+stamp = { hash = "b3:c92fef4810923685", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of V1: re-read; no file or network I/O, render path untouched by this PR" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
+stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/chroma_key.wgsl"]
+stamp = { hash = "b3:88a6dd167acd83f0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/color_correction.rs"]
+stamp = { hash = "b3:d309a355707cf542", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/color_correction.wgsl"]
+stamp = { hash = "b3:9b2962abbc752d3a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/color_key.wgsl"]
+stamp = { hash = "b3:fced012701216c58", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/keys.rs"]
+stamp = { hash = "b3:ea8cc0a37df47bed", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/keys.wgsl"]
+stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/luma_key.wgsl"]
+stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/mod.rs"]
+stamp = { hash = "b3:038f4594124689a2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
+stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
+stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
+stamp = { hash = "b3:854ea81f4391fad7", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/scroll.wgsl"]
+stamp = { hash = "b3:9e2d383b65689730", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/sharpen.rs"]
+stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/sharpen.wgsl"]
+stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/params.rs"]
+stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pass.rs"]
+stamp = { hash = "b3:2c5a58c2f08c2db4", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; still no file or network I/O, and the steady render path is untouched (the filter cache is outside it)" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/prelude.wgsl"]
+stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/testing.rs"]
+stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/gpu.rs"]
 stamp = { hash = "b3:f1de9efc6510e1ea" }
@@ -2358,7 +2502,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:e2eefb59f2b0e692", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:0ed7d39913b73022" }
+stamp = { hash = "b3:62431045a2096f1e", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; still no file or network I/O, and the steady render path is untouched (the filter cache is outside it)" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -2370,10 +2514,88 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
+stamp = { hash = "b3:bcf5059924ff7b21", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = 'This PR adds the filter harness (filter/*, Compositor::apply_filter, lib.rs exports). apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. "Does not allocate per item on the steady path" still holds since nothing on the render thread calls apply_filter until V0; Passes, resources and placement text unchanged; holds' }
+
+["CRATE-jstream-render#filters"."body"]
+stamp = { hash = "b3:1798b46dd4b634e7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of wave/m1-2 at V1 (#314): re-read; the wave's V1 kinds paragraph and this PR's cache/error-scope/external paragraphs sit side by side and both match the code; the Lane V unused_imports allow is gone, as V1 uses the pass types" }
+
+["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
+stamp = { hash = "b3:b655210653447199", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+
+["CRATE-jstream-render#filters"."dep:docs/adr/0026-source-filter-chains.md"]
+stamp = { hash = "b3:10fc5503702046a4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
+stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/mod.rs"]
+stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/external.rs"]
+stamp = { hash = "b3:380b8a512d3ac1ab", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; cache keyed by label and source (4 per label), Validation and Internal scopes, cached refusals, uniform length check and the External kinds paragraph match pass.rs/external.rs/mod.rs; N4 drops the stale doc line and the per-draw key allocation, which the text never claimed" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/mod.rs"]
+stamp = { hash = "b3:c92fef4810923685", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of wave/m1-2 at V1 (#314): re-read; the wave's V1 kinds paragraph and this PR's cache/error-scope/external paragraphs sit side by side and both match the code; the Lane V unused_imports allow is gone, as V1 uses the pass types" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
+stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/chroma_key.wgsl"]
+stamp = { hash = "b3:88a6dd167acd83f0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/color_correction.rs"]
+stamp = { hash = "b3:d309a355707cf542", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/color_correction.wgsl"]
+stamp = { hash = "b3:9b2962abbc752d3a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/color_key.wgsl"]
+stamp = { hash = "b3:fced012701216c58", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/keys.rs"]
+stamp = { hash = "b3:ea8cc0a37df47bed", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/keys.wgsl"]
+stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/luma_key.wgsl"]
+stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/mod.rs"]
+stamp = { hash = "b3:038f4594124689a2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
+stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
+stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
+stamp = { hash = "b3:854ea81f4391fad7", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/scroll.wgsl"]
+stamp = { hash = "b3:9e2d383b65689730", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/sharpen.rs"]
+stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/sharpen.wgsl"]
+stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "The single-pass pack (V1): not yet" with the V1 paragraph and its seven kinds. Checked against pack/*.rs descriptors and pack/*.wgsl: color_correction (OBS gamma mapping, CPU-built affine matrix, clamp, opacity; neutral defaults), chroma_key (BT.709 limited CbCr distance over 3x3, spill to luma), color_key (RGB distance), luma_key (hard edge keeps the limit), sharpen (unsharp mask over the box on premultiplied encoded colour, clamped to alpha), rounded_corners (SDF, border inside), scroll (f64 CPU offset wrapped, manual bilinear, seam wrap). Colour kinds on straight sRGB-encoded colour, decoded to premultiplied linear on output. pack/mod.rs registers them; filter/mod.rs drops the spent unused_imports allow; harness text unchanged; holds""" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/params.rs"]
+stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pass.rs"]
+stamp = { hash = "b3:2c5a58c2f08c2db4", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; cache keyed by label and source (4 per label), Validation and Internal scopes, cached refusals, uniform length check and the External kinds paragraph match pass.rs/external.rs/mod.rs; N4 drops the stale doc line and the per-draw key allocation, which the text never claimed" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/prelude.wgsl"]
+stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/testing.rs"]
+stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:7bb23bacf002a8e0", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
+stamp = { hash = "b3:46ff94905a449fdb", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; 'Not in this cut' now says loading WGSL effect packs is jstream-effects' and this crate only draws them, with #300's PRESENT wording kept from the wave; rest unchanged" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "Deps: platform gpu-frames and ARCH gpu-pipeline gained E3c's encoder text (Codecs::on_context, release fence, open_on); render still composites on the context and writes no NV12 encode target, so this section is unaffected" }
@@ -2382,7 +2604,7 @@ stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "Deps: platf
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "Deps: platform gpu-frames and ARCH gpu-pipeline gained E3c's encoder text (Codecs::on_context, release fence, open_on); render still composites on the context and writes no NV12 encode target, so this section is unaffected" }
+stamp = { hash = "b3:3423ee88f7d053e3", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; 'Not in this cut' now says loading WGSL effect packs is jstream-effects' and this crate only draws them, with #300's PRESENT wording kept from the wave; rest unchanged" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2391,7 +2613,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:af178dd41ff64ab0" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/Cargo.toml"]
-stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Cargo.toml only adds the criterion dev-dependency and the composite bench target" }
+stamp = { hash = "b3:18846eee0f8db3cf", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:8e0dd43ba922fd3d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
@@ -2403,10 +2625,79 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:705e6506274fa233", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
+stamp = { hash = "b3:a46736412c5810fb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
+stamp = { hash = "b3:9beac28bc6ebea4c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/mod.rs"]
+stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/external.rs"]
+stamp = { hash = "b3:380b8a512d3ac1ab", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; 'Not in this cut' now says loading WGSL effect packs is jstream-effects' and this crate only draws them, with #300's PRESENT wording kept from the wave; rest unchanged" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/mod.rs"]
+stamp = { hash = "b3:c92fef4810923685", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 merge of V1: re-read; 'Not in this cut' still says loading packs is jstream-effects' and this crate draws them; mod.rs only lost the unused_imports allow" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
+stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/chroma_key.wgsl"]
+stamp = { hash = "b3:88a6dd167acd83f0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/color_correction.rs"]
+stamp = { hash = "b3:d309a355707cf542", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/color_correction.wgsl"]
+stamp = { hash = "b3:9b2962abbc752d3a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/color_key.wgsl"]
+stamp = { hash = "b3:fced012701216c58", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/keys.rs"]
+stamp = { hash = "b3:ea8cc0a37df47bed", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/keys.wgsl"]
+stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/luma_key.wgsl"]
+stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/mod.rs"]
+stamp = { hash = "b3:038f4594124689a2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
+stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
+stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
+stamp = { hash = "b3:854ea81f4391fad7", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/scroll.wgsl"]
+stamp = { hash = "b3:9e2d383b65689730", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/sharpen.rs"]
+stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/sharpen.wgsl"]
+stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/params.rs"]
+stamp = { hash = "b3:b3aefcc2353c922c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pass.rs"]
+stamp = { hash = "b3:2c5a58c2f08c2db4", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; 'Not in this cut' now says loading WGSL effect packs is jstream-effects' and this crate only draws them, with #300's PRESENT wording kept from the wave; rest unchanged" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/prelude.wgsl"]
+stamp = { hash = "b3:a12814fa76dae1f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/testing.rs"]
+stamp = { hash = "b3:69b0b81a0701d9e3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/gpu.rs"]
 stamp = { hash = "b3:f1de9efc6510e1ea" }
@@ -2415,7 +2706,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:e2eefb59f2b0e692", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:0ed7d39913b73022" }
+stamp = { hash = "b3:62431045a2096f1e", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 hookup on wave/m1-2: re-read; 'Not in this cut' now says loading WGSL effect packs is jstream-effects' and this crate only draws them, with #300's PRESENT wording kept from the wave; rest unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -2427,10 +2718,10 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
+stamp = { hash = "b3:bcf5059924ff7b21", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR's one edit to Purpose adds the video filter chain runtime to Not in this cut and points at Filters. Checked: filter/ and Compositor::apply_filter provide passes only and nothing in the engine calls them (V0); nothing else in Purpose is touched by the harness; holds" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:d2dc1d36012c166b", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (#361 benchmarks) into #219: re-read; main's criterion Benchmarks paragraph sits beside E3b's GPU-frames-through-the-cache test text; benches compile against E3b's compositor (workspace clippy --all-targets clean); holds" }
+stamp = { hash = "b3:d6a245a78fa3f913", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters paragraph (filter::testing runs one filter over a small upload and reads back through a 1:1 scene; a two-pass copy covers the harness incl. a half-transparent texel) and makes tests.rs helpers pub(crate) for it; checked against testing.rs and its tests; the rest is unchanged; holds" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
@@ -2442,16 +2733,16 @@ stamp = { hash = "b3:7db1a4e21a6cee80" }
 stamp = { hash = "b3:e2b28a2df72d9e17" }
 
 ["CRATE-jstream-render#testing"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU-frames-through-the-cache test text matches the_cache_imports_gpu_frames_without_keeping_their_holds in tests.rs; holds" }
+stamp = { hash = "b3:bcf5059924ff7b21", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters paragraph (filter::testing runs one filter over a small upload and reads back through a 1:1 scene; a two-pass copy covers the harness incl. a half-transparent texel) and makes tests.rs helpers pub(crate) for it; checked against testing.rs and its tests; the rest is unchanged; holds" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
+stamp = { hash = "b3:712b0bc27a27658a", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale through ARCH#protocol (wave/m2's 0.24 bus references beside main's preview, pairing, filter and YouTube bullets) and jstream-control's design (the mock's bus.delete refusal, kind.list, and the four-method fix); the server forwards any dyn Control call, answers only the pairing calls itself and takes the version from the protocol crate, so its admission, pairing, sessions, preview frames, MCP and logging text holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a147f13398625f6e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale through ARCH#protocol (wave/m2's 0.24 bus references beside main's preview, pairing, filter and YouTube bullets) and jstream-control's design (the mock's bus.delete refusal, kind.list, and the four-method fix); the server forwards any dyn Control call, answers only the pairing calls itself and takes the version from the protocol crate, so its admission, pairing, sessions, preview frames, MCP and logging text holds" }
+stamp = { hash = "b3:8db796891a33db7e", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. ARCH#protocol, against wave/m1-2, gains main's protocol 0.24 bus additions (delete.plan's batch can delete a bus; a bus.delete refused because a setting draws the bus, as waveform and spectrum's audio setting holds) beside wave/m1-2's #288 text (a server that pairs nothing answers unsupported, a device token on loopback or a TLS listener, the /pair page and __Host-jstream_device cookie, ADR-0047). This section's text touches neither change and still holds." }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2463,22 +2754,22 @@ stamp = { hash = "b3:fbe7c61707faa7bd" }
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:b40149170c54dd7d", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
+stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:3c14853c445bd4f4", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:632bb2cf7d3c6cb2", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:ac3b48c1e839ddbd", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:a86c4597e7e99d59", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
+stamp = { hash = "b3:1acf6822677de4e7", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -2486,8 +2777,14 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
+["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair.html"]
+stamp = { hash = "b3:31924fc017e3dee1", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
+
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:e3e01039aa2838d5", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
+
+["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair_page.rs"]
+stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/preview.rs"]
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
@@ -2496,34 +2793,34 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:991aaa6de3af3ecf", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
+stamp = { hash = "b3:98577fac192b3f87", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
-stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#purpose"."body"]
-stamp = { hash = "b3:e828e552d8f6c1e1", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
+stamp = { hash = "b3:f67fa77227f07948", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-server"]
 stamp = { hash = "b3:91b837e64ac2fb2b" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:b40149170c54dd7d", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
+stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:3c14853c445bd4f4", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:632bb2cf7d3c6cb2", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:ac3b48c1e839ddbd", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:a86c4597e7e99d59", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
+stamp = { hash = "b3:1acf6822677de4e7", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -2531,8 +2828,14 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
+["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair.html"]
+stamp = { hash = "b3:31924fc017e3dee1", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
+
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:e3e01039aa2838d5", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
+
+["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair_page.rs"]
+stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/preview.rs"]
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
@@ -2541,10 +2844,10 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:991aaa6de3af3ecf", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
+stamp = { hash = "b3:98577fac192b3f87", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
-stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-sources#purpose"."body"]
 stamp = { hash = "b3:1af049c182e0afb7", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's audio_source setting, AudioScopes source/retain_sources/sources and drawn_source (scope/mod.rs), and its tests (scope/tests.rs, scope_no_alloc.rs) beside main's browser and youtube_chat kinds, SourceAudio/gpu_frame/opens_browser and Source::sound (MediaAudio) vs Source::audio (pages; only browser.rs overrides it). Edited: removed 'Neither draws a single source yet: that needs a per-input tap in the mixer', which #466 made false; removed a merge-artifact blank line inside lib.rs's //! crate doc. Not run here: cargo test." }
@@ -2703,7 +3006,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:8fabec9c27726549", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "Whole PR to the body: from main, the pairing paragraph (server side built, pairing.start and POST /api/v1/pair in jstream-server, the UI form decided by ADR-0047 and not built) and the Outputs bullet's virtual camera card (virtual_cam with no target/key/profile, desktop_vcam() in host.rs, the --register-vcam hint, 'is not registered', 'no virtual camera' and the Windows 11 reason, all in outputs.rs) beside wave/m2's mixer bullets; the merge kept #459's audio-restricted reference text (offers(), an_audio_reference_offers_only_sources_with_audio). Added in this PR: the Debug bundle size bullet, now pointing at jstream-server's Design for the file limit rather than repeating it; type-erasing the mixer views took the debug _bg.wasm from 68.4 MB to 49.6 MB and the local ui-e2e passes 18/18." }
+stamp = { hash = "b3:63cd27b83b8c0873", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: main's virtual camera card and registration hints (desktop_vcam), the pairing status in Connecting, and the opacity, blend and filters fields in the sources and store tests stand beside the wave's Studio store with buses, the scene, sources and properties panels with the bus picker, and the Mixer bullet whose bus delete reads delete.plan with DeleteTarget::Bus and applies the plan at its rev; holds" }
@@ -2712,7 +3015,7 @@ stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:8cf7ec4e2d3163db", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
 stamp = { hash = "b3:49945f646dfa549c" }
@@ -2730,10 +3033,13 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:7f8188e6129a36ac", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+stamp = { hash = "b3:9f04c296774de608", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/pairing.rs"]
+stamp = { hash = "b3:61d5c9e46ca8096c", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/confirm.rs"]
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Design against mixer.rs (BusStrip delete reads delete.plan with DeleteTarget::Bus, confirms with the plan_summary detail, applies the plan expecting its rev) and confirm.rs (doc comment only); rewrote the Mixer bullet that said the engine refuses deleting a drawn bus, and the Native builds bullet still holds. Tests: new a_drawn_bus_is_deleted_through_its_plan (mixer.rs) against MockEngine; cargo test -p jstream-ui --all-features passes" }
@@ -2763,16 +3069,16 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:54e4380a88fc2840", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: main's virtual camera card and registration hints (desktop_vcam), the pairing status in Connecting, and the opacity, blend and filters fields in the sources and store tests stand beside the wave's Studio store with buses, the scene, sources and properties panels with the bus picker, and the Mixer bullet whose bus delete reads delete.plan with DeleteTarget::Bus and applies the plan at its rev; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:775169539bbcd8d4", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: main's virtual camera card and registration hints (desktop_vcam), the pairing status in Connecting, and the opacity, blend and filters fields in the sources and store tests stand beside the wave's Studio store with buses, the scene, sources and properties panels with the bus picker, and the Mixer bullet whose bus delete reads delete.plan with DeleteTarget::Bus and applies the plan at its rev; holds" }
+stamp = { hash = "b3:a3ba61c525d96483", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:92092b53f0278780", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents list covers main's host.rs desktop() and desktop_vcam() and outputs.rs (streams, recordings, the virtual camera) beside the wave's Store bullet (Collection keeps state.get's buses), the properties form's bus reference select, and the Panels bullet with confirm.rs shared with mixer.rs, whose bus delete reads delete.plan; holds" }
+stamp = { hash = "b3:9a20394443b85faa", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged." }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:8cf7ec4e2d3163db", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
 stamp = { hash = "b3:49945f646dfa549c" }
@@ -2790,10 +3096,13 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): host.rs desktop() and desktop_vcam(); outputs.rs covers streams, recordings and the virtual camera" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:7f8188e6129a36ac", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+stamp = { hash = "b3:9f04c296774de608", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/pairing.rs"]
+stamp = { hash = "b3:61d5c9e46ca8096c", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/confirm.rs"]
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Purpose against mixer.rs (bus delete now reads delete.plan via plan_bus_delete/apply_plan and shows Confirm) and confirm.rs (doc comment names the mixer's bus strips); updated the Panels line so confirm.rs is shared with the mixer. Tests: new a_drawn_bus_is_deleted_through_its_plan; cargo test -p jstream-ui --all-features passes" }
@@ -3240,7 +3549,7 @@ stamp = { hash = "b3:7c0a5283f684f83d", by = "agent:youtube-sign-in", note = "Re
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a147f13398625f6e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale through ARCH#protocol, which carries main's 0.20 to 0.23 additions (preview, pairing, filters, YouTube) and the wave's 0.24 bus references; each is an addition under R-API-001's minor-bump rule, R-API-002 keeps the youtube exception ADR-0058 §3 requires, and the section names no specific version; holds" }
+stamp = { hash = "b3:8db796891a33db7e", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. ARCH#protocol, against wave/m1-2, gains main's protocol 0.24 bus additions (delete.plan's batch can delete a bus; a bus.delete refused because a setting draws the bus, as waveform and spectrum's audio setting holds) beside wave/m1-2's #288 text (a server that pairs nothing answers unsupported, a device token on loopback or a TLS listener, the /pair page and __Host-jstream_device cookie, ADR-0047). This section's text touches neither change and still holds." }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:efd084f9966f6d2d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: R-DEP-007 now cites ADR-0056, which keeps the SHA-pinning rule (item 1) and Dependabot keeping pins current (item 2); other R-DEP rules untouched." }
@@ -3294,7 +3603,7 @@ stamp = { hash = "b3:bcbdad685ad8815a", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage with the wave's Y3 change (no YouTube-bound output in the CLI, 0.23) and main's #450 (new capture items fit the canvas), and daemon Usage with P1's data directory; the steps stream to a generic RTMP URL with the control token, add no items, and their token and log paths are the data directory's; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from CLI Usage (pair/device; #440's set-key BOM and non-ASCII refusal) and server Design (pairing; Admitted's binary forward): no step pairs a device, every command uses the control token, and a key typed or piped per the steps passes #440's check; holds" }
+stamp = { hash = "b3:712b0bc27a27658a", by = "agent:claude", note = "Cascade from server Design's pairing page and cookie: the runbook runs on loopback without TLS and pairs no browser, so its steps don't change; nothing in wave/m1's server Design changed since #265; holds" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }

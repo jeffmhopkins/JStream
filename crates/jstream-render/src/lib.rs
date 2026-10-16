@@ -3,7 +3,7 @@
 //! Layer 2: no `unsafe`. The scene graph is the same layer, so the engine builds the
 //! [`Scene`] snapshot and calls in.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, crates/jstream-render/README.md#purpose, crates/jstream-render/README.md#design, crates/jstream-render/README.md#testing, docs/adr/0004-wgpu-with-native-interop.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, crates/jstream-render/README.md#purpose, crates/jstream-render/README.md#design, crates/jstream-render/README.md#filters, crates/jstream-render/README.md#testing, docs/adr/0004-wgpu-with-native-interop.md
 
 #![forbid(unsafe_code)]
 
@@ -11,6 +11,7 @@ mod cache;
 mod color;
 mod compositor;
 mod error;
+mod filter;
 mod gpu;
 mod image;
 mod place;
@@ -19,6 +20,10 @@ mod scene;
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;
 pub use error::RenderError;
+pub use filter::{
+    ExternalFilter, FilterClock, PRELUDE as FILTER_PRELUDE, VideoFilter,
+    descriptors as video_filter_descriptors,
+};
 pub use gpu::OpenOptions;
 pub use image::Image;
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
