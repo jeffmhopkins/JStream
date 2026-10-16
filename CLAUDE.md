@@ -67,7 +67,7 @@ depends_on = ["REVIEW.md#output", "REVIEW.md#rounds"]
 5. A `needs-human` label means the maintainer decides. Stop arguing that point.
 6. **Dependabot PRs** (author `dependabot[bot]`): enable auto-merge (squash) on them,
    and handle CI failures as if they were your own PRs. Action-pin-only bumps are
-   pre-approved governance ([ADR-0018](docs/adr/0018-ci-supply-chain-policy.md)).
+   pre-approved governance ([ADR-0056](docs/adr/0056-ci-supply-chain-policy-v2.md)).
 7. **Writing an ADR:** set its `tier` per [R-GOV-005](docs/RULES.md#R-GOV-005). For
    `maintainer` (product scope, licensing, security and privacy posture, public
    compatibility promises, spending, or the tier rules themselves): open it as `proposed`,

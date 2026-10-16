@@ -483,10 +483,10 @@ stamp = { hash = "b3:a0e7244abd1e0409", by = "agent:claude", note = "Added the -
 stamp = { hash = "b3:7baf4e16b6cfdff1", by = "agent:claude", note = "Whole #376 change to DOCS#verification and #notes re-read: per-input ledger stamps, the guarantee that a merge never leaves a section falsely fresh and a conflict usually leaves it stale, verify writing only changed inputs (removal-only and unchanged verifies record no note), and the last note on each entry covering the PR. docs-duty's verify, generate, migrate, merge-main and never-edit-the-ledger duties still hold" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:df8b08f4a74bee6c", by = "agent:claude", note = "Added the --from wave/<name> form of merge-main and the link to the waves runbook; both match xtask/src/docs/mod.rs and docs/runbooks/waves.md." }
+stamp = { hash = "b3:d59b282d9610896d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after DOCS#verification changed only its ADR link (ADR-0018 -> ADR-0056, Dependabot pin bumps ignored in workflow hashes); duty steps (docs check/verify, no hand hashes, generate, merge-main) unchanged and still accurate." }
 
 ["CLAUDE#pr-loop"."body"]
-stamp = { hash = "b3:d756a751285910f0", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read the PR loop against ADR-0043: item 7 now lists the narrowed maintainer tier and says everything else is agent tier, proxy format cited from ADR-0043" }
+stamp = { hash = "b3:f50bf78c7a2c63c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: item 6 now cites ADR-0056, which restates ADR-0018's action-pin pre-approval unchanged (decision item 3); Dependabot auto-merge and CI handling still hold; rest of the loop untouched." }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#output"]
 stamp = { hash = "b3:8b4ecdcf072341c3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0055: auto-merge still waits for the base branch's required checks; on wave/* that is review-gate, which item 1 covers" }
@@ -2766,7 +2766,7 @@ stamp = { hash = "b3:379ee0e3d8c9e499" }
 stamp = { hash = "b3:bd44ff4e86f247fa" }
 
 ["DOCS#governance"."body"]
-stamp = { hash = "b3:45d7638cdee2c505", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for ADR-0038 renumbered from 0036: governance.rs strips only one-'> '-line adr-status blocks from accepted ADRs before comparing; accepted-ADR and Status banner bullets match, protected list unchanged" }
+stamp = { hash = "b3:8351920c7315d119", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }
 
 ["DOCS#governance"."dep:docs/adr/0019-review-gate-v2.md"]
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
@@ -2775,7 +2775,7 @@ stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 stamp = { hash = "b3:92d196ca1c361213" }
 
 ["DOCS#governance"."file:xtask/src/governance.rs"]
-stamp = { hash = "b3:d2e3fa818c90908d" }
+stamp = { hash = "b3:991579db231715d8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }
 
 ["DOCS#ttl"."body"]
 stamp = { hash = "b3:e67dd72e603695c3", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "Re-read against sweep.yml: new Roadmap progress step runs xtask docs progress (full history from fetch-depth 0) into the issue; added its bullet; deny, docs-due, update dry-run, override audit, one pinned issue and not-built list unchanged" }
@@ -2829,7 +2829,7 @@ stamp = { hash = "b3:18feaae75f4923a3", by = "agent:claude@session_01QBbMRwRuZe7
 stamp = { hash = "b3:c65b46a55b573338" }
 
 ["REVIEW#checks"."body"]
-stamp = { hash = "b3:0c707680ca3d6b3d", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read Step 2 item 3 and the blocking list against ADR-0043: tier checked against ADR-0043, too-high tier non-blocking, decision-comment rules unchanged" }
+stamp = { hash = "b3:4666d5e43e84bb8c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: Governance step 5 now cites ADR-0056; its decision item 3 keeps the same narrow pin-only pre-approval and major-bump changelog read, so the reviewer instructions still hold." }
 
 ["REVIEW#checks"."dep:docs/RULES.md#R-DOC-004"]
 stamp = { hash = "b3:9a94d90984796d06" }
@@ -2883,7 +2883,7 @@ stamp = { hash = "b3:7ab4accbf98f6662" }
 stamp = { hash = "b3:d638c6ca8019b15d" }
 
 ["RULES#dependencies"."body"]
-stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
+stamp = { hash = "b3:efd084f9966f6d2d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: R-DEP-007 now cites ADR-0056, which keeps the SHA-pinning rule (item 1) and Dependabot keeping pins current (item 2); other R-DEP rules untouched." }
 
 ["RULES#dependencies"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
@@ -2940,7 +2940,7 @@ stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c40bfcab7de124d7", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }
 
 ["RUNBOOK-WAVES#current"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:df8b08f4a74bee6c", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }
+stamp = { hash = "b3:d59b282d9610896d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after DOCS#verification changed only its ADR link (ADR-0018 -> ADR-0056); merge-main --from wave and stamp-conflict behaviour unchanged, section still holds." }
 
 ["RUNBOOK-WAVES#landing"."body"]
 stamp = { hash = "b3:6ae91e98d6488857", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
