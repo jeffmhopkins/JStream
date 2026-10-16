@@ -121,7 +121,8 @@ pub(crate) fn cpu_draw() -> OpenDraw {
             |_: &Shot, size: FrameSize, capture: Option<&CaptureFrame<'_>>, out: &mut Vec<u8>| {
                 out.clear();
                 match capture {
-                    Some(capture) => out.extend_from_slice(capture.rgba),
+                    Some(capture) if capture.size == size => out.extend_from_slice(capture.rgba),
+                    Some(capture) => scale_nearest(capture, size, out),
                     None => out.resize(size.width() as usize * size.height() as usize * 4, 0),
                 }
                 Ok(None)
@@ -129,6 +130,24 @@ pub(crate) fn cpu_draw() -> OpenDraw {
         );
         Ok(draw)
     })
+}
+
+/// `capture` scaled to fill `size`, nearest neighbour, appended to `out`: what the GPU
+/// path's scale looks like closely enough for tests.
+fn scale_nearest(capture: &CaptureFrame<'_>, size: FrameSize, out: &mut Vec<u8>) {
+    let (cw, ch) = (
+        capture.size.width() as usize,
+        capture.size.height() as usize,
+    );
+    let (w, h) = (size.width() as usize, size.height() as usize);
+    out.reserve(w * h * 4);
+    for y in 0..h {
+        let row = (y * ch / h) * cw;
+        for x in 0..w {
+            let at = (row + x * cw / w) * 4;
+            out.extend_from_slice(&capture.rgba[at..at + 4]);
+        }
+    }
 }
 
 /// A fake Annex-B encoder does not emit SPS/PPS. FLV and MP4 still need a decoder
@@ -710,6 +729,9 @@ pub(crate) struct Parts {
     open_timeout: Duration,
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
+    /// The collection's canvas (width, height) when the program stage opens: the output
+    /// size follows it ([`output_size`]).
+    canvas: (u32, u32),
 }
 
 pub(crate) fn parts_from(
@@ -718,8 +740,10 @@ pub(crate) fn parts_from(
     open_timeout: Duration,
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
+    canvas: (u32, u32),
 ) -> Parts {
     Parts {
+        canvas,
         clock: Arc::clone(&backends.clock),
         capture: Arc::clone(&backends.capture),
         audio: Arc::clone(&backends.audio),
@@ -815,7 +839,8 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
 /// mixer threads, and waits for the compositor to open. On failure everything opened
 /// is dropped again.
 pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Program>, String> {
-    let (size, capture) = open_capture(&parts)?;
+    let size = output_size(parts.canvas)?;
+    let capture = open_capture(&parts)?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
     // On an early return this closes the inputs, each stream before its ring's last
@@ -1132,7 +1157,15 @@ fn frame_period(clock: Timebase) -> Result<MediaTime, String> {
         .map_err(|err| format!("frame period on the media clock: {err}"))
 }
 
-fn open_capture(parts: &Parts) -> Result<(FrameSize, Box<dyn CaptureStream>), String> {
+/// The size the program stage renders and encodes at: the canvas, rounded down to even
+/// sizes (NV12, the encoders' input, halves both for chroma), and at least 2x2. The
+/// display capture is scaled to it, not the other way round (#433).
+fn output_size((width, height): (u32, u32)) -> Result<FrameSize, String> {
+    let even = |edge: u32| (edge & !1).max(2);
+    FrameSize::new(even(width), even(height)).map_err(|err| format!("output size: {err}"))
+}
+
+fn open_capture(parts: &Parts) -> Result<Box<dyn CaptureStream>, String> {
     let targets = parts
         .capture
         .targets()
@@ -1145,14 +1178,10 @@ fn open_capture(parts: &Parts) -> Result<(FrameSize, Box<dyn CaptureStream>), St
         return Err("no capture target".into());
     };
     let info = targets.into_iter().nth(index).ok_or("no capture target")?;
-    let Some(size) = info.size else {
-        return Err(format!("capture target `{}` has no size", info.name));
-    };
-    let stream = parts
+    parts
         .capture
         .start(&info.target)
-        .map_err(|err| format!("starting capture: {err}"))?;
-    Ok((size, stream))
+        .map_err(|err| format!("starting capture: {err}"))
 }
 
 /// The video encoder settings for `profile` at `size` and the base frame rate.
@@ -1275,8 +1304,14 @@ fn render_thread(job: RenderJob) {
 /// What the render thread keeps between ticks. The buffers are reused, so a tick
 /// allocates only the frame the encoder takes ownership of.
 struct Frames {
-    /// The latest capture, converted to RGBA8. Empty until the first usable frame.
+    /// The latest capture the mailbox gave, not converted yet. It is converted only when
+    /// a tick draws the capture, so a program that doesn't show it costs no conversion.
+    pending: Option<VideoSurface>,
+    /// The latest converted capture, RGBA8 at `source_size`. Empty until the first
+    /// usable frame.
     source: Vec<u8>,
+    /// The size of `source`: the capture's own, which the compositor scales.
+    source_size: Option<FrameSize>,
     /// Counts the captures copied into `source`, so the compositor uploads a capture
     /// only when it is new.
     source_version: u64,
@@ -1291,16 +1326,11 @@ struct Frames {
 
 impl Frames {
     /// Reads the capture mailbox. An error or a missing frame keeps the last one.
-    fn read_capture(&mut self, capture: &mut dyn CaptureStream, size: FrameSize) {
+    fn read_capture(&mut self, capture: &mut dyn CaptureStream) {
         match capture.latest() {
             Ok(Some(surface)) => {
                 self.capture_failing = false;
-                if rgba_from_surface(&surface, size, &mut self.source) {
-                    self.source_version += 1;
-                } else if !self.warned_format {
-                    self.warned_format = true;
-                    tracing::warn!("capture frame is not CPU RGBA or BGRA at the encoder size");
-                }
+                self.pending = Some(surface);
             }
             Ok(None) => {}
             Err(err) => {
@@ -1321,7 +1351,10 @@ impl Frames {
         shot: &Shot,
         size: FrameSize,
     ) -> Result<Option<Reclaimed>, String> {
-        let capture = (!self.source.is_empty()).then_some(CaptureFrame {
+        if shot.shows_capture() {
+            self.convert_capture();
+        }
+        let capture = self.source_size.map(|size| CaptureFrame {
             version: self.source_version,
             size,
             rgba: &self.source,
@@ -1329,6 +1362,21 @@ impl Frames {
         let freed = draw(shot, size, capture.as_ref(), &mut self.scratch)?;
         std::mem::swap(&mut self.scratch, &mut self.shown);
         Ok(freed)
+    }
+
+    /// Converts the pending capture, if any, into `source`. One that can't be converted
+    /// keeps the last, and is reported once.
+    fn convert_capture(&mut self) {
+        let Some(surface) = self.pending.take() else {
+            return;
+        };
+        if let Some(size) = rgba_from_surface(&surface, &mut self.source) {
+            self.source_size = Some(size);
+            self.source_version += 1;
+        } else if !self.warned_format {
+            self.warned_format = true;
+            tracing::warn!("capture frame is not a CPU RGBA, BGRA or NV12 frame");
+        }
     }
 }
 
@@ -1385,7 +1433,9 @@ fn render_loop(job: RenderJob) {
     }
     reader.start();
     let mut frames = Frames {
+        pending: None,
         source: Vec::new(),
+        source_size: None,
         source_version: 0,
         shown: Vec::new(),
         scratch: Vec::new(),
@@ -1428,7 +1478,7 @@ fn render_loop(job: RenderJob) {
         skipped = skipped.saturating_add(missed);
         if !broken {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
-                frames.read_capture(capture.as_mut(), size);
+                frames.read_capture(capture.as_mut());
                 let snapshot = reader.adopt();
                 frames.draw(&mut draw, snapshot.shot(), size)
             }));
@@ -1526,44 +1576,110 @@ fn render_open_error(err: &RenderError) -> String {
     }
 }
 
-/// Copies a CPU RGBA8 or BGRA8 capture at `expected` into `out` as RGBA8, reusing its
-/// allocation. `false`, leaving `out` as it was, when the frame is not usable.
-fn rgba_from_surface(surface: &VideoSurface, expected: FrameSize, out: &mut Vec<u8>) -> bool {
+/// Converts a CPU capture into `out` as RGBA8, reusing its allocation, and returns its
+/// size. RGBA8 is copied, BGRA8 swizzled and NV12 (what Windows' display capture
+/// delivers) converted with its frame's matrix and range. `None`, leaving `out` as it
+/// was, when the frame is not one of those.
+fn rgba_from_surface(surface: &VideoSurface, out: &mut Vec<u8>) -> Option<FrameSize> {
     let VideoSurface::Cpu(frame) = surface else {
-        return false;
+        return None;
     };
     let info = frame.info();
-    if info.size != expected || !matches!(info.format, PixelFormat::Rgba8 | PixelFormat::Bgra8) {
-        return false;
-    }
     let width = info.size.width() as usize;
-    let height = info.size.height() as usize;
-    let Some(len) = width.checked_mul(height).and_then(|n| n.checked_mul(4)) else {
-        return false;
-    };
-    let row_len = width * 4;
-    for y in 0..height {
-        match frame.row(0, y as u32) {
-            Some(row) if row.len() >= row_len => {}
-            _ => return false,
-        }
-    }
-    out.resize(len, 0);
-    for y in 0..height {
-        let Some(row) = frame.row(0, y as u32) else {
-            return false;
-        };
-        let dst = &mut out[y * row_len..(y + 1) * row_len];
-        match info.format {
-            PixelFormat::Rgba8 => dst.copy_from_slice(&row[..row_len]),
-            _ => {
-                for (d, s) in dst.chunks_exact_mut(4).zip(row[..row_len].chunks_exact(4)) {
-                    d.copy_from_slice(&[s[2], s[1], s[0], s[3]]);
+    let height = info.size.height();
+    let row_len = width.checked_mul(4)?;
+    let len = row_len.checked_mul(height as usize)?;
+    match info.format {
+        PixelFormat::Rgba8 | PixelFormat::Bgra8 => {
+            if (0..height).any(|y| frame.row(0, y).is_none_or(|row| row.len() < row_len)) {
+                return None;
+            }
+            out.resize(len, 0);
+            for (y, dst) in (0..height).zip(out.chunks_exact_mut(row_len)) {
+                let row = &frame.row(0, y)?[..row_len];
+                if info.format == PixelFormat::Rgba8 {
+                    dst.copy_from_slice(row);
+                } else {
+                    for (d, s) in dst.chunks_exact_mut(4).zip(row.chunks_exact(4)) {
+                        d.copy_from_slice(&[s[2], s[1], s[0], s[3]]);
+                    }
                 }
             }
         }
+        PixelFormat::Nv12 => {
+            let chroma_len = width.div_ceil(2) * 2;
+            let rows_ok = (0..height).all(|y| frame.row(0, y).is_some_and(|r| r.len() >= width))
+                && (0..height.div_ceil(2))
+                    .all(|y| frame.row(1, y).is_some_and(|r| r.len() >= chroma_len));
+            if !rows_ok {
+                return None;
+            }
+            let yuv = Yuv::new(info.color);
+            out.resize(len, 0);
+            for (y, dst) in (0..height).zip(out.chunks_exact_mut(row_len)) {
+                let luma = frame.row(0, y)?;
+                let chroma = frame.row(1, y / 2)?;
+                for (x, d) in dst.chunks_exact_mut(4).enumerate() {
+                    let c = (x / 2) * 2;
+                    d.copy_from_slice(&yuv.rgba(luma[x], chroma[c], chroma[c + 1]));
+                }
+            }
+        }
+        _ => return None,
     }
-    true
+    Some(info.size)
+}
+
+/// YCbCr to R'G'B' for one matrix and range, in 16.16 fixed point.
+struct Yuv {
+    /// Luma: offset, then scale.
+    y: (i32, i32),
+    /// Chroma scale.
+    c: i32,
+    /// Cr to R, Cb to G, Cr to G, Cb to B.
+    cr_r: i32,
+    cb_g: i32,
+    cr_g: i32,
+    cb_b: i32,
+}
+
+impl Yuv {
+    fn new(color: ColorInfo) -> Self {
+        let (kr, kb) = match color.space {
+            ColorSpace::Bt601 => (0.299, 0.114),
+            ColorSpace::Bt2020 => (0.2627, 0.0593),
+            _ => (0.2126, 0.0722),
+        };
+        let kg = 1.0 - kr - kb;
+        let fixed = |v: f64| (v * 65_536.0).round() as i32;
+        let (y, c) = match color.range {
+            ColorRange::Full => ((0, fixed(1.0)), fixed(1.0)),
+            ColorRange::Limited => ((16, fixed(255.0 / 219.0)), fixed(255.0 / 224.0)),
+        };
+        Self {
+            y,
+            c,
+            cr_r: fixed(2.0 * (1.0 - kr)),
+            cb_g: fixed(2.0 * kb * (1.0 - kb) / kg),
+            cr_g: fixed(2.0 * kr * (1.0 - kr) / kg),
+            cb_b: fixed(2.0 * (1.0 - kb)),
+        }
+    }
+
+    /// One opaque RGBA8 pixel.
+    fn rgba(&self, y: u8, cb: u8, cr: u8) -> [u8; 4] {
+        // 16.16 fixed point throughout; each product stays well inside i64.
+        let l = i64::from((i32::from(y) - self.y.0) * self.y.1);
+        let cb = (i64::from(i32::from(cb) - 128) * i64::from(self.c)) >> 16;
+        let cr = (i64::from(i32::from(cr) - 128) * i64::from(self.c)) >> 16;
+        let channel = |v: i64| ((v + (1 << 15)) >> 16).clamp(0, 255) as u8;
+        [
+            channel(l + cr * i64::from(self.cr_r)),
+            channel(l - cb * i64::from(self.cb_g) - cr * i64::from(self.cr_g)),
+            channel(l + cb * i64::from(self.cb_b)),
+            255,
+        ]
+    }
 }
 
 /// Copies the readback of `output` into `out`, reusing its allocation.
@@ -1900,9 +2016,15 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 
 #[cfg(test)]
 mod tests {
-    use super::{catch_up, push_each, video_config};
-    use jstream_media::{FrameSize, MediaTime, Timebase};
-    use jstream_platform::{HardwarePreference, RateControl};
+    use super::{
+        DrawFn, Frames, catch_up, output_size, push_each, rgba_from_surface, video_config,
+    };
+    use crate::snapshot::Shot;
+    use jstream_media::{
+        ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane, Timebase,
+        VideoFrame, VideoFrameInfo,
+    };
+    use jstream_platform::{HardwarePreference, RateControl, VideoSurface};
     use jstream_protocol::{
         EncoderProfile, HardwarePreference as ProfileHardware, RateControl as ProfileRate,
     };
@@ -1963,6 +2085,142 @@ mod tests {
         assert_eq!(config.hardware, HardwarePreference::Prefer);
         profile.video.rate_control = ProfileRate::Unknown;
         assert!(video_config(size, &profile).is_err());
+    }
+
+    /// #433: the program renders and encodes at the canvas, rounded down to even sizes
+    /// for NV12, whatever the display's size.
+    #[test]
+    fn the_output_size_follows_the_canvas() {
+        let size = |w, h| FrameSize::new(w, h).expect("size");
+        assert_eq!(output_size((1280, 720)), Ok(size(1280, 720)));
+        assert_eq!(output_size((1281, 721)), Ok(size(1280, 720)));
+        assert_eq!(output_size((1, 1)), Ok(size(2, 2)));
+    }
+
+    fn frame(
+        format: PixelFormat,
+        w: u32,
+        h: u32,
+        color: ColorInfo,
+        planes: Vec<Plane>,
+    ) -> VideoSurface {
+        let info = VideoFrameInfo {
+            size: FrameSize::new(w, h).expect("size"),
+            format,
+            color,
+            pts: MediaTime::zero(Timebase::NANOS),
+        };
+        VideoSurface::Cpu(VideoFrame::new(info, planes).expect("frame"))
+    }
+
+    /// An NV12 capture of 2x2 blocks: white, black, red and a mid grey, BT.709 limited
+    /// range (what Windows' display capture delivers), rows padded.
+    fn nv12_blocks() -> VideoSurface {
+        let luma = [235, 235, 16, 16, 63, 63, 126, 126, 0xEE, 0xEE];
+        let chroma = [128, 128, 128, 128, 102, 240, 128, 128, 0xEE, 0xEE];
+        let mut y = Vec::new();
+        y.extend_from_slice(&luma);
+        y.extend_from_slice(&luma);
+        frame(
+            PixelFormat::Nv12,
+            8,
+            2,
+            ColorInfo::default(),
+            vec![Plane::new(y, 10), Plane::new(chroma.to_vec(), 10)],
+        )
+    }
+
+    /// #433: a capture converts at its own size whatever the output's, and NV12 is
+    /// converted with its matrix and range.
+    #[test]
+    fn captures_convert_to_rgba_at_their_own_size() {
+        let mut out = Vec::new();
+        let size = rgba_from_surface(&nv12_blocks(), &mut out).expect("NV12");
+        assert_eq!(size, FrameSize::new(8, 2).expect("size"));
+        assert_eq!(out.len(), 8 * 2 * 4);
+        let px = |x: usize| &out[x * 4..x * 4 + 4];
+        assert_eq!(px(0), [255, 255, 255, 255]);
+        assert_eq!(px(2), [0, 0, 0, 255]);
+        let red = px(4);
+        assert!(red[0] >= 253 && red[1] <= 2 && red[2] <= 2, "red {red:?}");
+        assert_eq!(px(6), [128, 128, 128, 255]);
+        assert_eq!(&out[32..], &out[..32], "both rows share the chroma");
+
+        // Full range: luma as is.
+        let full = ColorInfo {
+            space: ColorSpace::Bt709,
+            range: ColorRange::Full,
+        };
+        let grey = frame(
+            PixelFormat::Nv12,
+            2,
+            2,
+            full,
+            vec![Plane::new(vec![200; 4], 2), Plane::new(vec![128; 2], 2)],
+        );
+        rgba_from_surface(&grey, &mut out).expect("NV12 full");
+        assert_eq!(&out[..4], [200, 200, 200, 255]);
+
+        // BGRA is swizzled; another format is refused and leaves `out` alone.
+        let bgra = frame(
+            PixelFormat::Bgra8,
+            1,
+            1,
+            ColorInfo::default(),
+            vec![Plane::new(vec![1, 2, 3, 4], 4)],
+        );
+        rgba_from_surface(&bgra, &mut out).expect("BGRA");
+        assert_eq!(out, [3, 2, 1, 4]);
+        let i420 = VideoSurface::Cpu(
+            VideoFrame::zeroed(VideoFrameInfo {
+                size: FrameSize::new(2, 2).expect("size"),
+                format: PixelFormat::I420,
+                color: ColorInfo::default(),
+                pts: MediaTime::zero(Timebase::NANOS),
+            })
+            .expect("frame"),
+        );
+        assert_eq!(rgba_from_surface(&i420, &mut out), None);
+        assert_eq!(out, [3, 2, 1, 4]);
+    }
+
+    /// The capture is converted only on a tick that shows it: a program scene without a
+    /// `display` source costs no conversion (#433), and the frame waits for one that does.
+    #[test]
+    fn a_capture_is_converted_only_when_shown() {
+        let mut frames = Frames {
+            pending: Some(nv12_blocks()),
+            source: Vec::new(),
+            source_size: None,
+            source_version: 0,
+            shown: Vec::new(),
+            scratch: Vec::new(),
+            capture: jstream_platform::CaptureStats::default(),
+            warned_format: false,
+            capture_failing: false,
+        };
+        let size = FrameSize::new(4, 4).expect("size");
+        // Fills the output, checking the capture it is given.
+        let drawing = |expected: Option<(u64, FrameSize)>| -> DrawFn {
+            Box::new(move |_, size: FrameSize, capture, out: &mut Vec<u8>| {
+                assert_eq!(capture.map(|c| (c.version, c.size)), expected);
+                out.resize(size.width() as usize * size.height() as usize * 4, 0);
+                Ok(None)
+            })
+        };
+        let program = crate::snapshot::tests::one_scene_shot();
+        assert!(!program.shows_capture());
+        frames
+            .draw(&mut drawing(None), &program, size)
+            .expect("draw");
+        assert!(frames.pending.is_some(), "not converted");
+        let empty = Shot::default();
+        assert!(empty.shows_capture());
+        let mut check = drawing(Some((1, FrameSize::new(8, 2).expect("size"))));
+        frames.draw(&mut check, &empty, size).expect("draw");
+        assert!(frames.pending.is_none());
+        assert_eq!(frames.source_version, 1);
+        assert_eq!(frames.shown.len(), 4 * 4 * 4);
     }
 
     fn us(ticks: i64) -> MediaTime {

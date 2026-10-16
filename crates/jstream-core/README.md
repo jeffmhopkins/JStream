@@ -121,7 +121,9 @@ state machine. Contents:
   `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
   thread's output size (the capture filling it with no scene, the program scaled from
-  the canvas, a `display` source showing the capture) and nested-scene layers reused
+  the canvas, a `display` source showing the capture), the program stage's output size
+  following the canvas, captures converted to RGBA8 at their own size (NV12 with its
+  matrix and range) and only on ticks that show them and nested-scene layers reused
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), the pipeline against the platform fakes
@@ -413,7 +415,8 @@ uploaded again, and each nested scene is redrawn into the layer it had
 are retired and freed after the GPU has finished with them. The program scene is drawn
 at the canvas: straight to the output when that is the canvas size (`video.snapshot`),
 else into a layer that a last pass scales to the output (the render thread draws at the
-encoder size). Without a program scene the output is the capture filling it, or black.
+encoder size, which is the canvas the stage opened with). Without a program scene the
+output is the capture scaled to fill it, or black.
 A `display` source with no stored frame shows the pipeline's capture on the render
 thread and nothing in `video.snapshot`, which has no capture; a stored frame wins.
 That mapping holds until per-source capture exists.
@@ -738,8 +741,9 @@ a lock ([R-RT-003](../../docs/RULES.md#R-RT-003)). Each tick the tap copies the
 program frame (RGBA) into a buffer the camera thread handed back and sends it,
 without blocking: with a frame still waiting, it drops this one and counts it in
 `output_stats`' output drops. The camera thread converts each frame to BGRA at the
-canvas size (as is when the program frame is the canvas size, otherwise fitted inside
-it, centred, by nearest neighbour, with black bars), publishes it and hands the
+canvas size (as is when the program frame is the canvas size, otherwise, when the
+canvas changed after the program stage opened, fitted inside it, centred, by nearest
+neighbour, with black bars), publishes it and hands the
 buffer back. It runs beside streams and recordings on the same program frame, and
 `output_stats` counts no encoder input for it. A publish error fails that output
 alone, through its own failure line; the others keep running. Once the camera thread
@@ -791,7 +795,14 @@ emits `stopping` and `stopped` as from `active`.
 The render thread reads the platform capture mailbox, composites the program mix of
 the render snapshot (see *Snapshots*) at 30 frames per second, repeats the last
 capture when the mailbox is empty, and reads the composite back as RGBA8 because this
-cut has no GPU encode target. Each tick first calls `RenderReader::adopt`, which
+cut has no GPU encode target. It draws at the canvas size the collection has when the
+program stage opens, rounded down to even sizes for NV12 (`output_size`), so every
+output encodes at the canvas, not the display (#433); a canvas change while outputs
+run takes effect when the stage next opens. The capture keeps the display's size and
+the compositor scales it. The thread keeps only the newest capture from the mailbox
+and converts it to RGBA8 (RGBA copied, BGRA swizzled, NV12, which Windows' capture
+delivers, converted with its frame's matrix and range) on a tick whose shot shows the
+capture, so a program without a `display` source converts nothing. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
 the snapshot it held to the program stage's `jstream-collector` thread. The GPU images the
@@ -1033,9 +1044,9 @@ The output pipeline (`src/runtime/`) is the part of
 (a recording output or a virtual camera needs none), starts it and emits `output.state_changed` from the
 control thread. The render thread calls the platform capture mailbox and, on each
 1/30 s tick, composites the program mix from the render snapshot (see *Snapshots* in
-Design) at the encoder size: the program scene and the scenes it nests, with every
+Design) at the canvas size: the program scene and the scenes it nests, with every
 `display` source that has no stored frame showing the captured display. With no scene
-it draws the capture filling the frame. It repeats the last capture when the mailbox
+it draws the capture scaled to fill the frame. It repeats the last capture when the mailbox
 is empty, and reads the frame back. This cut encodes that CPU readback, and the
 readback is counted. The mixer thread polls the media clock and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs (see *Audio sources* in Design; the

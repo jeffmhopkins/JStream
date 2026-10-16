@@ -256,6 +256,12 @@ impl Shot {
     pub(crate) fn uses_capture(&self) -> bool {
         self.uses_capture
     }
+
+    /// Whether drawing this shows the pipeline's capture: a pass places it, or there is
+    /// no program scene and the capture fills the output.
+    pub(crate) fn shows_capture(&self) -> bool {
+        self.uses_capture || self.passes.is_empty()
+    }
 }
 
 /// Two shots are equal when they draw the same thing: the passes and keys follow from
@@ -817,7 +823,7 @@ pub(crate) struct CaptureFrame<'a> {
 /// scene is premultiplied linear `Rgba16Float` that stays on the GPU, transparent where
 /// it draws nothing. The program scene is drawn at the canvas size: straight to the
 /// output when that is the canvas size, else into a layer that the output scales to
-/// fill. Without a program scene the output is `capture` filling it, or black.
+/// fill. Without a program scene the output is `capture` scaled to fill it, or black.
 ///
 /// # Errors
 /// What the compositor reports for an upload or a pass.
@@ -843,7 +849,7 @@ pub(crate) fn compose(
         }
     }
     let capture = match capture {
-        Some(capture) if shot.uses_capture || shot.passes.is_empty() => {
+        Some(capture) if shot.shows_capture() => {
             cache.upload(
                 compositor,
                 &GpuKey::Capture,
@@ -858,9 +864,14 @@ pub(crate) fn compose(
     };
     let Some((program, nested)) = shot.passes.split_last() else {
         let image = cache.get(&GpuKey::Capture).filter(|_| capture);
+        // Scaled to fill the output, which follows the canvas, not the display.
         let items: Vec<Item<'_>> = image
             .into_iter()
-            .map(|image| whole(image, 1.0, 1.0))
+            .map(|image| {
+                let sx = output.width() as f32 / image.width() as f32;
+                let sy = output.height() as f32 / image.height() as f32;
+                whole(image, sx, sy)
+            })
             .collect();
         return compositor.render(&scene(output, Color::BLACK, &items), readback);
     };
