@@ -602,11 +602,13 @@ async fn streams_and_records_on_the_fakes_driven_over_websocket_and_mcp() {
     .expect("welcome");
     let mut events = control.events();
 
-    // MCP builds the show: a scene with a display source, then the two outputs.
+    // MCP builds the show: the display's size as the canvas (the outputs encode at the
+    // canvas), a scene with a display source, then the two outputs.
     let mut mcp = Mcp::initialize(&authority);
     mcp.call(
         "batch",
         r#"{"edits":[
+            {"type":"canvas.set_size","width":64,"height":36},
             {"type":"scene.create","scene_id":"main","name":"Main"},
             {"type":"source.create","source_id":"screen","name":"Screen","kind":{"type":"builtin","kind":"display"}},
             {"type":"item.add","scene_id":"main","item_id":"screen_1","source_id":"screen"}
@@ -768,7 +770,9 @@ async fn streams_and_records_on_the_fakes_driven_over_websocket_and_mcp() {
     drop(engine);
     let audit = std::fs::read_to_string(dir.join("audit.jsonl")).expect("the audit log");
     assert!(
-        audit.contains("\"edits\":[\"scene.create\",\"source.create\",\"item.add\"]"),
+        audit.contains(
+            "\"edits\":[\"canvas.set_size\",\"scene.create\",\"source.create\",\"item.add\"]"
+        ),
         "{audit}"
     );
     assert!(audit.contains("output.start"), "{audit}");

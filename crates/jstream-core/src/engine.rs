@@ -868,6 +868,7 @@ impl Engine {
                     *lock(&host.open_timeout),
                     Arc::clone(&state.render),
                     state.audio.wanted(),
+                    canvas_size(&state.graph),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1229,6 +1230,12 @@ enum OwnTarget {
     Record(PathBuf),
     /// The virtual camera, at the canvas size.
     Vcam(FrameSize),
+}
+
+/// The collection's canvas, width and height.
+fn canvas_size(graph: &Graph) -> (u32, u32) {
+    let canvas = graph.state().canvas();
+    (canvas.width, canvas.height)
 }
 
 /// Where a recording output in the collection records to, or the size a virtual camera
