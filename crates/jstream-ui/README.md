@@ -48,6 +48,10 @@ Contents ([Design](#design) explains the choices):
   logic behind it, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer along the bottom (faders, mutes, routing and buses, with meters and the
   master's loudness), also tested natively against `MockEngine`.
+- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the inspector's pages,
+  shown only when the server pairs devices (start pairing and show the code, list and
+  revoke devices), and the calls behind it, tested natively against `MockEngine` and a
+  stub that answers them as the server does.
 - **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
   over a placeholder background, edits their geometry with the pointer and the
   keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
@@ -70,12 +74,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   console, and the field is a password field. It may be left empty when the daemon
   served the page behind HTTP Basic with the token as the password: the browser's
   cached Basic credentials then carry the token on the upgrade, and no token
-  subprotocol is sent. A remote browser will pair with a one-time code instead
-  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): the server side is built
-  (`pairing.start` and `POST /api/v1/pair`,
-  [jstream-server › Design](../jstream-server/README.md#design)), the UI's pairing form
-  isn't ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md) decides
-  it). In the desktop app the form is skipped: the
+  subprotocol is sent. It may also be left empty in a browser that paired on the
+  server's `/pair` page, which holds its device token in a cookie the browser sends on
+  the upgrade ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md),
+  [jstream-server › Design](../jstream-server/README.md#design)); that page is the
+  server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). That connection carries the
   token in the subprotocol, which `jstream-server` accepts
@@ -135,7 +138,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Routing.** `app.rs` decides the regions: the scene and sources lists on the left,
   the canvas in the middle, the inspector on the right, and the mixer along the
   bottom. The inspector's pages are `inspector_pages()`, one line each, shown as tabs
-  once there is more than one. A failed call shows in a dismissable bar.
+  once there is more than one; the pairing panel sits under them, outside the tabs,
+  because it hides itself where the server pairs nothing. A failed call shows in a
+  dismissable bar.
 - **The shell** is a CSS grid: a status bar on top, the scene and sources lists on the left, the
   preview canvas in the middle, the inspector on the right and the mixer along the
   bottom; narrow windows stack them. Each region is its own component, so the panels
@@ -163,6 +168,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sink's own reason ("it needs Windows 11") is shown as it is. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
+- **Pairing.** The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
+  calls `device.list` when it opens and shows only if that is served: a session with no
+  server in front answers `unsupported` and the panel stays hidden. "Pair a device"
+  calls `pairing.start` and shows the code, large, with a countdown from its
+  `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address). The
+  code shows until the countdown ends or a device pairs: every 3 seconds the panel
+  re-reads `device.list`, and a device ID that wasn't listed when the code was drawn
+  means the code was used. A newer code replaces the shown one. Each device shows its
+  name and its paired and last-used dates (UTC), with a button that calls
+  `device.revoke` and re-reads the list. The code is never logged or stored by the page,
+  and `OpenCode`'s `Debug` form hides it.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
   password field is not bound to a signal: the panel reads it only on save, wraps it in
   a `SecretString` at once (trimming a pasted newline), empties the field and sends
