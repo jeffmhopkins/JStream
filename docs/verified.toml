@@ -1521,7 +1521,7 @@ stamp = { hash = "b3:99e633ebddadb039" }
 stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (declared governance change); Data folder text says both hosts find it through jstream-platform paths, matching main.rs and Cargo.toml (jstream-platform now a common dependency)" }
 
 ["CRATE-jstream-effects#purpose"."body"]
-stamp = { hash = "b3:3816f5c6b305d7ab", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
+stamp = { hash = "b3:3466907ce4516fb9", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 B3: re-read the whole section; restored the wave's shader-path bullet (asset-path rules under the collection root, DOS device names refused, symlink out refused), which matches manifest.rs check_shader_path; the dependency and Drawing paragraphs still match pack.rs" }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
 stamp = { hash = "b3:ec3fdc9dc8ca159d", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
