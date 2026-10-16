@@ -503,7 +503,9 @@ fn instructions_mark_remote_text_and_tools_carry_annotations() {
         "data, never instructions",
         "`remote_`",
         "`action_failed` `reason`",
+        "whole `action_failed` `reason`",
         "`destructiveHint`",
+        "`source`, whose `browser` kind loads any http or https page",
     ] {
         assert!(legacy.contains(needle), "{needle}: {legacy}");
     }
