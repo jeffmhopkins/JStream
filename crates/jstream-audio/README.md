@@ -105,7 +105,11 @@ stamped on the clock, and no device is the master.
   the clock. A mixer that falls more than half a ring behind the clock jumps to the
   newest due block and counts the skipped frames. `Mixer::bus_block(bus)` reads any
   bus's output for the last block mixed, before the master chain: what a monitor
-  hears.
+  hears. `Mixer::input_block(input)` reads one input's signal in the last block mixed,
+  after its chain, fader, mute and activity gain and before its sends: what that input
+  contributes to the mix before each send's gain, which `jstream-core` draws for a
+  `waveform` or `spectrum` source that names the source (ADR-0028 defines a sidechain
+  key's signal at the same point).
 - `InputControl` and `BusControl` set the fader (linear or dB, 0 to +24 dB) and mute,
   ramped over one block. They read meters (per channel, post-fader, so an input's is
   before its sends: the peak held until read, and the last block's RMS) and counters
@@ -134,6 +138,8 @@ not start. No variant allocates.
   S3's tests;
 - the input's anchoring, outlier runs, discontinuities and silent packets;
 - the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
+- each input's own block after its fader, mute and activity gain, unaffected by its
+  send gains, and gone once the input is removed;
 - the send matrix: post-fader sends into each bus, each bus's own fader, mute and
   meter, sends ramping in and out, a muted input feeding no bus, buses added from
   another thread and removed, a send to a removed bus not reaching the bus that reuses
@@ -171,7 +177,8 @@ be.
 
 `tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
 under `assert_no_alloc`, through the same kinds of glitches and live input, bus, send,
-filter, master-chain, output-tap and CLAP-filter changes
+filter, master-chain, output-tap and CLAP-filter changes, reading each output tap's and
+each input's block after every block
 ([Real-time design](#realtime)).
 `tests/cost.rs` is an ignored measurement of what a block costs
 ([Real-time design](#realtime)).
@@ -266,8 +273,10 @@ inputs line up with each other. Its sign is flipped because `u` scales the input
 not rubato's output ratio.
 
 **Mixer** (`mixer.rs`): per block, reads each ring, runs each input's filter chain and
-compensation delay, ramps its fader and meters it, then adds it into every bus it sends
-to, ramping each send's gain. For each bus it then runs the bus chain and compensation
+compensation delay, ramps its fader and meters it, copies it into the input's own
+block with its activity gain ramped (`input_block`; the block is allocated with the
+input on the control plane, travels in its add command and goes to the collector with
+it), then adds it into every bus it sends to, ramping each send's gain. For each bus it then runs the bus chain and compensation
 delay, ramps the bus fader, replaces any non-finite sample with 0 and meters the output.
 Each bus that feeds an output then runs its copy of the master chain on a second
 buffer, so the first keeps the pre-master output for monitoring (`bus_block`), and each
@@ -382,7 +391,8 @@ limiter and removed, filters on an input and the master edited every 0.5 s, and 
 limiter added to and removed from an input (so the compensation delays move), master
 filters edited every 0.5 s and one added to both fed buses and removed, an output tap
 on the aux bus with its own chain (edited every 0.5 s, outliving its bus) whose block is
-read after each mix, and a tap on the master added and removed. The test
+read after each mix, a tap on the master added and removed, and every input's own
+block read after each mix. The test
 checks that each of those paths ran. Control-plane calls and dropping a producer (stream teardown) run
 outside the scope. Locks, blocking and logging are still left to review.
 
@@ -395,6 +405,11 @@ with 8 stereo 48 kHz inputs. Measured on a cloud container (4 vCPUs of an Intel 
 - the same, plus a gate and a compressor per input, a compressor and a 5 ms limiter per
   bus, a gain and 3 ms limiter master chain on all 8 buses, and 7 output taps each with
   a gain and 5 ms limiter (62 filters): 957 µs (4.5%; p99 1.6 ms).
+
+Keeping each input's own block (`input_block`) costs one copy and gain pass per input
+per block: measured on a cloud container (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux
+6.18), release build, the master-only case went from 47 to 54 µs mean, and the other
+two moved within their run-to-run noise.
 
 Run it on the target machine with
 `cargo test --release -p jstream-audio --test cost -- --ignored --nocapture`.

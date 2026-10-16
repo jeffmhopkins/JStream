@@ -1,15 +1,15 @@
 //! The audio scope's push and read, and painting and taking a waveform or spectrum
-//! frame, of the program mix or of a bus (#362), do not allocate once the frame pool
-//! has filled (R-RT-001 for the push, which
-//! runs on the mixer thread; painting runs on the `jstream-sources` thread, but drawing
-//! 30 frames a second stays allocation-free too).
+//! frame, of the program mix, of a bus (#362) or of another source (#459), do not
+//! allocate once the frame pool has filled (R-RT-001 for the push, which runs on the
+//! mixer thread; painting runs on the `jstream-sources` thread, but drawing 30 frames
+//! a second stays allocation-free too).
 //!
 //! This test binary installs `assert_no_alloc`'s allocator as its global allocator, so
 //! it is its own binary: no other test runs under it.
 
 use assert_no_alloc::{AllocDisabler, assert_no_alloc, reset_violation_count, violation_count};
 use jstream_media::{MediaTime, Timebase};
-use jstream_protocol::{BusId, Settings};
+use jstream_protocol::{BusId, Settings, SourceId};
 use jstream_sources::{AudioScope, AudioScopes, Context, Registry};
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -22,6 +22,7 @@ fn scope_pushes_reads_and_frames_do_not_allocate() {
     let scope = Arc::new(AudioScope::new());
     let scopes = Arc::new(AudioScopes::with_program(Arc::clone(&scope)));
     let bus = scopes.bus(&BusId::new("vod"));
+    let mic = scopes.source(&SourceId::new("mic"));
     let block: Vec<f32> = (0..960).map(|n| (n as f32 * 0.05).sin()).collect();
     let mut window = vec![0.0f32; AudioScope::MAX_WINDOW];
     let registry = Registry::builtin();
@@ -30,14 +31,17 @@ fn scope_pushes_reads_and_frames_do_not_allocate() {
         ..Context::default()
     };
     let vod = json!({"type": "bus", "bus_id": "vod"});
+    let from_mic = json!({"type": "source", "source_id": "mic"});
     let mut sources: Vec<_> = [
-        ("waveform", Value::Null),
-        ("spectrum", Value::Null),
-        ("waveform", vod.clone()),
-        ("spectrum", vod),
+        ("waveform", Value::Null, Value::Null),
+        ("spectrum", Value::Null, Value::Null),
+        ("waveform", vod.clone(), Value::Null),
+        ("spectrum", vod, Value::Null),
+        ("waveform", Value::Null, from_mic.clone()),
+        ("spectrum", Value::Null, from_mic),
     ]
     .into_iter()
-    .map(|(kind, audio)| {
+    .map(|(kind, audio, audio_source)| {
         let mut settings: Settings = registry
             .descriptor(kind)
             .expect("a scope kind")
@@ -46,6 +50,7 @@ fn scope_pushes_reads_and_frames_do_not_allocate() {
             .map(|p| (p.id.clone(), p.default.clone()))
             .collect();
         settings.insert("audio", audio);
+        settings.insert("audio_source", audio_source);
         registry.create(kind, &settings, &ctx).expect("a source")
     })
     .collect();
@@ -54,6 +59,7 @@ fn scope_pushes_reads_and_frames_do_not_allocate() {
     for tick in 0..4 {
         scope.push(48_000, &block);
         bus.push(48_000, &block);
+        mic.push(48_000, &block);
         for source in &mut sources {
             if let Some(painter) = source.painter() {
                 painter.paint(at(tick));
@@ -72,6 +78,7 @@ fn scope_pushes_reads_and_frames_do_not_allocate() {
         assert_no_alloc(|| {
             scope.push(48_000, &block);
             bus.push(48_000, &block);
+            mic.push(48_000, &block);
             scope.latest(&mut window);
             for (source, painter) in sources.iter_mut().zip(&painters) {
                 painter.paint(at(tick));

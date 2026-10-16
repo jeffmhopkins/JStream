@@ -56,7 +56,7 @@ use jstream_protocol::{
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
 use jstream_sources::AudioScopes;
 
-use crate::audio::{MasterMetering, MixerHandles, ScopeTaps};
+use crate::audio::{MasterMetering, MixerHandles, ScopeTaps, TapFeed};
 use crate::audio_sources::{AudioInputs, Wanted};
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, DropGuard, DropSnapshot, FnDropSource, VideoEncodeDrops,
@@ -1645,7 +1645,7 @@ struct MixOut {
     /// What the `waveform` and `spectrum` sources draw: the program mix's scope gets
     /// each block.
     scopes: Arc<AudioScopes>,
-    /// The bus scopes, each fed its bus's block.
+    /// The bus and source scopes, each fed its bus's or input's block.
     taps: Arc<ScopeTaps>,
 }
 
@@ -1678,8 +1678,8 @@ struct Mixing {
 }
 
 /// Mixes on the media clock, meters the master, and pushes each block into the program
-/// mix's audio scope and each drawn bus's block into its scope (pushes neither lock nor
-/// allocate, and the list of bus scopes is adopted lock-free), and into every encoder
+/// mix's audio scope and each drawn bus's and source's block into its scope (pushes
+/// neither lock nor allocate, and the list of scopes is adopted lock-free), and into every encoder
 /// session the program has handed it, letting go of one that has finished. A rejected block or a poll error
 /// is fatal: both mean the mixer and the encoder disagree about the format, which no
 /// retry fixes.
@@ -1702,19 +1702,26 @@ fn mixer_loop(
     } = out;
     let format = *format;
     let scope = scopes.program();
-    let mut bus_scopes = taps.reader();
+    let mut scope_taps = taps.reader();
     let samples_len = mixer.config().block_frames.saturating_mul(2);
     let mut samples = vec![0.0f32; samples_len];
+    // What a silent drawn source's scope gets.
+    let silence = vec![0.0f32; samples_len];
     let mut targets: Vec<AudioInput> = Vec::new();
     'mix: while !stop.load(Ordering::Relaxed) {
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
                 metering.process(&samples);
                 scope.push(format.sample_rate(), &samples);
-                let (bus_taps, replaced) = bus_scopes.adopt();
-                for tap in bus_taps {
-                    if let Some(bus) = mixer.bus_block(tap.bus) {
-                        tap.scope.push(format.sample_rate(), bus);
+                let (drawn, replaced) = scope_taps.adopt();
+                for tap in drawn {
+                    let block = match tap.feed {
+                        TapFeed::Bus(bus) => mixer.bus_block(bus),
+                        TapFeed::Input(input) => mixer.input_block(input),
+                        TapFeed::Silence => Some(&silence[..]),
+                    };
+                    if let Some(block) = block {
+                        tap.scope.push(format.sample_rate(), block);
                     }
                 }
                 if let Some(replaced) = replaced {
@@ -1750,7 +1757,7 @@ fn mixer_loop(
             }
         }
     }
-    collector.free(Garbage::Scopes(bus_scopes.into_held()));
+    collector.free(Garbage::Scopes(scope_taps.into_held()));
 }
 
 struct OutputJob {

@@ -9,8 +9,8 @@
 use crate::app::SessionContext;
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
-    AssetRoot, Edit, KindDescriptor, ParamDescriptor, ParamType, Reference, Settings, SourceId,
-    SourceInfo, SourceKind,
+    AssetRoot, Edit, KindDescriptor, Media, ParamDescriptor, ParamType, Reference, Settings,
+    SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -517,13 +517,14 @@ fn input_for(
                     .collect()
             })
         }),
-        ParamType::Source { .. } => {
+        ParamType::Source { media } => {
             let own = source_id.clone();
+            let media = *media;
             reference_select(value, send, move || {
                 studio.collection.with(|c| {
                     c.iter()
                         .flat_map(|c| &c.sources)
-                        .filter(|s| s.source_id != own)
+                        .filter(|s| s.source_id != own && offers(s, media))
                         .map(|s| {
                             let r = Reference::Source {
                                 source_id: s.source_id.clone(),
@@ -549,6 +550,20 @@ fn input_for(
         }),
         // A type this UI doesn't know: shown, not editable.
         _ => view! { <code class="readonly">{text}</code> }.into_any(),
+    }
+}
+
+/// Whether a source reference parameter restricted to `media` offers `source`. An
+/// audio reference offers only sources with a mixer channel: those that report audio
+/// settings, less `scene` sources, which have none of their own (ADR-0028), so the
+/// select lists what the engine accepts (#459). A video one offers every source, as
+/// a source's info doesn't say whether its kind makes video.
+fn offers(source: &SourceInfo, media: Option<Media>) -> bool {
+    match media {
+        Some(Media::Audio) => {
+            source.audio.is_some() && !matches!(source.kind, SourceKind::Scene { .. })
+        }
+        _ => true,
     }
 }
 
@@ -646,7 +661,9 @@ fn asset_input(
 
 #[cfg(test)]
 mod tests {
-    use super::{asset_value, display, is_visible, parse, rgb_part, sections, value_of, with_rgb};
+    use super::{
+        asset_value, display, is_visible, offers, parse, rgb_part, sections, value_of, with_rgb,
+    };
     use jstream_control::protocol::{
         AssetRoot, EnumOption, KindCategory, KindDescriptor, ParamDescriptor, ParamType, Reference,
         Settings, VisibleIf,
@@ -784,6 +801,53 @@ mod tests {
         assert_eq!(display(&json!("abc")), "abc");
         assert_eq!(display(&json!(2.5)), "2.5");
         assert_eq!(display(&Value::Null), "");
+    }
+
+    /// #459: an audio source reference (a waveform's `audio_source`) offers only the
+    /// sources with a mixer channel; any other source reference offers every source.
+    #[test]
+    fn an_audio_reference_offers_only_sources_with_audio() {
+        use jstream_control::protocol::{
+            AudioFollow, Finite32, Media, SceneId, SourceAudio, SourceId, SourceInfo, SourceKind,
+        };
+        let audio = SourceAudio {
+            enabled: true,
+            follow: AudioFollow::Always,
+            gain_db: Finite32::ZERO,
+            muted: false,
+        };
+        let source = |kind: SourceKind, audio: Option<SourceAudio>| SourceInfo {
+            source_id: SourceId::new("s"),
+            name: "S".into(),
+            kind,
+            settings: Settings::new(),
+            duplicated_from: None,
+            audio,
+        };
+        let mic = source(
+            SourceKind::Builtin {
+                kind: "audio_input".into(),
+            },
+            Some(audio),
+        );
+        let image = source(
+            SourceKind::Builtin {
+                kind: "image".into(),
+            },
+            None,
+        );
+        let nested = source(
+            SourceKind::Scene {
+                scene_id: SceneId::new("inner"),
+            },
+            Some(audio),
+        );
+        assert!(offers(&mic, Some(Media::Audio)));
+        assert!(!offers(&image, Some(Media::Audio)));
+        assert!(!offers(&nested, Some(Media::Audio)));
+        for any in [None, Some(Media::Video)] {
+            assert!(offers(&image, any) && offers(&mic, any) && offers(&nested, any));
+        }
     }
 
     #[test]

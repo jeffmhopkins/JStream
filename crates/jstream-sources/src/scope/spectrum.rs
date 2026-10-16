@@ -1,6 +1,6 @@
 //! The `spectrum` source: the latest audio's frequency spectrum as bars.
 
-use super::waveform::{audio_param, enum_type, live, smoothing_type};
+use super::waveform::{audio_param, audio_source_param, enum_type, live, smoothing_type};
 use super::{Scope, WINDOW, bad, color, create, ease, smoothing, string};
 use crate::describe::{kind, param, size};
 use crate::source::setting;
@@ -28,6 +28,7 @@ impl SpectrumKind {
         Self(KindDescriptor {
             params: vec![
                 audio_param(),
+                audio_source_param(),
                 param("width", "Width", size(), json!(640)),
                 param("height", "Height", size(), json!(240)),
                 live(param(

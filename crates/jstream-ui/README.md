@@ -118,7 +118,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   read once per kind and kept), with no code per kind (ADR-0025): a checkbox, number
   (and slider when bounded), select, colour, text, asset (root and path) or reference
   select (of the scenes, the other sources, or the buses, with None for `null`, which
-  for a `waveform`'s or `spectrum`'s `audio` is the program mix) per parameter type, in the descriptor's order, grouped by `group`, advanced
+  for a `waveform`'s or `spectrum`'s `audio` is the program mix; a source reference
+  restricted to audio, such as their `audio_source`, offers only the sources that
+  report audio settings, less `scene` sources, as the engine accepts no other) per
+  parameter type, in the descriptor's order, grouped by `group`, advanced
   ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for

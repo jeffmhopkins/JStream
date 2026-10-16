@@ -8,7 +8,8 @@
 //! (a string drawn with a TrueType or OpenType font, read with `skrifa`), `media` (a
 //! video file, demuxed and decoded by the platform's [`MediaDecoders`] from
 //! [`Context::media`]), and `waveform` and `spectrum` (the latest audio of an
-//! [`AudioScope`]: the program mix's, or a bus's, found through [`AudioScopes`]). The audio-only kinds (`audio_input`, `desktop_audio` and
+//! [`AudioScope`]: the program mix's, a bus's or another source's, found through
+//! [`AudioScopes`]). The audio-only kinds (`audio_input`, `desktop_audio` and
 //! `app_audio`) make no frames: the engine records the [`AudioTarget`] their settings
 //! name. The other built-in kinds are described only. `jstream-core` drives sources
 //! from its `jstream-sources` thread through [`Registry::create`], [`Source::frame`],
@@ -35,5 +36,5 @@ pub use audio::AudioTarget;
 pub use error::SourceError;
 pub use media::MediaAudio;
 pub use registry::Registry;
-pub use scope::{AudioScope, AudioScopes};
+pub use scope::{AudioScope, AudioScopes, drawn_source};
 pub use source::{AssetRoots, Context, Limits, Painter, Source, SourceKind, needs_restart};

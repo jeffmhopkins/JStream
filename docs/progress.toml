@@ -754,7 +754,8 @@ note = "media file hardware tests (#382)"
 id = "W1"
 milestone = "M2"
 title = "Audio waveform and spectrum sources"
-status = "planned"
+status = "review"
+prs = [460, 463, 466]
 
 [[item]]
 id = "K1"
