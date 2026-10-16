@@ -53,7 +53,9 @@ impl MediaKind {
                     ..param(
                         "file",
                         "Media file",
-                        asset(&["mp4", "mkv", "mov", "webm", "mp3", "wav", "flac", "ogg"]),
+                        asset(&[
+                            "mp4", "mkv", "mov", "webm", "mp3", "m4a", "wav", "flac", "ogg",
+                        ]),
                         Value::Null,
                     )
                 },

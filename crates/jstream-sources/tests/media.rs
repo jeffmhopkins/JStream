@@ -230,6 +230,28 @@ fn no_file_shows_one_transparent_pixel_and_the_file_is_not_live() {
     assert_eq!(fake.stats().opened, 0);
 }
 
+/// The `file` parameter takes the audio and video files the platform plays, `.m4a`
+/// among them (#428), and refuses others.
+#[test]
+fn the_file_parameter_takes_media_extensions() {
+    let registry = Registry::builtin();
+    let file = registry
+        .descriptor("media")
+        .and_then(|kind| kind.param("file"))
+        .expect("the file parameter");
+    let asset = |path: &str| {
+        Reference::Asset {
+            root: AssetRoot::Collection,
+            path: path.into(),
+        }
+        .to_value()
+    };
+    for path in ["clip.mp4", "song.m4a", "song.mp3", "song.flac"] {
+        assert_eq!(file.check(&asset(path)), Ok(()), "{path}");
+    }
+    assert!(file.check(&asset("notes.txt")).is_err());
+}
+
 #[test]
 fn files_it_cant_play_are_errors() {
     let (dir, fake) = setup("errors", clip());
