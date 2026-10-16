@@ -393,8 +393,10 @@ dropped any threads it opened, then settles `stopped`. The start answers
 `action_failed` and does not settle `active`. Once the pipeline is `active`, stop
 takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locking*.
 
-- **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule:
-  `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
+- **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule
+  (except, until CLAP filters run, the engine's own refusal of a `clap/` `filter.add`,
+  `invalid_argument` on its `kind`, checked before the graph and so before
+  `expected_rev`): `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
   edits in order on a working copy, the first failure aborting with `not_found`,
   `already_exists` or `invalid_argument` (`edits.<n>.<field>`) and nothing applied; on
   success `rev` goes up by exactly one. The engine adds the per-client **idempotency
