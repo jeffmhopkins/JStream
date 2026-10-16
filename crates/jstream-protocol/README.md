@@ -42,7 +42,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `send.remove`), with `ItemTransform` (deprecated), `Crop`, `SourceKind` and
   `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch`, `audio.reset_loudness`);
+  `scene.switch`, `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
@@ -76,6 +76,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   shares them. No kind is defined here.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
   `events.dropped`, `stats.tick` and `meters.tick`.
+- **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
+  `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
+  their defaults and range checks, which the engine applies), and the binary
+  frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
+  `to_bytes`/`parse` and `BinaryError`, and `KeyframeGate`, the drop rule every hop that
+  queues frames applies ([Binary streams](#design)).
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
@@ -92,9 +98,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
-  audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
-  `audio.reset_loudness`); 0.18 added the `virtual_cam` output kind, 0.17
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.20 because of
+  the preview streams (`preview.subscribe`, `preview.unsubscribe` and the binary
+  frame); 0.19 added audio (sources' audio, buses, sends, `bus.list`, `meters.tick`
+  and `audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
   `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
@@ -152,8 +159,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":19},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":19},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":20},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":20},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -771,14 +778,57 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   the engine's runtime source sizes, and live geometry values (ADR-0032's `live.set`),
   which need the live-value channel. Both are later minors.
 
-### Binary streams (deferred)
+### Binary streams
 
-Preview video and audio meters
-([ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol)) stay WebSocket binary
-frames, not designed yet except the meter frame's fields. Preview is the M2 low-res
-H.264 stream ([ROADMAP › M2](../../ROADMAP.md#m2)). They will travel with a small fixed
-header (stream ID, stream kind, the `rev` or media timestamp they show) and be opened
-and closed with JSON subscriptions. That header is part of the preview work.
+Preview video travels as WebSocket binary messages, one `BinaryFrame` each, alongside
+the JSON text messages of the same connection (0.20,
+[ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol),
+[ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). Audio meters travel in the JSON
+`meters.tick` event; a binary meter stream would be another kind of the same frame.
+
+- **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,
+  codecs?}` is an action: it opens a stream of the program mix for the calling
+  session only, tagged with the `channel` number the client chose (a `u32`, not an ID:
+  it only tells the session's streams apart in the frame header). The picture is the
+  canvas scaled down to fit `max_width` × `max_height` (default 640 × 360, at most
+  1920 × 1080) with even sides, so it follows `canvas.set_size`. A picture is sent when
+  what the program mix draws changes, at most `fps` times a second (default 15, at
+  most 30), and at least every 2 s as a keyframe. `codecs` lists what the client can
+  decode, most preferred first (default `["h264", "jpeg"]`); the engine uses the first
+  it can encode, and may fall back to a later one if an encoder fails to open, so each
+  frame names its codec. A session has at most 4 streams. `preview.unsubscribe
+  {channel}` closes one (and succeeds for a channel that isn't open); so does the
+  session's end. The stream shows the mix before any master stage, which is the
+  default ARCH asks for; a post-master option comes with that stage. Over MCP, which
+  has no binary channel, `preview.subscribe` fails with `action_failed`.
+- **The frame.** A fixed 32-byte little-endian header, then the payload:
+
+  | Offset | Size | Field |
+  |---|---|---|
+  | 0 | 1 | version, 1 |
+  | 1 | 1 | kind: 1 = preview |
+  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG |
+  | 3 | 1 | flags: bit 0 keyframe, bit 1 end of stream |
+  | 4 | 4 | channel |
+  | 8 | 2 | width |
+  | 10 | 2 | height |
+  | 12 | 4 | reserved, 0 |
+  | 16 | 8 | presentation time in µs since the stream opened (signed) |
+  | 24 | 8 | the `rev` the picture shows |
+
+  An H.264 payload is one access unit in Annex B form, with the parameter sets in band
+  at keyframes, which WebCodecs' `VideoDecoder` takes with no `description`. A JPEG
+  payload is a whole baseline JFIF picture, always a keyframe. An end frame (flag bit
+  1, codec 0) says the engine ended the stream; its payload is the reason as UTF-8, and
+  the channel is free again. A client ignores a frame whose version, kind or codec it
+  doesn't know, and the reserved bytes and spare flag bits.
+- **Overload.** Frames are never buffered without bound. Each hop that queues them (the
+  engine, the server, the WebSocket client) drops a frame that finds its queue full,
+  and every later frame of that channel until a keyframe finds room (`KeyframeGate`),
+  so what a client receives always decodes. The 2 s keyframe bounds the gap.
+- **Compatibility.** The header's version byte changes only with a new protocol major.
+  A new kind, codec or flag is a minor change, and a frame a client can't read is
+  skipped.
 
 `video.snapshot` is not one of those frames. M1a uses it so an agent can check a scene
 over the JSON API and over MCP ([ROADMAP › M1](../../ROADMAP.md#m1),

@@ -42,6 +42,9 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
   session and back, with the bounded outbox that keeps a slow client from holding up
   its events.
+- **Preview frames** (`preview.rs`): the session's binary channel, queued per
+  connection and sent as WebSocket binary messages, dropping up to the next keyframe
+  when the client reads slowly.
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
 Not here yet: TLS and pairing ([Open questions](#design)).
@@ -216,8 +219,16 @@ task speaks the envelope
   run; answers go back as they complete, carrying the client's request ID. A request
   before `hello` is answered by the session itself (`handshake_required`).
 - A message that doesn't parse gets a `malformed` error, with the request ID when one is
-  readable. Binary frames get `malformed` too, until binary streams are designed.
-  Messages over 4 MiB close the connection.
+  readable. A binary message from the client gets `malformed` too: binary frames only
+  go to the client. Messages over 4 MiB close the connection.
+- **Preview frames.** After a successful `hello` the task also opens the session's
+  binary channel (`Control::binary`) and sends each frame it yields as a WebSocket
+  binary message (`BinaryFrame::to_bytes`), so `preview.subscribe` works over the
+  wire. The frames have their own queue of 8 (`FRAME_BUFFER`), apart from the outbox:
+  the writer sends text before binary, so a picture never delays an answer, and when a
+  frame finds the queue full that channel's frames are dropped until a keyframe finds
+  room (`KeyframeGate`), so what the client receives decodes. The session's own queue
+  is bounded the same way, so a slow client holds a few pictures and nothing more.
 - **Request IDs.** A `Control` session assigns its own IDs, which appear in the
   `state.changed` and `studio.changed` events its calls cause. The task maps them back to the client's wire
   IDs, so a client matches its event to its response by the ID it chose, as in the

@@ -8,6 +8,7 @@ mod audio_routing;
 mod collection;
 mod gpu_capture;
 mod history;
+mod preview;
 mod sources;
 #[cfg(all(windows, feature = "hw-tests"))]
 mod windows_gpu;

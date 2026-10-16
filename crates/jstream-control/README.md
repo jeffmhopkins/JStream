@@ -24,8 +24,9 @@ needs no async runtime from its callers (the native WebSocket client runs its ow
 the browser one runs on the page's event loop).
 
 Contents (a first cut; [Design](#design) explains the choices):
-- **The trait** (`control.rs`): `Control` with `hello`, `call` and `events`, and the
-  `BoxFuture`, `EventStream` and `MaybeSendSync` types that keep it dyn-compatible.
+- **The trait** (`control.rs`): `Control` with `hello`, `call`, `events` and
+  `binary`, and the `BoxFuture`, `EventStream`, `BinaryStream` and `MaybeSendSync`
+  types that keep it dyn-compatible.
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
 - **Mock** (`mock.rs`, feature `mock`): `MockEngine` and `MockControl`, an in-memory
@@ -64,6 +65,15 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
 - `events() -> EventStream`: an independent subscription to every event emitted after
   the call, buffered until read, in emission order. It ends when the session or the
   engine goes away.
+- `binary() -> BinaryStream`: the session's binary channel, the preview frames of its
+  `preview.subscribe` streams (protocol 0.20). A session has one: opening it again
+  ends the stream returned before (in-process it also ends that channel's preview
+  streams; over WebSocket the engine's streams go on into the new one), and
+  `preview.subscribe` fails with
+  `action_failed` until it is open. Unlike events its frames are bounded: a reader
+  that falls behind loses frames up to the next keyframe (`KeyframeGate`), so what it
+  reads decodes. The default implementation is a stream that ends at once, for an
+  implementation with no binary channel (the mock, MCP).
 
 Every method takes `&self`, so a session can be shared as `Arc<dyn Control>` with
 several calls in flight.
@@ -267,7 +277,11 @@ pulls `web-sys`.
   `req_2`, … per session, and the server reports the `state.changed` event a call
   causes with that same ID. The connection thread routes each `response` or `error` to
   its waiting call by request ID (`welcome`, and an error without an ID, answer the
-  oldest pending `hello`) and fans `event`s out to the subscriptions.
+  oldest pending `hello`) and fans `event`s out to the subscriptions. Binary messages
+  (array buffers, in the browser) are parsed as `BinaryFrame`s and queued for the stream `binary()` last opened, at
+  most 16 (`BINARY_BUFFER`), dropping up to a keyframe when full; an unreadable one is
+  skipped. The server opens its own side of the channel after `hello`, so frames
+  arrive once a `preview.subscribe` succeeds.
 - **Failures are `Disconnected`.** An invalid URL (or a `wss://` one, natively), an
   unreachable engine, or a refused upgrade fails `connect`. Natively the reason names
   HTTP 401 for the token and 403 for `Origin` or `Host`; a browser doesn't tell the page

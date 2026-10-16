@@ -5,12 +5,12 @@
 use crate::{Connector, Server, ServerConfig, Token};
 use futures_util::{SinkExt, StreamExt};
 use jstream_control::protocol::{
-    Action, Batch, Call, CallResult, ClientId, Edit, Event, Hello, OutputId, OutputState,
-    PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Response, Rev,
-    SceneId, ServerMessage, Welcome,
+    Action, Batch, BinaryFrame, BinaryHeader, Call, CallResult, ClientId, Edit, Event, Hello,
+    OutputId, OutputState, PROTOCOL_VERSION, PreviewCodec, ProtocolError, ProtocolVersion, Query,
+    QueryResult, RequestId, Response, Rev, SceneId, ServerMessage, StreamKind, Welcome,
 };
 use jstream_control::{
-    BoxFuture, Control, ControlError, EventStream, MockEngine, WsConfig, WsControl,
+    BinaryStream, BoxFuture, Control, ControlError, EventStream, MockEngine, WsConfig, WsControl,
 };
 use std::future::Future;
 use std::sync::Arc;
@@ -52,14 +52,6 @@ fn start(engine: &MockEngine) -> Harness {
 
 /// A server serving `engine`, with its configuration changed by `configure`.
 fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) -> Harness {
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .enable_all()
-        .build()
-    {
-        Ok(runtime) => runtime,
-        Err(error) => panic!("runtime: {error}"),
-    };
     let sessions = Arc::new(AtomicUsize::new(0));
     let open = Arc::new(AtomicUsize::new(0));
     let taken = Arc::new(AtomicUsize::new(0));
@@ -82,6 +74,28 @@ fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) ->
             silent: Arc::clone(silent),
         })
     });
+    serve(connector, configure, sessions, open, taken, silent)
+}
+
+/// A server opening its sessions with `connector`, counting them in `sessions`,
+/// `open` and `taken`, with `silent` as its [`Harness`]'s flag (see [`Harness`]). The
+/// connector's sessions honour `silent` only if they are [`Tracked`].
+fn serve(
+    connector: Connector,
+    configure: impl FnOnce(&mut ServerConfig),
+    sessions: Arc<AtomicUsize>,
+    open: Arc<AtomicUsize>,
+    taken: Arc<AtomicUsize>,
+    silent: Arc<AtomicBool>,
+) -> Harness {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => panic!("runtime: {error}"),
+    };
     let mut config = match Token::new(TOKEN) {
         Ok(token) => ServerConfig::new(token),
         Err(error) => panic!("token: {error}"),
@@ -1802,6 +1816,130 @@ fn mcp_keep_alive_outlasts_the_header_read_timeout() {
         (first, second)
     });
     assert_eq!((first.status, second.status), (200, 200));
+}
+
+/// A mock session with a binary channel the test feeds: [`Control::binary`] hands the
+/// sending end of a fresh channel to `feed`.
+struct Framed {
+    inner: jstream_control::MockControl,
+    feed: Arc<std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<BinaryFrame>>>>,
+}
+
+impl Control for Framed {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        self.inner.hello(hello)
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        self.inner.call(call)
+    }
+
+    fn events(&self) -> EventStream {
+        self.inner.events()
+    }
+
+    fn binary(&self) -> BinaryStream {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        *self
+            .feed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(tx);
+        Box::pin(futures_util::stream::poll_fn(move |cx| rx.poll_recv(cx)))
+    }
+}
+
+fn preview_frame(channel: u32, keyframe: bool, n: u8) -> BinaryFrame {
+    BinaryFrame {
+        header: BinaryHeader {
+            kind: StreamKind::Preview,
+            channel,
+            codec: Some(PreviewCodec::H264),
+            keyframe,
+            end: false,
+            width: 640,
+            height: 360,
+            pts_us: i64::from(n) * 66_666,
+            rev: Rev(u64::from(n)),
+        },
+        payload: Arc::from(&[0, 0, 0, 1, n][..]),
+    }
+}
+
+/// The session's binary frames reach the client as binary messages, in order and
+/// byte for byte, once the handshake has opened the channel; the server reads none
+/// from the client.
+#[test]
+fn preview_frames_go_out_as_binary_messages() {
+    let engine = MockEngine::new();
+    let feed = Arc::new(std::sync::Mutex::new(None));
+    let slot = Arc::clone(&feed);
+    let connector: Connector = Arc::new(move || {
+        Box::new(Framed {
+            inner: engine.connect(),
+            feed: Arc::clone(&slot),
+        })
+    });
+    let counter = || Arc::new(AtomicUsize::new(0));
+    let silent = Arc::new(AtomicBool::new(false));
+    let harness = serve(connector, |_| {}, counter(), counter(), counter(), silent);
+    let (control, _) = harness.session();
+    let mut frames = control.binary();
+    // The server opened the session's channel when the handshake succeeded.
+    let sender = feed
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+        .expect("the server opened the binary channel");
+    let sent: Vec<_> = (0..3).map(|n| preview_frame(5, n == 0, n)).collect();
+    for frame in &sent {
+        assert!(sender.send(frame.clone()).is_ok());
+    }
+    let end = BinaryFrame::end(StreamKind::Preview, 5, Rev(3), "the encoder stopped");
+    assert!(sender.send(end.clone()).is_ok());
+    let received: Vec<_> = harness.run(async {
+        let mut received = Vec::new();
+        while received.len() < 4 {
+            match frames.next().await {
+                Some(frame) => received.push(frame),
+                None => panic!("the binary channel ended"),
+            }
+        }
+        received
+    });
+    assert_eq!(received[..3], sent[..]);
+    assert_eq!(received[3], end);
+
+    // A client's binary message is not part of the protocol.
+    let bearer = format!("Bearer {TOKEN}");
+    let mut socket = match harness.raw(
+        Some(&harness.own_origin()),
+        Some(&harness.authority.clone()),
+        Some(&bearer),
+    ) {
+        Ok(socket) => socket,
+        Err(status) => panic!("refused: {status}"),
+    };
+    let reply = harness.run(async {
+        if let Err(error) = socket.send(Message::Binary(vec![1, 2, 3].into())).await {
+            panic!("send: {error}");
+        }
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(reply))) => {
+                    match serde_json::from_str::<ServerMessage>(reply.as_str()) {
+                        Ok(message) => return message,
+                        Err(error) => panic!("unreadable reply {reply}: {error}"),
+                    }
+                }
+                Some(Ok(_)) => continue,
+                other => panic!("no reply: {other:?}"),
+            }
+        }
+    });
+    match reply {
+        ServerMessage::Error(error) => assert_eq!(error.error.error.code(), "malformed"),
+        other => panic!("unexpected reply {other:?}"),
+    }
 }
 
 /// A UI bundle in a fresh temporary directory, removed on drop, beside a `secret` file

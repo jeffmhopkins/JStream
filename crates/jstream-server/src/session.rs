@@ -22,6 +22,11 @@
 //! calls are in flight such an event is held back (with every event after it, to keep
 //! the order) until the answer arrives or no call is left in flight.
 //!
+//! **Preview frames.** Once the handshake succeeds the task also opens the session's
+//! binary channel and sends its frames as binary messages, after any JSON message
+//! that is waiting ([`preview`](crate::preview)). It reads no binary messages: a client
+//! that sends one gets a `malformed` error.
+//!
 //! **Slow clients.** The task never waits on the socket. What it sends goes into an
 //! [`Outbox`], and a writer future that owns the socket's sink sends it, one message at a
 //! time, while the task keeps reading the client and draining the session's events. So a
@@ -36,11 +41,12 @@
 //! client that sends requests without reading the answers is held back by the socket as
 //! before.
 
+use crate::preview::{self, Frames};
 use axum::extract::ws::{CloseFrame, Message, WebSocket, close_code};
 use futures_util::future::BoxFuture as SendFuture;
 use futures_util::stream::{FuturesUnordered, SplitSink};
 use futures_util::{SinkExt, StreamExt};
-use jstream_control::{BoxFuture, Control, ControlError, EventStream};
+use jstream_control::{BinaryStream, BoxFuture, Control, ControlError, EventStream};
 use jstream_protocol::{
     ClientId, ClientMessage, ErrorResponse, Event, EventMessage, Hello, ProtocolError, RequestId,
     Response, ServerMessage, Welcome, WireError,
@@ -117,11 +123,13 @@ pub(crate) async fn run(
     let control: &dyn Control = &*control;
     let mut calls: FuturesUnordered<BoxFuture<'_, Answer>> = FuturesUnordered::new();
     let mut events: Option<EventStream> = None;
+    let mut binary: Option<BinaryStream> = None;
+    let mut frames = Frames::default();
     let mut ids = IdMap::default();
     let handshake_deadline = tokio::time::sleep_until(hello_by);
     tokio::pin!(handshake_deadline);
     let end: Result<Option<CloseFrame>, Closed> = loop {
-        if writer.start(&mut outbox).is_err() {
+        if writer.start(&mut outbox, &mut frames).is_err() {
             break Err(Closed);
         }
         tokio::select! {
@@ -146,7 +154,7 @@ pub(crate) async fn run(
                     None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break Err(Closed),
                     Some(Ok(Message::Text(text))) => text,
                     Some(Ok(Message::Binary(_))) => {
-                        outbox.push(malformed(None, "binary frames are not part of the protocol yet"));
+                        outbox.push(malformed(None, "the server reads no binary messages"));
                         continue;
                     }
                     // Pings are answered by the WebSocket layer.
@@ -175,6 +183,7 @@ pub(crate) async fn run(
                             ids.client_id = Some(welcome.client_id.clone());
                             if events.is_none() {
                                 events = Some(control.events());
+                                binary = Some(control.binary());
                             }
                             outbox.push(ServerMessage::Welcome(welcome));
                         }
@@ -213,6 +222,7 @@ pub(crate) async fn run(
                 outbox.push(reply);
                 flush(&mut outbox, &mut ids, !calls.is_empty());
             }
+            frame = preview::next_frame(&mut binary) => frames.push(frame),
             event = next_event(&mut events) => {
                 let Some(event) = event else {
                     break Ok(Some(close(close_code::AWAY, "the engine went away")));
@@ -239,9 +249,11 @@ pub(crate) async fn run(
         Ok(None) => tracing::info!("connection closed"),
         Err(Closed) => tracing::info!("connection closed: client gone or send failed"),
     }
-    // Nothing reads the session's events from here on: end the subscription now, so the
-    // engine stops queueing for this connection while the last messages go out.
+    // Nothing reads the session's events or frames from here on: end the subscriptions
+    // now, so the engine stops queueing for this connection while the last messages go
+    // out.
     drop(events);
+    drop(binary);
     if let Ok(frame) = end {
         // What is queued (a refused handshake's error, say) goes before the close frame.
         // Then the closing handshake: read, and drop, what the client still sends until
@@ -489,25 +501,27 @@ impl Writer {
         }
     }
 
-    /// Starts sending the outbox's next message, unless a send is in progress or the
-    /// outbox is empty.
-    fn start(&mut self, outbox: &mut Outbox) -> Result<(), Closed> {
+    /// Starts sending the outbox's next message, or if it is empty the next binary
+    /// frame, unless a send is in progress or there is nothing to send.
+    fn start(&mut self, outbox: &mut Outbox, frames: &mut Frames) -> Result<(), Closed> {
         if self.sending.is_some() {
             return Ok(());
         }
         let Some(mut sink) = self.idle.take() else {
             return Err(Closed);
         };
-        let Some(message) = outbox.pop() else {
-            self.idle = Some(sink);
-            return Ok(());
+        let message = match outbox.pop() {
+            Some(message) => Message::Text(encode(&message)?.into()),
+            None => match frames.pop() {
+                Some(bytes) => Message::Binary(bytes.into()),
+                None => {
+                    self.idle = Some(sink);
+                    return Ok(());
+                }
+            },
         };
-        let text = encode(&message)?;
         self.sending = Some(Box::pin(async move {
-            let sent = sink
-                .send(Message::Text(text.into()))
-                .await
-                .map_err(|_| Closed);
+            let sent = sink.send(message).await.map_err(|_| Closed);
             (sink, sent)
         }));
         Ok(())
@@ -525,7 +539,8 @@ impl Writer {
         sent
     }
 
-    /// Sends everything still queued, then the close message.
+    /// Sends every JSON message still queued (not the binary frames), then the close
+    /// message.
     async fn finish(
         &mut self,
         outbox: &mut Outbox,
@@ -535,7 +550,7 @@ impl Writer {
             if self.sending.is_some() {
                 self.sent().await?;
             }
-            self.start(outbox)?;
+            self.start(outbox, &mut Frames::default())?;
             if self.sending.is_none() {
                 break;
             }

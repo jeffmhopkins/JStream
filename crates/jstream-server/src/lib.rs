@@ -20,6 +20,7 @@ mod error;
 mod gate;
 mod listener;
 mod mcp;
+mod preview;
 mod session;
 #[cfg(test)]
 mod tests;
