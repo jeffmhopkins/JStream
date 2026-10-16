@@ -10,9 +10,10 @@
 
 use crate::error::ControlError;
 use futures_core::Stream;
-use jstream_protocol::{Call, Event, Hello, Response, Welcome};
+use jstream_protocol::{BinaryFrame, Call, Event, Hello, Response, Welcome};
 use std::future::Future;
 use std::pin::Pin;
+use std::task::{Context, Poll};
 
 /// A boxed future, as returned by [`Control`] methods.
 ///
@@ -39,6 +40,18 @@ pub type EventStream = Pin<Box<dyn Stream<Item = Event> + Send>>;
 /// `Send` on native targets, not on `wasm32` (see [`BoxFuture`]).
 #[cfg(target_arch = "wasm32")]
 pub type EventStream = Pin<Box<dyn Stream<Item = Event>>>;
+
+/// The binary frames pushed to one session, as returned by [`Control::binary`].
+///
+/// `Send` on native targets, not on `wasm32` (see [`BoxFuture`]).
+#[cfg(not(target_arch = "wasm32"))]
+pub type BinaryStream = Pin<Box<dyn Stream<Item = BinaryFrame> + Send>>;
+
+/// The binary frames pushed to one session, as returned by [`Control::binary`].
+///
+/// `Send` on native targets, not on `wasm32` (see [`BoxFuture`]).
+#[cfg(target_arch = "wasm32")]
+pub type BinaryStream = Pin<Box<dyn Stream<Item = BinaryFrame>>>;
 
 /// `Send + Sync` on native targets, nothing on `wasm32`. The supertrait of [`Control`].
 #[cfg(not(target_arch = "wasm32"))]
@@ -87,4 +100,31 @@ pub trait Control: MaybeSendSync {
     /// engine emitted them, and buffers them until they are read. It ends when the
     /// session or the engine goes away. Each call opens an independent subscription.
     fn events(&self) -> EventStream;
+
+    /// Opens the session's binary channel: the frames of the preview streams this
+    /// session opens with `preview.subscribe`, each tagged with the stream's channel.
+    ///
+    /// A session has one binary channel. Opening it again ends the stream returned
+    /// before. Until it is open, `preview.subscribe` fails with `action_failed`, so a
+    /// host that never reads binary frames (MCP) never has the engine encode for it.
+    /// Frames are not buffered without bound: a reader that falls behind loses frames,
+    /// and then the rest of that stream until its next keyframe, so what it does get
+    /// always decodes. The stream ends with the session.
+    ///
+    /// The default is a stream that ends at once: the session carries no binary frames
+    /// (the mock).
+    fn binary(&self) -> BinaryStream {
+        Box::pin(NoFrames)
+    }
+}
+
+/// The stream [`Control::binary`] returns by default: it ends at once.
+struct NoFrames;
+
+impl Stream for NoFrames {
+    type Item = BinaryFrame;
+
+    fn poll_next(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<BinaryFrame>> {
+        Poll::Ready(None)
+    }
 }

@@ -106,6 +106,14 @@ pub enum ProtocolError {
         /// What went wrong.
         reason: String,
     },
+    /// The call is valid, but whoever answered it doesn't serve it: `pairing.start`,
+    /// `device.list` and `device.revoke` sent to an engine with no server in front.
+    /// Retrying won't help.
+    #[error("`{call}` is not served here")]
+    Unsupported {
+        /// The call's name (`pairing.start`).
+        call: String,
+    },
     /// The engine hit a bug or an unexpected condition. The request may be retried.
     #[error("internal error: {reason}")]
     Internal {
@@ -144,6 +152,7 @@ impl ProtocolError {
             ProtocolError::UndoConflict { .. } => "undo_conflict",
             ProtocolError::HistoryEmpty { .. } => "history_empty",
             ProtocolError::ActionFailed { .. } => "action_failed",
+            ProtocolError::Unsupported { .. } => "unsupported",
             ProtocolError::Internal { .. } => "internal",
             ProtocolError::Unknown => "unknown",
         }
@@ -167,6 +176,9 @@ pub enum EntityKind {
     Encoder,
     /// An audio bus.
     Bus,
+    /// A paired device (0.21). Only an error answering `device.revoke` names it, so a
+    /// client older than 0.21, which sends none, never reads it.
+    Device,
 }
 
 impl fmt::Display for EntityKind {
@@ -178,6 +190,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
             EntityKind::Bus => "bus",
+            EntityKind::Device => "device",
         })
     }
 }
