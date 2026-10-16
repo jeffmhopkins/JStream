@@ -1092,7 +1092,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:1d96c0a4f96940c7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, ingest resolved outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs; tests.rs adds mod youtube; the wave's new stop text (the deadline checked before each send) and its 50 ms StalledPeer test sit beside it unchanged; holds" }
+stamp = { hash = "b3:5db5b65d043e9ca1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #457. #457's tests.rs change (per-run frame baseline in the vcam test) makes no Design claim; Y3's YouTube locking and action text matches its own code and was verified on wave/m1. Tests pass after the merge." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's browser paragraph says a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser and the new tests/audio.rs case; the wave's B7 opacity/blend/filter text is in other paragraphs; holds" }
@@ -1206,7 +1206,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:1d96c0a4f96940c7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: tests.rs adds mod youtube (tests/youtube.rs: sign-in, broadcasts, youtube outputs, health, the empty built-in client) beside the wave's windows_gpu module and its 50 ms stalled-peer test; the YouTube bullet and builder list still match youtube.rs, engine.rs and lib.rs; holds" }
+stamp = { hash = "b3:5db5b65d043e9ca1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #457. #457 changes only the vcam test in tests.rs (each run waits for 5 frames past its own start); Y3 added YouTube bullets and src/tests/youtube.rs. The Tests list still describes the virtual camera test correctly. cargo test -p jstream-core (177 passed) after the merge." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
