@@ -209,6 +209,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`session.rs`, `store.rs`, `panels/outputs.rs`, `panels/mixer.rs`) and in plain functions the panels are built on (the rows,
   what "Add" sends, the form's sections, parsing and checks); only the components
   themselves need a browser.
+- **Debug bundle size.** A leptos view's type spells out every element and closure
+  inside it, and a debug build names each function with those types: most of its
+  `_bg.wasm` is that name section. The server serves no file over 64 MiB, so the
+  mixer's strips, rows, meters, faders and mute buttons return `AnyView` rather than
+  `impl IntoView`, which keeps a nested view's type out of its parents' names. A
+  component that grows as large does the same.
 
 <a id="canvas"></a>
 ## Canvas

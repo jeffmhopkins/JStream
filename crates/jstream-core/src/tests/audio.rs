@@ -331,9 +331,13 @@ fn a_media_files_sound_is_mixed_while_the_program_shows_it() {
     let engine = engine_with(&audio, &clock, media.clone());
     let control = connected(&engine);
     let mut events = control.events();
+    // The engine canonicalizes the path itself, so the fake is keyed by the canonical
+    // path; the setting drops Windows' verbatim `\\?\` prefix, which an `absolute`
+    // asset path refuses as two leading separators.
+    let setting = path.to_string_lossy();
     let file = Reference::Asset {
         root: AssetRoot::Absolute,
-        path: path.to_string_lossy().into_owned(),
+        path: setting.strip_prefix(r"\\?\").unwrap_or(&setting).to_owned(),
     };
     let video: Settings = Settings(
         [

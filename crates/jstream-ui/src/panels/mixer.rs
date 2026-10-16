@@ -644,7 +644,7 @@ pub fn Mixer() -> impl IntoView {
 }
 
 /// A stereo meter: RMS bars, peak bars and peak holds, left over right.
-fn meter(reading: impl Fn() -> Option<Reading> + Copy + Send + Sync + 'static) -> impl IntoView {
+fn meter(reading: impl Fn() -> Option<Reading> + Copy + Send + Sync + 'static) -> AnyView {
     let percent = |fraction: f32| format!("{:.1}%", fraction * 100.0);
     let title = move || match reading().and_then(|r| level_to_dbfs(r.peak[0].max(r.peak[1]))) {
         Some(dbfs) => format!("Peak {dbfs:.1} dBFS"),
@@ -677,6 +677,7 @@ fn meter(reading: impl Fn() -> Option<Reading> + Copy + Send + Sync + 'static) -
             {channel(1)}
         </div>
     }
+    .into_any()
 }
 
 /// A fader with its readout. It shows the dragged value while the pointer holds it, and
@@ -688,7 +689,7 @@ fn fader<Fut>(
     gain: impl Fn() -> f32 + Copy + Send + Sync + 'static,
     problem: RwSignal<Option<String>>,
     commit: impl Fn(f32) -> Fut + Copy + 'static,
-) -> impl IntoView
+) -> AnyView
 where
     Fut: Future<Output = Result<(), String>> + 'static,
 {
@@ -728,13 +729,14 @@ where
             {move || format_gain(shown())}
         </button>
     }
+    .into_any()
 }
 
 /// A mute toggle.
 fn mute_button(
     muted: impl Fn() -> bool + Copy + Send + Sync + 'static,
     toggle: impl Fn() + 'static,
-) -> impl IntoView {
+) -> AnyView {
     view! {
         <button
             class="mute"
@@ -745,11 +747,12 @@ fn mute_button(
             "Mute"
         </button>
     }
+    .into_any()
 }
 
 /// One audio source's strip: its meter, fader, mute and, folded, its routing.
 #[component]
-fn ChannelStrip(panel: Panel, source_id: SourceId) -> impl IntoView {
+fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
     let channel = {
         let source_id = source_id.clone();
         Memo::new(move |_| {
@@ -871,11 +874,12 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> impl IntoView {
             </details>
         </li>
     }
+    .into_any()
 }
 
 /// One possible send from a source into a bus: on or off, and its gain.
 #[component]
-fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> impl IntoView {
+fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
     let ids = StoredValue::new((source_id, bus_id));
     let gain = move || {
         ids.with_value(|(source_id, bus_id)| {
@@ -949,12 +953,13 @@ fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> impl IntoView {
             " dB"
         </li>
     }
+    .into_any()
 }
 
 /// One bus's strip: its meter, fader and mute, renaming and deleting; the master's adds
 /// its loudness.
 #[component]
-fn BusStrip(panel: Panel, bus_id: BusId) -> impl IntoView {
+fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
     let bus = {
         let bus_id = bus_id.clone();
         Memo::new(move |_| {
@@ -1113,11 +1118,12 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> impl IntoView {
             })}
         </li>
     }
+    .into_any()
 }
 
 /// The form that adds a bus, with the next free `bus-N` ID.
 #[component]
-fn NewBusForm(panel: Panel) -> impl IntoView {
+fn NewBusForm(panel: Panel) -> AnyView {
     let name = RwSignal::new(String::new());
     let full = move || {
         panel
@@ -1165,6 +1171,7 @@ fn NewBusForm(panel: Panel) -> impl IntoView {
             </button>
         </form>
     }
+    .into_any()
 }
 
 #[cfg(test)]
