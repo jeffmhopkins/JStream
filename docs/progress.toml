@@ -651,7 +651,7 @@ prs = [265]
 id = "U3a"
 milestone = "M2"
 title = "Scenes, sources, properties"
-status = "review"
+status = "done"
 prs = [256]
 
 [[item]]
@@ -665,7 +665,7 @@ prs = [254]
 id = "U3c"
 milestone = "M2"
 title = "Mixer panel"
-status = "review"
+status = "done"
 prs = [308]
 
 [[item]]
@@ -761,8 +761,8 @@ note = "media file hardware tests (#382)"
 id = "W1"
 milestone = "M2"
 title = "Audio waveform and spectrum sources"
-status = "review"
-prs = [460, 463, 466]
+status = "done"
+prs = [315, 460, 463, 466]
 
 [[item]]
 id = "K1"

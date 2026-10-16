@@ -49,10 +49,10 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 94% | 33 | 1 | 1 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `██████░░░░` 61% | 14 | 5 | 4 |
+| [M2: UI](ROADMAP.md#m2) | `███████░░░` 74% | 17 | 2 | 4 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 33% | 3 | 1 | 5 |
 
-94 of 112 items are merged; 5 of those still wait on a run on Windows hardware.
+97 of 112 items are merged; 5 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -175,7 +175,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M2</b> UI: 14 of 23 merged</summary>
+<summary><b>M2</b> UI: 17 of 23 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -183,9 +183,9 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U2a | ADR-0044 pairing | ✅ merged | #248 |
 | U2 | Serve the UI | ✅ merged | #246, #247 |
 | U2b | Device pairing | ✅ merged | #265 |
-| U3a | Scenes, sources, properties | 🔍 in review | #256 |
+| U3a | Scenes, sources, properties | ✅ merged | #256 |
 | U3b | Outputs and go-live panel | ✅ merged | #254 |
-| U3c | Mixer panel | 🔍 in review | #308 |
+| U3c | Mixer panel | ✅ merged | #308 |
 | U4 | Canvas editing | ✅ merged | #255 |
 | U4p | Live preview on canvas | ⏳ planned |  |
 | U1 | Preview stream | ✅ merged | #251 |
@@ -199,7 +199,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | D8 | Master and output audio chains | ✅ merged | #249 |
 | D8p | Audio chain protocol fields | ⏳ planned |  |
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
-| W1 | Audio waveform and spectrum sources | 🔍 in review | #460, #463, #466 |
+| W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned |  |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
 
