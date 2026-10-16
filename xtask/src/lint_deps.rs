@@ -27,6 +27,8 @@ const UNSAFE_CRATES: &[&str] = &[
     "jstream-platform-macos",
     "jstream-platform-linux",
     "jstream-vcam-windows",
+    // CEF's shared textures and planar audio pointers (ADR-0046).
+    "jstream-browser",
 ];
 
 /// Clients that never depend on the engine (R-ARCH-003).
@@ -64,6 +66,13 @@ const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
         None,
         "`links = \"wasm_bindgen\"` only enforces one version per graph; its build script sets \
          environment variables and compiles nothing. Reached through wgpu's wasm32-only dependencies",
+    ),
+    (
+        "cef-dll-sys",
+        None,
+        "the prebuilt CEF runtime R-DEP-002 and ADR-0021 allow: `links = \"cef_dll_wrapper\"`, and \
+         its build script compiles CEF's C++ wrapper with CMake against the downloaded binaries. \
+         Only with jstream-browser's `cef` feature (ADR-0046), so the default graph lacks it",
     ),
     // Tauri 2 (jstream-desktop, ADR-0045), a dependency on Windows only. `cargo metadata`
     // lists every platform's packages, so most of these are never built for Windows.
@@ -344,7 +353,7 @@ fn unsafe_decl(ws_root: &str, m: &Member<'_>, findings: &mut Vec<Finding>) -> Re
             at: m.manifest.clone(),
             rule: "R-UNSAFE-001",
             msg: format!(
-                "`{}` declares `unsafe_allowed = true` but is not a platform, vcam or `*-sys` crate",
+                "`{}` declares `unsafe_allowed = true` but is not a platform, vcam, browser or `*-sys` crate",
                 m.name
             ),
         }),
