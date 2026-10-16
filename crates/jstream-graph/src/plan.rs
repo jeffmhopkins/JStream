@@ -8,8 +8,8 @@
 use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
-    DeleteTarget, Edit, EntityKind, ItemId, ProtocolError, QueryResult, Settings, SourceId,
-    SourceKind,
+    DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, ItemId, ProtocolError, QueryResult,
+    Settings, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -24,6 +24,7 @@ impl Graph {
     /// - `item.remove` for each item that places a deleted source;
     /// - one `source.set_settings` per remaining source whose settings refer to a deleted
     ///   object, setting each such parameter to `null`;
+    /// - one `filter.set_settings` per remaining filter whose settings do, likewise;
     /// - `source.delete` for each `scene` source that shows a deleted scene;
     /// - the delete of the target.
     pub fn delete_plan(&self, target: &DeleteTarget) -> Result<QueryResult, ProtocolError> {
@@ -73,24 +74,34 @@ impl Graph {
 
         let mut removes: Vec<ItemId> = Vec::new();
         let mut clears: BTreeMap<SourceId, Settings> = BTreeMap::new();
+        let mut filter_clears: BTreeMap<(SourceId, FilterId), Settings> = BTreeMap::new();
         for node in &deleted {
             for blocker in deps::blockers(state, node) {
-                match (blocker.entity, blocker.field.strip_prefix("settings.")) {
-                    (EntityKind::Item, _) => removes.push(ItemId::new(blocker.id)),
-                    (EntityKind::Source, Some(param)) => {
-                        let source_id = SourceId::new(blocker.id);
-                        // A source the batch deletes anyway needs no clearing.
-                        if !deleted.contains(&Node::Source(source_id.clone())) {
-                            let param = param.to_owned();
-                            clears
-                                .entry(source_id)
-                                .or_default()
-                                .insert(param, Value::Null);
-                        }
-                    }
-                    // `kind.scene_id`: a `scene` source, already in `shown_by`.
-                    _ => {}
+                if blocker.entity == EntityKind::Item {
+                    removes.push(ItemId::new(blocker.id));
+                    continue;
                 }
+                let source_id = SourceId::new(blocker.id);
+                // A source the batch deletes anyway needs no clearing.
+                if deleted.contains(&Node::Source(source_id.clone())) {
+                    continue;
+                }
+                if let Some(param) = blocker.field.strip_prefix("settings.") {
+                    clears
+                        .entry(source_id)
+                        .or_default()
+                        .insert(param.to_owned(), Value::Null);
+                } else if let Some((filter, param)) = blocker
+                    .field
+                    .strip_prefix("filters.")
+                    .and_then(|rest| rest.rsplit_once('.'))
+                {
+                    filter_clears
+                        .entry((source_id, FilterId::new(filter)))
+                        .or_default()
+                        .insert(param.to_owned(), Value::Null);
+                }
+                // `kind.scene_id`: a `scene` source, already in `shown_by`.
             }
         }
 
@@ -102,6 +113,15 @@ impl Graph {
             clears
                 .into_iter()
                 .map(|(source_id, patch)| Edit::SourceSetSettings { source_id, patch }),
+        );
+        edits.extend(
+            filter_clears
+                .into_iter()
+                .map(|((source_id, filter_id), patch)| Edit::FilterSetSettings {
+                    owner: FilterOwner::Source { source_id },
+                    filter_id,
+                    patch,
+                }),
         );
         edits.extend(
             shown_by

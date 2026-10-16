@@ -56,7 +56,11 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # Platform tests (`hw-tests`) only run on real hardware, but they must still compile:
       # type-check them on the platform they target.
-      - run: cargo clippy -p jstream-platform-windows --all-targets --features hw-tests --locked -- -D warnings
+      - run: cargo clippy -p jstream-platform-windows -p jstream-core --all-targets --features hw-tests --locked -- -D warnings
+      # The CEF backend of the browser source (ADR-0046) must compile too, and so must the
+      # desktop app's and the daemon's wiring of it. `dox` type-checks it against
+      # cef-dll-sys's bundled bindings without downloading or building CEF.
+      - run: cargo clippy -p jstream-browser -p jstream-browser-helper -p jstream-desktop -p jstream-daemon --all-targets --features jstream-browser/dox,jstream-browser-helper/dox,jstream-desktop/dox,jstream-daemon/dox --locked -- -D warnings
       - name: Report the result to the PR
         if: always() && github.event_name == 'workflow_dispatch'
         shell: bash
@@ -85,6 +89,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Test
         run: cargo test --workspace --locked
+      # The browser source's engine side (feature `cef`) builds without CEF since
+      # ADR-0048, so its Windows-only tests (the helper's pipes) can run here.
+      - name: Test the browser engine side
+        run: cargo test -p jstream-browser --features cef --locked
       - name: Report the result to the PR
         if: always() && github.event_name == 'workflow_dispatch'
         shell: bash

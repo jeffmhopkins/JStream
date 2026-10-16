@@ -20,7 +20,7 @@ mod ws_config;
 #[cfg(all(feature = "ws", target_arch = "wasm32"))]
 mod ws_web;
 
-pub use control::{BoxFuture, Control, EventStream, MaybeSendSync};
+pub use control::{BinaryStream, BoxFuture, Control, EventStream, MaybeSendSync};
 pub use error::ControlError;
 #[cfg(any(test, feature = "mock"))]
 pub use mock::{MockControl, MockEngine};

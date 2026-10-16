@@ -32,11 +32,13 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   prints where it listens, and maps failures to exit codes.
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
-  creates the file with a new random token ([Design](#design)).
+  creates the file with a new random token, and names the device file beside it
+  ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, [Design](#design)), installs
-  the signal handlers that stop it, then binds the server with MCP on and, with
-  `--ui-dir`, the web UI's files.
+  file and the placeholder outputs; on Windows a live one, which with the `cef`
+  feature also opens browser sources, [Design](#design)), installs the signal
+  handlers that stop it, then binds the server with MCP on and, with `--ui-dir`, the
+  web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
@@ -107,6 +109,14 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   group or others any permission (mode bits `077`), is refused with exit code 1, and
   left as it is.
   The parent directory must exist. The token itself is never printed.
+- **Paired devices.** Devices paired with `jstream-cli pair`
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) are kept in
+  `<token file>.devices` beside the token file (for example `token.devices`): their
+  names and token digests, never a token, user-only on Unix. It is created at the first
+  pairing, so devices stay paired across restarts; deleting it unpairs them all. A
+  device file that can't be read or parsed, or (on Unix) that group or others can read,
+  is a startup failure (exit 1). A device token works only while the daemon listens on
+  `127.0.0.1`, which it always does for now.
 - **Output.** On stdout: `token file: <path> (created, new token)` or
   `… (existing token)`, then `mcp endpoint: http://127.0.0.1:<port>/mcp` (point an MCP
   client there, with the token as `Authorization: Bearer <token>`), then
@@ -178,7 +188,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   succeeds. Undo history is not saved. Nothing stops two daemons from using the same
   file: each saves over the other's changes, so give each its own.
 - **Audit log.** Every batch, undo, redo and action, by any client, is one JSON line
-  in `audit.jsonl` in the log directory: the time, the client's ID and `hello` name,
+  in `audit.jsonl` in the log directory: the time, the client's ID and `hello` name
+  (`device:<name>` for a paired device),
   the call and its edits by name, the output an action names, the `rev` before and
   after, and the result code. Never a call's arguments, so never a stream key
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). When it would pass 8 MiB it becomes
@@ -188,7 +199,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -274,6 +285,31 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   moves, rather than in a directory of its own. Its entries are written as they come;
   on a graceful stop the writer finishes the queue when the engine is dropped. Without `--collection` nothing is saved, as before
   ([Open questions](#open-questions), 6).
+- **Browser sources** (`serve.rs`, feature `cef`, Windows only). Built with
+  `--features cef`, the daemon gives the engine `jstream-browser`'s CEF backend
+  (`Engine::with_browser`), so `browser` sources open their pages
+  ([jstream-browser › Purpose](../../crates/jstream-browser/README.md#purpose)). It does
+  so after `with_backends`, through a clone of the live engine (clones share its
+  sources), so pages start on the media clock. First
+  it opens a GPU device on the media adapter with the backends' `GpuInterop::open_device`
+  and hands it over with `use_device`, so a page's first paint already lands on it. CEF
+  runs only in the sandboxed browser helper, which the backend starts with the first
+  page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
+  (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and
+  `jstream-browser-helper.dll`) and CEF's runtime files must be next to
+  `jstream-daemon.exe`; its cache is the data directory's `cef` folder (else the log
+  directory's) and its log the log directory's `cef.log`. Nothing about the browser
+  stops the daemon: a device that won't open leaves pages playing audio with their
+  frames dropped, a daemon whose own path is unknown leaves browser sources empty, and
+  a missing helper or missing CEF files fail the page that opens, not the daemon; the
+  first two are logged at `warn`. The program mix doesn't draw pages' frames yet (that is the
+  render import of GPU frames), so the device the compositor will sample is still to be
+  settled there. The daemon doesn't build or link CEF (only the helper does); the
+  feature is off by default until the helper and CEF's runtime are packaged
+  ([jstream-browser › Open items](../../crates/jstream-browser/README.md#open-items)).
+  `dox` type-checks the wiring without downloading CEF, as CI's Windows clippy does. Without the feature, `browser` sources show
+  nothing, as on other platforms. `browse` is that wiring over any backend, which is how
+  the tests run it on `jstream-browser`'s fake.
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server
   answers MCP at `/mcp` on the same port, with its default MCP session cap and idle
   timeout. Each MCP session is one more engine client through the same `Connector`, so
@@ -284,8 +320,15 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
 - **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port, MCP and the UI directory changed):
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
-  option to listen on other addresses until remote browsers need it (with TLS and token
-  pairing, [ROADMAP › M2](../../ROADMAP.md#m2)).
+  option to listen on other addresses until remote browsers need it (with TLS,
+  [ROADMAP › M2](../../ROADMAP.md#m2)). Pairing is served already, and its device tokens
+  are accepted on loopback only until then.
+- **The device file** (`token.rs`, `main.rs`). The daemon names
+  `ServerConfig::device_file` as the token file's path plus `.devices`, so the devices
+  live and move with the token they stand beside, and deleting the two together resets
+  every credential. The server owns the file: it loads it at bind, writes it, and keeps
+  only BLAKE3 digests in it
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)).
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random
   token in a user-only file). New tokens are 32 bytes from the OS's random source
   (`getrandom`), written as 64 lowercase hex characters, so they fit an `Authorization`
@@ -352,7 +395,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
   `jstream-platform` (`Backends`, the key store trait, the data directory),
-  `jstream-platform-windows` on Windows only (the backends, the key store and the Media Foundation check),
+  `jstream-browser` (the `BrowserBackend` seam, and its CEF backend with the `cef`
+  feature; already in the tree through core), `jstream-platform-windows` on Windows only
+  (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `anyhow`, `tracing` (the startup line) and `blake3`
   (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,
@@ -364,7 +409,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
-  `jstream-platform` (feature `fake`), for the live engine and opener tests.
+  `jstream-platform` (feature `fake`), for the live engine and opener tests;
+  `jstream-browser` (feature `fake`), for the browser wiring's test.
 
 <a id="open-questions"></a>
 ### Open questions

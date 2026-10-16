@@ -2,14 +2,15 @@
 id = "ADR-0041"
 title = "YouTube interaction scope v3: one sign-in"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0051-youtube-without-a-required-oauth-client.md"
 tier = "maintainer"
 -->
 
 # ADR-0041: YouTube interaction scope v3: one sign-in
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0051: YouTube v4: no required OAuth client](0051-youtube-without-a-required-oauth-client.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0034](0034-youtube-interaction-scope-v2.md). It restates all of

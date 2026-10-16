@@ -6,29 +6,34 @@
 //! naming and classification checks see every variant.
 
 use crate::{
-    Action, Batch, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
+    Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
     CommandClass, Crop, DeleteTarget, DropCounts, Edit, EntityKind, ErrorResponse, Event,
-    EventMessage, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo,
-    ItemTransform, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm,
-    ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings,
-    Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32, FitMode,
+    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo,
+    OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
+    RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
+    SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
+    Vec2, Welcome, json_schema,
 };
 use crate::{
-    AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
-    EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,
+    ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
+    BroadcastListStatus, BroadcastPrivacy, BroadcastTransition, BroadcastType, EncoderProfile,
+    EncoderProfileId, EncoderProfileInfo, EncoderSessionInfo, HardwarePreference, HealthIssue,
+    IssueSeverity, RateControl, StreamHealth, StreamInfo, StreamStatus, VideoCodec, VideoEncoding,
+    YoutubeAuth,
 };
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
+use crate::{DeviceId, DeviceInfo};
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
-use crate::{HistoryCall, HistoryDirection, HistoryOp};
+use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
 pub(crate) fn edits() -> Vec<Edit> {
-    vec![
+    let mut edits = vec![
         Edit::SceneCreate {
             scene_id: SceneId::new("scn_1"),
             name: "Main".into(),
@@ -61,6 +66,8 @@ pub(crate) fn edits() -> Vec<Edit> {
             source_id: SourceId::new("src_cam"),
             transform: None,
             geometry: None,
+            opacity: None,
+            blend: None,
         },
         Edit::ItemAdd {
             scene_id: SceneId::new("scn_1"),
@@ -68,6 +75,8 @@ pub(crate) fn edits() -> Vec<Edit> {
             source_id: SourceId::new("src_cam"),
             transform: Some(ItemTransform::IDENTITY),
             geometry: None,
+            opacity: None,
+            blend: None,
         },
         Edit::ItemAdd {
             scene_id: SceneId::new("scn_1"),
@@ -75,6 +84,13 @@ pub(crate) fn edits() -> Vec<Edit> {
             source_id: SourceId::new("src_cam"),
             transform: None,
             geometry: Some(corner_box()),
+            opacity: Finite32::new(0.75),
+            blend: Some(BlendMode::Normal),
+        },
+        Edit::ItemSetOpacity {
+            item_id: ItemId::new("itm_3"),
+            scene_id: None,
+            opacity: Finite32::new(0.5).expect("finite"),
         },
         Edit::ItemRemove {
             item_id: ItemId::new("itm_1"),
@@ -215,6 +231,14 @@ pub(crate) fn edits() -> Vec<Edit> {
             },
         },
         Edit::OutputCreate {
+            output_id: OutputId::new("out_live"),
+            kind: OutputKind::Rtmp {
+                target: RtmpTarget::YouTube {
+                    broadcast_id: "dQw4w9WgXcQ".into(),
+                },
+            },
+        },
+        Edit::OutputCreate {
             output_id: OutputId::new("out_cam"),
             kind: OutputKind::VirtualCam,
         },
@@ -279,6 +303,63 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::BusDelete {
             bus_id: BusId::new("bus_old"),
+        },
+    ];
+    // Every blend mode, though the engine draws only `normal` so far.
+    edits.extend(BlendMode::ALL.map(|blend| Edit::ItemSetBlend {
+        item_id: ItemId::new("itm_3"),
+        blend,
+    }));
+    edits.extend(filter_edits());
+    edits
+}
+
+/// The filter edits (ADR-0026), on both chains.
+fn filter_edits() -> Vec<Edit> {
+    let mic = || FilterOwner::Source {
+        source_id: SourceId::new("src_mic"),
+    };
+    let mut gain = Settings::new();
+    gain.insert("gain_db", serde_json::json!(-6.0));
+    vec![
+        Edit::FilterAdd {
+            owner: mic(),
+            chain: FilterChain::Audio,
+            filter_id: FilterId::new("flt_gain"),
+            kind: "gain".into(),
+            settings: gain.clone(),
+            enabled: None,
+            index: None,
+        },
+        Edit::FilterAdd {
+            owner: FilterOwner::Source {
+                source_id: SourceId::new("src_cam"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("flt_lut"),
+            kind: "pack.lut".into(),
+            settings: Settings::new(),
+            enabled: Some(false),
+            index: Some(0),
+        },
+        Edit::FilterSetEnabled {
+            owner: mic(),
+            filter_id: FilterId::new("flt_gain"),
+            enabled: false,
+        },
+        Edit::FilterSetSettings {
+            owner: mic(),
+            filter_id: FilterId::new("flt_gain"),
+            patch: gain,
+        },
+        Edit::FilterReorder {
+            owner: mic(),
+            filter_id: FilterId::new("flt_gain"),
+            index: 0,
+        },
+        Edit::FilterRemove {
+            owner: mic(),
+            filter_id: FilterId::new("flt_gain"),
         },
     ]
 }
@@ -394,9 +475,50 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::OutputClearKey {
             output_id: OutputId::new("out_yt"),
         },
+        Action::YoutubeSignIn,
+        Action::YoutubeSignOut,
+        Action::YoutubeCreateBroadcast {
+            title: "Friday stream".into(),
+            description: "Building JStream live.".into(),
+            scheduled_start_time: "2026-10-16T19:00:00Z".into(),
+            privacy: BroadcastPrivacy::Unlisted,
+            made_for_kids: false,
+        },
+        Action::YoutubeBindBroadcast {
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            stream_id: Some("UCfixturechannelfixturestream1".into()),
+        },
+        Action::YoutubeBindBroadcast {
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            stream_id: None,
+        },
+        Action::YoutubeTransitionBroadcast {
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            to: BroadcastTransition::Testing,
+        },
+        Action::YoutubeTransitionBroadcast {
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            to: BroadcastTransition::Live,
+        },
+        Action::YoutubeTransitionBroadcast {
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            to: BroadcastTransition::Complete,
+        },
         Action::AudioResetLoudness {},
+        Action::PreviewSubscribe {
+            channel: 1,
+            max_width: Some(960),
+            max_height: None,
+            fps: Some(30),
+            codecs: vec![PreviewCodec::H264, PreviewCodec::Jpeg],
+        },
+        Action::PreviewUnsubscribe { channel: 1 },
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
+        },
+        Action::PairingStart,
+        Action::DeviceRevoke {
+            device_id: DeviceId::new("dev_1"),
         },
     ]
 }
@@ -420,6 +542,30 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::OutputList,
         Query::StudioGet,
         Query::EncoderList,
+        Query::YoutubeStatus,
+        Query::YoutubeListBroadcasts {
+            status: BroadcastListStatus::All,
+            broadcast_type: BroadcastType::All,
+            page_token: None,
+        },
+        Query::YoutubeListBroadcasts {
+            status: BroadcastListStatus::Upcoming,
+            broadcast_type: BroadcastType::Event,
+            page_token: Some("CAEQAA".into()),
+        },
+        Query::YoutubeListBroadcasts {
+            status: BroadcastListStatus::Active,
+            broadcast_type: BroadcastType::Persistent,
+            page_token: None,
+        },
+        Query::YoutubeListBroadcasts {
+            status: BroadcastListStatus::Completed,
+            broadcast_type: BroadcastType::All,
+            page_token: None,
+        },
+        Query::YoutubeListStreams {
+            page_token: Some("CAEQAA".into()),
+        },
         Query::BusList,
         Query::DeletePlan {
             target: DeleteTarget::Scene {
@@ -431,7 +577,46 @@ pub(crate) fn queries() -> Vec<Query> {
                 source_id: SourceId::new("src_cam"),
             },
         },
+        Query::DeviceList,
     ]
+}
+
+/// A broadcast in every lifecycle state and privacy, the first with every field.
+fn broadcasts() -> Vec<BroadcastInfo> {
+    let lifecycles = [
+        BroadcastLifeCycle::Created,
+        BroadcastLifeCycle::Ready,
+        BroadcastLifeCycle::TestStarting,
+        BroadcastLifeCycle::Testing,
+        BroadcastLifeCycle::LiveStarting,
+        BroadcastLifeCycle::Live,
+        BroadcastLifeCycle::Complete,
+        BroadcastLifeCycle::Revoked,
+        BroadcastLifeCycle::Other,
+    ];
+    let privacies = [
+        BroadcastPrivacy::Unlisted,
+        BroadcastPrivacy::Private,
+        BroadcastPrivacy::Public,
+        BroadcastPrivacy::Other,
+    ];
+    lifecycles
+        .into_iter()
+        .enumerate()
+        .map(|(i, life_cycle)| BroadcastInfo {
+            broadcast_id: format!("bc{i}"),
+            title: "Friday stream".into(),
+            description: if i == 0 {
+                "Building JStream live.".into()
+            } else {
+                String::new()
+            },
+            scheduled_start_time: (i == 0).then(|| "2026-10-16T19:00:00Z".into()),
+            life_cycle,
+            privacy: privacies[i % privacies.len()],
+            bound_stream_id: (i == 0).then(|| "UCfixturechannelfixturestream1".into()),
+        })
+        .collect()
 }
 
 fn color_settings() -> Settings {
@@ -564,6 +749,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: color_settings(),
             duplicated_from: None,
+            filters: Default::default(),
             audio: None,
         },
         SourceInfo {
@@ -574,6 +760,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: None,
+            filters: Default::default(),
             audio: None,
         },
         SourceInfo {
@@ -584,6 +771,15 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: Some(SourceId::new("src_cam")),
+            filters: FilterChains {
+                video: vec![FilterInfo {
+                    filter_id: FilterId::new("flt_lut"),
+                    kind: "pack.lut".into(),
+                    enabled: false,
+                    settings: Settings::new(),
+                }],
+                audio: vec![],
+            },
             audio: Some(SourceAudio {
                 enabled: false,
                 ..SourceAudio::new(AudioFollow::WhenShown)
@@ -597,6 +793,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: None,
+            filters: Default::default(),
             audio: Some(SourceAudio::new(AudioFollow::WhenShown)),
         },
         SourceInfo {
@@ -612,6 +809,7 @@ fn source_infos() -> Vec<SourceInfo> {
                 muted: true,
                 ..SourceAudio::new(AudioFollow::Always)
             }),
+            filters: Default::default(),
         },
     ]
 }
@@ -638,6 +836,8 @@ fn item_infos() -> Vec<ItemInfo> {
             }),
             crop: Crop::NONE,
             visible: true,
+            opacity: Finite32::new(0.5).expect("finite"),
+            blend: BlendMode::Normal,
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
@@ -656,6 +856,8 @@ fn item_infos() -> Vec<ItemInfo> {
                 bottom: 0,
             },
             visible: false,
+            opacity: Finite32::ONE,
+            blend: BlendMode::Normal,
         },
     ]
 }
@@ -758,6 +960,33 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             rev: Rev(12),
             encoders: encoder_infos(),
         },
+        QueryResult::YoutubeStatus {
+            auth: YoutubeAuth::SignedIn,
+        },
+        QueryResult::YoutubeListBroadcasts {
+            broadcasts: broadcasts(),
+            next_page_token: Some("CAEQAA".into()),
+        },
+        QueryResult::YoutubeListStreams {
+            streams: [
+                (StreamStatus::Active, StreamHealth::Good),
+                (StreamStatus::Created, StreamHealth::Ok),
+                (StreamStatus::Error, StreamHealth::Bad),
+                (StreamStatus::Inactive, StreamHealth::NoData),
+                (StreamStatus::Ready, StreamHealth::Other),
+                (StreamStatus::Other, StreamHealth::NoData),
+            ]
+            .into_iter()
+            .enumerate()
+            .map(|(i, (status, health))| StreamInfo {
+                stream_id: format!("st{i}"),
+                title: "Default stream key".into(),
+                status,
+                health,
+            })
+            .collect(),
+            next_page_token: None,
+        },
         QueryResult::BusList {
             rev: Rev(12),
             buses: bus_infos(),
@@ -780,6 +1009,14 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     scene_id: SceneId::new("scn_mask"),
                 },
             ],
+        },
+        QueryResult::DeviceList {
+            devices: vec![DeviceInfo {
+                device_id: DeviceId::new("dev_1"),
+                name: "Tablet".into(),
+                paired_at: 1_790_000_000,
+                last_used_at: 1_790_003_600,
+            }],
         },
     ]
 }
@@ -845,6 +1082,36 @@ pub(crate) fn events() -> Vec<Event> {
             encode_blocks: 6,
             output_packets: 7,
         },
+    });
+    for auth in [
+        YoutubeAuth::Unavailable,
+        YoutubeAuth::SignedOut,
+        YoutubeAuth::SigningIn,
+        YoutubeAuth::SignedIn,
+        YoutubeAuth::Other,
+    ] {
+        events.push(Event::YoutubeStatusChanged { auth });
+    }
+    events.push(Event::YoutubeHealthChanged {
+        output_id: OutputId::new("out_live"),
+        broadcast_id: "dQw4w9WgXcQ".into(),
+        stream_id: "UCfixturechannelfixturestream1".into(),
+        status: StreamStatus::Active,
+        health: StreamHealth::Bad,
+        issues: [
+            IssueSeverity::Error,
+            IssueSeverity::Warning,
+            IssueSeverity::Info,
+            IssueSeverity::Other,
+        ]
+        .into_iter()
+        .map(|severity| HealthIssue {
+            issue: "gopSizeLong".into(),
+            severity,
+            reason: "Check video settings".into(),
+            description: "Please use a keyframe frequency of four seconds or less.".into(),
+        })
+        .collect(),
     });
     events.push(Event::MetersTick {
         sources: vec![SourceMeter {
@@ -925,6 +1192,9 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         ProtocolError::ActionFailed {
             reason: "connection refused".into(),
         },
+        ProtocolError::Unsupported {
+            call: "pairing.start".into(),
+        },
         ProtocolError::Internal {
             reason: "render thread stopped".into(),
         },
@@ -935,7 +1205,9 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Source,
         EntityKind::Output,
         EntityKind::Encoder,
+        EntityKind::Filter,
         EntityKind::Bus,
+        EntityKind::Device,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -1012,7 +1284,16 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r10"),
-            result: CallResult::Action {},
+            result: CallResult::action(),
+        }),
+        ServerMessage::Response(Response {
+            id: RequestId::new("r15"),
+            result: CallResult::Action {
+                result: Some(ActionResult::PairingStart {
+                    code: SecretString::new("7K3M-9QXA"),
+                    expires_in_secs: 120,
+                }),
+            },
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r30"),
@@ -1028,6 +1309,26 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
             error: ProtocolError::HandshakeRequired.into(),
         }),
     ];
+    let broadcast = broadcasts().swap_remove(0);
+    for result in [
+        ActionResult::YoutubeSignIn {
+            url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=1234-fixture.apps.googleusercontent.com&redirect_uri=http%3A%2F%2F127.0.0.1%3A53682&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&state=fixture-state".into(),
+        },
+        ActionResult::YoutubeCreateBroadcast {
+            broadcast: broadcast.clone(),
+        },
+        ActionResult::YoutubeBindBroadcast {
+            broadcast: broadcast.clone(),
+        },
+        ActionResult::YoutubeTransitionBroadcast { broadcast },
+    ] {
+        msgs.push(ServerMessage::Response(Response {
+            id: RequestId::new("r11"),
+            result: CallResult::Action {
+                result: Some(result),
+            },
+        }));
+    }
     for result in query_results() {
         msgs.push(ServerMessage::Response(Response {
             id: RequestId::new("r20"),
