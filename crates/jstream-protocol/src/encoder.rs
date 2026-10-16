@@ -120,7 +120,7 @@ pub struct VideoEncoding {
     /// Seconds from one keyframe to the next, 1..=10, else `invalid_argument`. Most
     /// streaming services ask for 2.
     pub keyframe_interval_s: u32,
-    /// Whether to use a hardware encoder. Omitted means `prefer`.
+    /// Whether to use a hardware encoder. Omitted means `avoid`.
     #[serde(default)]
     pub hardware: HardwarePreference,
 }
@@ -171,12 +171,13 @@ pub enum RateControl {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum HardwarePreference {
-    /// Hardware if there is one, else software. The default (ADR-0031: hardware first).
-    #[default]
+    /// Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses
+    /// (ADR-0031: hardware first).
     Prefer,
     /// Hardware only: `output.start` fails when there is none.
     Require,
-    /// Software only.
+    /// Software only. What an omitted `hardware` field means.
+    #[default]
     Avoid,
     /// A preference this version of the protocol doesn't know, from a newer server.
     /// The engine refuses it in an edit with `invalid_argument`.
@@ -275,6 +276,6 @@ mod tests {
         .expect("parses");
         assert_eq!(profile.video.codec, VideoCodec::Unknown);
         assert_eq!(profile.video.rate_control, RateControl::Unknown);
-        assert_eq!(profile.video.hardware, HardwarePreference::Prefer);
+        assert_eq!(profile.video.hardware, HardwarePreference::Avoid);
     }
 }

@@ -1120,7 +1120,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "prefer",
-                "description": "Hardware if there is one, else software. The default (ADR-0031: hardware first).",
+                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
                 "type": "string"
               },
               {
@@ -1130,7 +1130,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "avoid",
-                "description": "Software only.",
+                "description": "Software only. What an omitted `hardware` field means.",
                 "type": "string"
               }
             ]
@@ -1498,8 +1498,8 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "hardware": {
                 "$ref": "#/$defs/HardwarePreference",
-                "default": "prefer",
-                "description": "Whether to use a hardware encoder. Omitted means `prefer`."
+                "default": "avoid",
+                "description": "Whether to use a hardware encoder. Omitted means `avoid`."
               },
               "keyframe_interval_s": {
                 "description": "Seconds from one keyframe to the next, 1..=10, else `invalid_argument`. Most\nstreaming services ask for 2.",
@@ -1969,7 +1969,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "prefer",
-                "description": "Hardware if there is one, else software. The default (ADR-0031: hardware first).",
+                "description": "Hardware if there is one, else software. What [`EncoderProfile::DEFAULT`] uses\n(ADR-0031: hardware first).",
                 "type": "string"
               },
               {
@@ -1979,7 +1979,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "avoid",
-                "description": "Software only.",
+                "description": "Software only. What an omitted `hardware` field means.",
                 "type": "string"
               }
             ]
@@ -2065,8 +2065,8 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "hardware": {
                 "$ref": "#/$defs/HardwarePreference",
-                "default": "prefer",
-                "description": "Whether to use a hardware encoder. Omitted means `prefer`."
+                "default": "avoid",
+                "description": "Whether to use a hardware encoder. Omitted means `avoid`."
               },
               "keyframe_interval_s": {
                 "description": "Seconds from one keyframe to the next, 1..=10, else `invalid_argument`. Most\nstreaming services ask for 2.",

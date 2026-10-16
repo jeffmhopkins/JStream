@@ -399,7 +399,8 @@ Encoder profiles (0.13) are collection state as well
 `encoder.create` and `encoder.update` take a `profile_id`, a `name` and an
 `EncoderProfile`: H.264 video with `cbr` or `vbr` rate control (100..=100000 kbit/s;
 a `vbr` peak at least the average and at most 200000), a keyframe interval of 1..=10 s
-and a hardware preference (`prefer`, the default, `require` or `avoid`), and AAC audio
+and a hardware preference (`prefer`, `require` or `avoid`, which an omitted field
+means), and AAC audio
 at 32..=320 kbit/s. Anything else, including a value a newer server sent as `unknown`,
 is refused with `invalid_argument` naming the field. `encoder.delete` is refused while
 an output uses the profile. `output.set_encoder` points an output at a profile, or with

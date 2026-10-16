@@ -25,8 +25,9 @@ impl OpenOptions {
     }
 
     /// A hardware adapter first (the high-performance one when there are several),
-    /// then the software adapter, so a machine with no GPU still runs. The default: a
-    /// software adapter composites far slower than 30 fps needs (#433).
+    /// then the software adapter, so a machine with no GPU still runs; a hardware
+    /// adapter whose device won't open falls back to software as well. The default: on
+    /// WARP a 720p program ran at about 10 fps (#433).
     pub const fn hardware() -> Self {
         Self { software: false }
     }
@@ -60,15 +61,29 @@ impl Gpu {
             wgpu::Instance::new(desc)
         };
         // On Windows a hardware adapter is D3D12 first: the platform's capture, interop
-        // and encoders are D3D11/D3D12, and wgpu's own pick there was Vulkan (#433).
+        // and encoders are D3D11/D3D12, and wgpu's own pick there was Vulkan (#433). A
+        // D3D12 device that won't open goes on to the other backends.
         if cfg!(windows)
             && !options.software
             && let Ok(adapter) = request(&instance(wgpu::Backends::DX12), false)
+            && let Ok(gpu) = Self::from_adapter(adapter)
         {
-            return Self::from_adapter(adapter);
+            return Ok(gpu);
         }
-        let adapter = pick_adapter(&instance(wgpu::Backends::all()), options.software)?;
-        Self::from_adapter(adapter)
+        let instance = instance(wgpu::Backends::all());
+        let adapter = pick_adapter(&instance, options.software)?;
+        let opened = Self::from_adapter(adapter);
+        if options.software {
+            return opened;
+        }
+        // A hardware adapter can be returned and still refuse its device (limits below
+        // the defaults, a removed or hung GPU), so that falls back to software too.
+        or_software(opened, || {
+            let adapter = request(&instance, true).map_err(|detail| RenderError::NoAdapter {
+                detail: format!("software adapter: {detail}"),
+            })?;
+            Self::from_adapter(adapter)
+        })
     }
 
     pub(crate) fn from_context(ctx: &GpuContext) -> Self {
@@ -122,6 +137,25 @@ impl Gpu {
     }
 }
 
+/// `hardware`, or when it failed, what `software` opens. Both failures are reported
+/// when both fail.
+fn or_software<T>(
+    hardware: Result<T, RenderError>,
+    software: impl FnOnce() -> Result<T, RenderError>,
+) -> Result<T, RenderError> {
+    let hardware_err = match hardware {
+        Ok(opened) => return Ok(opened),
+        Err(err) => err,
+    };
+    tracing::warn!(
+        error = %hardware_err,
+        "the hardware adapter's device did not open; trying the software adapter"
+    );
+    software().map_err(|software_err| RenderError::Device {
+        detail: format!("hardware: {hardware_err}; software: {software_err}"),
+    })
+}
+
 fn pick_adapter(instance: &wgpu::Instance, software: bool) -> Result<wgpu::Adapter, RenderError> {
     // The preferred kind first, then the other.
     let (first, second) = if software {
@@ -168,5 +202,32 @@ fn ready<F: Future>(future: F) -> Option<F::Output> {
     {
         Poll::Ready(value) => Some(value),
         Poll::Pending => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::or_software;
+    use crate::RenderError;
+
+    fn device(detail: &str) -> RenderError {
+        RenderError::Device {
+            detail: detail.into(),
+        }
+    }
+
+    /// A hardware device that won't open falls back to the software one, and an error
+    /// names both when neither opens (#437 B1).
+    #[test]
+    fn a_hardware_device_that_fails_falls_back_to_software() {
+        assert!(matches!(or_software(Ok(1), || Ok(2)), Ok(1)));
+        assert!(matches!(
+            or_software(Err(device("limits")), || Ok(2)),
+            Ok(2)
+        ));
+        let both = or_software::<u8>(Err(device("hung")), || Err(device("none")))
+            .expect_err("neither opens");
+        let text = both.to_string();
+        assert!(text.contains("hung") && text.contains("none"), "{text}");
     }
 }
