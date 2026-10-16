@@ -747,7 +747,7 @@ stamp = { hash = "b3:c470e006d8095daa" }
 stamp = { hash = "b3:3e63f714aef88590" }
 
 ["CRATE-jstream-browser#open-items"."body"]
-stamp = { hash = "b3:8cf798e440520095", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:96f1e1c1344ffb05", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 against wave/m1: the File access item is gone since RequestPolicy now limits file pages to their folder, so two items block a host (sandbox, packaging); the wave's Hosts item from #290 (desktop creates a backend on its own media-adapter device, daemon doesn't) is kept; Compositing still holds after E3b, which imports capture frames but nothing reads Source::gpu_frame" }
 
 ["CRATE-jstream-browser#open-items"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
@@ -960,7 +960,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 (b65be40, #283 browser sources) into #219: re-read. Body: wave's browser source and Recorded::Own audio text beside E3b's compose capture import, GPU-path held frame and allocation text; the browser page shown transparent is the wave's GPU frame, not E3b's capture path. Cargo.toml adds the wave's jstream-browser fake dev-dependency beside E3b's hw-tests feature and cfg(windows) platform-windows dev-dependency, which the dev-dependency paragraph names. tests.rs: E3b's mod gpu_capture, hw-tests-gated mod windows_gpu (:12-13), OpenDraw closures taking Option<&GpuContext>, and #396's HANG_BOUND; design names no test deadline; holds" }
+stamp = { hash = "b3:2187a61bf2b86722", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 against wave/m1: C8b2 changes only the Audio sources lead, which now names each running source's own audio beside audio-only sources, matching AudioSources' Recorded::Own and the extended page audio test; the wave's E3b text (GPU capture path, cache import, allocations) is untouched by this PR and kept as merged" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
@@ -1203,7 +1203,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 into #219: stale via core#design only (wave's browser sources and E3b's capture text); daemon text names neither with_browser nor the GPU path beyond handing WindowsGpu and WgcCapture to with_backends; holds" }
+stamp = { hash = "b3:2187a61bf2b86722", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "Stale via jstream-core#design only: C8b2 reworded core's Audio sources lead and the wave added E3b's GPU capture text; the daemon design cites core only for per-connection sessions and the no-backend placeholder outputs, both unchanged; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: daemon design does not describe handshake timing; dep change in server Design doesn't affect it" }
