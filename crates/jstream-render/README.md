@@ -57,9 +57,10 @@ and calls this crate.
   `render_image` makes a new layer, and `render_into` redraws one the caller keeps
   (from `layer`). The depth bound and cycle handling are the caller's
   ([jstream-core › Snapshots](../jstream-core/README.md#design)).
-- `ResourceCache` keeps what a caller draws every frame (uploads and layers), keyed by
-  the caller's IDs, so a frame that shows what the last one showed allocates no
-  texture. An image no frame references is freed only after the GPU has finished the
+- `ResourceCache` keeps what a caller draws every frame (uploads, imports of GPU
+  frames, and layers), keyed by the caller's IDs, so a frame that shows what the last
+  one showed allocates no texture. An import keeps its frame's `FrameSync` hold only
+  for the frame that draws it, so the platform can reuse the texture afterwards. An image no frame references is freed only after the GPU has finished the
   last frame that used it, and the cache hands it back as `Reclaimed` so the caller
   picks the thread that drops it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
@@ -80,7 +81,8 @@ and calls this crate.
   `Bgra8UnormSrgb`, so the sampler decodes it to linear, and is read as straight
   alpha: exact for an opaque capture, a fringe at partly transparent edges. A
   `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
-  before the submit that samples it. Staging stays the safe method on
+  before the submit that samples it, and ends that submit by moving each staged
+  texture to `PRESENT`, as `stage` requires. Staging stays the safe method on
   `jstream-platform`. This crate never calls wgpu-hal.
 - An `Image` draws only in the `Compositor` that made it. It carries that
   compositor's identity, and `render` refuses an item whose image came from another
@@ -99,7 +101,7 @@ and calls this crate.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's. Also not here: NV12 or
-P010 conversion, encode-target export and the D3D12 `PRESENT` transition, WGSL effect
+P010 conversion, encode-target export, WGSL effect
 packs, the video filter chain runtime (the built-in filters' passes are here, see
 [Filters](#filters)), 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
 stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
@@ -182,9 +184,12 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    tests do.
 
 Both passes are one command buffer and one `queue.submit`. `FrameSync::stage` runs
-before that submit, for every distinct hold the scene samples. The output texture is
-the compositor's own, not a shared encode target, so nothing transitions it to
-`PRESENT`.
+before that submit, for every distinct hold the scene samples, and the command buffer
+ends by transitioning each of those textures to `PRESENT` (on D3D12 the `COMMON` state
+the platform's other APIs read a shared texture in), which `stage` requires of the
+submit. `render_into` does the same. The compositor lets go of the holds after the
+submit, so it keeps no platform texture busy between frames. The output texture is the
+compositor's own, not a shared encode target, so nothing transitions it.
 
 ### Resources kept across frames
 
@@ -194,14 +199,14 @@ the compositor's own, not a shared encode target, so nothing transitions it to
 | FP16 target, sRGB target, resolve bind group | Recreated when the canvas size changes |
 | Vertex buffer | Grown when the scene needs more vertices, never shrunk; `queue.write_buffer` otherwise |
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
-| Staged-hold scratch | Cleared and refilled each frame; capacity kept |
+| Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
 | Per-image texture and bind group | `Image`, dropped with it |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | `ResourceCache` entries | While a frame uses them; then retired until the GPU finishes the last frame that used them, and handed back as `Reclaimed` |
 
-**`ResourceCache`.** A frame runs `begin_frame`, `upload` or `layer` for each image it
-draws, its passes, then `end_frame`. `upload` keyed by an ID reuses the entry when the
+**`ResourceCache`.** A frame runs `begin_frame`, `upload`, `import` or `layer` for each
+image it draws, its passes, then `end_frame`. `upload` keyed by an ID reuses the entry when the
 caller's version and the size are unchanged, rewrites the same texture for a new
 version, and makes a new texture (retiring the old one) for a new size; `layer` reuses
 a layer of the same size. `end_frame` retires every entry the frame did not use,
@@ -210,6 +215,16 @@ the newest finished frame in an atomic), polls the device once without blocking,
 returns the retired images whose last frame has finished. A steady frame allocates
 only that callback; a frame that fails before `end_frame` leaves its retirees to the
 next frame's fence, which covers it.
+
+`import` keyed by an ID samples a `GpuFrame` with no copy. The entry's image carries
+the frame's `FrameSync` hold, so each `render` that draws it stages it, until
+`end_frame`, which drops every live entry's hold (as retiring does): a cached image
+never keeps a platform texture from being reused. The import itself, texture view and
+bind group, is kept: a frame in the texture the key showed recently swaps that
+texture's import back in, so a platform ring of N textures costs N imports once, not
+one per frame. At most eight such kept imports per key; a frame of a new size retires
+the kept imports of the old size, which the platform has released. An upload or a
+layer under the key replaces the import, which retires as any entry does.
 
 A returned output texture is a clone of the cached sRGB target. The next `render`
 overwrites those texels, including when the canvas size is unchanged. Readback bytes
@@ -302,7 +317,8 @@ kinds.
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
   that move or hold frames. An imported input's `FrameSync` is staged once the pass has
-  recorded, right before the submit. The prelude's `frame.time` is that time wrapped
+  recorded, right before the submit, and the submit hands its texture back in
+  `PRESENT`, as `render` does. The prelude's `frame.time` is that time wrapped
   to a day (better than 10 ms in an `f32`) and jumps back once a day, so a kind that
   moves with time computes its phase on the CPU in `f64` and passes it in its `Params`.
 - A pass records fullscreen draws through `Ctx::draw`. Every filter shader is appended
@@ -387,7 +403,13 @@ replaces it for a new size; an unused entry is handed back only after the frame 
 opaque-red-then-transparent upload drawn half a pixel off and at scale 2 keeps red
 at 255 where it is partly covered (straight filtering gave 187 on lavapipe); an
 imported sRGB texture is read as straight alpha. An image from another compositor on
-the same device is refused. Without an adapter, unit tests still cover the binary16 encode
+the same device is refused. GPU frames through the cache: a frame drawn from an
+import is staged once, and once the frame ends nothing but the frame holds its
+`FrameSync`; a second texture under the key is a second import, the first texture
+coming round again reuses its import and stages again, a frame of a new size retires
+both old imports after the fence, and an upload under the key replaces the import
+(the staged submit's `PRESENT` transition runs on the software adapter here). Without
+an adapter, unit tests still cover the binary16 encode
 (every value an upload can produce, within half an ulp), the premultiply order and
 the compositor identity.
 
@@ -414,7 +436,15 @@ so the missing adapter panics and the job fails. The `macos` job is
 Editing the workflow is a governance change because `.github/**` is protected; it
 adds a package so tests can render, and it does not weaken a check.
 
-**Not measured** ([R-RT-005](../../docs/RULES.md#R-RT-005)). No frame-time numbers.
+**Benchmarks** (`benches/composite.rs`, criterion, [R-RT-005](../../docs/RULES.md#R-RT-005)).
+A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with readback
+(`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
+and refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
+`cargo bench -p jstream-render --bench composite`; the `bench` workflow records them on
+lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
+software adapter's numbers are CPU rasterisation: they track regressions in what the
+compositor submits, and say nothing about GPU frame time. **Not measured:** frame time on
+a hardware GPU.
 
 <a id="open-questions"></a>
 ## Open questions

@@ -16,7 +16,8 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
-Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)). It is written against
+Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)), except YouTube's account
+features, which are for people, through the UI (ADR-0058 §3). It is written against
 `dyn Control` and `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host hands it a session, in process
 or over the WebSocket API. Layer 3: it builds on `jstream-control` (layer 2) and needs no
@@ -28,9 +29,11 @@ Contents (a first cut; [Design](#design) explains the choices):
   serves. A `video.snapshot` result leads with an image content block, the only place
   its PNG appears.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
-  and the decoding of tool arguments into protocol calls.
+  less the people-only `youtube.*` ops (`PEOPLE_ONLY`), and the decoding of tool
+  arguments into protocol calls, which refuses an output edit with a `youtube` target.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
-  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`.
+  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`;
+  `youtube.*` events are dropped.
 - **JSON-RPC** (`jsonrpc.rs`): parsing one message and building replies.
 - **stdio transport** (`stdio.rs`): `serve_stdio`, newline-delimited messages over any
   `BufRead`/`Write` pair.
@@ -54,11 +57,17 @@ generated from the protocol's JSON Schema when a `Server` is built: every varian
 named after its noun
 takes it as its `op` argument. A command added to the protocol becomes an op with no
 change here, and a new noun becomes a new tool. The generated list is in the snapshot
-below; its shape is:
+below; its shape is the following. The protocol's `youtube.*` ops get no tool, and a
+call naming one is an unknown op, so none reaches the engine: YouTube is for people,
+through the UI ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
+For the same reason an `output.create` or
+`output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
+`batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
+target stays open to agents), and the `events` feed drops `youtube.*` events. `describe_api` still returns the whole schema, YouTube included.
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`audio`, `bus`, `canvas`, `delete`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `video` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -76,6 +85,13 @@ names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-ro
 [`schema/tools.snap`](schema/tools.snap): a protocol change shows up there as the tool
 diff agents will see. After an intended change, regenerate it with
 `INSTA_UPDATE=always cargo test -p jstream-mcp` and review the diff.
+
+The `pairing` and `device` tools (protocol 0.21) need no code here either: the session
+`jstream-server` hands this crate answers them
+([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), so an agent can
+pair and revoke devices as any client can (ADR-0006), and gets `unsupported` from a
+session with no server in front. A `pairing.start` result carries the code, the one
+place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 ### MCP revisions
 
@@ -114,6 +130,7 @@ batches (MCP removed them in 2025-06-18).
 | The arguments don't fit the tool, or an `events` cursor is past the newest event | the same, with the protocol's `malformed` code and the reason |
 | The connection to the engine was lost during the call | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again ([Session and identity](#design)). |
 | `hello` failed with a lost connection | the same `disconnected` code, saying the call was not sent and that the MCP server must be restarted for a new session, with its own undo history |
+| `hello` wasn't answered within 3 s | the same `disconnected` code, saying the call was not sent and that the next call sends `hello` again ([Session and identity](#design)) |
 | Unknown tool, or a `tools/call` without `name` or with non-object `arguments` | JSON-RPC `-32602` |
 | Unparseable JSON / not a valid request / unknown method | `-32700` / `-32600` / `-32601` |
 
@@ -143,9 +160,14 @@ client introduces itself: at `initialize` (handshake-based revisions) with
 `jstream-server` closes a connection that hasn't completed its handshake within its
 handshake timeout ([jstream-server › Design](../jstream-server/README.md#design)), so the
 session must open before the agent goes idle, not at its first tool call. If that
-`hello` fails, the request still succeeds, and a client that skips both (a stateless
+`hello` fails, or isn't answered within 3 s (well under that handshake timeout, so an
+engine that accepted the connection and then hangs doesn't hold `initialize` until it
+closes), the request still succeeds, and a client that skips both (a stateless
 client going straight to `tools/call`) gets its `hello` before the next tool call that
-needs the engine, which reports a failure. Later names don't change the session.
+needs the engine, which reports a failure. That `hello` has the same 3 s bound: if it
+runs out, the call isn't sent and fails with `disconnected`, and the call after it sends
+`hello` again (if the engine closed the connection meanwhile, that call reports a lost
+connection, as below). Later names don't change the session.
 `describe_api`, argument errors and `events` reads never call the engine
 ([Events](#design)).
 
@@ -184,7 +206,8 @@ Consequences). A tick carries running totals, so the feed keeps only the newest 
 outside the buffer, and every read returns it as `stats`; an agent still sees the drop
 counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
 counted in `dropped`. `meters.tick`, about ten a second while the mixer runs, is kept
-the same way as `meters`: each one is a full reading of the levels. A read drains
+the same way as `meters`: each one is a full reading of the levels. `youtube.*` events
+are dropped as they arrive and take no `seq`: YouTube is for people (ADR-0058 §3). A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 
@@ -213,8 +236,9 @@ buffer and page sizes, so agents don't need this page.
 
 ### Async and transports
 
-`Server::handle` is an `async fn` whose future is `Send` and only awaits the `Control`
-futures, so any executor can run it, and `jstream-server` can mount it inside axum.
+`Server::handle` is an `async fn` whose future is `Send` and awaits only the `Control`
+futures and the hello wait's timer, which its own thread wakes, so any executor can run
+it, and `jstream-server` can mount it inside axum.
 `serve_stdio` needs none: it reads a line, drives that message's future on the calling
 thread with a small `block_on` (park until woken, built on `std::task::Wake`), writes the
 reply line and flushes. That works for any `Control` whose futures are woken by their

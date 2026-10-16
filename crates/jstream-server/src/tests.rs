@@ -5,19 +5,20 @@
 use crate::{Connector, Server, ServerConfig, Token};
 use futures_util::{SinkExt, StreamExt};
 use jstream_control::protocol::{
-    Action, Batch, Call, CallResult, ClientId, Edit, Event, Hello, OutputId, OutputState,
-    PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Response, Rev,
-    SceneId, ServerMessage, Welcome,
+    Action, ActionResult, Batch, BinaryFrame, BinaryHeader, Call, CallResult, ClientId, DeviceId,
+    DeviceInfo, Edit, Event, Hello, OutputId, OutputState, PROTOCOL_VERSION, PreviewCodec,
+    ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Response, Rev, SceneId,
+    ServerMessage, StreamKind, Welcome,
 };
 use jstream_control::{
-    BoxFuture, Control, ControlError, EventStream, MockEngine, WsConfig, WsControl,
+    BinaryStream, BoxFuture, Control, ControlError, EventStream, MockEngine, WsConfig, WsControl,
 };
 use std::future::Future;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::runtime::Runtime;
-use tokio::sync::oneshot;
+use tokio::sync::{Notify, Semaphore, oneshot};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode, header};
 use tokio_tungstenite::tungstenite::{self, Message};
@@ -38,7 +39,12 @@ struct Harness {
     /// How many events the server's sessions have taken from the engine, over all
     /// connections.
     taken: Arc<AtomicUsize>,
+    /// While set, the engine never answers `hello`, as one that accepted the session and
+    /// then hangs.
+    silent: Arc<AtomicBool>,
     stop: Option<oneshot::Sender<()>>,
+    /// The serving task: done once `serve_with_shutdown` has returned.
+    serving: Option<tokio::task::JoinHandle<Result<(), crate::ServerError>>>,
 }
 
 fn start(engine: &MockEngine) -> Harness {
@@ -47,29 +53,92 @@ fn start(engine: &MockEngine) -> Harness {
 
 /// A server serving `engine`, with its configuration changed by `configure`.
 fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) -> Harness {
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
+    start_on(multi_thread(), engine, configure)
+}
+
+/// [`start_with`] on a runtime that runs every task on the thread that calls
+/// [`Harness::run`], so a subscriber set there sees every log line.
+fn start_on_this_thread(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) -> Harness {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build();
+    start_on(runtime, engine, configure)
+}
+
+/// The runtime the tests' servers run on, unless they ask for another.
+fn multi_thread() -> std::io::Result<Runtime> {
+    tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
         .build()
-    {
-        Ok(runtime) => runtime,
-        Err(error) => panic!("runtime: {error}"),
-    };
+}
+
+fn start_on(
+    runtime: std::io::Result<Runtime>,
+    engine: &MockEngine,
+    configure: impl FnOnce(&mut ServerConfig),
+) -> Harness {
     let sessions = Arc::new(AtomicUsize::new(0));
     let open = Arc::new(AtomicUsize::new(0));
     let taken = Arc::new(AtomicUsize::new(0));
-    let counters = (Arc::clone(&sessions), Arc::clone(&open), Arc::clone(&taken));
+    let silent = Arc::new(AtomicBool::new(false));
+    let counters = (
+        Arc::clone(&sessions),
+        Arc::clone(&open),
+        Arc::clone(&taken),
+        Arc::clone(&silent),
+    );
     let engine = engine.clone();
     let connector: Connector = Arc::new(move || {
-        let (sessions, open, taken) = &counters;
+        let (sessions, open, taken, silent) = &counters;
         sessions.fetch_add(1, Ordering::SeqCst);
         open.fetch_add(1, Ordering::SeqCst);
         Box::new(Tracked {
             inner: engine.connect(),
             open: Arc::clone(open),
             taken: Arc::clone(taken),
+            silent: Arc::clone(silent),
         })
     });
+    serve_on(runtime, connector, configure, sessions, open, taken, silent)
+}
+
+/// A server opening its sessions with `connector`, counting them in `sessions`,
+/// `open` and `taken`, with `silent` as its [`Harness`]'s flag (see [`Harness`]). The
+/// connector's sessions honour `silent` only if they are [`Tracked`].
+fn serve(
+    connector: Connector,
+    configure: impl FnOnce(&mut ServerConfig),
+    sessions: Arc<AtomicUsize>,
+    open: Arc<AtomicUsize>,
+    taken: Arc<AtomicUsize>,
+    silent: Arc<AtomicBool>,
+) -> Harness {
+    serve_on(
+        multi_thread(),
+        connector,
+        configure,
+        sessions,
+        open,
+        taken,
+        silent,
+    )
+}
+
+/// [`serve`] on `runtime`.
+fn serve_on(
+    runtime: std::io::Result<Runtime>,
+    connector: Connector,
+    configure: impl FnOnce(&mut ServerConfig),
+    sessions: Arc<AtomicUsize>,
+    open: Arc<AtomicUsize>,
+    taken: Arc<AtomicUsize>,
+    silent: Arc<AtomicBool>,
+) -> Harness {
+    let runtime = match runtime {
+        Ok(runtime) => runtime,
+        Err(error) => panic!("runtime: {error}"),
+    };
     let mut config = match Token::new(TOKEN) {
         Ok(token) => ServerConfig::new(token),
         Err(error) => panic!("token: {error}"),
@@ -86,7 +155,7 @@ fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) ->
     let url = server.ws_url();
     let authority = server.local_addr().to_string();
     let (stop, stopped) = oneshot::channel::<()>();
-    runtime.spawn(server.serve_with_shutdown(async move {
+    let serving = runtime.spawn(server.serve_with_shutdown(async move {
         // A dropped sender also stops the server.
         let _ = stopped.await;
     }));
@@ -97,21 +166,28 @@ fn start_with(engine: &MockEngine, configure: impl FnOnce(&mut ServerConfig)) ->
         sessions,
         open,
         taken,
+        silent,
         stop: Some(stop),
+        serving: Some(serving),
     }
 }
 
 /// A mock session that counts, for the [`Harness`], the events the server takes from it
 /// and whether the server still holds it. These are what the shutdown tests wait on,
-/// rather than on wall-clock time, which a loaded machine stretches (#137).
+/// rather than on wall-clock time, which a loaded machine stretches (#137). While
+/// `silent` is set, `hello` is never answered.
 struct Tracked {
     inner: jstream_control::MockControl,
     open: Arc<AtomicUsize>,
     taken: Arc<AtomicUsize>,
+    silent: Arc<AtomicBool>,
 }
 
 impl Control for Tracked {
     fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        if self.silent.load(Ordering::SeqCst) {
+            return Box::pin(std::future::pending());
+        }
         self.inner.hello(hello)
     }
 
@@ -400,7 +476,7 @@ fn a_batch_a_query_and_events_round_trip() {
         },
     };
     let response = ok(harness.run(control.call(start)));
-    assert_eq!(response.result, CallResult::Action {});
+    assert_eq!(response.result, CallResult::action());
     for state in [OutputState::Starting, OutputState::Active] {
         assert_eq!(
             next_event(&harness, &mut events),
@@ -616,6 +692,187 @@ fn a_server_shutdown_disconnects_calls_and_ends_events() {
     // A subscription opened after the close ends at once.
     let mut late = control.events();
     assert_eq!(next_event(&harness, &mut late), None);
+}
+
+/// A session whose `hello` signals `entered`, then waits for a permit from `gate`, so a
+/// test can hold a connection's task inside the handshake while the client queues more
+/// messages behind it.
+struct Gated {
+    inner: jstream_control::MockControl,
+    entered: Arc<Notify>,
+    gate: Arc<Semaphore>,
+}
+
+impl Control for Gated {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        Box::pin(async move {
+            self.entered.notify_one();
+            match self.gate.acquire().await {
+                Ok(permit) => permit.forget(),
+                Err(error) => panic!("gate: {error}"),
+            }
+            self.inner.hello(hello).await
+        })
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        self.inner.call(call)
+    }
+
+    fn events(&self) -> EventStream {
+        self.inner.events()
+    }
+}
+
+/// #294: a request the server reads once it is shutting down is never answered. The
+/// connection closes with 1001 instead, so the client's call fails with `Disconnected`
+/// rather than succeeding after `serve_with_shutdown` has returned. The close frame
+/// arrives, and the connection then ends cleanly: the server reads the client's close
+/// before closing the socket, rather than resetting it with the request unread.
+///
+/// Each round holds the connection's task inside `hello` while the client queues a
+/// request and the server begins shutting down, so when the task goes on, the shutdown
+/// and the request are ready together. `tokio::select!` picks among ready branches at random,
+/// and without the check the task took and answered the request in about one round in
+/// twenty; 200 rounds (well under a second) miss that with a probability near 1e-4.
+#[test]
+fn a_request_read_after_the_shutdown_is_not_answered() {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => panic!("runtime: {error}"),
+    };
+    let query =
+        r#"{"type":"request","id":"q1","call":{"kind":"query","query":{"type":"scene.list"}}}"#;
+    let hello = r#"{"type":"hello","protocol":{"major":0,"minor":5},"client_name":"raw"}"#;
+    for round in 0..200 {
+        let entered = Arc::new(Notify::new());
+        let gate = Arc::new(Semaphore::new(0));
+        let engine = MockEngine::new();
+        let connector: Connector = {
+            let (entered, gate) = (Arc::clone(&entered), Arc::clone(&gate));
+            Arc::new(move || {
+                Box::new(Gated {
+                    inner: engine.connect(),
+                    entered: Arc::clone(&entered),
+                    gate: Arc::clone(&gate),
+                })
+            })
+        };
+        let config = match Token::new(TOKEN) {
+            Ok(token) => ServerConfig::new(token),
+            Err(error) => panic!("token: {error}"),
+        };
+        let closed = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(10), async {
+                let server = match Server::bind(config, connector).await {
+                    Ok(server) => server,
+                    Err(error) => panic!("bind: {error}"),
+                };
+                let mut request = match server.ws_url().into_client_request() {
+                    Ok(request) => request,
+                    Err(error) => panic!("request: {error}"),
+                };
+                match HeaderValue::from_str(&format!("Bearer {TOKEN}")) {
+                    Ok(value) => request.headers_mut().insert(header::AUTHORIZATION, value),
+                    Err(error) => panic!("header: {error}"),
+                };
+                let addr = server.local_addr();
+                let (stop, stopped) = oneshot::channel::<()>();
+                let serving = tokio::spawn(server.serve_with_shutdown(async move {
+                    let _ = stopped.await;
+                }));
+                let mut socket = match tokio_tungstenite::connect_async(request).await {
+                    Ok((socket, _)) => socket,
+                    Err(error) => panic!("connect: {error}"),
+                };
+                for text in [hello, query] {
+                    if let Err(error) = socket.send(Message::Text(text.into())).await {
+                        panic!("send: {error}");
+                    }
+                    if text == hello {
+                        // The connection's task is now held inside `hello`.
+                        entered.notified().await;
+                    }
+                }
+                let _ = stop.send(());
+                // The server stops listening only after it has told its connections it is
+                // shutting down. (Awaiting `serving` here would wait for this connection,
+                // which `hello` holds.)
+                while tokio::net::TcpStream::connect(addr).await.is_ok() {
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+                gate.add_permits(1);
+                let code = loop {
+                    match socket.next().await {
+                        Some(Ok(Message::Text(text))) => {
+                            match serde_json::from_str::<ServerMessage>(text.as_str()) {
+                                // The `hello` was read before the shutdown.
+                                Ok(ServerMessage::Welcome(_)) => {}
+                                other => panic!("round {round}: answered {other:?}"),
+                            }
+                        }
+                        Some(Ok(Message::Close(frame))) => {
+                            // The server finishes the closing handshake before it closes
+                            // the socket, so the stream then ends without a reset. Linux
+                            // keeps a frame that arrived before a reset readable, but
+                            // macOS and Windows discard it, so this checks the reset
+                            // itself.
+                            match socket.next().await {
+                                None => {}
+                                other => panic!("round {round}: after the close: {other:?}"),
+                            }
+                            break frame.map(|frame| u16::from(frame.code));
+                        }
+                        Some(Ok(_)) => {}
+                        None | Some(Err(_)) => break None,
+                    }
+                };
+                match serving.await {
+                    Ok(Ok(())) => {}
+                    other => panic!("the server did not stop cleanly: {other:?}"),
+                }
+                code
+            })
+            .await
+        });
+        match closed {
+            Ok(code) => assert_eq!(code, Some(1001), "round {round}"),
+            Err(_) => panic!("round {round} timed out"),
+        }
+    }
+}
+
+/// #294: `serve_with_shutdown` returns only once every connection has sent its close
+/// and finished the closing handshake. Returning sooner let a host that exits right
+/// after it (the daemon drops its runtime) cut those closes short, so clients lost their
+/// close frame and last replies.
+#[test]
+fn serve_with_shutdown_returns_once_its_connections_have_closed() {
+    let mut harness = start(&MockEngine::new());
+    let (first, _) = harness.session();
+    let (second, _) = harness.session();
+    let mut events = second.events();
+    harness.shut_down();
+    let Some(serving) = harness.serving.take() else {
+        panic!("the harness has no serving task");
+    };
+    match harness.run(serving) {
+        Ok(Ok(())) => {}
+        other => panic!("the server did not stop cleanly: {other:?}"),
+    }
+    assert_eq!(
+        harness.open.load(Ordering::SeqCst),
+        0,
+        "a connection was still open when the server returned"
+    );
+    // Both clients got the close.
+    assert_eq!(next_event(&harness, &mut events), None);
+    let reason = expect_disconnected(harness.run(first.call(create_scene("main"))));
+    assert!(reason.contains("shutting down"), "{reason}");
 }
 
 #[test]
@@ -982,6 +1239,34 @@ fn a_client_that_never_says_hello_is_closed() {
     harness.run(async { tokio::time::sleep(Duration::from_millis(400)).await });
     let response = ok(harness.run(control.call(create_scene("main"))));
     assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+}
+
+/// A client that says `hello` in time to an engine that never answers it is still closed
+/// (close code 1008) at the handshake deadline, and its session is dropped, rather than
+/// holding its connection slot until the engine answers (#273).
+#[test]
+fn a_hello_the_engine_never_answers_is_closed_at_the_deadline() {
+    let harness = start_with(&MockEngine::new(), |config| {
+        config.handshake_timeout = Duration::from_millis(300);
+    });
+    harness.silent.store(true, Ordering::SeqCst);
+    let bearer = format!("Bearer {TOKEN}");
+    let mut socket = match harness.raw(None, Some(&harness.authority), Some(&bearer)) {
+        Ok(socket) => socket,
+        Err(status) => panic!("upgrade refused: {status}"),
+    };
+    let hello =
+        match serde_json::to_string(&jstream_control::protocol::ClientMessage::Hello(hello())) {
+            Ok(text) => text,
+            Err(error) => panic!("hello: {error}"),
+        };
+    harness.run(async {
+        if let Err(error) = socket.send(Message::Text(hello.into())).await {
+            panic!("send: {error}");
+        }
+    });
+    assert_eq!(closed_by_server(&harness, &mut socket), Some(1008));
+    harness.wait_until(|| harness.open.load(Ordering::SeqCst) == 0);
 }
 
 /// At most `max_connections` (32 by default) WebSocket connections are open at once: one
@@ -1576,6 +1861,130 @@ fn mcp_keep_alive_outlasts_the_header_read_timeout() {
     assert_eq!((first.status, second.status), (200, 200));
 }
 
+/// A mock session with a binary channel the test feeds: [`Control::binary`] hands the
+/// sending end of a fresh channel to `feed`.
+struct Framed {
+    inner: jstream_control::MockControl,
+    feed: Arc<std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedSender<BinaryFrame>>>>,
+}
+
+impl Control for Framed {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        self.inner.hello(hello)
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        self.inner.call(call)
+    }
+
+    fn events(&self) -> EventStream {
+        self.inner.events()
+    }
+
+    fn binary(&self) -> BinaryStream {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        *self
+            .feed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(tx);
+        Box::pin(futures_util::stream::poll_fn(move |cx| rx.poll_recv(cx)))
+    }
+}
+
+fn preview_frame(channel: u32, keyframe: bool, n: u8) -> BinaryFrame {
+    BinaryFrame {
+        header: BinaryHeader {
+            kind: StreamKind::Preview,
+            channel,
+            codec: Some(PreviewCodec::H264),
+            keyframe,
+            end: false,
+            width: 640,
+            height: 360,
+            pts_us: i64::from(n) * 66_666,
+            rev: Rev(u64::from(n)),
+        },
+        payload: Arc::from(&[0, 0, 0, 1, n][..]),
+    }
+}
+
+/// The session's binary frames reach the client as binary messages, in order and
+/// byte for byte, once the handshake has opened the channel; the server reads none
+/// from the client.
+#[test]
+fn preview_frames_go_out_as_binary_messages() {
+    let engine = MockEngine::new();
+    let feed = Arc::new(std::sync::Mutex::new(None));
+    let slot = Arc::clone(&feed);
+    let connector: Connector = Arc::new(move || {
+        Box::new(Framed {
+            inner: engine.connect(),
+            feed: Arc::clone(&slot),
+        })
+    });
+    let counter = || Arc::new(AtomicUsize::new(0));
+    let silent = Arc::new(AtomicBool::new(false));
+    let harness = serve(connector, |_| {}, counter(), counter(), counter(), silent);
+    let (control, _) = harness.session();
+    let mut frames = control.binary();
+    // The server opened the session's channel when the handshake succeeded.
+    let sender = feed
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+        .expect("the server opened the binary channel");
+    let sent: Vec<_> = (0..3).map(|n| preview_frame(5, n == 0, n)).collect();
+    for frame in &sent {
+        assert!(sender.send(frame.clone()).is_ok());
+    }
+    let end = BinaryFrame::end(StreamKind::Preview, 5, Rev(3), "the encoder stopped");
+    assert!(sender.send(end.clone()).is_ok());
+    let received: Vec<_> = harness.run(async {
+        let mut received = Vec::new();
+        while received.len() < 4 {
+            match frames.next().await {
+                Some(frame) => received.push(frame),
+                None => panic!("the binary channel ended"),
+            }
+        }
+        received
+    });
+    assert_eq!(received[..3], sent[..]);
+    assert_eq!(received[3], end);
+
+    // A client's binary message is not part of the protocol.
+    let bearer = format!("Bearer {TOKEN}");
+    let mut socket = match harness.raw(
+        Some(&harness.own_origin()),
+        Some(&harness.authority.clone()),
+        Some(&bearer),
+    ) {
+        Ok(socket) => socket,
+        Err(status) => panic!("refused: {status}"),
+    };
+    let reply = harness.run(async {
+        if let Err(error) = socket.send(Message::Binary(vec![1, 2, 3].into())).await {
+            panic!("send: {error}");
+        }
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(reply))) => {
+                    match serde_json::from_str::<ServerMessage>(reply.as_str()) {
+                        Ok(message) => return message,
+                        Err(error) => panic!("unreadable reply {reply}: {error}"),
+                    }
+                }
+                Some(Ok(_)) => continue,
+                other => panic!("no reply: {other:?}"),
+            }
+        }
+    });
+    match reply {
+        ServerMessage::Error(error) => assert_eq!(error.error.error.code(), "malformed"),
+        other => panic!("unexpected reply {other:?}"),
+    }
+}
+
 /// A UI bundle in a fresh temporary directory, removed on drop, beside a `secret` file
 /// outside it that no request may reach.
 struct Bundle {
@@ -1879,5 +2288,286 @@ fn a_websocket_upgrade_accepts_the_token_as_a_subprotocol() {
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED)
         }
         other => panic!("expected 401, got {:?}", other.map(|(_, r)| r.status())),
+    }
+}
+
+// Pairing (ADR-0044).
+
+impl Harness {
+    /// POSTs `body` as JSON to the pairing path on a new connection, with `headers`
+    /// (`Host` is added unless given).
+    fn post_pair(&self, headers: &[(&str, &str)], body: &str) -> HttpReply {
+        let addr = self.authority.clone();
+        let mut all: Vec<(&str, &str)> = vec![("Content-Type", "application/json")];
+        if !headers.iter().any(|(n, _)| n.eq_ignore_ascii_case("host")) {
+            all.push(("Host", &addr));
+        }
+        all.extend_from_slice(headers);
+        self.run(async {
+            let mut stream = match tokio::net::TcpStream::connect(&addr).await {
+                Ok(stream) => stream,
+                Err(error) => panic!("connect: {error}"),
+            };
+            http_to(&mut stream, "POST", crate::PAIR_PATH, &all, body).await
+        })
+    }
+
+    /// Starts pairing over `control` and returns the code.
+    fn start_pairing(&self, control: &WsControl) -> String {
+        let response = ok(self.run(control.call(Call::Action {
+            action: Action::PairingStart,
+        })));
+        match response.result {
+            CallResult::Action {
+                result:
+                    Some(ActionResult::PairingStart {
+                        code,
+                        expires_in_secs,
+                    }),
+            } => {
+                assert_eq!(expires_in_secs, 120);
+                code.expose().to_owned()
+            }
+            other => panic!("expected a pairing code, got {other:?}"),
+        }
+    }
+
+    /// Pairs a device named `name` with `code`, returning its ID and token.
+    fn pair(&self, code: &str, name: &str) -> (String, String) {
+        let body = serde_json::json!({"code": code, "name": name}).to_string();
+        let origin = self.own_origin();
+        let reply = self.post_pair(&[("Origin", &origin)], &body);
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        assert_eq!(reply.header("cache-control"), Some("no-store"));
+        let answer = reply.json();
+        match (answer["device_id"].as_str(), answer["token"].as_str()) {
+            (Some(id), Some(token)) => (id.to_owned(), token.to_owned()),
+            _ => panic!("no device in {answer}"),
+        }
+    }
+
+    fn device_list(&self, control: &WsControl) -> Vec<DeviceInfo> {
+        let call = Call::Query {
+            query: Query::DeviceList,
+        };
+        match ok(self.run(control.call(call))).result {
+            CallResult::Query {
+                result: QueryResult::DeviceList { devices },
+            } => devices,
+            other => panic!("expected device.list, got {other:?}"),
+        }
+    }
+}
+
+/// A code that differs from `code` in its last symbol.
+fn wrong_code(code: &str) -> String {
+    if code.ends_with('0') {
+        format!("{}1", &code[..8])
+    } else {
+        format!("{}0", &code[..8])
+    }
+}
+
+/// ADR-0044 end to end: an authenticated client starts pairing, a device trades the code
+/// for its own token, connects with it as itself, and a revoke closes it and locks it out.
+#[test]
+fn a_paired_device_connects_with_its_own_token_until_revoked() {
+    let harness = start(&MockEngine::new());
+    let (host, _) = harness.session();
+    // No code open: the one unauthenticated request is refused like a missing token.
+    let body = r#"{"code":"0000-0000","name":"Tablet"}"#;
+    assert_eq!(harness.post_pair(&[], body).status, 401);
+
+    let code = harness.start_pairing(&host);
+    // A foreign page can't pair, even with the code.
+    let foreign = serde_json::json!({"code": code, "name": "Evil"}).to_string();
+    let reply = harness.post_pair(&[("Origin", "http://evil.example")], &foreign);
+    assert_eq!(reply.status, 403);
+    // A bad name uses up no attempt; then the code pairs, once.
+    let unnamed = serde_json::json!({"code": code, "name": " "}).to_string();
+    assert_eq!(harness.post_pair(&[], &unnamed).status, 400);
+    let (device_id, token) = harness.pair(&code, "Tablet");
+    assert_eq!(token.len(), 64);
+    let again = serde_json::json!({"code": code, "name": "Again"}).to_string();
+    assert_eq!(harness.post_pair(&[], &again).status, 401);
+
+    // The device token gets in, and the device acts like any client.
+    let device = ok(harness.run(WsControl::connect(WsConfig::new(
+        harness.url.clone(),
+        token.clone(),
+    ))));
+    ok(harness.run(device.hello(hello())));
+    ok(harness.run(device.call(create_scene("scn_tablet"))));
+    let devices = harness.device_list(&device);
+    assert_eq!(devices.len(), 1);
+    assert_eq!(devices[0].device_id.as_str(), device_id);
+    assert_eq!(devices[0].name, "Tablet");
+    let origin = harness.own_origin();
+    let bearer = format!("Bearer {token}");
+    assert!(
+        harness
+            .raw(Some(&origin), Some(&harness.authority), Some(&bearer))
+            .is_ok()
+    );
+
+    // Revoking it closes its connection and locks its token out.
+    let mut events = device.events();
+    let revoke = Call::Action {
+        action: Action::DeviceRevoke {
+            device_id: DeviceId::new(device_id.as_str()),
+        },
+    };
+    ok(harness.run(host.call(revoke.clone())));
+    while next_event(&harness, &mut events).is_some() {}
+    let refused = harness.run(WsControl::connect(WsConfig::new(
+        harness.url.clone(),
+        token,
+    )));
+    assert!(expect_disconnected(refused).contains("401"));
+    assert!(harness.device_list(&host).is_empty());
+    assert_eq!(protocol_code(harness.run(host.call(revoke))), "not_found");
+}
+
+/// The server answers the pairing calls itself, after the handshake like any call, and
+/// the newest code replaces the one open.
+#[test]
+fn pairing_needs_the_handshake_and_the_newest_code_wins() {
+    let harness = start(&MockEngine::new());
+    let control = ok(harness.connect());
+    let early = harness.run(control.call(Call::Action {
+        action: Action::PairingStart,
+    }));
+    assert_eq!(protocol_code(early), "handshake_required");
+    ok(harness.run(control.hello(hello())));
+    let code = harness.start_pairing(&control);
+    let newer = harness.start_pairing(&control);
+    if newer != code {
+        let stale = serde_json::json!({"code": code, "name": "Old"}).to_string();
+        assert_eq!(harness.post_pair(&[], &stale).status, 403);
+    }
+    harness.pair(&newer, "Kitchen tablet");
+}
+
+/// Five wrong codes void the open one, so a guesser gets five tries per code.
+#[test]
+fn five_wrong_codes_void_the_open_one() {
+    let harness = start(&MockEngine::new());
+    let (control, _) = harness.session();
+    let code = harness.start_pairing(&control);
+    let guess = serde_json::json!({"code": wrong_code(&code), "name": "Guess"}).to_string();
+    for _ in 0..5 {
+        assert_eq!(harness.post_pair(&[], &guess).status, 403);
+    }
+    let right = serde_json::json!({"code": code, "name": "Late"}).to_string();
+    assert_eq!(harness.post_pair(&[], &right).status, 401);
+}
+
+/// MCP agents reach the pairing calls as the `pairing` and `device` tools, and a device
+/// token opens MCP sessions of its own, which the control token can't use.
+#[test]
+fn mcp_agents_can_pair_and_list_devices() {
+    let harness = start_with(&MockEngine::new(), mcp_on());
+    let session = harness.mcp_session("agent");
+    let call = |tool: &str, op: serde_json::Value| {
+        serde_json::json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                           "params": {"name": tool, "arguments": {"op": op}}})
+    };
+    let reply = harness.mcp(
+        Some(&session),
+        &call("pairing", serde_json::json!({"type": "pairing.start"})),
+    );
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let answer = reply.json();
+    let Some(code) = answer
+        .pointer("/result/structuredContent/result/result/code")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+    else {
+        panic!("no code in {answer}");
+    };
+    let (device_id, token) = harness.pair(&code, "Agent box");
+    let reply = harness.mcp(
+        Some(&session),
+        &call("device", serde_json::json!({"type": "device.list"})),
+    );
+    let listed = reply.json();
+    assert_eq!(
+        listed.pointer("/result/structuredContent/result/result/devices/0/device_id"),
+        Some(&serde_json::Value::from(device_id.as_str())),
+        "{listed}"
+    );
+    assert!(
+        !reply.body.contains(&token),
+        "device tokens are never reported"
+    );
+    // The device's own session; the control token can't use it.
+    let bearer = format!("Bearer {token}");
+    let headers = [
+        ("Authorization", bearer.as_str()),
+        ("Content-Type", "application/json"),
+        ("Accept", "application/json, text/event-stream"),
+    ];
+    let reply = harness.http("POST", &headers, &mcp_initialize("device").to_string());
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let Some(device_session) = reply.header("mcp-session-id").map(str::to_owned) else {
+        panic!("no session");
+    };
+    let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
+    assert_eq!(harness.mcp(Some(&device_session), &note).status, 404);
+}
+
+/// R-SEC-001: neither a pairing code nor a device token appears in what the server
+/// logs, from starting pairing, through wrong and right attempts and the device's
+/// connection, to its revocation.
+#[test]
+fn pairing_codes_and_device_tokens_are_never_logged() {
+    let capture = crate::gate::tests::Capture::default();
+    let mut secrets = Vec::new();
+    tracing::subscriber::with_default(capture.clone(), || {
+        let harness = start_on_this_thread(&MockEngine::new(), |_| {});
+        let (host, _) = harness.session();
+        let first = harness.start_pairing(&host);
+        let wrong = wrong_code(&first);
+        let guess = serde_json::json!({"code": wrong, "name": "Guess"}).to_string();
+        for _ in 0..5 {
+            assert_eq!(harness.post_pair(&[], &guess).status, 403);
+        }
+        let code = harness.start_pairing(&host);
+        let (device_id, token) = harness.pair(&code, "Tablet");
+        let device = ok(harness.run(WsControl::connect(WsConfig::new(
+            harness.url.clone(),
+            token.clone(),
+        ))));
+        ok(harness.run(device.hello(hello())));
+        let revoke = Call::Action {
+            action: Action::DeviceRevoke {
+                device_id: DeviceId::new(device_id.as_str()),
+            },
+        };
+        ok(harness.run(host.call(revoke)));
+        let refused = harness.run(WsControl::connect(WsConfig::new(
+            harness.url.clone(),
+            token.clone(),
+        )));
+        assert!(refused.is_err());
+        secrets.extend([first, wrong, code, token]);
+    });
+    let logged = capture.text();
+    for expected in [
+        "pairing started",
+        "pairing code voided after 5 wrong attempts",
+        "wrong pairing code",
+        "device paired",
+        "Tablet",
+        "device revoked",
+    ] {
+        assert!(logged.contains(expected), "{expected} not logged: {logged}");
+    }
+    for secret in &secrets {
+        let bare = secret.replace('-', "");
+        assert!(
+            !logged.contains(secret.as_str()) && !logged.contains(&bare),
+            "{secret} logged: {logged}"
+        );
     }
 }

@@ -27,3 +27,10 @@ tracing.workspace = true
 # Backends are additive (R-RS-010): Vulkan for lavapipe, DX12 for WARP, Metal on macOS.
 # `wgsl` compiles the compositor shaders. The version is the workspace pin (ADR-0004).
 wgpu = { workspace = true, features = ["vulkan", "dx12", "metal", "wgsl"] }
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "composite"
+harness = false

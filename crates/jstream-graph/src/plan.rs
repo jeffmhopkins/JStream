@@ -1,8 +1,8 @@
-//! `delete.plan`: the batch that deletes a scene or source together with everything that
-//! refers to it ([ADR-0025](../../../docs/adr/0025-typed-settings-kind-descriptors.md)).
+//! `delete.plan`: the batch that deletes a scene, source or bus together with everything
+//! that refers to it ([ADR-0025](../../../docs/adr/0025-typed-settings-kind-descriptors.md)).
 //!
-//! Rejection stays the only delete: `scene.delete` and `source.delete` refuse while
-//! anything refers to their target. The plan spells out the removal as ordinary edits,
+//! Rejection stays the only delete: `scene.delete`, `source.delete` and `bus.delete`
+//! refuse while anything refers to their target. The plan spells out the removal as ordinary edits,
 //! so the client can show it, and its undo is the batch's normal inverse.
 
 use crate::deps::{self, Node};
@@ -20,7 +20,8 @@ impl Graph {
     /// succeed. Fails with `not_found` if the target doesn't exist.
     ///
     /// Deleting a scene also deletes the `scene` sources that show it. Deleting a source
-    /// never deletes a scene, so the cascade stops there. The edits are, in order:
+    /// never deletes a scene, so the cascade stops there. A bus is held only by settings
+    /// values, which the plan clears; `bus.delete` takes its sends itself. The edits are, in order:
     /// - `item.remove` for each item that places a deleted source;
     /// - one `source.set_settings` per remaining source whose settings refer to a deleted
     ///   object, setting each such parameter to `null`;
@@ -49,6 +50,23 @@ impl Graph {
                     Node::Source(source_id.clone()),
                     Edit::SourceDelete {
                         source_id: source_id.clone(),
+                    },
+                )
+            }
+            DeleteTarget::Bus { bus_id } => {
+                if state.bus(bus_id).is_none() {
+                    return Err(not_found(EntityKind::Bus, bus_id.as_str()));
+                }
+                if bus_id.is_master() {
+                    return Err(ProtocolError::invalid_argument(
+                        "target.bus_id",
+                        "the master bus can't be deleted",
+                    ));
+                }
+                (
+                    Node::Bus(bus_id.clone()),
+                    Edit::BusDelete {
+                        bus_id: bus_id.clone(),
                     },
                 )
             }
