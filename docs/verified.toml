@@ -1284,7 +1284,7 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:7666dcee9f6dd8ce" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:bddbb16fdccc59f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "ADR-0058 rework: --youtube-client is a developer's override of the built-in client; YouTube bullet says the built-in client is empty, MCP has no youtube tool; exit 1 row keeps both the client file and --ui-dir; matches args.rs help" }
+stamp = { hash = "b3:4f358ffc756f6b3f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "B4: YouTube bullet now says with a client status answers signed_out and sign_in returns the consent URL, then the token is kept; matches the runbook's steps 2-3" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:4c7b5e8c1545de7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "ADR-0058 rework: --youtube-client is a developer's override of the built-in client; YouTube bullet says the built-in client is empty, MCP has no youtube tool; exit 1 row keeps both the client file and --ui-dir; matches args.rs help" }
@@ -3030,7 +3030,7 @@ stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:bddbb16fdccc59f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (YouTube bullet, --youtube-client wording); these steps don't use YouTube sign-in and hold" }
+stamp = { hash = "b3:4f358ffc756f6b3f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (B4 sign-in wording); these steps don't use YouTube sign-in and hold" }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
@@ -3039,7 +3039,7 @@ stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:5766c7b224313478", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: stale via the CLI usage, which now says the CLI has no YouTube-bound output or YouTube actions; the smoke script uses only generic RTMP outputs; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:bddbb16fdccc59f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (YouTube bullet); the smoke script doesn't touch YouTube and holds" }
+stamp = { hash = "b3:4f358ffc756f6b3f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (B4 sign-in wording); the smoke script doesn't touch YouTube and holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -3051,7 +3051,7 @@ stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:5766c7b224313478", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: stale via the CLI usage, which now says the CLI has no YouTube-bound output or YouTube actions; the steps stream with a generic RTMPS URL and stream key, which the CLI still does; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:bddbb16fdccc59f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (YouTube bullet); the RTMP steps over MCP use output and video tools only and hold" }
+stamp = { hash = "b3:4f358ffc756f6b3f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (B4 sign-in wording); the RTMP steps over MCP hold" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; step 7 (Ctrl-C prints stopped, exits 0) holds with #301's bounded close wait; default limits are non-zero; holds" }

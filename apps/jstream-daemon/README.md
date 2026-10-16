@@ -152,9 +152,10 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   below with YouTube Studio's RTMPS URL and stream key. Signing in, for the
   `youtube.*` calls ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)),
   uses JStream's own OAuth client (ADR-0058). This build's built-in client is still
-  empty, so `youtube.status` answers `unavailable` and the startup log says so. Signed
-  in, `youtube.sign_in` returns Google's consent URL, and the account's refresh token
-  is kept in Credential Manager, so a restart stays signed in. The `youtube.*` calls
+  empty, so `youtube.status` answers `unavailable` and the startup log says so. With a
+  client (the built-in one, or a developer's below), `youtube.status` answers
+  `signed_out` and `youtube.sign_in` returns Google's consent URL; once approved, the
+  account's refresh token is kept in Credential Manager, so a restart stays signed in. The `youtube.*` calls
   are a person's tools, over the WebSocket API: MCP has no `youtube` tool (ADR-0058).
   A developer can test with their own Google Cloud OAuth client of type "Desktop
   app", with the YouTube Data API v3 enabled: pass its downloaded JSON with
