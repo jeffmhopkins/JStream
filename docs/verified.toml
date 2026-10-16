@@ -1062,7 +1062,7 @@ stamp = { hash = "b3:63e27b443cbc6f6d" }
 stamp = { hash = "b3:6ecb293741341e3b" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/drops.rs"]
-stamp = { hash = "b3:c7eb14245f6d9072" }
+stamp = { hash = "b3:46527912b4ef832c", by = "agent:claude-e3d", note = "Render thread paragraph still holds after the ring fix: GPU sessions get encode targets, others readback; held-target drops are counted, described in Runtime" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
 stamp = { hash = "b3:714ef3084c85fff1", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
@@ -1098,7 +1098,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:3aff48497d0fbed4", by = "agent:claude-e3d", note = "Render thread paragraph: GPU sessions get NV12 encode targets, others readback; per-tick allocation now per CPU session; Not-yet list no longer lists a GPU encode target" }
+stamp = { hash = "b3:1110f657e7c1e0d8", by = "agent:claude-e3d", note = "Render thread paragraph still holds after the ring fix: GPU sessions get encode targets, others readback; held-target drops are counted, described in Runtime" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1176,7 +1176,7 @@ stamp = { hash = "b3:63e27b443cbc6f6d" }
 stamp = { hash = "b3:6ecb293741341e3b" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/drops.rs"]
-stamp = { hash = "b3:c7eb14245f6d9072" }
+stamp = { hash = "b3:46527912b4ef832c", by = "agent:claude-e3d", note = "Testing list still holds; adds the encode-ring unit test in pipeline.rs and the encode_frame_drops helper in drops.rs, neither changing the purpose text" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
 stamp = { hash = "b3:714ef3084c85fff1", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents carry main's with_youtube/with_browser, YouTube, audio filters, preview and GPU capture beside wave/m2's media playback (with_backends' media files, sound fed while shown), waveform/spectrum scopes and the bus scopes (#362); audio_sources.rs now holds both main's Recorded::Own page inputs and wave/m2's Want::Live media inputs, each Key::Source input running its filter chain (Wants: targets, live, chains), so I rewrote the Audio sources bullet to list the three kinds of input and say each runs the filters and is routed; added main's browser tests in src/tests/audio.rs to the tests list; the rest matches engine.rs, live.rs, pipeline.rs and the tests" }
@@ -1212,7 +1212,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:3aff48497d0fbed4", by = "agent:claude-e3d", note = "Testing list adds the GPU-encoder output test in gpu_capture.rs and its NV12-feature skip" }
+stamp = { hash = "b3:1110f657e7c1e0d8", by = "agent:claude-e3d", note = "Testing list still holds; adds the encode-ring unit test in pipeline.rs and the encode_frame_drops helper in drops.rs, neither changing the purpose text" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1275,7 +1275,7 @@ stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:abbe7b25a9e379ed", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9 merged with C10: body's Live sources bullet says the program mix advances animations and videos, tells a source when it shows it again, and media sources play through the injected backends' media files, beside C10's waveform/spectrum sentence. engine.rs: with_backends calls live.set_media(backends.media), test-only set_source_media, plan_with calls live.begin_plan(). live.rs: set_media (Context.media, rebuilds every source) beside C10's set_audio_scope, plan/planned numbering, Running.planned set in install beside C10's painter sharing, and Source::show when a plan reaches a source after plans that didn't. tests.rs, tests/audio.rs, tests/scenarios.rs: FakeMediaDecoders as Backends.media. tests/sources.rs: a_media_file_plays_on_the_clock_and_restarts_when_shown_again and a_media_file_first_shown_long_after_it_was_built_plays_from_the_start (#245 B2), after C10's waveform test and main's #293 FakeClock test; holds" }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:c70752d41f09ac36", by = "agent:claude-e3d", note = "New Encode path paragraph matches open_video (open_on), VideoTap, EncodeRing (input_capacity+2), DrawTo readback skip, fatal on refused target; removed encode target from the not-built rows" }
+stamp = { hash = "b3:11a12e4fc360c5a8", by = "agent:claude-e3d", note = "Encode path now says a target is reused only when the ring alone holds it (besides the shown frame) and a tick with every target held drops the GPU sessions' frame into encode_frames; matches EncodeRing::next and render_loop (review B1)" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:74397f35965002f4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 (#320 only adds the jstream-outputs crate-map row; merge-main took wave stamps that predate this PR): stale via ARCH#threading's Preview row only (not a real-time thread); section text is main's; holds" }
@@ -1287,7 +1287,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:3aff48497d0fbed4", by = "agent:claude-e3d", note = "New Encode path paragraph matches open_video (open_on), VideoTap, EncodeRing (input_capacity+2), DrawTo readback skip, fatal on refused target; removed encode target from the not-built rows" }
+stamp = { hash = "b3:1110f657e7c1e0d8", by = "agent:claude-e3d", note = "Encode path now says a target is reused only when the ring alone holds it (besides the shown frame) and a tick with every target held drops the GPU sessions' frame into encode_frames; matches EncodeRing::next and render_loop (review B1)" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1536,7 +1536,7 @@ stamp = { hash = "b3:c605dc3799e8d4cc" }
 stamp = { hash = "b3:08d1db37fb68e030" }
 
 ["CRATE-jstream-encode#design"."body"]
-stamp = { hash = "b3:9abb2b5acc27b6d8", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (70d5ce5) into #325: re-read E3c's GPU frames subsection and Not yet beside main's benchmarks (benches/session.rs) text; both hold" }
+stamp = { hash = "b3:fec2067b31381140", by = "agent:claude-e3d", note = "Removed the Not-yet bullet saying the engine doesn't use open_on; GPU frames subsection's only-clone contract is what the ring now meets (review B2)" }
 
 ["CRATE-jstream-encode#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }

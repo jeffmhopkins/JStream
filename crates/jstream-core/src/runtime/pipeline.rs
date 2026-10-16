@@ -73,7 +73,7 @@ use crate::audio::{MasterMetering, MixerHandles, ScopeTaps, TapFeed};
 use crate::audio_sources::{AudioInputs, Wanted};
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, DropGuard, DropSnapshot, FnDropSource, VideoEncodeDrops,
-    capture_drops, output_packet_drops, render_tick_drops,
+    capture_drops, encode_frame_drops, output_packet_drops, render_tick_drops,
 };
 use crate::engine::Engine;
 use crate::lock;
@@ -141,9 +141,12 @@ impl DrawTo<'_> {
     };
 }
 
-/// Encode targets the render thread converts into, in turn. A session queues up to
-/// [`SessionOptions::input_capacity`] frames and its encoder reads one more, so a target
-/// is written again only after every frame queued from it has been read, or dropped.
+/// Encode targets the render thread converts into. A target is written again only once
+/// the ring holds its only clone (`jstream-platform` README › GPU frames): every frame
+/// queued from it has been read or dropped. A session queues up to
+/// [`SessionOptions::input_capacity`] frames and its encoder reads one more, so with
+/// one session keeping up there is always a free target; when none is free, the tick's
+/// frame is dropped for the GPU sessions ([`EncodeRing::next`]).
 fn encode_ring_len() -> usize {
     SessionOptions::default().input_capacity + 2
 }
@@ -1785,6 +1788,7 @@ fn render_loop(job: RenderJob) {
     };
     let mut next: Option<MediaTime> = None;
     let mut skipped: u64 = 0;
+    let mut encode_held: u64 = 0;
     let mut draw_errors: u32 = 0;
     // Set by a fatal error: stop drawing and repeat `shown` until the pipeline stops.
     let mut broken = false;
@@ -1818,9 +1822,18 @@ fn render_loop(job: RenderJob) {
         skipped = skipped.saturating_add(missed);
         let readback = !cams.is_empty() || targets.iter().any(|tap| !tap.gpu);
         let mut nv12 = None;
-        if !broken && targets.iter().any(|tap| tap.gpu) {
-            match ring.next(gpu.as_ref(), context.as_deref(), size) {
-                Ok(frame) => nv12 = Some(frame),
+        // GPU sessions that miss this tick's frame because every target is still held.
+        let mut held_drops: u64 = 0;
+        let gpu_taps = targets.iter().filter(|tap| tap.gpu).count() as u64;
+        if !broken && gpu_taps > 0 {
+            match ring.next(
+                gpu.as_ref(),
+                context.as_deref(),
+                size,
+                frames.encoded.as_ref(),
+            ) {
+                Ok(Some(frame)) => nv12 = Some(frame),
+                Ok(None) => held_drops = gpu_taps,
                 Err(err) => {
                     broken = true;
                     reader.stop();
@@ -1873,11 +1886,18 @@ fn render_loop(job: RenderJob) {
                 }
             }
         }
-        drops.publish(capture_drops(frames.capture).saturating_add(render_tick_drops(skipped)));
+        encode_held = encode_held.saturating_add(held_drops);
+        drops.publish(
+            capture_drops(frames.capture)
+                .saturating_add(render_tick_drops(skipped))
+                .saturating_add(encode_frame_drops(encode_held)),
+        );
         gpu_captures.store(frames.gpu_captures, Ordering::Relaxed);
         push_each(
             &mut targets,
             |tap| match (tap.gpu, &frames.encoded) {
+                // Every target was held: the frame is dropped, not repeated.
+                (true, _) if held_drops > 0 => true,
                 (true, Some(frame)) => push_gpu(&tap.input, frame, due),
                 (false, _) if !frames.shown.is_empty() => {
                     push_frame(&tap.input, size, due, &frames.shown)
@@ -1927,7 +1947,10 @@ struct EncodeRing {
 }
 
 impl EncodeRing {
-    /// The target to convert the next frame into, allocating the ring on first use.
+    /// The target to convert the next frame into, allocating the ring on first use:
+    /// the next one only the ring holds, besides `shown` (the last frame converted, held
+    /// to repeat it). `None` when a queued or encoding frame holds every target: the
+    /// caller drops the frame rather than rewrite one (R-RT-004).
     ///
     /// # Errors
     /// No context, which a session on the GPU path cannot be opened without, or the
@@ -1937,7 +1960,8 @@ impl EncodeRing {
         gpu: &dyn GpuInterop,
         context: Option<&GpuContext>,
         size: FrameSize,
-    ) -> Result<GpuFrame, String> {
+        shown: Option<&GpuFrame>,
+    ) -> Result<Option<GpuFrame>, String> {
         if self.slots.is_empty() {
             let context =
                 context.ok_or("a GPU encoder session without the platform's GPU context")?;
@@ -1948,9 +1972,17 @@ impl EncodeRing {
                 self.slots.push(target);
             }
         }
-        let frame = self.slots[self.next % self.slots.len()].clone();
-        self.next = (self.next + 1) % self.slots.len();
-        Ok(frame)
+        let len = self.slots.len();
+        for step in 0..len {
+            let at = (self.next + step) % len;
+            let sync = self.slots[at].sync();
+            let shown = shown.is_some_and(|frame| Arc::ptr_eq(frame.sync(), sync));
+            if Arc::strong_count(sync) == 1 + usize::from(shown) {
+                self.next = (at + 1) % len;
+                return Ok(Some(self.slots[at].clone()));
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -2507,17 +2539,152 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        DrawFn, DrawTo, Frames, catch_up, output_size, push_each, rgba_from_surface, video_config,
+        DrawFn, DrawTo, EncodeRing, Frames, catch_up, encode_ring_len, output_size, push_each,
+        rgba_from_surface, video_config,
     };
     use crate::snapshot::{CaptureImage, Shot};
     use jstream_media::{
         ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane, Timebase,
         VideoFrame, VideoFrameInfo,
     };
+    use jstream_platform::wgpu;
     use jstream_platform::{HardwarePreference, RateControl, VideoSurface};
     use jstream_protocol::{
         EncoderProfile, HardwarePreference as ProfileHardware, RateControl as ProfileRate,
     };
+
+    /// Encode targets on a software device: plain textures with a sync that does
+    /// nothing, enough for the ring's bookkeeping.
+    struct Targets(jstream_render::Compositor);
+
+    #[derive(Debug)]
+    struct NoSync;
+
+    impl jstream_platform::FrameSync for NoSync {
+        fn stage(&self, _queue: &wgpu::Queue) -> Result<(), jstream_platform::PlatformError> {
+            Ok(())
+        }
+    }
+
+    impl jstream_platform::GpuInterop for Targets {
+        fn open_device(
+            &self,
+        ) -> Result<jstream_platform::GpuContext, jstream_platform::PlatformError> {
+            Ok(jstream_platform::GpuContext::new(
+                self.0.adapter().clone(),
+                self.0.device().clone(),
+                self.0.queue().clone(),
+                jstream_platform::AdapterId {
+                    luid: None,
+                    vendor: 0,
+                },
+                None,
+            ))
+        }
+
+        fn encode_target(
+            &self,
+            context: &jstream_platform::GpuContext,
+            size: FrameSize,
+        ) -> Result<jstream_platform::GpuFrame, jstream_platform::PlatformError> {
+            let texture = context.device().create_texture(&wgpu::TextureDescriptor {
+                label: Some("jstream-core-test-ring"),
+                size: wgpu::Extent3d {
+                    width: size.width(),
+                    height: size.height(),
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::R8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let info = VideoFrameInfo {
+                size,
+                format: PixelFormat::Nv12,
+                color: ColorInfo::default(),
+                pts: MediaTime::zero(Timebase::MICROS),
+            };
+            Ok(jstream_platform::GpuFrame::new(
+                texture,
+                info,
+                std::sync::Arc::new(NoSync),
+            ))
+        }
+    }
+
+    /// The ring never hands out a target a queued or encoding frame still holds: with
+    /// every target held it gives none (the tick's frame is dropped), and a target comes
+    /// back once its frames are let go of. The last frame shown, which the render thread
+    /// holds to repeat, does not count as held.
+    #[test]
+    fn the_encode_ring_skips_targets_a_frame_still_holds() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let compositor =
+            match jstream_render::Compositor::open(jstream_render::OpenOptions::headless()) {
+                Ok(compositor) => compositor,
+                Err(err) => {
+                    assert!(
+                        std::env::var_os("CI").is_none(),
+                        "CI has no wgpu adapter: {err}"
+                    );
+                    return;
+                }
+            };
+        let gpu = Targets(compositor);
+        let context = jstream_platform::GpuInterop::open_device(&gpu).expect("context");
+        let size = FrameSize::new(4, 2).expect("size");
+        let mut ring = EncodeRing::default();
+        let mut queued = Vec::new();
+        for _ in 0..encode_ring_len() {
+            let frame = ring
+                .next(&gpu, Some(&context), size, None)
+                .expect("ring")
+                .expect("a free target");
+            assert!(
+                queued
+                    .iter()
+                    .all(|q: &jstream_platform::GpuFrame| !std::sync::Arc::ptr_eq(
+                        q.sync(),
+                        frame.sync()
+                    )),
+                "a held target was handed out again"
+            );
+            queued.push(frame);
+        }
+        // The encoder has fallen behind: every target is queued.
+        assert!(
+            ring.next(&gpu, Some(&context), size, None)
+                .expect("ring")
+                .is_none()
+        );
+        // The shown frame alone does not hold its target.
+        let shown = queued.pop().expect("one");
+        let again = ring
+            .next(&gpu, Some(&context), size, Some(&shown))
+            .expect("ring")
+            .expect("the shown target is free");
+        assert!(std::sync::Arc::ptr_eq(again.sync(), shown.sync()));
+        drop(again);
+        // A frame the encoder read comes back; the others stay held.
+        let read = queued.remove(0);
+        let read_at = std::sync::Arc::as_ptr(read.sync()).cast::<()>();
+        drop(read);
+        let freed = ring
+            .next(&gpu, Some(&context), size, Some(&shown))
+            .expect("ring")
+            .expect("the read target is free");
+        assert_eq!(std::sync::Arc::as_ptr(freed.sync()).cast::<()>(), read_at);
+        drop(freed);
+        assert!(
+            ring.next(&gpu, Some(&context), size, Some(&shown))
+                .expect("ring")
+                .is_some(),
+            "the shown target is free again"
+        );
+    }
 
     /// Every target is pushed once; exactly the ones that refuse are taken out and
     /// retired (handed to the collector), and the rest stay.

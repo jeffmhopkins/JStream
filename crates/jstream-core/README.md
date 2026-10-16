@@ -1370,9 +1370,13 @@ platform's context when there is one (`VideoSession::open_on`): it takes GPU fra
 the codecs can encode the context's encode targets (`Codecs::on_context`), and CPU
 frames otherwise, which is logged. The render thread learns which with the session's
 input. For a session on the GPU path it allocates a ring of `encode_target`s once,
-enough that a target is written again only after the frames queued from it are read,
-and converts each composite into the next one (`Nv12Converter`, BT.709 in the target's
-range) in a submit of its own that stages the target's fence. It pushes that target,
+and converts each composite into the next one the ring alone holds (besides the last
+frame converted, kept to repeat it): a target is written again only once every frame
+queued from it has been read or dropped. When frames still hold every target (the
+encoder has fallen behind), the tick's frame is dropped for the GPU sessions and
+counted in `encode_frames`, never written over a held one. The conversion
+(`Nv12Converter`, BT.709 in the target's range) is a submit of its own that stages the
+target's fence. It pushes that target,
 stamped with the tick's time, to every such session. Sessions on the CPU path and
 virtual cameras get the composite read back as RGBA8; a tick with none of them skips
 the readback, and each readback is counted (`OutputStats::readbacks`). The ring drops
