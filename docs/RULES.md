@@ -544,7 +544,8 @@ token (even on localhost), except `POST /api/v1/pair` while a pairing code is op
 ([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
 device token, never the control token, as the `__Host-jstream_device` cookie. Every
 listener validates the `Host` header, and
-the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
+the `Origin` header when one is present. A device token is accepted only over loopback
+or TLS. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>
@@ -603,6 +604,13 @@ applies_to = [".github/workflows/**"]
 -->
 This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`.
 `enforced_by = ["review"]` means the rule is judged by the reviewer agent ([REVIEW.md](../REVIEW.md)).
+On a draft PR every `ci` job is skipped; they run when the PR is marked ready for review.
+`ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e` and `macos` are in
+`after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
+([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
+the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
+A PR into a `wave/*` branch skips only `test`, `doc`, `deny`, `wasm` and the after-review jobs;
+every other check runs. The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
 
 | Check | Runs | Required | From |
 |---|---|---|---|
@@ -619,6 +627,7 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
+| `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
 
 <a id="R-GIT-004"></a>

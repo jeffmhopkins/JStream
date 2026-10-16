@@ -86,8 +86,12 @@ pub enum Reference {
         /// Which folder `path` is under.
         root: AssetRoot,
         /// Under `collection` or `app`, a relative path with `/` separators, no `..`
-        /// segment, no drive letter and no leading `/`. Under `absolute`, an absolute
-        /// path.
+        /// segment, no drive letter, no leading `/` and no `:`. Under `absolute`, an
+        /// absolute path that is not a UNC or device path (no leading `\\` or `//`), with
+        /// no `:` but the drive letter's and no `?` or `*` (so no `\??\…` NT object
+        /// path). Under every root, no DOS device name (`CON`, `NUL.png`, `COM1`, …) as
+        /// its last component.
+        /// [`check_asset_path`](crate::check_asset_path) holds the full rules.
         path: String,
     },
 }

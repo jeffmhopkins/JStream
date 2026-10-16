@@ -58,8 +58,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `cargo xtask docs log` derives a doc's or section's history from git, and
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
-  `origin/main`, resolves conflicts that are only between stamps, moves inline stamps a
-  branch from before ADR-0053 still has, and lists the sections left stale.
+  `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
+  that are only between stamps, moves inline stamps a branch from before ADR-0053 still
+  has, and lists the sections left stale.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -305,10 +306,13 @@ cargo xtask docs review ARCH \
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
 cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
 cargo xtask docs merge-main                    # merge origin/main; stamp-only conflicts take main's
+cargo xtask docs merge-main --from wave/m1     # the same for a PR into a wave (ADR-0055)
 cargo xtask docs migrate                       # move inline stamps to the ledger (below)
 ```
 
-`docs merge-main` fetches and merges `origin/main` into a clean working tree. Every
+`docs merge-main` fetches and merges `origin/main` into a clean working tree. With
+`--from wave/<name>` it merges that wave branch instead, and "main's side" below means the
+wave's ([runbook](runbooks/waves.md#current)). Every
 conflict in the ledger takes main's side: a merge never leaves a section falsely fresh,
 and a conflict usually leaves it stale, for a re-read. The result must parse, and is
 rewritten in canonical form. In a doc, a conflict whose two sides are only inline `verified` lines

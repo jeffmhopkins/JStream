@@ -28,7 +28,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
    │ jstream-ui (Leptos→WASM)   jstream-mcp (MCP tools)   jstream-cli   3rd party │
    └───────────────┬──────────────────────────────────────────────────────────────┘
                    │  Control trait: in-process (InProcessControl), or WebSocket + token
-                   │  (JSON messages, including video.snapshot's PNG; binary frames later: preview, meters)
+                   │  (JSON messages, including video.snapshot's PNG; binary frames: preview)
                    ▼
 ┌───────────────────────────── jstream-core :: Engine ─────────────────────────────┐
 │ command bus → state (rev N) → events      per-client undo · audit log · persist │
@@ -53,8 +53,8 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 
 | Host (`apps/`) | What it is |
 |---|---|
-| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-browser-helper` | Not a host: the sandboxed browser helper, CEF's bootstrap exe renamed plus this crate's DLL, which a host's CEF backend starts and drives over pipes. Hosts that turn on browser sources ship it next to their own exe ([ADR-0048](adr/0048-sandboxed-browser-helper.md), [its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
@@ -146,16 +146,17 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
+| 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling. No GPU device | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md), [ADR-0048](adr/0048-sandboxed-browser-helper.md)): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, feature `cef`), which drives the sandboxed browser helper over pipes and copies its shared-texture frames onto the engine's device; and the CEF code the helper runs (feature `helper`) | **yes** |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
-| 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
+| 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -415,6 +416,7 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
+| Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot and `rev` under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
@@ -423,7 +425,7 @@ next to its code, which that section covers: the output pipeline in
 [`jstream-core`'s runtime](../crates/jstream-core/README.md#runtime) and the audio and
 mixer threads in [`jstream-audio`'s real-time design](../crates/jstream-audio/README.md#realtime)
 ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)). Neither may contradict this
-model; a change that would edits it in the same PR.
+model; a change that would contradict it edits it in the same PR.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), M3, in progress: the shared block
 (`jstream-plugin-proto`) and the mixer's side of it (`jstream-audio`) are built; the
@@ -478,51 +480,53 @@ lock-free parameter channels. On the wire they are live values, committed by one
 at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
-The **render snapshot** is built. After every applied batch, undo and redo, every
-stored source frame and a collection file's load, the control side re-plans the program mix under the collection lock: the
-reachable scenes, the frames they show and the passes that draw them. It publishes
-that as the next render generation only when it draws something new, so a batch that
-touches nothing on program publishes nothing. The render thread loads it without the
-lock. `video.snapshot` reads it together with `rev` under the lock on the control path,
-and its thread only receives the snapshot. The render thread draws through a `jstream-render`
-resource cache keyed by source and by nested scene and depth. A frame that shows what
-the last one showed allocates no texture: an unchanged frame is not uploaded again and
-each nested scene is redrawn into the layer it had. An image no frame references is
-retired, then freed once the GPU has finished the last frame that used it (a
-`Queue::on_submitted_work_done` fence the cache polls without blocking). The render
-thread hands those images, and each render snapshot it replaces, to the program
-stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
-reader slot as the handover below says. When a fatal error stops its drawing it
-publishes the stopped marker too: it adopts nothing more and only repeats the frame it
-last drew until teardown. The audio and outputs snapshots are not built.
+The **render snapshot** is built. After every applied batch, undo and redo, every stored
+source frame and a collection file's load, the control side re-plans the program mix
+under the collection lock: the reachable scenes, the frames they show and the passes
+that draw them. It publishes that as the next render generation only when it draws
+something new, so a batch that touches nothing on program publishes nothing. The render
+thread loads it without the lock. `video.snapshot` reads it together with `rev` under
+the lock on the control path, and its thread only receives the snapshot. The render
+thread draws through a `jstream-render` resource cache keyed by source and by nested
+scene and depth. A frame that shows what the last one showed allocates no texture: an
+unchanged frame is not uploaded again and each nested scene is redrawn into the layer it
+had. An image no frame references is retired, then freed once the GPU has finished the
+last frame that used it (a `Queue::on_submitted_work_done` fence the cache polls without
+blocking). The render thread hands those images, and each render snapshot it replaces,
+to the program stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render
+thread stamps its reader slot as the handover below says. When a fatal error stops its
+drawing it publishes the stopped marker too: it adopts nothing more and only repeats the
+frame it last drew until teardown. The audio and outputs snapshots are not built.
 
 **Live-value handover** (decided; the render generation and its reader slot are built,
-the parameter channels and the gesture release are not): the engine learns that a real-time
-thread holds a committed snapshot through a **generation counter per subsystem**. Each
-time the control side publishes a subsystem's snapshot it bumps that subsystem's
-generation and stores it in the snapshot. Each real-time thread that reads the snapshot
-(the render thread for render, the mixer for audio) publishes the last generation it
-adopted with one atomic store when it picks up a new snapshot, which allocates, locks and
-waits on nothing ([R-RT-001](RULES.md#R-RT-001), [R-RT-002](RULES.md#R-RT-002)). When a
-gesture's committing batch applies, the control side notes the generation of the snapshot
-that carries it, and releases the gesture's live values from the parameter channels once
-every thread that reads them has reported a generation at least that high. Until then the
-parameter channel keeps the live value, so no frame shows the old value in between. The
-control side polls the published generations; the real-time threads never wait for it.
-A thread that isn't adopting snapshots counts as caught up, so a gesture's live values
-aren't held while it is stopped or parked (no output running, nothing to render, no
-device to mix for). Before it stops or parks it publishes a stopped marker in place of
-its generation, and it shows nothing while marked. Each reader's slot starts as
-the stopped marker, so a gesture committed before a thread has ever run waits on
-nothing. On starting or resuming it clears the marker before it loads a snapshot, and
-reads the parameter channels only after that load. So if the control side saw the
-marker and released a gesture, the thread's next load comes after the committing
-snapshot was published and already carries the committed value. That needs a store
-then load on each side (the thread clears the marker then loads the snapshot; the
-control side publishes the snapshot then reads the marker), which release and acquire
-alone don't order: the marker and generation stores and reads are `SeqCst`, with a
-`SeqCst` fence between each side's store and its load. A fence doesn't allocate, lock
-or wait, so R-RT-001 and R-RT-002 still hold.
+the parameter channels and the gesture release are not): the engine learns that a
+real-time thread holds a committed snapshot through a **generation counter per
+subsystem**. Each time the control side publishes a subsystem's snapshot it bumps that
+subsystem's generation and stores it in the snapshot. Each real-time thread that reads
+the snapshot (the render thread for render, the mixer for audio) publishes the last
+generation it adopted with one atomic store when it picks up a new snapshot, which
+allocates, locks and waits on nothing ([R-RT-001](RULES.md#R-RT-001),
+[R-RT-002](RULES.md#R-RT-002)). When a gesture's committing batch applies, the control
+side notes the generation of the snapshot that carries it, and releases the gesture's
+live values from the parameter channels once every thread that reads them has reported a
+generation at least that high. Until then the parameter channel keeps the live value, so
+no frame shows the old value in between. The control side polls the published
+generations; the real-time threads never wait for it. A thread that isn't adopting
+snapshots counts as caught up, so a gesture's live values aren't held while it is
+stopped or parked (no output running, nothing to render, no device to mix for). Before
+it stops or parks it publishes a stopped marker in place of its generation, and it shows
+nothing while marked. Each reader's slot starts as the stopped marker, so a gesture
+committed before a thread has ever run waits on nothing. On starting or resuming it
+clears the marker before it loads a snapshot, to a value below every generation (so it
+counts as caught up with nothing until it adopts one), and reads the parameter channels
+only after that load. So if the control side saw the marker and released a gesture, the
+thread's next load comes after the committing snapshot was published and already carries
+the committed value. That needs a store then load on each side (the thread clears the
+marker then loads the snapshot; the control side publishes the snapshot then reads the
+marker), which release and acquire alone don't order: the marker and generation stores
+and reads are `SeqCst`, with a `SeqCst` fence between each side's store and its load. A
+fence doesn't allocate, lock or wait, so [R-RT-001](RULES.md#R-RT-001) and
+[R-RT-002](RULES.md#R-RT-002) still hold.
 
 The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
 reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
@@ -575,6 +579,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
+- **Pairing** (protocol 0.21, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
+  action `pairing.start` answers a one-time code (an action result, the one place it is
+  sent), which a device trades at `POST /api/v1/pair` for a device token of its own;
+  `device.list` and the action `device.revoke` manage the paired devices. They concern
+  whom a listener admits, so `jstream-server` answers them, and a session with no server
+  in front answers `unsupported`
+  ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
@@ -629,8 +640,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `scene.delete` or `source.delete` refused because something still refers to its
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
   [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
-- **Binary streams** (WebSocket binary frames): preview video and meters. Not designed
-  yet, except the meter frame's fields
+- **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
+  `preview.subscribe` opens a stream of the program mix for the calling session,
+  scaled down, at most `fps` pictures a second and only when the mix changes, in H.264
+  when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the
+  session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
+  keyframe, size, presentation time, `rev`) and the picture, and every hop that queues
+  frames drops up to the next keyframe when full, so a slow client still decodes what
+  it gets. The layout is in
+  [jstream-protocol › Design](../crates/jstream-protocol/README.md#design). Meters
+  travel in the JSON `meters.tick` event for now (protocol 0.19); a binary meter frame
+  would be another kind of the same frame. The meter fields
   ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
   (4× oversampled, BS.1770); per bus, also momentary, short-term and integrated loudness
   (LUFS). Loudness is computed only for the master bus and for subscribed buses and
@@ -644,7 +664,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the browser, where the token travels as a subprotocol because a page can't set
   `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)). `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
-  default, with the token required and `Origin`/`Host` validated
+  default, with the token (the control token, or a paired device's on loopback until TLS)
+  required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
   for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
@@ -671,7 +692,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
+  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -682,12 +703,15 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   about ten a second while the mixer runs, is kept the same way, as `meters`.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 178 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 183 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
+- **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
+  tool's `preview.subscribe` fails with `action_failed`; an agent looks with
+  `video.snapshot`.
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an
@@ -754,7 +778,19 @@ a layer the caller keeps, so a frame allocates no texture for it. The caller wal
 nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see
-[Threads › State to RT threads](#threading)). Still outside this crate: the render
+[Threads › State to RT threads](#threading)). On the GPU path the engine's render
+thread composites on the platform's `GpuContext`, and capture moves onto it through
+`Capture::on_context`: each captured texture is imported once into the cache and
+sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
+and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
+Without a context, or a capture that can deliver on it, the engine keeps CPU frames
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
+composite is still read back to the CPU for the encoder. Step 5's encoder side is built:
+on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
+on D3D11 into a texture of their own, fence-synchronized both ways, and
+`jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
+([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
+Nothing writes the encode targets yet. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
 the output path below.
 
@@ -805,8 +841,8 @@ depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native
 A browser source is a CEF off-screen browser
 ([ADR-0021](adr/0021-browser-source.md)), built in `jstream-browser`
 ([ADR-0046](adr/0046-browser-crate-and-helper.md),
-[its README](../crates/jstream-browser/README.md)) but not yet wired into a host or the
-program mix.
+[its README](../crates/jstream-browser/README.md)). The desktop app wires it in behind
+its off-by-default `cef` feature; the daemon and the program mix don't use it yet.
 CEF runs in the sandboxed browser helper process, never in the engine's
 ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), which the engine drives over two named
 pipes. Each `OnAcceleratedPaint`

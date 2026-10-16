@@ -30,6 +30,12 @@ blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 # (ADR-0048), and `build-util`/`resources` are app-bundling helpers. Only that feature
 # pulls it in.
 cef = { version = "=154.5.0", default-features = false }
+# Benchmarks (`benches/` in jstream-render, jstream-audio and jstream-encode), dev-only.
+# No default features: no `rayon` or `plotters`, so no HTML plots; the JSON estimates under
+# `target/criterion` are what the `bench` workflow records. `cargo_bench_support` keeps
+# `cargo bench` and its `--bench` filters working. Held at 0.7: 0.8 adds `alloca`, which
+# compiles C with `cc` and is not on lint-deps' native-code allowlist (R-DEP-002).
+criterion = { version = "~0.7", default-features = false, features = ["cargo_bench_support"] }
 # Lock-free bounded queues for the audio mixer's commands and the collector (R-RT-003).
 # A send on a bounded channel does not allocate. `std` is the only feature.
 crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
@@ -38,9 +44,9 @@ futures-core = { version = "0.3", default-features = false }
 # `ws` feature on wasm32), which has no tokio. Already in the tree through Leptos.
 futures-channel = { version = "0.3", default-features = false, features = ["std"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
-# OS randomness (the daemon's control token). Already in the tree through tungstenite's
-# `rand`, so the version matches it.
-getrandom = { version = "0.3", default-features = false }
+# OS randomness (the daemon's control token). 0.4 is already in the tree through
+# `tempfile` and `uuid`, so this adds no version.
+getrandom = { version = "0.4", default-features = false }
 # GIF decoding for the image source (ADR-0031: pure-Rust image crates). No default
 # features: `color_quant` only matters for encoding RGBA frames.
 gif = { version = "0.14", default-features = false, features = ["std"] }
@@ -54,6 +60,7 @@ jstream-audio = { path = "crates/jstream-audio" }
 jstream-browser = { path = "crates/jstream-browser" }
 jstream-control = { path = "crates/jstream-control" }
 jstream-core = { path = "crates/jstream-core" }
+jstream-effects = { path = "crates/jstream-effects" }
 jstream-encode = { path = "crates/jstream-encode" }
 jstream-graph = { path = "crates/jstream-graph" }
 jstream-mcp = { path = "crates/jstream-mcp" }
@@ -69,6 +76,10 @@ jstream-server = { path = "crates/jstream-server" }
 jstream-sources = { path = "crates/jstream-sources" }
 jstream-vcam-proto = { path = "crates/jstream-vcam-proto" }
 jstream-youtube = { path = "crates/jstream-youtube" }
+# WGSL parsing and validation for effect packs (`jstream-effects`). Pinned to wgpu's
+# exact version (ADR-0004), so it is the copy wgpu already brings in. `wgsl-in` is the
+# only feature: no back ends, no `std`-only extras.
+naga = { version = "=30.0.1", default-features = false, features = ["wgsl-in"] }
 # PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.

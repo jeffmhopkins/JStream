@@ -92,7 +92,7 @@ pub fn start(options: &Options, exe_dir: Option<&Path>, data: Option<&Path>) -> 
         let logs = data.join("logs");
         let audit = jstream_core::AuditFile::open(&logs)
             .with_context(|| format!("could not open the audit log in `{}`", logs.display()))?;
-        let engine = host::engine(&data.join(COLLECTION), Arc::new(audit))?;
+        let engine = host::engine(&data.join(COLLECTION), data, Arc::new(audit))?;
         Host::start(engine, ui::ORIGIN)
     })();
     let host = match host {

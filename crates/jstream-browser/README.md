@@ -151,8 +151,9 @@ shipping the `cef` feature.
   checks the pinned CEF against CEF stable.
 - **Measurements.** Spike S4 measured CEF in the engine's process; the sandboxed
   helper's frames take a second copy and a pipe round trip, which haven't been measured.
-- **Hosts.** The daemon and desktop app don't create a backend or call
-  `Engine::with_browser`, and nothing hands the backend the engine's device.
+- **Hosts.** The daemon doesn't create a backend yet. The desktop app does, with its
+  `cef` feature, on a device of the media adapter it opens, not the engine's own,
+  which the engine doesn't hand out yet.
 - **Compositing.** The program mix doesn't draw a page's `GpuFrame` yet; a `browser`
   source draws a transparent frame of its size until the render import of GPU frames
   lands.

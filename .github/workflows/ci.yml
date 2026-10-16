@@ -8,8 +8,14 @@
 
 name: ci
 
+# Linux only. The Windows legs of `clippy` and `test`, `ui-e2e` and `macos` are in
+# after-review.yml, which runs on main and, on a PR, once review passes (ADR-0054).
+# A PR into a `wave/*` branch runs only the quick jobs (fmt, Linux clippy, docs,
+# lint-deps, gate-test, pr-title); the wave's own PR into main runs everything (ADR-0055).
 on:
   pull_request:
+    # ready_for_review: draft PRs skip every job below, so CI runs when a draft is marked ready.
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -26,6 +32,7 @@ env:
 
 jobs:
   fmt:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,30 +40,24 @@ jobs:
       - run: cargo fmt --all --check
 
   clippy:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]   # the Windows leg is in after-review.yml (ADR-0054)
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      # Platform tests (`hw-tests`) only run on real hardware, but they must still compile:
-      # type-check them on the platform they target.
-      - if: runner.os == 'Windows'
-        run: cargo clippy -p jstream-platform-windows --all-targets --features hw-tests --locked -- -D warnings
-      # The CEF backend of the browser source (ADR-0046) must compile too. `dox` type-checks
-      # it against cef-dll-sys's bundled bindings without downloading or building CEF.
-      - if: runner.os == 'Windows'
-        run: cargo clippy -p jstream-browser -p jstream-browser-helper --all-targets --features jstream-browser/dox,jstream-browser-helper/dox --locked -- -D warnings
 
   test:
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]   # the Windows leg is in after-review.yml (ADR-0054)
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -85,6 +86,7 @@ jobs:
         run: cargo test -p jstream-browser --features cef --locked
 
   doc:
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -D warnings
@@ -95,6 +97,7 @@ jobs:
       - run: cargo doc --workspace --no-deps --locked
 
   deny:
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,8 +109,9 @@ jobs:
   # The web UI for wasm32 (ADR-0045): clippy over the browser WebSocket client and the UI,
   # then a trunk build. trunk and the wasm-bindgen CLI are downloaded at pinned versions
   # and checked against pinned SHA-256 sums; the wasm-bindgen CLI must match Cargo.lock.
-  # `ui-e2e` pins the same versions: change both together.
+  # `ui-e2e` in after-review.yml pins the same versions: change both together.
   wasm:
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     runs-on: ubuntu-latest
     env:
       TRUNK_VERSION: 0.21.14
@@ -142,55 +146,8 @@ jobs:
         working-directory: crates/jstream-ui
         run: trunk build --locked --offline
 
-  # The web UI end to end (crates/jstream-ui/tests/e2e/README.md): Playwright drives the
-  # trunk build in the runner's Google Chrome against the mock daemon. trunk and the
-  # wasm-bindgen CLI are installed as in `wasm`; Playwright comes from the lockfile, with
-  # install scripts off, and downloads no browser. Not required (R-GIT-003).
-  ui-e2e:
-    runs-on: ubuntu-latest
-    env:
-      TRUNK_VERSION: 0.21.14
-      TRUNK_SHA256: f2b4680cd239693a646a2795e4633c625328d7b2a044fbe749fa3a2fe9e7036b
-      WASM_BINDGEN_VERSION: 0.2.129
-      WASM_BINDGEN_SHA256: 82d12bb940e2d4e72e0d5605387fc1b8ca179044e012b620f0ce4e7440e8320e
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - name: Install trunk and the wasm-bindgen CLI
-        run: |
-          set -euo pipefail
-          locked=$(cargo metadata --format-version 1 --locked | jq -r '.packages[] | select(.name == "wasm-bindgen") | .version')
-          if [ "$locked" != "$WASM_BINDGEN_VERSION" ]; then
-            echo "::error::Cargo.lock has wasm-bindgen $locked: set WASM_BINDGEN_VERSION and WASM_BINDGEN_SHA256 in ci.yml to match"
-            exit 1
-          fi
-          mkdir -p "$RUNNER_TEMP/bin"
-          cd "$RUNNER_TEMP"
-          curl -sSLf -o trunk.tar.gz "https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz"
-          echo "${TRUNK_SHA256}  trunk.tar.gz" | sha256sum -c -
-          tar xzf trunk.tar.gz -C bin trunk
-          wb="wasm-bindgen-${WASM_BINDGEN_VERSION}-x86_64-unknown-linux-musl"
-          curl -sSLf -o wasm-bindgen.tar.gz "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${WASM_BINDGEN_VERSION}/${wb}.tar.gz"
-          echo "${WASM_BINDGEN_SHA256}  wasm-bindgen.tar.gz" | sha256sum -c -
-          tar xzf wasm-bindgen.tar.gz --strip-components=1 -C bin "${wb}/wasm-bindgen"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Build the UI
-        working-directory: crates/jstream-ui
-        run: trunk build --locked --offline
-      - name: Install Playwright
-        working-directory: crates/jstream-ui/tests/e2e
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: End-to-end tests
-        working-directory: crates/jstream-ui/tests/e2e
-        run: |
-          set -euo pipefail
-          JSTREAM_E2E_CHROMIUM="$(command -v google-chrome)"
-          export JSTREAM_E2E_CHROMIUM
-          npx --no-install playwright test
-
   pr-title:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - name: Conventional Commit title (R-GIT-002)
@@ -207,6 +164,7 @@ jobs:
 
   # The documentation graph (docs/DOCS.md); R-DOC-* rules the tool implements so far.
   docs:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -216,6 +174,7 @@ jobs:
 
   # Crate layering, unsafe declarations, links= allowlist, workspace deps (xtask/src/lint_deps.rs).
   lint-deps:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -225,17 +184,8 @@ jobs:
 
   # The merge gate's decision logic (ADR-0019), tested against the deployed workflow file.
   gate-test:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: node .github/tests/review-gate-decide.test.mjs
-
-  # Not required until M3 (R-GIT-003).
-  macos:
-    runs-on: macos-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo test --workspace --locked

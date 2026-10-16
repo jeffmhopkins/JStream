@@ -131,7 +131,8 @@ not start. No variant allocates.
   zero delay, output rate under a correction, long silences;
 - the controller, drift fit, continuity and downmix coefficients, ported from S3 with
   S3's tests;
-- the input's anchoring, outlier runs, discontinuities and silent packets;
+- the input's anchoring, outlier runs, discontinuities (one whose stamp is off the line
+  re-anchors at once; unflagged outliers still wait for the run) and silent packets;
 - the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
 - the send matrix: post-fader sends into each bus, each bus's own fader, mute and
   meter, sends ramping in and out, a muted input feeding no bus, buses added from
@@ -248,7 +249,8 @@ and its measured tuning):
   `discontinuity` flag (except on the first packet) makes the input re-anchor.
 - **Drift fit.** A segmented least-squares fit of device position against stamp time.
   It rejects stamps more than 20 ms off the line (after 100 points); a run of 50 outliers
-  restarts the segment. It also reports drift and jitter.
+  restarts the segment. The first stamp after a `discontinuity` flag is never rejected:
+  off the line, it restarts the segment at once. It also reports drift and jitter.
 - **Anchoring.** An input is placed on the time line at its first accepted stamp, and
   again after a restart. A forward jump reads as silence; an overlap with audio already
   written is skipped and counted as late. Packets before the first stamp are dropped and
@@ -373,7 +375,8 @@ and a keyed compressor and the meters on each mixed block run inside an
 `assert_no_alloc` scope. Any allocation or free
 there fails the test, in debug and release builds alike. Five inputs (mono 44.1 kHz,
 stereo 48 and 96 kHz, 5.1, and 32 kHz added while running) drift and jitter. The checked phase also
-covers timestamp outliers and missing stamps, lost packets, a discontinuity, a stalled
+covers timestamp outliers and missing stamps, lost packets, a discontinuity (and one
+whose stamp is off the clock line, which restarts the drift fit's segment), a stalled
 audio thread that catches up, a 3 s device gap that resets the mapping, silent and
 non-finite packets, a mixer stall long enough to overrun the rings and skip frames,
 an input added and one removed while the mixer runs, a bus added, sent to, given a
@@ -398,8 +401,17 @@ with 8 stereo 48 kHz inputs. Measured on a cloud container (4 vCPUs of an Intel 
 Run it on the target machine with
 `cargo test --release -p jstream-audio --test cost -- --ignored --nocapture`.
 
+**Benchmarks** (`benches/mix.rs`, criterion). `mix_block` times the same three mixer
+scenarios per block, and `input_push` times one engine block's worth of device frames (1024 at 48 kHz, 940 or 941
+at 44.1 kHz) through `InputProducer::push_packet` (downmix and adaptive resampling).
+Measured on a cloud container (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux 6.18), release
+build, mean: `input_push` about 200 µs at either rate (0.9% of the block period). The
+`bench` workflow records them on every push to `main`
+([R-GIT-003](../../docs/RULES.md#R-GIT-003)). Run them with
+`cargo bench -p jstream-audio --bench mix`.
+
 **Not yet enforced or measured:**
-- The cost on Windows hardware, and of resampling, is not measured.
+- The cost on Windows hardware is not measured.
 - Catching a panic at the thread boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) is the engine's job, where the threads are.
 

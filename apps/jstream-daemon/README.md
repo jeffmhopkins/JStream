@@ -32,10 +32,12 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   prints where it listens, and maps failures to exit codes.
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
-  creates the file with a new random token ([Design](#design)).
+  creates the file with a new random token, and names the device file beside it
+  ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
   file and the placeholder outputs; on Windows a live one, [Design](#design)), installs
-  the signal handlers that stop it, then binds the server with MCP on.
+  the signal handlers that stop it, then binds the server with MCP on and, with
+  `--ui-dir`, the web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
@@ -51,7 +53,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Tests** (`serve.rs`, `token.rs`, `args.rs`, `logs.rs`, `crash.rs` unit tests, the
   crash hook in a child process; the publish opener and the live engine on the
   platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
-  `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
+  `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI
+  requests, and stopped with
   SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
   daemon makes it live, on the platform fakes with the CPU compositor, behind the
   server with MCP on, where MCP builds a scene and creates an RTMP output to a local
@@ -62,10 +65,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
-Not here yet: serving the web UI (`jstream-server` serves one from
-`ServerConfig::ui_dir`, [jstream-server › Design](../../crates/jstream-server/README.md#design),
-but the daemon has no flag for it yet),
-YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
+Not here yet: YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
@@ -92,6 +92,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--token-file <path>` | The control token file. Default: the `JSTREAM_TOKEN_FILE` environment variable, which `jstream-cli` reads too. One of them is required. |
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
 | `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding the empty collection, if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
+| `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
@@ -106,12 +107,26 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   group or others any permission (mode bits `077`), is refused with exit code 1, and
   left as it is.
   The parent directory must exist. The token itself is never printed.
+- **Paired devices.** Devices paired with `jstream-cli pair`
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) are kept in
+  `<token file>.devices` beside the token file (for example `token.devices`): their
+  names and token digests, never a token, user-only on Unix. It is created at the first
+  pairing, so devices stay paired across restarts; deleting it unpairs them all. A
+  device file that can't be read or parsed, or (on Unix) that group or others can read,
+  is a startup failure (exit 1). A device token works only while the daemon listens on
+  `127.0.0.1`, which it always does for now.
 - **Output.** On stdout: `token file: <path> (created, new token)` or
   `… (existing token)`, then `mcp endpoint: http://127.0.0.1:<port>/mcp` (point an MCP
   client there, with the token as `Authorization: Bearer <token>`), then
+  `ui: http://127.0.0.1:<port>/` with `--ui-dir`, then
   `listening on ws://127.0.0.1:<port>/api/v1/ws` once it
   serves (a script waits for this line), and `stopped` after a graceful stop. Errors go
   to stderr as `error: <message>`.
+- **Web UI.** With `--ui-dir`, open the `ui:` address in a browser on the same
+  machine. It asks for a user name and password: enter anything as the user name and
+  the token file's contents as the password. The browser keeps them for the session
+  and sends them on the UI's WebSocket connection too
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)).
 - **Logs.** The libraries' log lines go to stderr, never stdout, and to log files:
   connections accepted and refused (with the reason, never the token), handshakes,
   output actions, and how connections end. `--log-level`, else `RUST_LOG`, filters
@@ -170,7 +185,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   succeeds. Undo history is not saved. Nothing stops two daemons from using the same
   file: each saves over the other's changes, so give each its own.
 - **Audit log.** Every batch, undo, redo and action, by any client, is one JSON line
-  in `audit.jsonl` in the log directory: the time, the client's ID and `hello` name,
+  in `audit.jsonl` in the log directory: the time, the client's ID and `hello` name
+  (`device:<name>` for a paired device),
   the call and its edits by name, the output an action names, the `rev` before and
   after, and the result code. Never a call's arguments, so never a stream key
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). When it would pass 8 MiB it becomes
@@ -180,7 +196,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
-| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -273,11 +289,18 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is
   no option to turn it off: it is behind the same token as the WebSocket API, which
   already gives full control ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)).
-- **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port and MCP changed):
+- **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port, MCP and the UI directory changed):
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
-  option to listen on other addresses until remote browsers need it (with TLS and token
-  pairing, [ROADMAP › M2](../../ROADMAP.md#m2)).
+  option to listen on other addresses until remote browsers need it (with TLS,
+  [ROADMAP › M2](../../ROADMAP.md#m2)). Pairing is served already, and its device tokens
+  are accepted on loopback only until then.
+- **The device file** (`token.rs`, `main.rs`). The daemon names
+  `ServerConfig::device_file` as the token file's path plus `.devices`, so the devices
+  live and move with the token they stand beside, and deleting the two together resets
+  every credential. The server owns the file: it loads it at bind, writes it, and keeps
+  only BLAKE3 digests in it
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)).
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random
   token in a user-only file). New tokens are 32 bytes from the OS's random source
   (`getrandom`), written as 64 lowercase hex characters, so they fit an `Authorization`

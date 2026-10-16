@@ -12,6 +12,7 @@ use crate::error::{ProtocolError, WireError};
 use crate::event::Event;
 use crate::history::HistoryCall;
 use crate::id::{ClientId, RequestId, Rev};
+use crate::output::SecretString;
 use crate::query::{Query, QueryResult};
 use crate::version::ProtocolVersion;
 use schemars::JsonSchema;
@@ -131,8 +132,15 @@ pub enum CallResult {
         /// The revision the batch produced.
         rev: Rev,
     },
-    /// The action was accepted. Its progress is reported by events.
-    Action {},
+    /// The action was accepted. Its progress is reported by events. An action whose
+    /// answer carries data (`pairing.start`) has it in `result`; the others omit it.
+    Action {
+        /// What the action answered, tagged by the action's name, for the actions that
+        /// answer something. Absent for every other action, and from a server older
+        /// than 0.21.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result: Option<ActionResult>,
+    },
     /// The query's answer.
     Query {
         /// The result.
@@ -150,6 +158,36 @@ pub enum CallResult {
         /// How many steps the client can redo.
         redo_depth: u32,
     },
+}
+
+impl CallResult {
+    /// An action's answer with no data: what every action but `pairing.start` answers.
+    pub fn action() -> Self {
+        CallResult::Action { result: None }
+    }
+}
+
+/// What an action answered, for the few actions whose answer carries data. Its `type`
+/// tag repeats the action's name.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type")]
+#[non_exhaustive]
+pub enum ActionResult {
+    /// The answer to `pairing.start`: the one-time pairing code, sent to the client that
+    /// started pairing and to no one else (ADR-0044).
+    #[serde(rename = "pairing.start")]
+    PairingStart {
+        /// The code: 8 characters of Crockford's base32 alphabet, written `XXXX-XXXX`.
+        /// The host shows it; the device posts it to `POST /api/v1/pair`. Never logged.
+        code: SecretString,
+        /// How long the code stays open, in seconds (120).
+        expires_in_secs: u32,
+    },
+    /// An action result this version of the protocol doesn't know. Never sent; produced
+    /// only when parsing an answer from a newer server.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 /// A failed request, a failed handshake, or a message that couldn't be parsed.

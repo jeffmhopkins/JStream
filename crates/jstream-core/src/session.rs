@@ -4,7 +4,8 @@ use crate::engine::{Engine, Executed};
 use crate::events;
 use crate::events::QueueRef;
 use crate::lock;
-use jstream_control::{BoxFuture, Control, ControlError, EventStream};
+use crate::preview::SessionPreviews;
+use jstream_control::{BinaryStream, BoxFuture, Control, ControlError, EventStream};
 use jstream_protocol::{
     Call, ClientId, Hello, PROTOCOL_VERSION, ProtocolError, RequestId, Response, Welcome,
 };
@@ -39,6 +40,8 @@ pub struct InProcessControl {
     next_request: AtomicU64,
     /// This session's event subscriptions, closed when it is dropped.
     subscriptions: Mutex<Vec<QueueRef>>,
+    /// Its binary channel and preview streams, closed when it is dropped.
+    previews: SessionPreviews,
 }
 
 impl InProcessControl {
@@ -49,6 +52,7 @@ impl InProcessControl {
             client_id: Mutex::new(None),
             next_request: AtomicU64::new(1),
             subscriptions: Mutex::new(Vec::new()),
+            previews: SessionPreviews::default(),
         }
     }
 
@@ -112,7 +116,7 @@ impl Control for InProcessControl {
                 tracing::debug!("call refused: no hello yet");
                 Executed::Ready(Err(ProtocolError::HandshakeRequired))
             }
-            Some(client_id) => self.engine.execute(&client_id, &id, call),
+            Some(client_id) => self.engine.execute(&client_id, &id, call, &self.previews),
         };
         match executed {
             Executed::Ready(result) => Box::pin(future::ready(
@@ -146,6 +150,10 @@ impl Control for InProcessControl {
         mine.push(queue);
         Box::pin(stream)
     }
+
+    fn binary(&self) -> BinaryStream {
+        Box::pin(self.previews.open_binary())
+    }
 }
 
 impl Drop for InProcessControl {
@@ -158,5 +166,6 @@ impl Drop for InProcessControl {
         }
         let mine = std::mem::take(&mut *lock(&self.subscriptions));
         events::close(mine);
+        self.previews.close();
     }
 }
