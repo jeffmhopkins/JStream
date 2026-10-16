@@ -11,9 +11,10 @@
 # needs:  the steps an unfinished item still needs before it is `done`, in order, for the
 #         README's "What's left" table: build (code to write or finish through review),
 #         wave (merged into a wave that hasn't landed), hardware (a Windows run),
-#         maintainer (a decision or an action only the maintainer can take). Required on
-#         `planned` and `review` items; a `hardware` item without it needs its run. Drop
-#         it when the item is `done`. ROADMAP.md#endgame has the order they land in.
+#         maintainer (a decision or an action only the maintainer can take). Set it on
+#         every `planned` and `review` item (`docs progress` lists the ones without); a
+#         `hardware` item without it needs its run. Drop it when the item is `done`.
+#         ROADMAP.md#endgame has the order they land in.
 # Item IDs are the roadmap board's; PR titles name them in parentheses, e.g. "(A5)".
 
 [[milestone]]

@@ -3087,7 +3087,7 @@ stamp = { hash = "b3:7b5a1d8b0b60bed1", by = "agent:wave-owner", note = "merge-m
 stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/progress.rs"]
-stamp = { hash = "b3:d6835f845ace7566", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "progress.rs gains the needs field, its validation, the What's left table and a sweep line for done items still listing needs; the bootstrap bullet (generate writes the README's progress block, docs progress lists stale entries) still holds, and DOCS#generated now describes needs" }
+stamp = { hash = "b3:9a4f4c0318d10742", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "progress.rs gains the optional needs field, its validation, the What's left table and sweep lines for planned or review items without needs and done items still listing it; the bootstrap bullet (generate writes the README's progress block, docs progress lists stale entries) still holds, and DOCS#generated now describes needs" }
 
 ["DOCS#dependency-lint"."body"]
 stamp = { hash = "b3:416056ff5f5233ae", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the unsafe bullet adds the browser-helper crate (UNSAFE_CRATES and R-UNSAFE-001, for its RunWinMain export); cef-dll-sys now sits behind jstream-browser's helper feature, not cef; matches lint_deps.rs" }

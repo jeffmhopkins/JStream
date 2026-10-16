@@ -33,6 +33,8 @@ const NEEDS: &[(&str, &str)] = &[
     ("hardware", "🧪 Windows run"),
     ("maintainer", "👤 maintainer"),
 ];
+/// The step shown for an unfinished item whose `needs` isn't set yet.
+const UNSET: &str = "unset";
 /// Cells in the progress bar.
 const BAR: usize = 10;
 
@@ -65,12 +67,14 @@ impl Item {
     }
 
     /// The steps it still needs: its `needs`, or for a `hardware` item that lists none,
-    /// its Windows run. Empty once it is `done`.
+    /// its Windows run, or `unset` for another unfinished item that lists none. Empty
+    /// once it is `done`.
     fn steps(&self) -> Vec<&str> {
         match self.status.as_str() {
             "done" => Vec::new(),
-            "hardware" if self.needs.is_empty() => vec!["hardware"],
-            _ => self.needs.iter().map(String::as_str).collect(),
+            _ if !self.needs.is_empty() => self.needs.iter().map(String::as_str).collect(),
+            "hardware" => vec!["hardware"],
+            _ => vec![UNSET],
         }
     }
 }
@@ -235,13 +239,6 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
                 "{what}: status `hardware` needs a `note` naming the pending run"
             ));
         }
-        if matches!(item.status.as_str(), "planned" | "review") && item.needs.is_empty() {
-            errs.push(format!(
-                "{what}: status `{}` needs `needs`, the steps still to do (one or more of {})",
-                item.status,
-                NEEDS.iter().map(|(s, _)| *s).collect::<Vec<_>>().join(", ")
-            ));
-        }
         if item.status == "hardware"
             && !item.needs.is_empty()
             && !item.needs.iter().any(|n| n == "hardware")
@@ -363,9 +360,15 @@ fn left(p: &Progress, out: &mut String) {
         out.push_str("\nNothing is left: every item is done.\n");
         return;
     }
-    let label = |s: &str| NEEDS.iter().find(|(n, _)| *n == s).map_or("", |(_, l)| l);
+    let label = |s: &str| {
+        NEEDS
+            .iter()
+            .find(|(n, _)| *n == s)
+            .map_or("❔ not set", |(_, l)| l)
+    };
     let counts: Vec<String> = NEEDS
         .iter()
+        .chain([&(UNSET, "❔ not set")])
         .filter_map(|(n, l)| {
             let c = open.iter().filter(|i| i.steps().first() == Some(n)).count();
             (c > 0).then(|| format!("{l} {c}"))
@@ -544,6 +547,12 @@ fn stale(p: &Progress, merged: &[Merged]) -> Vec<String> {
                 prs(i)
             ));
         }
+        if matches!(i.status.as_str(), "planned" | "review") && i.needs.is_empty() {
+            out.push(format!(
+                "- **{}** is `{}` but has no `needs`: list the steps it still needs.",
+                i.id, i.status
+            ));
+        }
         if i.status == "done" && !i.needs.is_empty() {
             out.push(format!(
                 "- **{}** is `done` but still lists `needs`: remove it.",
@@ -720,6 +729,19 @@ needs = ["maintainer"]
             "{r}"
         );
         assert!(!r.contains("| A1 | Done thing | M1 |"), "{r}");
+        let unset = parse(&DATA_OK.replace("needs = [\"maintainer\"]\n", ""))
+            .expect("invariant: needs is optional");
+        let r = render(&unset);
+        assert!(
+            r.contains("| A4 | Later | M1 | ❔ not set |  |  |\n"),
+            "{r}"
+        );
+        assert!(
+            r.contains("🧪 Windows run 1, ❔ not set 1</summary>"),
+            "{r}"
+        );
+        let s = stale(&unset, &[]).join("\n");
+        assert!(s.contains("**A4** is `planned` but has no `needs`"), "{s}");
     }
 
     #[test]
@@ -757,12 +779,6 @@ prs = [3, 3]
 needs = ["build", "build"]
 
 [[item]]
-id = "A2"
-milestone = "M1"
-title = "z"
-status = "planned"
-
-[[item]]
 id = "A3"
 milestone = "M1"
 title = "w"
@@ -781,7 +797,6 @@ needs = ["soon"]
             "duplicate item id `A1`",
             "status `hardware` needs `hardware` in its `needs`",
             "a step is listed twice in `needs`",
-            "item `A2`: status `planned` needs `needs`",
             "item `A3`: unknown step `soon`",
         ] {
             assert!(all.contains(needle), "missing {needle:?} in:\n{all}");
