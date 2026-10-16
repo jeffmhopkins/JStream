@@ -543,7 +543,8 @@ token (even on localhost), except `POST /api/v1/pair` while a pairing code is op
 ([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
 device token, never the control token, as the `__Host-jstream_device` cookie. Every
 listener validates the `Host` header, and
-the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
+the `Origin` header when one is present. A device token is accepted only over loopback
+or TLS. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>

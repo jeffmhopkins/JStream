@@ -115,7 +115,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-
   picks, behind a 32-byte random token made at each start and kept only in memory: no
   token file, and no other client can connect. MCP is off. The server accepts the
   webview's origin besides its own (R-SEC-002); every connection still presents the
-  token. On Windows the engine is live with the same wiring as the daemon (OS backends,
+  token. No device file is set, so a device paired from the app
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) lasts only until it exits,
+  and, like the token, is accepted only on loopback. On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
   When the app exits, the server closes its connections and the engine stops.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and

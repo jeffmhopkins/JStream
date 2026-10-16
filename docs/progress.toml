@@ -685,7 +685,7 @@ status = "planned"
 id = "U1"
 milestone = "M2"
 title = "Preview stream"
-status = "review"
+status = "done"
 prs = [251]
 
 [[item]]
