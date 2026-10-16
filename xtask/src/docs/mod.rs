@@ -91,6 +91,22 @@ fn load(root: &Path) -> Result<Loaded> {
     })
 }
 
+/// Rewrites every `@generated` block from its source, as `docs generate` does: the ADR
+/// status banners and index, and the README's progress table. Returns what was written
+/// and the problems that stopped a block.
+pub(crate) fn write_generated(root: &Path) -> Result<generate::Generated> {
+    let l = load(root)?;
+    let mut g = generate::generate(&l.docs);
+    let (readme, problems) = progress::generate(root, &l.docs);
+    g.files
+        .extend(readme.map(|(path, line, text)| (path, Some(line), text)));
+    g.problems.extend(problems);
+    for (path, _, text) in &g.files {
+        std::fs::write(root.join(path), text).with_context(|| format!("writing {path}"))?;
+    }
+    Ok(g)
+}
+
 fn read_toml(root: &Path, p: &str) -> Result<toml::Table> {
     let text = std::fs::read_to_string(root.join(p)).with_context(|| format!("reading {p}"))?;
     text.parse().with_context(|| format!("parsing {p}"))
@@ -453,17 +469,11 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             let [_] = args else {
                 bail!("usage: cargo xtask docs generate");
             };
-            let l = load(root)?;
-            let mut g = generate::generate(&l.docs);
-            let (readme, problems) = progress::generate(root, &l.docs);
-            g.files
-                .extend(readme.map(|(path, line, text)| (path, Some(line), text)));
-            g.problems.extend(problems);
+            let g = write_generated(root)?;
             for d in &g.problems {
                 eprintln!("{}:{}: {}", d.path, d.line, d.msg);
             }
-            for (path, _, text) in &g.files {
-                std::fs::write(root.join(path), text).with_context(|| format!("writing {path}"))?;
+            for (path, _, _) in &g.files {
                 eprintln!("generated {path}");
             }
             if g.files.iter().any(|(_, line, _)| line.is_none()) {
@@ -573,6 +583,9 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             let m = merge::merge_main(root, branch)?;
             for s in &m.stamps {
                 eprintln!("took {branch}'s stamp: {s}");
+            }
+            for path in &m.generated {
+                eprintln!("regenerated after a conflict in its @generated blocks: {path}");
             }
             for (path, why) in &m.refused {
                 eprintln!("left for you: {path}: {why}");
@@ -986,6 +999,55 @@ mod tests {
         let m = merge::merge_main(&work.0, "wave/m1").expect("merges");
         assert!(m.committed && m.refused.is_empty(), "{m:?}");
         assert!(work.0.join("src/w.rs").exists());
+    }
+
+    /// Two branches that each mark a different roadmap item done and regenerate the README
+    /// conflict only inside its progress block: `docs merge-main` takes the wave's side,
+    /// regenerates the block from the merged `docs/progress.toml` and commits.
+    #[test]
+    fn merge_main_regenerates_conflicting_generated_blocks() {
+        let readme = "<!-- @doc\nid = \"README\"\ntitle = \"R\"\nkind = \"normative\"\nstatus = \"active\"\nreview_every = \"90d\"\n-->\n\n# R\n\n<!-- @generated begin progress -->\n<!-- @generated end progress -->\n";
+        let item = |id: &str, status: &str| {
+            let prs = if status == "done" { "[1]" } else { "[]" };
+            format!(
+                "[[item]]\nid = \"{id}\"\nmilestone = \"M0\"\ntitle = \"{id}\"\nstatus = \"{status}\"\nprs = {prs}\n\n"
+            )
+        };
+        let progress = |a: &str, b: &str| {
+            format!(
+                "[[milestone]]\nid = \"M0\"\ntitle = \"Base\"\nroadmap = \"ROADMAP.md#m0\"\n\n{}{}{}",
+                item("A", a),
+                item("B", b),
+                item("C", "planned")
+            )
+        };
+        let base = progress("planned", "planned");
+        let mut files = REGISTRIES.to_vec();
+        files.extend([("README.md", readme), ("docs/progress.toml", base.as_str())]);
+        let (origin, work) = origin_and_clone("merge-generated", &files);
+        let generated = |f: &Fixture| {
+            let g = write_generated(&f.0).expect("generates");
+            assert!(g.problems.is_empty(), "{:?}", g.problems);
+        };
+        generated(&origin);
+        commit_all(&origin, "main: table");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        origin.git(&["checkout", "-q", "-b", "wave/m1"]);
+        origin.write("docs/progress.toml", &progress("done", "planned"));
+        generated(&origin);
+        commit_all(&origin, "wave: A done");
+        origin.git(&["checkout", "-q", "main"]);
+        work.write("docs/progress.toml", &progress("planned", "done"));
+        generated(&work);
+        commit_all(&work, "work: B done");
+
+        let m = merge::merge_main(&work.0, "wave/m1").expect("merges");
+        assert!(m.committed && m.refused.is_empty(), "{m:?}");
+        assert_eq!(m.generated, vec!["README.md".to_owned()]);
+        let text = std::fs::read_to_string(work.0.join("README.md")).expect("readme");
+        assert!(text.contains("2 of 3 items are merged"), "{text}");
+        assert!(!text.contains("<<<<<<<"), "{text}");
+        assert!(write_generated(&work.0).expect("again").files.is_empty());
     }
 
     /// ADR-0053 with `docs merge-main`: two branches that change different covered files

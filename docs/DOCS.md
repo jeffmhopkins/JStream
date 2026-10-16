@@ -59,7 +59,7 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
-  that are only between stamps, moves inline stamps a branch from before ADR-0053 still
+  that are only between stamps or only inside `@generated` blocks, moves inline stamps a branch from before ADR-0053 still
   has, and lists the sections left stale.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
@@ -317,9 +317,12 @@ conflict in the ledger takes main's side: a merge never leaves a section falsely
 and a conflict usually leaves it stale, for a re-read. The result must parse, and is
 rewritten in canonical form. In a doc, a conflict whose two sides are only inline `verified` lines
 inside `@section` blocks (either side may have none, as when `main` moved them to the
-ledger) takes main's side too. Any other conflict, including one in a file that also has
-stamp conflicts, is left exactly as git wrote it, and the merge stays open for you to
-finish by hand. When every conflict was a stamp conflict it commits the merge, runs
+ledger) takes main's side too. A conflict whose two sides lie wholly inside `@generated`
+blocks, such as two PRs each regenerating the README's progress table, takes main's side,
+and then every block is rewritten from the merged sources, as `docs generate` would. Any
+other conflict, including one in a file that also has stamp conflicts, is left exactly as
+git wrote it, and the merge stays open for you to finish by hand. When every conflict was
+resolved this way it commits the merge, runs
 `docs migrate` and commits what that changed separately, and prints the sections that are
 now stale, for `docs verify` after a re-read.
 
