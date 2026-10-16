@@ -119,7 +119,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `chat_message` (named "Chat message"): the featured live chat message
   ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) §2). It belongs to
   the optional API path: messages come from the Live API's chat, which needs JStream's
-  Google OAuth client (built in, empty for now; ADR-0058). The message is
+  Google OAuth client (built in, empty for now; ADR-0058) and the collection's API chat
+  switch, off by default (ADR-0058 §5). The message is
   runtime state, not a setting: `Context::chat` holds a `ChatFeature`, a shared slot
   the host fills with `set(Some(FeaturedMessage { author, badge, text, amount }))` or
   clears with `set(None)`, and every source created from that context draws what it

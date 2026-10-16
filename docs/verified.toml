@@ -2376,7 +2376,7 @@ stamp = { hash = "b3:ba68a58b43011f41", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:76a0bd9be3b1d5ce", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+stamp = { hash = "b3:1da58abebcad813a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223 (browser kind from C8 beside it): the chat_message bullet matches chat.rs (ChatFeature slot, header over text, max_width wrap, stack() in text/raster.rs counting frame plus blocks, blank pixel fallback via show(), create/update failing only for settings, 1000/100 char caps, 100 ms next_change) and tests/chat.rs; Context lists chat beside browser; it now says the API path needs the built-in client and the collection's chat switch, off by default (ADR-0058 §5); holds" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:dfba6103702005f0" }
@@ -2392,6 +2392,9 @@ stamp = { hash = "b3:234830343d1d1b94" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/browser.rs"]
 stamp = { hash = "b3:1bf858d2952869b0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+
+["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/chat.rs"]
+stamp = { hash = "b3:ee034f8d81f32e44", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223 (browser kind from C8 beside it): the chat_message bullet matches chat.rs (ChatFeature slot, header over text, max_width wrap, stack() in text/raster.rs counting frame plus blocks, blank pixel fallback via show(), create/update failing only for settings, 1000/100 char caps, 100 ms next_change) and tests/chat.rs; Context lists chat beside browser; it now says the API path needs the built-in client and the collection's chat switch, off by default (ADR-0058 §5); holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/color.rs"]
 stamp = { hash = "b3:52ebcec35599e793", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
@@ -2409,22 +2412,25 @@ stamp = { hash = "b3:6ae3f673fe0d6d0b" }
 stamp = { hash = "b3:c4299f8d4d3cdecb" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/lib.rs"]
-stamp = { hash = "b3:fba46fd30ae6b5fa", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+stamp = { hash = "b3:d4d40c9b81176be3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223 (browser kind from C8 beside it): the chat_message bullet matches chat.rs (ChatFeature slot, header over text, max_width wrap, stack() in text/raster.rs counting frame plus blocks, blank pixel fallback via show(), create/update failing only for settings, 1000/100 char caps, 100 ms next_change) and tests/chat.rs; Context lists chat beside browser; it now says the API path needs the built-in client and the collection's chat switch, off by default (ADR-0058 §5); holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/registry.rs"]
-stamp = { hash = "b3:56d6987ba076744f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+stamp = { hash = "b3:9f8d123c58ef87b3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223 (browser kind from C8 beside it): the chat_message bullet matches chat.rs (ChatFeature slot, header over text, max_width wrap, stack() in text/raster.rs counting frame plus blocks, blank pixel fallback via show(), create/update failing only for settings, 1000/100 char caps, 100 ms next_change) and tests/chat.rs; Context lists chat beside browser; it now says the API path needs the built-in client and the collection's chat switch, off by default (ADR-0058 §5); holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/source.rs"]
-stamp = { hash = "b3:ef5b0035cfbd689e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+stamp = { hash = "b3:db515ea8210af627", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223 (browser kind from C8 beside it): the chat_message bullet matches chat.rs (ChatFeature slot, header over text, max_width wrap, stack() in text/raster.rs counting frame plus blocks, blank pixel fallback via show(), create/update failing only for settings, 1000/100 char caps, 100 ms next_change) and tests/chat.rs; Context lists chat beside browser; it now says the API path needs the built-in client and the collection's chat switch, off by default (ADR-0058 §5); holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/mod.rs"]
-stamp = { hash = "b3:34314ba6e93e9e21" }
+stamp = { hash = "b3:bf94ec975fec69fa", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223 (browser kind from C8 beside it): the chat_message bullet matches chat.rs (ChatFeature slot, header over text, max_width wrap, stack() in text/raster.rs counting frame plus blocks, blank pixel fallback via show(), create/update failing only for settings, 1000/100 char caps, 100 ms next_change) and tests/chat.rs; Context lists chat beside browser; it now says the API path needs the built-in client and the collection's chat switch, off by default (ADR-0058 §5); holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/raster.rs"]
-stamp = { hash = "b3:c3408e030cf73654" }
+stamp = { hash = "b3:afac5ae6cae8369a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223 (browser kind from C8 beside it): the chat_message bullet matches chat.rs (ChatFeature slot, header over text, max_width wrap, stack() in text/raster.rs counting frame plus blocks, blank pixel fallback via show(), create/update failing only for settings, 1000/100 char caps, 100 ms next_change) and tests/chat.rs; Context lists chat beside browser; it now says the API path needs the built-in client and the collection's chat switch, off by default (ADR-0058 §5); holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/browser.rs"]
 stamp = { hash = "b3:a886220b5abd4b1e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+
+["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/chat.rs"]
+stamp = { hash = "b3:991291479bb0d17c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223 (browser kind from C8 beside it): the chat_message bullet matches chat.rs (ChatFeature slot, header over text, max_width wrap, stack() in text/raster.rs counting frame plus blocks, blank pixel fallback via show(), create/update failing only for settings, 1000/100 char caps, 100 ms next_change) and tests/chat.rs; Context lists chat beside browser; it now says the API path needs the built-in client and the collection's chat switch, off by default (ADR-0058 §5); holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/data/anim.webp"]
 stamp = { hash = "b3:9d858ccee8b712ef" }
@@ -2442,7 +2448,7 @@ stamp = { hash = "b3:dbb67160c5d2f421" }
 stamp = { hash = "b3:fc3b1214b3ce4e96" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/sources.rs"]
-stamp = { hash = "b3:7a6860ce7e1ce8ac", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
+stamp = { hash = "b3:0b5543ff0b254548", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223 (browser kind from C8 beside it): the chat_message bullet matches chat.rs (ChatFeature slot, header over text, max_width wrap, stack() in text/raster.rs counting frame plus blocks, blank pixel fallback via show(), create/update failing only for settings, 1000/100 char caps, 100 ms next_change) and tests/chat.rs; Context lists chat beside browser; it now says the API path needs the built-in client and the collection's chat switch, off by default (ADR-0058 §5); holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/text.rs"]
 stamp = { hash = "b3:df9bfd5ccf0cf15b", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
@@ -2727,7 +2733,7 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
 ["CRATE-jstream-youtube#purpose"."body"]
-stamp = { hash = "b3:9232af18dece160f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements it; the empty BUILT_IN_CLIENT_ID/SECRET constants; the engine paragraph now says the calls are protocol commands for the UI and MCP leaves them out (§3), replacing 'and so as MCP tools'; Not yet unchanged; holds" }
+stamp = { hash = "b3:d9cc1e2fd34ccbde", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223: the chat bullet matches chat.rs (chat_messages page with Readonly, ChatMessage fields and events, stranger-text caps 1000/100, ChatPoller interval of at least 1 s, separate error and quota backoff ladders, stop on offlineAt or chat ended/not found/disabled) and its fixtures and tests; it adds that API chat reading is opt-in per collection (ADR-0058 §5), and Not yet names that switch and streamList; #223's built-in client and UI-only engine paragraph are kept; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:ac6493f8088539b9" }
@@ -2756,6 +2762,15 @@ stamp = { hash = "b3:ade83091ac58b10d" }
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/broadcasts_list.json"]
 stamp = { hash = "b3:95050509cf687820" }
 
+["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/chat_messages.json"]
+stamp = { hash = "b3:aadb9b59b8ac12c1", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223: the chat bullet matches chat.rs (chat_messages page with Readonly, ChatMessage fields and events, stranger-text caps 1000/100, ChatPoller interval of at least 1 s, separate error and quota backoff ladders, stop on offlineAt or chat ended/not found/disabled) and its fixtures and tests; it adds that API chat reading is opt-in per collection (ADR-0058 §5), and Not yet names that switch and streamList; #223's built-in client and UI-only engine paragraph are kept; holds" }
+
+["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/chat_messages_offline.json"]
+stamp = { hash = "b3:e085e140bca7a632", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223: the chat bullet matches chat.rs (chat_messages page with Readonly, ChatMessage fields and events, stranger-text caps 1000/100, ChatPoller interval of at least 1 s, separate error and quota backoff ladders, stop on offlineAt or chat ended/not found/disabled) and its fixtures and tests; it adds that API chat reading is opt-in per collection (ADR-0058 §5), and Not yet names that switch and streamList; #223's built-in client and UI-only engine paragraph are kept; holds" }
+
+["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/error_chat_ended.json"]
+stamp = { hash = "b3:eac1d3460b0700be", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223: the chat bullet matches chat.rs (chat_messages page with Readonly, ChatMessage fields and events, stranger-text caps 1000/100, ChatPoller interval of at least 1 s, separate error and quota backoff ladders, stop on offlineAt or chat ended/not found/disabled) and its fixtures and tests; it adds that API chat reading is opt-in per collection (ADR-0058 §5), and Not yet names that switch and streamList; #223's built-in client and UI-only engine paragraph are kept; holds" }
+
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/error_quota.json"]
 stamp = { hash = "b3:95d711a6ef1fe846" }
 
@@ -2783,6 +2798,12 @@ stamp = { hash = "b3:d388d0682e80ff41" }
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/token_refresh.json"]
 stamp = { hash = "b3:8b26b2ef26103774" }
 
+["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/chat.rs"]
+stamp = { hash = "b3:57139b9640ad674a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223: the chat bullet matches chat.rs (chat_messages page with Readonly, ChatMessage fields and events, stranger-text caps 1000/100, ChatPoller interval of at least 1 s, separate error and quota backoff ladders, stop on offlineAt or chat ended/not found/disabled) and its fixtures and tests; it adds that API chat reading is opt-in per collection (ADR-0058 §5), and Not yet names that switch and streamList; #223's built-in client and UI-only engine paragraph are kept; holds" }
+
+["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/chat/tests.rs"]
+stamp = { hash = "b3:722bb865491932d7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223: the chat bullet matches chat.rs (chat_messages page with Readonly, ChatMessage fields and events, stranger-text caps 1000/100, ChatPoller interval of at least 1 s, separate error and quota backoff ladders, stop on offlineAt or chat ended/not found/disabled) and its fixtures and tests; it adds that API chat reading is opt-in per collection (ADR-0058 §5), and Not yet names that switch and streamList; #223's built-in client and UI-only engine paragraph are kept; holds" }
+
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/error.rs"]
 stamp = { hash = "b3:a175ce9c54120d89" }
 
@@ -2799,10 +2820,10 @@ stamp = { hash = "b3:a1b77e31232697af" }
 stamp = { hash = "b3:2a7db87174f1fd6d" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/lib.rs"]
-stamp = { hash = "b3:943f6a631785bc79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §1: list_broadcasts_of_type with the broadcastType filter is described as live.rs implements and tests it; Not yet drops the protocol, MCP and engine wiring; the oauth bullet adds the empty BUILT_IN_CLIENT_ID and BUILT_IN_CLIENT_SECRET constants (re-exported from lib.rs) that the maintainer fills in; holds" }
+stamp = { hash = "b3:562bf3ccaae601be", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223: the chat bullet matches chat.rs (chat_messages page with Readonly, ChatMessage fields and events, stranger-text caps 1000/100, ChatPoller interval of at least 1 s, separate error and quota backoff ladders, stop on offlineAt or chat ended/not found/disabled) and its fixtures and tests; it adds that API chat reading is opt-in per collection (ADR-0058 §5), and Not yet names that switch and streamList; #223's built-in client and UI-only engine paragraph are kept; holds" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/live.rs"]
-stamp = { hash = "b3:a973aec7a81ebb2d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: list_broadcasts_of_type with the broadcastType filter is described as live.rs implements and tests it; the engine now holds the LiveClient and the token store, so Not yet drops the protocol, MCP and engine wiring; holds" }
+stamp = { hash = "b3:43f01c6865193be8", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1 after merging #223: the chat bullet matches chat.rs (chat_messages page with Readonly, ChatMessage fields and events, stranger-text caps 1000/100, ChatPoller interval of at least 1 s, separate error and quota backoff ladders, stop on offlineAt or chat ended/not found/disabled) and its fixtures and tests; it adds that API chat reading is opt-in per collection (ADR-0058 §5), and Not yet names that switch and streamList; #223's built-in client and UI-only engine paragraph are kept; holds" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/live/tests.rs"]
 stamp = { hash = "b3:df2bf7557aa2b67d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: list_broadcasts_of_type with the broadcastType filter is described as live.rs implements and tests it; the engine now holds the LiveClient and the token store, so Not yet drops the protocol, MCP and engine wiring; holds" }

@@ -102,6 +102,10 @@ Contents:
   for good when a page reports `offlineAt` or the API answers `liveChatEnded`,
   `liveChatNotFound` or `liveChatDisabled`. It takes the time as an argument, starts
   no thread and never sleeps: the engine's loop calls `poll` and waits until `due`.
+  Every page costs quota from the one daily quota JStream's built-in client shares
+  across its users, so reading chat through the API is opt-in: a per-collection
+  switch, off by default, decides whether the engine polls at all (ADR-0058 §5). The
+  "YouTube chat" browser preset shows chat at no quota cost.
 - **`fake`** (feature `fake`, and in this crate's tests): `FakeTransport` replays
   queued responses and records requests. Tests run on JSON fixtures in `fixtures/`,
   shaped after the API reference's documented responses, so no test uses the network
@@ -125,5 +129,6 @@ The engine (`jstream-core`, roadmap Y3) holds one `LiveClient`, keeps its refres
 in the `OAuthTokenStore` and exposes these calls as protocol commands for the UI. MCP
 leaves them out: YouTube is for people, not agents (ADR-0058 §3).
 
-**Not yet:** sending chat as the channel, the engine's chat polling and its
-`youtube.chat.feature` action, audience stats from ADR-0041, and quota accounting.
+**Not yet:** sending chat as the channel, the engine's chat polling with its
+per-collection opt-in switch and its `youtube.chat.feature` action,
+`liveChatMessages.streamList` where the API offers it (ADR-0058 §5), audience stats from ADR-0041, and quota accounting.
