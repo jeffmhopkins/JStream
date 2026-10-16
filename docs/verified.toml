@@ -1290,7 +1290,7 @@ stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:5b73caa28ffd99e3" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:00b01a34b3b7f606", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:aedcbd688062d375", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1308,7 +1308,7 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:bb5ec41398523fc4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): vcam status values match host.rs VcamStatus strings; build.rs delay-loads mfsensorgroup.dll; WindowsVcam behind --no-vcam" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:46946d3ef73adbf5", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:2764d292a76b33c3", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): vcam status values match host.rs VcamStatus strings; build.rs delay-loads mfsensorgroup.dll; WindowsVcam behind --no-vcam" }
@@ -1320,7 +1320,7 @@ stamp = { hash = "b3:6d9ebaeab4249226", by = "agent:claude@session_01D6iWjpMkoHb
 stamp = { hash = "b3:ca2f21dc552ae191" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:87507502dd985e20", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:585937dddc3fdee0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:7d332860fef7cc2b", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
@@ -1341,13 +1341,13 @@ stamp = { hash = "b3:45624952598c1f3a" }
 stamp = { hash = "b3:558b5c5512b30191" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:d279c9bf130da277", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:3b7ae6b00b7ec604", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:46946d3ef73adbf5", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:2764d292a76b33c3", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): contents list matches app.rs, host.rs (vcam_status), bootstrap.rs (vcam in the global) and ui.rs" }
@@ -1359,7 +1359,7 @@ stamp = { hash = "b3:6d9ebaeab4249226", by = "agent:claude@session_01D6iWjpMkoHb
 stamp = { hash = "b3:ca2f21dc552ae191" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:87507502dd985e20", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:585937dddc3fdee0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:7d332860fef7cc2b", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
@@ -1377,13 +1377,13 @@ stamp = { hash = "b3:ee281b0fbf540f66" }
 stamp = { hash = "b3:45624952598c1f3a" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:9ccb51f8581fe0c8", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:160fa02a88ac65c0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
 stamp = { hash = "b3:7261cd248aac926a", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:46946d3ef73adbf5", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:2764d292a76b33c3", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/data.rs"]
 stamp = { hash = "b3:ca2f21dc552ae191" }
