@@ -213,7 +213,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:8c0c258dab2abccb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:a1cffce44b08cd28", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; tools.snap changed only in bus.create's description text, holds" }
+stamp = { hash = "b3:980bdf71d921b870", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "tools.snap regenerated: it now carries #460's protocol doc text (bus.delete refused while a setting refers to the bus, since 0.24; DeleteTarget::Bus; the delete.plan description naming bus) and the BusId definition it pulls in. #460 changed the protocol docs on wave/m2 but the snapshot was not updated, since wave PRs skip the test job. ARCH#mcp lists tool groups including bus and delete and makes no claim the new text contradicts. cargo test -p jstream-mcp passes (38)." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
