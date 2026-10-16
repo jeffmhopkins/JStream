@@ -119,7 +119,12 @@ pub(crate) fn invalid(at: usize, name: &str, reason: impl Into<String>) -> Proto
 }
 
 /// The `invalid_argument` that refuses deleting `target` while `blockers` refer to it.
-fn blocked(at: usize, name: &str, target: &Node, blockers: Vec<Blocker>) -> ProtocolError {
+pub(crate) fn blocked(
+    at: usize,
+    name: &str,
+    target: &Node,
+    blockers: Vec<Blocker>,
+) -> ProtocolError {
     let list: Vec<String> = blockers
         .iter()
         .map(|b| format!("{} `{}` ({})", b.entity, b.id, b.field))
@@ -1086,7 +1091,7 @@ fn set_settings(
 }
 
 /// Checks one settings value for `param` of source `source_id`: its type and
-/// constraints, that a referenced scene or source exists (`not_found` if not), and that a
+/// constraints, that a referenced scene, source or bus exists (`not_found` if not), and that a
 /// referenced source produces what the parameter needs. A source may name itself here;
 /// [`check_reference_cycles`] rejects that as a cycle.
 pub(crate) fn check_value(
@@ -1104,6 +1109,11 @@ pub(crate) fn check_value(
     match Reference::from_value(value) {
         Some(Reference::Scene { scene_id }) => {
             find_scene(state, &scene_id)?;
+        }
+        Some(Reference::Bus { bus_id }) => {
+            if state.bus(&bus_id).is_none() {
+                return Err(not_found(EntityKind::Bus, bus_id.as_str()));
+            }
         }
         Some(Reference::Source { source_id: target }) if &target != source_id => {
             let referenced = state

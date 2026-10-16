@@ -133,7 +133,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
-| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, and `paths` (the data folder, ADR-0020). The **single owner** of the encoder and decoder traits. | no |
+| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, and `paths` (the data folder, ADR-0020). The **single owner** of the encoder and decoder traits. | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
@@ -281,8 +281,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   stays empty in v1, so adding them later needs no collection migration.
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
-  validates against. References to scenes, sources and asset files inside settings are
-  typed, so the graph tracks them in cycle checks and delete rejection
+  validates against. References to scenes, sources, buses and asset files inside
+  settings are typed, so the graph tracks them in cycle checks and delete rejection
   ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Every edit that can add a
   dependency edge runs the cycle check, including `item.set_source`, `item.move` and
   creating a variant. Kinds are built in, come from an effect pack, or, for audio
@@ -367,16 +367,20 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   plain link that reads as absent once the original is deleted. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
-  refers to, or a scene a source still shows or a setting refers to, is rejected; a
+  refers to, or a scene a source still shows or a setting refers to, is rejected, and so
+  is deleting a bus a setting refers to (a `bus` reference, which never closes a cycle); a
   reference in a filter's settings is an edge of the filter's source. The
   built-in kinds come from `jstream-sources`. The engine runs a source of each one
-  whose kind is built (`color`, `image` and `text`), rebuilt when its settings change,
-  and the program mix shows its frames, animations advancing on the media clock. The
-  audio-only kinds (`audio_input`, `desktop_audio`, `app_audio`) have no `Source`:
-  while an output runs, the engine records each as a mixer input, routed as its audio
-  and sends say, running the source's enabled audio filters of the built-in kinds
-  (`gain`, `noise_gate`, `compressor`, `limiter`, `delay`). No video filter kind is
-  built in yet.
+  whose kind is built (`browser` and its `youtube_chat` preset, through the host's
+  browser backend, and `color`, `image`, `media`, `text`, `waveform` and `spectrum`),
+  rebuilt when its settings change, and the program mix shows its frames, animations
+  and videos advancing on the media clock. The audio-only kinds (`audio_input`,
+  `desktop_audio`, `app_audio`) have no `Source`: while an output runs, the engine
+  records each as a mixer input, routed as its audio and sends say, running the
+  source's enabled audio filters of the built-in kinds (`gain`, `noise_gate`,
+  `compressor`, `limiter`, `delay`). A `browser` page's audio and a `media` file's
+  sound are mixer inputs of their running source, routed the same way. No video filter
+  kind is built in yet.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
   container: mp4 }`, the path checked to be absolute and to end in a file name, or
@@ -636,8 +640,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
-  batch that deletes a scene or source with everything that refers to it, and the `rev`
-  it was planned at; `bus.list` (protocol 0.19) → the buses and sends; audio levels are
+  batch that deletes a scene or source (or, from protocol 0.24, a bus) with everything
+  that refers to it, and the `rev` it was planned at; `bus.list` (protocol 0.19) → the buses and sends; audio levels are
   the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
@@ -668,7 +672,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Errors** carry a stable machine-readable `code`, detail fields and a message. A
   `scene.delete` or `source.delete` refused because something still refers to its
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
-  [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
+  [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)), and so does a `bus.delete`
+  refused because a setting draws the bus (protocol 0.24: a `bus` reference, as the
+  `waveform` and `spectrum` kinds' `audio` setting holds).
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
   `preview.subscribe` opens a stream of the program mix for the calling session,
   scaled down, at most `fps` pictures a second and only when the mix changes, in H.264

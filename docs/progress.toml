@@ -665,7 +665,8 @@ prs = [254]
 id = "U3c"
 milestone = "M2"
 title = "Mixer panel"
-status = "planned"
+status = "review"
+prs = [308]
 
 [[item]]
 id = "U4"
@@ -752,14 +753,16 @@ status = "planned"
 id = "C9"
 milestone = "M2"
 title = "Media file source"
-status = "review"
-prs = [245]
+status = "hardware"
+prs = [245, 322]
+note = "media file hardware tests (#382)"
 
 [[item]]
 id = "W1"
 milestone = "M2"
 title = "Audio waveform and spectrum sources"
-status = "planned"
+status = "review"
+prs = [460, 463, 466]
 
 [[item]]
 id = "K1"
