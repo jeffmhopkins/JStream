@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:de3f5e959909dcd3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the merged table: the outputs row now lists reconnect, the record sink and the vcam runtime note from the wave, and the youtube and sources rows keep this branch's ADR-0051 citation; layers unchanged" }
+stamp = { hash = "b3:de3f5e959909dcd3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the table: the jstream-youtube row and the jstream-sources row's 'YouTube chat message' entry now cite ADR-0051, matching both Cargo.toml jstream-meta summaries; the wave's outputs row (#408) is kept as merged; layers unchanged" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -87,7 +87,7 @@ stamp = { hash = "b3:45a0daff6f397ade" }
 stamp = { hash = "b3:419939266a782736" }
 
 ["ARCH#crate-map"."file:crates/jstream-sources/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:b3871b2f45578d14", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the jstream-youtube and jstream-sources rows cite ADR-0051, matching their Cargo summaries; the wave's rows (C8's jstream-browser, CEF off the platform-windows row, the effects and vcam text) sit unchanged beside them; holds" }
+stamp = { hash = "b3:b3871b2f45578d14", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the table: the jstream-youtube row and the jstream-sources row's 'YouTube chat message' entry now cite ADR-0051, matching both Cargo.toml jstream-meta summaries; the wave's outputs row (#408) is kept as merged; layers unchanged" }
 
 ["ARCH#crate-map"."file:crates/jstream-types/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e7dbb93ef26bf6b8" }
@@ -105,7 +105,7 @@ stamp = { hash = "b3:504280e9852eb46f" }
 stamp = { hash = "b3:24cef673281620f5" }
 
 ["ARCH#crate-map"."file:crates/jstream-youtube/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:87341bdb2fc70e6f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the jstream-youtube and jstream-sources rows cite ADR-0051, matching their Cargo summaries; the wave's rows (C8's jstream-browser, CEF off the platform-windows row, the effects and vcam text) sit unchanged beside them; holds" }
+stamp = { hash = "b3:87341bdb2fc70e6f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the table: the jstream-youtube row and the jstream-sources row's 'YouTube chat message' entry now cite ADR-0051, matching both Cargo.toml jstream-meta summaries; the wave's outputs row (#408) is kept as merged; layers unchanged" }
 
 ["ARCH#data-model"."body"]
 stamp = { hash = "b3:d72def29f6861e6d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio paragraph says protocol 0.19; not-yet list drops VirtualCam as main did; holds" }
@@ -288,7 +288,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the YouTube bullet cites ADR-0051, which keeps those planned actions for a user with a client; the protocol README it covers changed by that same link and the wave's #402 DOS device rule; holds" }
+stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the summary against both protocol README changes: this PR's youtube.stats citation moving to ADR-0051, matching the summary's own YouTube bullet, which now cites ADR-0051 as well; and the wave's #402/#409 DOS-device asset-path rule, which the summary doesn't restate" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -330,7 +330,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:c3d64f1f5b022c49", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the summary against the protocol README's new DOS-device asset rule: the summary doesn't restate asset path rules (it notes asset references aren't edges), so it still holds" }
+stamp = { hash = "b3:c3d64f1f5b022c49", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the summary against both protocol README changes: this PR's youtube.stats citation moving to ADR-0051, matching the summary's own YouTube bullet, which now cites ADR-0051 as well; and the wave's #402/#409 DOS-device asset-path rule, which the summary doesn't restate" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
@@ -894,7 +894,7 @@ stamp = { hash = "b3:c7379cddeb275056" }
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Failures bullet matches ws_web.rs (onerror handler ends the session via end_reason, State::close keeps the first reason; connect reason mentions CSP); test paragraph matches connect.spec.js and ws_config.rs tests. Edited open question 3 so it no longer implies the browser client is untested (e2e via jstream-ui now covers it)." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: stale only via ARCH#protocol, whose YouTube bullet now cites ADR-0051; the Control trait design names no YouTube scope; holds" }
+stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from ARCH#protocol, whose YouTube bullet now cites ADR-0051 instead of ADR-0041: control's design describes the Control trait and transports, not the YouTube actions, so it holds" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -966,10 +966,10 @@ stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:9a7eb002f3836fc4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the protocol README's asset-path change: core's design covers engine, sessions and dispatch, not asset path validation, so nothing here restates the changed rule" }
+stamp = { hash = "b3:9a7eb002f3836fc4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the protocol README (youtube.stats now cites ADR-0051; the wave's #402/#409 asset-path rule) and ARCH#protocol's YouTube bullet: core's design names no YouTube ADR and no asset path rule, so it still holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: stale only via the protocol README design and ARCH#protocol, whose changes are the YouTube citation moving to ADR-0051 (and the wave's #402 asset-path rule); the engine design names neither; holds" }
+stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the protocol README (youtube.stats now cites ADR-0051; the wave's #402/#409 asset-path rule) and ARCH#protocol's YouTube bullet: core's design names no YouTube ADR and no asset path rule, so it still holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1518,7 +1518,7 @@ stamp = { hash = "b3:6c1b99c4b8c63792" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:9a7eb002f3836fc4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the protocol README's asset-path change: graph still uses the protocol's Edits, IDs and error codes unchanged and does not describe asset path checks" }
+stamp = { hash = "b3:9a7eb002f3836fc4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the protocol README's design (youtube.stats citation moved to ADR-0051; the wave's #402/#409 DOS-device asset-path rule): graph only relies on the protocol's Edits, IDs and error codes, none of which changed" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1641,7 +1641,7 @@ stamp = { hash = "b3:e57559ad7b2a4fbc", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
 
 ["CRATE-jstream-media#purpose"."body"]
-stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the Codec bullet's citation for the codecs enhanced RTMP carries, and packet.rs's matching doc comment, now point at ADR-0051, whose §1 keeps the RTMPS stream-key output those codecs go out on; the codec list and Annex B/OBU framing text are unchanged; holds" }
+stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read Packets: this PR moves the 'video codecs enhanced RTMP carries' citation (README and packet.rs doc comment) from ADR-0041 to ADR-0051, which keeps ADR-0041's streaming scope (§3) for that point; the Codec list and payload-framing text are unchanged" }
 
 ["CRATE-jstream-media#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-media"]
 stamp = { hash = "b3:18137b74917731cc" }
@@ -1665,7 +1665,7 @@ stamp = { hash = "b3:1d2c5fbae960d299" }
 stamp = { hash = "b3:92a44864b9ef193c" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/packet.rs"]
-stamp = { hash = "b3:841d98d687ec8849", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the Codec bullet's citation for the codecs enhanced RTMP carries, and packet.rs's matching doc comment, now point at ADR-0051, whose §1 keeps the RTMPS stream-key output those codecs go out on; the codec list and Annex B/OBU framing text are unchanged; holds" }
+stamp = { hash = "b3:841d98d687ec8849", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read Packets: this PR moves the 'video codecs enhanced RTMP carries' citation (README and packet.rs doc comment) from ADR-0041 to ADR-0051, which keeps ADR-0041's streaming scope (§3) for that point; the Codec list and payload-framing text are unchanged" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/pixel.rs"]
 stamp = { hash = "b3:12eb4553ad7e5ab1" }
@@ -1677,10 +1677,10 @@ stamp = { hash = "b3:3969b618c2c6f598" }
 stamp = { hash = "b3:d6dfe064425156bb" }
 
 ["CRATE-jstream-mux#purpose"."body"]
-stamp = { hash = "b3:d3a56f7eedf0de15", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the FLV-for-RTMP(S) citation, depends_on and lib.rs Docs line move from ADR-0041 to ADR-0051; ADR-0051 §1 makes that RTMPS stream-key output the default YouTube path, so the FLV and enhanced RTMP container this section describes is what it relies on; ADR-0041 changes only to superseded; the media dep moved only its own citation; holds" }
+stamp = { hash = "b3:d3a56f7eedf0de15", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the opening paragraph: the FLV-to-YouTube citation and the depends_on/lib.rs Docs line move from ADR-0041 to ADR-0051, whose §1 makes RTMPS with a stream key the default YouTube path this FLV feeds; also re-checked against media#purpose's matching ADR-0051 citation" }
 
 ["CRATE-jstream-mux#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the FLV-for-RTMP(S) citation, depends_on and lib.rs Docs line move from ADR-0041 to ADR-0051; ADR-0051 §1 makes that RTMPS stream-key output the default YouTube path, so the FLV and enhanced RTMP container this section describes is what it relies on; ADR-0041 changes only to superseded; the media dep moved only its own citation; holds" }
+stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the opening paragraph: the FLV-to-YouTube citation and the depends_on/lib.rs Docs line move from ADR-0041 to ADR-0051, whose §1 makes RTMPS with a stream key the default YouTube path this FLV feeds; also re-checked against media#purpose's matching ADR-0051 citation" }
 
 ["CRATE-jstream-mux#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mux"]
 stamp = { hash = "b3:cc699c75167f9edd" }
@@ -1689,7 +1689,7 @@ stamp = { hash = "b3:cc699c75167f9edd" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["CRATE-jstream-mux#purpose"."dep:docs/adr/0051-youtube-without-a-required-oauth-client.md"]
-stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the FLV-for-RTMP(S) citation, depends_on and lib.rs Docs line move from ADR-0041 to ADR-0051; ADR-0051 §1 makes that RTMPS stream-key output the default YouTube path, so the FLV and enhanced RTMP container this section describes is what it relies on; ADR-0041 changes only to superseded; the media dep moved only its own citation; holds" }
+stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the opening paragraph: the FLV-to-YouTube citation and the depends_on/lib.rs Docs line move from ADR-0041 to ADR-0051, whose §1 makes RTMPS with a stream key the default YouTube path this FLV feeds; also re-checked against media#purpose's matching ADR-0051 citation" }
 
 ["CRATE-jstream-mux#purpose"."file:crates/jstream-mux/Cargo.toml"]
 stamp = { hash = "b3:1474bbecc72bdf29" }
@@ -1722,10 +1722,10 @@ stamp = { hash = "b3:655a50861b8f8ac2" }
 stamp = { hash = "b3:db7b56b6ec192456" }
 
 ["CRATE-jstream-mux#purpose"."file:crates/jstream-mux/src/lib.rs"]
-stamp = { hash = "b3:6e5013d99f034114", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the FLV-for-RTMP(S) citation, depends_on and lib.rs Docs line move from ADR-0041 to ADR-0051; ADR-0051 §1 makes that RTMPS stream-key output the default YouTube path, so the FLV and enhanced RTMP container this section describes is what it relies on; ADR-0041 changes only to superseded; the media dep moved only its own citation; holds" }
+stamp = { hash = "b3:6e5013d99f034114", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the opening paragraph: the FLV-to-YouTube citation and the depends_on/lib.rs Docs line move from ADR-0041 to ADR-0051, whose §1 makes RTMPS with a stream key the default YouTube path this FLV feeds; also re-checked against media#purpose's matching ADR-0051 citation" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:b07a91c7c3a4097d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: the reconnect resync now keeps HEVC/AV1 enhanced-RTMP sequence starts and skips end-of-sequence tags, and Not yet narrows to end-to-end enhanced RTMP; the ADR-0051 citation for the generic RTMP(S) output still names the right ADR" }
+stamp = { hash = "b3:b07a91c7c3a4097d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the intro: the RTMP(S) client is still needed for the generic RTMP/RTMPS output, now cited to ADR-0051 §1 (stream key over RTMPS, no OAuth) in the README, depends_on and lib.rs Docs line; the rest of the section (handshake, chunks, reconnect resync) is untouched by this PR" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:13fabd34e2ef41ff", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose still holds against the reworded crate-map row: it says the Output trait comes later and lists jstream-media and jstream-mux as its JStream dependencies, matching the row" }
@@ -1737,10 +1737,10 @@ stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/adr/0051-youtube-without-a-required-oauth-client.md"]
-stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the generic RTMP/RTMPS output citation, depends_on and lib.rs Docs line move to ADR-0051, whose §1 sends a YouTube stream as exactly this generic RTMPS output with the user's stream key; ADR-0041 changes only to superseded; the wave's #320 text (vcam runs in jstream-core) is kept beside it; holds" }
+stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the intro: the RTMP(S) client is still needed for the generic RTMP/RTMPS output, now cited to ADR-0051 §1 (stream key over RTMPS, no OAuth) in the README, depends_on and lib.rs Docs line; the rest of the section (handshake, chunks, reconnect resync) is untouched by this PR" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/lib.rs"]
-stamp = { hash = "b3:ac52af575c1b9c34", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the generic RTMP/RTMPS output citation, depends_on and lib.rs Docs line move to ADR-0051, whose §1 sends a YouTube stream as exactly this generic RTMPS output with the user's stream key; ADR-0041 changes only to superseded; the wave's #320 text (vcam runs in jstream-core) is kept beside it; holds" }
+stamp = { hash = "b3:ac52af575c1b9c34", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the intro: the RTMP(S) client is still needed for the generic RTMP/RTMPS output, now cited to ADR-0051 §1 (stream key over RTMPS, no OAuth) in the README, depends_on and lib.rs Docs line; the rest of the section (handshake, chunks, reconnect resync) is untouched by this PR" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/record/error.rs"]
 stamp = { hash = "b3:5576f34b8fef4acc" }
@@ -1794,7 +1794,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:de3f5e959909dcd3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the crate map: only the outputs row and ADR-0051 rows changed; GPU frames talks about platform, render and encoders, whose rows and layers are unchanged" }
+stamp = { hash = "b3:de3f5e959909dcd3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the crate map, where only the youtube and sources rows change citation to ADR-0051: GPU frames talks about the platform, render and encode rows, which are unchanged" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
@@ -1809,7 +1809,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "E3c over wave/m1's E3b text: FrameSync::platform bullet (None by default) matches gpu.rs; Codecs::on_context bullet (Ok(None) default) matches codec.rs; Not yet now lists the vcam on GPU frames, video_devices and vendor-ID encoder matching, and no longer lists encoders taking GPU frames" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: stale only via jstream-media#purpose, whose only change is its codec citation moving to ADR-0051; this section's backend traits text cites neither ADR; holds" }
+stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from media#purpose's enhanced-RTMP citation moving to ADR-0051: platform's purpose uses media's Packet and frame types, not that citation; its note that jstream-youtube keeps its refresh token in the credential store still matches ADR-0051 §2" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform"]
 stamp = { hash = "b3:4179d522e3055d3d" }
@@ -2040,7 +2040,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:9a7eb002f3836fc4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: the asset-path rule now refuses empty segments and DOS device names under collection and app roots too; the YouTube kinds still cite ADR-0051 and nothing in the merge touches them" }
+stamp = { hash = "b3:9a7eb002f3836fc4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the stats paragraph and the asset-path rule: this PR moves the youtube.stats audience-figures citation from ADR-0041 to ADR-0051 (whose §2 keeps stats for users with their own client); the wave's #402/#409 DOS-device asset-path rule sits elsewhere in the section and this PR doesn't touch it" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2307,7 +2307,7 @@ stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client error-event handling, CSP wording, open question 3 edit): server-side checks, subprotocol token and CSP description unaffected, holds." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: stale only via ARCH#protocol, whose YouTube bullet now cites ADR-0051; the server's connection and auth design names no YouTube scope; holds" }
+stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from ARCH#protocol's YouTube citation moving to ADR-0051: the server's design covers WebSocket serving, tokens and sessions and names no YouTube ADR, so nothing changes" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:9bcfb0336f6adad9" }
@@ -2382,7 +2382,7 @@ stamp = { hash = "b3:4a9ea9ae5014f95c" }
 stamp = { hash = "b3:76a0bd9be3b1d5ce", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the browser kind (url or file, size, fps cap, css), Source::gpu_frame and Source::audio with SourceAudio, Context.browser, NoBackend and Browser errors; the browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit; matches browser.rs, source.rs, error.rs, registry.rs and tests/browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
-stamp = { hash = "b3:2e3b05c6b81e422d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: stale only via its crate-map row, where the YouTube chat message source's citation moves to ADR-0051 (§2 keeps the API chat-message source for a user with a client); this section doesn't describe that source yet; holds" }
+stamp = { hash = "b3:2e3b05c6b81e422d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the crate-map sources row, whose planned 'YouTube chat message' kind now cites ADR-0051: sources#purpose describes the built kinds and doesn't cite the YouTube ADR, so it holds" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199" }
@@ -2730,13 +2730,13 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
 ["CRATE-jstream-youtube#purpose"."body"]
-stamp = { hash = "b3:86f8b58afedd27a5", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the whole section after the wave/m1 merge (which re-stamped it on its side, E3c): ADR-0051 is the parent ADR for the optional API half, the §4 scopes and §5 quota notes still read as ADR-0041 rules kept by ADR-0051, and Not yet names the own-client settings from ADR-0051 §2" }
+stamp = { hash = "b3:86f8b58afedd27a5", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the whole section and the oauth.rs/error.rs/lib.rs comments: the crate is now the optional half of ADR-0051 (§2, the user's own client); scope and quota notes read 'ADR-0041 §4/§5, kept by ADR-0051'; Not yet adds the own-client ID and secret settings kept in the OS credential store; the crate-map row cites ADR-0051" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "Dep: platform #purpose gained the Codecs::on_context and FrameSync::platform bullets and a new Not yet; youtube still uses jstream-platform only for Secret, so this section is unaffected" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
-stamp = { hash = "b3:52b27d1ffa7b6a0b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the intro calls this crate the optional half of ADR-0051 (§2: the user's own client, which this crate takes as a ClientId and a Secret; where the host keeps them, the OS credential store per §2, is the host's job); scope and quota citations, and the error.rs and oauth.rs comments, cite ADR-0041 §4/§5 kept by ADR-0051 §2-3; lib.rs Docs line and crate-map row point at ADR-0051; holds" }
+stamp = { hash = "b3:52b27d1ffa7b6a0b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the whole section and the oauth.rs/error.rs/lib.rs comments: the crate is now the optional half of ADR-0051 (§2, the user's own client); scope and quota notes read 'ADR-0041 §4/§5, kept by ADR-0051'; Not yet adds the own-client ID and secret settings kept in the OS credential store; the crate-map row cites ADR-0051" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/RULES.md#R-DEP-006"]
 stamp = { hash = "b3:8efb19c99c8be969" }
@@ -2745,7 +2745,7 @@ stamp = { hash = "b3:8efb19c99c8be969" }
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/adr/0051-youtube-without-a-required-oauth-client.md"]
-stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the intro calls this crate the optional half of ADR-0051 (§2: the user's own client, which this crate takes as a ClientId and a Secret; where the host keeps them, the OS credential store per §2, is the host's job); scope and quota citations, and the error.rs and oauth.rs comments, cite ADR-0041 §4/§5 kept by ADR-0051 §2-3; lib.rs Docs line and crate-map row point at ADR-0051; holds" }
+stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the whole section and the oauth.rs/error.rs/lib.rs comments: the crate is now the optional half of ADR-0051 (§2, the user's own client); scope and quota notes read 'ADR-0041 §4/§5, kept by ADR-0051'; Not yet adds the own-client ID and secret settings kept in the OS credential store; the crate-map row cites ADR-0051" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/broadcast_bind.json"]
 stamp = { hash = "b3:8da9c74a2b289be3" }
@@ -2787,7 +2787,7 @@ stamp = { hash = "b3:d388d0682e80ff41" }
 stamp = { hash = "b3:8b26b2ef26103774" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/error.rs"]
-stamp = { hash = "b3:7070dec4a775093f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the intro calls this crate the optional half of ADR-0051 (§2: the user's own client, which this crate takes as a ClientId and a Secret; where the host keeps them, the OS credential store per §2, is the host's job); scope and quota citations, and the error.rs and oauth.rs comments, cite ADR-0041 §4/§5 kept by ADR-0051 §2-3; lib.rs Docs line and crate-map row point at ADR-0051; holds" }
+stamp = { hash = "b3:7070dec4a775093f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the whole section and the oauth.rs/error.rs/lib.rs comments: the crate is now the optional half of ADR-0051 (§2, the user's own client); scope and quota notes read 'ADR-0041 §4/§5, kept by ADR-0051'; Not yet adds the own-client ID and secret settings kept in the OS credential store; the crate-map row cites ADR-0051" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/fake.rs"]
 stamp = { hash = "b3:072de4248097ea45" }
@@ -2802,7 +2802,7 @@ stamp = { hash = "b3:a1b77e31232697af" }
 stamp = { hash = "b3:2a7db87174f1fd6d" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/lib.rs"]
-stamp = { hash = "b3:c0f36ba10d5d19df", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the intro calls this crate the optional half of ADR-0051 (§2: the user's own client, which this crate takes as a ClientId and a Secret; where the host keeps them, the OS credential store per §2, is the host's job); scope and quota citations, and the error.rs and oauth.rs comments, cite ADR-0041 §4/§5 kept by ADR-0051 §2-3; lib.rs Docs line and crate-map row point at ADR-0051; holds" }
+stamp = { hash = "b3:c0f36ba10d5d19df", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the whole section and the oauth.rs/error.rs/lib.rs comments: the crate is now the optional half of ADR-0051 (§2, the user's own client); scope and quota notes read 'ADR-0041 §4/§5, kept by ADR-0051'; Not yet adds the own-client ID and secret settings kept in the OS credential store; the crate-map row cites ADR-0051" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/live.rs"]
 stamp = { hash = "b3:37cfb6646affdb72" }
@@ -2817,7 +2817,7 @@ stamp = { hash = "b3:49badb1e6e8761a0" }
 stamp = { hash = "b3:a9e8a37ad1f0f16f" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/oauth.rs"]
-stamp = { hash = "b3:4a59346b1a818179", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the intro calls this crate the optional half of ADR-0051 (§2: the user's own client, which this crate takes as a ClientId and a Secret; where the host keeps them, the OS credential store per §2, is the host's job); scope and quota citations, and the error.rs and oauth.rs comments, cite ADR-0041 §4/§5 kept by ADR-0051 §2-3; lib.rs Docs line and crate-map row point at ADR-0051; holds" }
+stamp = { hash = "b3:4a59346b1a818179", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the whole section and the oauth.rs/error.rs/lib.rs comments: the crate is now the optional half of ADR-0051 (§2, the user's own client); scope and quota notes read 'ADR-0041 §4/§5, kept by ADR-0051'; Not yet adds the own-client ID and secret settings kept in the OS credential store; the crate-map row cites ADR-0051" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/oauth/tests.rs"]
 stamp = { hash = "b3:b593d1da7528ba61" }
@@ -2997,7 +2997,7 @@ stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:7ab4accbf98f6662" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: stale only via ARCH#protocol, whose YouTube bullet now cites ADR-0051; the compatibility rules cite no YouTube ADR; holds" }
+stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from ARCH#protocol's YouTube bullet now citing ADR-0051: the compatibility rules (protocol semver, persistence) don't depend on which ADR plans the YouTube actions; ADR-0051 keeps them defined in the protocol" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
