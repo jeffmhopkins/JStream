@@ -58,7 +58,8 @@ stamped on the clock, and no device is the master.
 - `Mixer::add_bus` and `MixerControl::add_bus` add a stereo bus and return its
   `BusControl`; `BusControl::remove` removes it, and `Mixer::bus` is the master's,
   which can't be removed. Like inputs, buses change through the command queue while
-  `poll` runs. At most 16 buses, the master included. A bus's `BusId` is never reused,
+  `poll` runs. At most 16 buses (`MAX_BUSES`, which `jstream-core` holds equal to the
+  protocol's limit), the master included. A bus's `BusId` is never reused,
   so a send to a removed bus stays inert even after a new bus takes its buffer. It is
   also tagged with its mixer, so an input ignores another mixer's bus,
   `Mixer::bus_block` answers `None` for one and `add_output_tap` refuses one

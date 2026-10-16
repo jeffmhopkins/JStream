@@ -57,7 +57,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
   `SourceAudio` and `AudioFollow`, a source's audio settings; `BusInfo` and `SendInfo`,
   the buses and the send matrix as reads report them; the fader range and its shared
-  check (`gain_db_problem`); and `SourceMeter`, `BusMeter` and `Loudness`, the readings
+  check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
+  the UI use and the engine's mixer is held to; and `SourceMeter`, `BusMeter` and `Loudness`, the readings
   a `meters.tick` carries.
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
@@ -276,7 +277,7 @@ and needs at least one. A `scene` source has no fader, mute or sends of its own:
 **Buses** are collection objects with an ID, a name and a fader (`gain_db`, `muted`).
 Every collection has the master bus, ID `master`, named `Master`; it can be renamed and
 faded but never deleted. `bus.create`, `bus.rename`, `bus.set_fader` and `bus.delete`
-manage the others, at most 16 buses in all. **Sends** route a source's audio into a
+manage the others, at most 16 buses in all (`MAX_BUSES`). **Sends** route a source's audio into a
 bus, post-fader, at a gain: `send.set { source_id, bus_id, gain_db }` creates one or
 changes its gain, `send.remove` removes it. Only a source with a channel of its own
 sends, so not a `scene` source. A new channel source sends to the master at 0 dB.

@@ -401,8 +401,8 @@ pub enum Edit {
         muted: Option<bool>,
     },
     /// Adds a bus, at 0 dB, unmuted, with no sends into it. A collection holds at most
-    /// 16 buses, the master included; one more is `invalid_argument`. Inverse:
-    /// `bus.delete`.
+    /// 16 buses (`MAX_BUSES`), the master included; one more is `invalid_argument`.
+    /// Inverse: `bus.delete`.
     #[serde(rename = "bus.create")]
     BusCreate {
         /// The new bus's ID, chosen by the client. Rejected if it exists, so `master` is

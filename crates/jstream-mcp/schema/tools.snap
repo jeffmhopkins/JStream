@@ -916,7 +916,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Adds a bus, at 0 dB, unmuted, with no sends into it. A collection holds at most\n16 buses, the master included; one more is `invalid_argument`. Inverse:\n`bus.delete`.",
+                "description": "Adds a bus, at 0 dB, unmuted, with no sends into it. A collection holds at most\n16 buses (`MAX_BUSES`), the master included; one more is `invalid_argument`.\nInverse: `bus.delete`.",
                 "properties": {
                   "bus_id": {
                     "$ref": "#/$defs/BusId",
@@ -1612,7 +1612,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `bus` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Adds a bus, at 0 dB, unmuted, with no sends into it. A collection holds at most\n16 buses, the master included; one more is `invalid_argument`. Inverse:\n`bus.delete`.",
+                "description": "Adds a bus, at 0 dB, unmuted, with no sends into it. A collection holds at most\n16 buses (`MAX_BUSES`), the master included; one more is `invalid_argument`.\nInverse: `bus.delete`.",
                 "properties": {
                   "bus_id": {
                     "$ref": "#/$defs/BusId",

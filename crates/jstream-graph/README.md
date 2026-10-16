@@ -48,7 +48,8 @@ codes, so the engine passes them to clients unchanged.
   stacking position, so it converts the item between a reference and a clone
   ([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)).
 - `Bus`: an ID, a name and a fader (`gain_db`, `muted`). The master bus (`master`,
-  `MASTER_NAME`) is in every state; at most `MAX_BUSES` (16) buses in all. A send is a
+  `MASTER_NAME`) is in every state; at most `MAX_BUSES` (16, the protocol's
+  `MAX_BUSES`) buses in all. A send is a
   gain in dB from a source into a bus.
 - `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
   `State::encoding_of` gives the encoding an output starts with.

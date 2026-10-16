@@ -271,7 +271,7 @@ fn create_bus(
         return Err(invalid(
             at,
             "bus_id",
-            "a collection holds at most 16 buses, the master included",
+            format!("a collection holds at most {MAX_BUSES} buses, the master included"),
         ));
     }
     state
