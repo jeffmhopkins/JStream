@@ -3362,8 +3362,12 @@ mod cpu_pipeline {
     // --- Item: a stalled publish target cannot hold `output.stop` past the drain bound.
 
     /// A publish target whose peer has stopped reading: once `stalled`, every send
-    /// blocks for 200 ms, and it ignores [`LivePublish::stop_by`] as a destination that
-    /// cannot cut a write short would. Records the deadline it was given.
+    /// blocks for 50 ms, and it ignores [`LivePublish::stop_by`] as a destination that
+    /// cannot cut a write short would. Records the deadline it was given. A send is
+    /// short next to `OUTPUT_GRACE`, so the output thread, which may still be in one
+    /// when the deadline passes, ends inside the grace even on a slow runner and the
+    /// stop sees what it abandoned; a send that outlasts the grace is
+    /// `a_send_that_ignores_the_stop_deadline_cannot_hold_output_stop`'s case.
     struct StalledPeer {
         stalled: Arc<AtomicBool>,
         sent: Arc<AtomicU64>,
@@ -3373,7 +3377,7 @@ mod cpu_pipeline {
     impl LivePublish for StalledPeer {
         fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
             if self.stalled.load(Ordering::Acquire) {
-                thread::sleep(Duration::from_millis(200));
+                thread::sleep(Duration::from_millis(50));
             }
             self.sent.fetch_add(1, Ordering::AcqRel);
             Ok(())
@@ -3393,7 +3397,7 @@ mod cpu_pipeline {
     }
 
     /// The peer stalls while well over a hundred packets queue up behind it. Draining
-    /// them all at 200 ms a tag would hold `output.stop` for half a minute; the stop
+    /// them all at 50 ms a tag would hold `output.stop` for several seconds; the stop
     /// gives up after `STOP_DRAIN`, drops the rest, counts it in the final
     /// `stats.tick`'s `output_packets`, and passes its deadline to the target.
     #[test]

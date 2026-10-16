@@ -35,9 +35,10 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   creates the file with a new random token, and names the device file beside it
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, [Design](#design)), installs
-  the signal handlers that stop it, then binds the server with MCP on and, with
-  `--ui-dir`, the web UI's files.
+  file and the placeholder outputs; on Windows a live one, which with the `cef`
+  feature also opens browser sources, [Design](#design)), installs the signal
+  handlers that stop it, then binds the server with MCP on and, with `--ui-dir`, the
+  web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
@@ -282,6 +283,26 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   moves, rather than in a directory of its own. Its entries are written as they come;
   on a graceful stop the writer finishes the queue when the engine is dropped. Without `--collection` nothing is saved, as before
   ([Open questions](#open-questions), 6).
+- **Browser sources** (`serve.rs`, feature `cef`, Windows only). Built with
+  `--features cef`, the daemon gives the engine `jstream-browser`'s CEF backend
+  (`Engine::with_browser`), so `browser` sources open their pages
+  ([jstream-browser › Purpose](../../crates/jstream-browser/README.md#purpose)). It does
+  so after `with_backends`, through a clone of the live engine (clones share its
+  sources), so pages start on the media clock. First
+  it opens a GPU device on the media adapter with the backends' `GpuInterop::open_device`
+  and hands it over with `use_device`, so a page's first paint already lands on it. CEF
+  starts with the first page: its subprocess exe, `jstream-browser-helper.exe`, and CEF's
+  runtime files must be next to `jstream-daemon.exe`; its cache is the data directory's
+  `cef` folder (else the log directory's) and its log the log directory's `cef.log`. Nothing about the browser
+  stops the daemon: a device that won't open leaves pages playing audio with their
+  frames dropped, and a daemon whose own path is unknown leaves browser sources empty;
+  both are logged at `warn`. The program mix doesn't draw pages' frames yet (that is the
+  render import of GPU frames), so the device the compositor will sample is still to be
+  settled there. The feature is off by default because building it downloads CEF and
+  builds its C++ wrapper with CMake and Ninja (ADR-0046); `dox` type-checks the wiring
+  without CEF, as CI's Windows clippy does. Without the feature, `browser` sources show
+  nothing, as on other platforms. `browse` is that wiring over any backend, which is how
+  the tests run it on `jstream-browser`'s fake.
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server
   answers MCP at `/mcp` on the same port, with its default MCP session cap and idle
   timeout. Each MCP session is one more engine client through the same `Connector`, so
@@ -366,7 +387,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`--token-file`, `--port`, `--output`, `--log-dir`, `--log-level`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
-  `jstream-platform` (`Backends`, the key store trait), `jstream-platform-windows` on
+  `jstream-platform` (`Backends`, the key store trait), `jstream-browser` (the
+  `BrowserBackend` seam, and its CEF backend with the `cef` feature; already in the
+  tree through core), `jstream-platform-windows` on
   Windows only (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `anyhow`, `tracing` (the startup line) and `blake3`
@@ -379,7 +402,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
-  `jstream-platform` (feature `fake`), for the live engine and opener tests.
+  `jstream-platform` (feature `fake`), for the live engine and opener tests;
+  `jstream-browser` (feature `fake`), for the browser wiring's test.
 
 <a id="open-questions"></a>
 ### Open questions

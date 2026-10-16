@@ -2669,6 +2669,7 @@ dependencies = [
  "blake3",
  "futures-util",
  "getrandom 0.4.3",
+ "jstream-browser",
  "jstream-control",
  "jstream-core",
  "jstream-media",
