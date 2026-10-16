@@ -71,6 +71,7 @@ fn ctx(dir: &Path, fake: &FakeMediaDecoders) -> Context {
         limits: Limits::default(),
         audio: None,
         media: Some(Arc::new(fake.clone())),
+        browser: None,
     }
 }
 
@@ -407,7 +408,7 @@ impl Drop for Handler {
 /// The source's audio, opened on a recorder, with the clock it is stamped on (at 0, the
 /// source's time zero).
 fn open_audio(source: &dyn Source) -> (MediaAudio, Box<dyn AudioStream>, Recorder, FakeClock) {
-    let audio = source.audio().expect("the file has sound");
+    let audio = source.sound().expect("the file has sound");
     let clock = FakeClock::new(Timebase::MICROS);
     let recorder = Recorder::default();
     let stream = audio

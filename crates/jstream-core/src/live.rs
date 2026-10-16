@@ -21,10 +21,12 @@
 //! scene that isn't the program yet, or behind a hidden item) counts as shown again when
 //! one first does.
 //!
-//! A source with sound of its own (a media file, [`Source::audio`]) is heard while the
-//! latest plan reaches it ([`LiveSources::end_plan`]). The engine hands its audio to the
-//! program stage, which mixes it like an audio source (`crate::audio_sources`):
-//! [`LiveSources::take_audio`] says when what there is to mix changed.
+//! A media file's sound is heard while the latest plan reaches it
+//! ([`LiveSources::end_plan`]). The engine hands its audio to the program stage, which
+//! mixes it like an audio source (`crate::audio_sources`): [`LiveSources::take_audio`]
+//! says when what there is to mix changed. A source with audio of its own that it makes
+//! itself (`browser`, [`Source::audio`]) hands it to the program stage's audio inputs
+//! once it is built ([`LiveSources::audio`]), whether or not a plan reaches it.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -35,7 +37,10 @@ use std::time::{Duration, Instant};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{MediaClock, MediaDecoders};
 use jstream_protocol::{Settings, SourceId, SourceKind};
-use jstream_sources::{AudioScopes, Context, MediaAudio, Painter, Registry, Source, SourceError};
+use jstream_sources::{
+    AudioScopes, BrowserBackend, Context, MediaAudio, Painter, Registry, Source, SourceAudio,
+    SourceError,
+};
 
 use crate::lock;
 use crate::snapshot::Frame;
@@ -52,8 +57,10 @@ pub(crate) trait LiveHost: Send + Sync {
 /// The live sources of one engine. Lives in the engine state, under the collection lock.
 pub(crate) struct LiveSources {
     registry: Arc<Registry>,
-    ctx: Context,
+    /// Declared before `ctx`, so the running sources drop first: a `browser` page closes
+    /// while the backend in `ctx` is still there.
     entries: BTreeMap<SourceId, Entry>,
+    ctx: Context,
     /// Numbers the builds, so a result installs only if nothing changed the source
     /// since it was asked for.
     tickets: u64,
@@ -209,6 +216,27 @@ impl LiveSources {
         self.sync(state);
     }
 
+    /// The browser engine `browser` sources and its presets (`youtube_chat`) open their
+    /// pages in. Sources of those kinds built before have none, so they are built again.
+    pub(crate) fn set_browser(&mut self, browser: Arc<dyn BrowserBackend>) {
+        self.ctx.browser = Some(browser);
+        for entry in self
+            .entries
+            .values_mut()
+            .filter(|e| jstream_sources::opens_browser(&e.kind))
+        {
+            entry.settings = Settings::new();
+        }
+    }
+
+    /// The audio of every running source that has its own, by source.
+    pub(crate) fn audio(&self) -> BTreeMap<SourceId, Arc<dyn SourceAudio>> {
+        self.entries
+            .iter()
+            .filter_map(|(id, entry)| Some((id.clone(), entry.running.as_ref()?.source.audio()?)))
+            .collect()
+    }
+
     /// The folder behind `collection` asset references: the collection file's.
     pub(crate) fn set_collection_folder(&mut self, folder: Option<PathBuf>) {
         if self.ctx.assets.collection != folder {
@@ -282,7 +310,7 @@ impl LiveSources {
         self.audio_changed = true;
         let running = match built.result {
             Ok(source) => Some(Running {
-                audio: source.audio(),
+                audio: source.sound(),
                 source,
                 ticket: built.ticket,
                 start: self.worker.now(),

@@ -823,6 +823,7 @@ mod tests {
             settings: Settings::new(),
             duplicated_from: None,
             audio,
+            filters: Default::default(),
         };
         let mic = source(
             SourceKind::Builtin {

@@ -17,7 +17,8 @@
 //! as it does on the control thread.
 //!
 //! The checked phase walks through the paths a session hits besides plain steady state:
-//! drift, jitter, timestamp outliers and missing stamps, lost packets, a discontinuity,
+//! drift, jitter, timestamp outliers and missing stamps, lost packets, a discontinuity
+//! (and one whose stamp is off the clock line),
 //! a stalled audio thread that catches up, a device gap long enough to reset the
 //! mapping, silent and non-finite packets, a stalled mixer (overrun and skipped
 //! frames), an input added and another removed while the mixer runs, a bus added, sent
@@ -85,6 +86,9 @@ enum Event {
     Lose,
     /// The packet is flagged as discontinuous.
     Discontinuity,
+    /// The packet is flagged as discontinuous and its stamp is 50 ms off the clock line,
+    /// so the drift fit's segment restarts with it at once.
+    DiscontinuityOffLine,
     /// The packet's stamp is 50 ms off the clock line.
     Outlier,
     /// The packet has no usable stamp.
@@ -209,7 +213,7 @@ impl Device {
         let stamp = T0 + first as f64 / self.true_rate + self.jitter_s * self.noise.next();
         let time = match event {
             Some(Event::NoStamp) => None,
-            Some(Event::Outlier) => Some(clock(stamp + 0.05)),
+            Some(Event::Outlier | Event::DiscontinuityOffLine) => Some(clock(stamp + 0.05)),
             _ => Some(clock(stamp)),
         };
         self.producer.on_packet(&AudioPacket {
@@ -217,7 +221,10 @@ impl Device {
             device_position: first,
             time,
             flags: AudioPacketFlags {
-                discontinuity: event == Some(Event::Discontinuity),
+                discontinuity: matches!(
+                    event,
+                    Some(Event::Discontinuity | Event::DiscontinuityOffLine)
+                ),
                 silent: event == Some(Event::Silent),
             },
         });
@@ -351,6 +358,7 @@ mod rt {
             (1_700, Event::Lose),
             (1_701, Event::Lose),
             (1_800, Event::Discontinuity),
+            (1_900, Event::DiscontinuityOffLine),
             (2_000, Event::Stall),
             (2_001, Event::Stall),
             (2_002, Event::Stall),
@@ -634,6 +642,8 @@ mod rt {
         assert!(mic.gap_frames > 0, "{mic:?}");
         assert!(mic.discontinuities > 0, "{mic:?}");
         assert!(mic.reanchors > 0, "{mic:?}");
+        // Only the off-line discontinuity restarts the mic's mapping.
+        assert!(mic.resets > 0, "{mic:?}");
         assert!(mic.overrun_frames > 0, "{mic:?}");
         assert!(mic.drift_ppm.is_some(), "{mic:?}");
         assert!(loopback.resets > 0, "{loopback:?}");

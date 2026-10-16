@@ -136,7 +136,8 @@ not start. No variant allocates.
   zero delay, output rate under a correction, long silences;
 - the controller, drift fit, continuity and downmix coefficients, ported from S3 with
   S3's tests;
-- the input's anchoring, outlier runs, discontinuities and silent packets;
+- the input's anchoring, outlier runs, discontinuities (one whose stamp is off the line
+  re-anchors at once; unflagged outliers still wait for the run) and silent packets;
 - the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
 - each input's own block after its fader, mute and activity gain, unaffected by its
   send gains, and gone once the input is removed;
@@ -256,7 +257,8 @@ and its measured tuning):
   `discontinuity` flag (except on the first packet) makes the input re-anchor.
 - **Drift fit.** A segmented least-squares fit of device position against stamp time.
   It rejects stamps more than 20 ms off the line (after 100 points); a run of 50 outliers
-  restarts the segment. It also reports drift and jitter.
+  restarts the segment. The first stamp after a `discontinuity` flag is never rejected:
+  off the line, it restarts the segment at once. It also reports drift and jitter.
 - **Anchoring.** An input is placed on the time line at its first accepted stamp, and
   again after a restart. A forward jump reads as silence; an overlap with audio already
   written is skipped and counted as late. Packets before the first stamp are dropped and
@@ -383,7 +385,8 @@ and a keyed compressor and the meters on each mixed block run inside an
 `assert_no_alloc` scope. Any allocation or free
 there fails the test, in debug and release builds alike. Five inputs (mono 44.1 kHz,
 stereo 48 and 96 kHz, 5.1, and 32 kHz added while running) drift and jitter. The checked phase also
-covers timestamp outliers and missing stamps, lost packets, a discontinuity, a stalled
+covers timestamp outliers and missing stamps, lost packets, a discontinuity (and one
+whose stamp is off the clock line, which restarts the drift fit's segment), a stalled
 audio thread that catches up, a 3 s device gap that resets the mapping, silent and
 non-finite packets, a mixer stall long enough to overrun the rings and skip frames,
 an input added and one removed while the mixer runs, a bus added, sent to, given a

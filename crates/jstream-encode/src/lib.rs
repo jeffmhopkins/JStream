@@ -23,7 +23,9 @@ pub use error::{EncodeError, PushError, StreamEnd};
 pub use fanout::{SubscriberStats, Subscription};
 pub use registry::{SessionKey, SessionRegistry};
 pub use session::{EncoderSettings, SessionOptions, SessionStats, StreamInfo};
-pub use video::{VideoInput, VideoSession};
+pub use video::{VideoInput, VideoPath, VideoSession};
 
+#[cfg(test)]
+mod gpu_tests;
 #[cfg(test)]
 mod tests;

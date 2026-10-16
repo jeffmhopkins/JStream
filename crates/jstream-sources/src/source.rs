@@ -1,8 +1,9 @@
 //! The `Source` and `SourceKind` seams, and what a source is created with.
 
 use crate::{AudioScopes, MediaAudio, SourceError};
-use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
-use jstream_platform::MediaDecoders;
+use jstream_browser::BrowserBackend;
+use jstream_media::{AudioFormat, MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame, MediaDecoders};
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
 use std::fs::File;
 use std::io::Read;
@@ -45,8 +46,10 @@ pub trait Source: Send {
     }
 
     /// The source's sound, for the engine to mix while the program shows the source: a
-    /// `media` file's audio. `None`, the default, for a kind without sound of its own.
-    fn audio(&self) -> Option<MediaAudio> {
+    /// `media` file's audio, decoded on the media clock. `None`, the default, for a kind
+    /// without such sound. A kind whose audio plays whether or not it is shown (a
+    /// `browser` page) gives it through [`audio`](Self::audio) instead.
+    fn sound(&self) -> Option<MediaAudio> {
         None
     }
 
@@ -65,6 +68,23 @@ pub trait Source: Send {
     fn painter(&self) -> Option<Arc<dyn Painter>> {
         None
     }
+
+    /// The source's frame as a texture on the engine's GPU device, for kinds whose
+    /// frames never reach the CPU (`browser`, ADR-0021): when it is `Some`, it is what
+    /// the source shows, and [`frame`](Self::frame) is only a transparent stand-in of
+    /// the same size. `None` (the default, and a GPU source before its first frame)
+    /// means [`frame`](Self::frame) is the source's picture.
+    fn gpu_frame(&mut self) -> Option<GpuFrame> {
+        None
+    }
+
+    /// The source's own audio, for kinds that produce sound as well as frames
+    /// (`browser`), which the engine records into a mixer input as it records a device.
+    /// `None` (the default) means the source has none. The same source returns the same
+    /// audio for as long as it runs.
+    fn audio(&self) -> Option<Arc<dyn SourceAudio>> {
+        None
+    }
 }
 
 /// Draws a source's next frame, off any lock the caller of [`Source::frame`] holds.
@@ -77,6 +97,18 @@ pub trait Source: Send {
 pub trait Painter: Send + Sync {
     /// Draws the frame to show at `at`, on the same clock as [`Source::frame`].
     fn paint(&self, at: MediaTime);
+}
+
+/// A source's own audio ([`Source::audio`]): a stream the engine records into a mixer
+/// input the way it records an audio device (`AudioIo::open_input` in
+/// `jstream-platform`).
+pub trait SourceAudio: Send + Sync {
+    /// The format packets arrive in: interleaved `f32`, at a fixed rate and layout.
+    fn format(&self) -> AudioFormat;
+
+    /// Starts handing packets to `handler`, on the source's own audio thread, until the
+    /// returned stream is dropped. Opening again replaces the earlier handler.
+    fn open(&self, handler: Box<dyn AudioInputHandler>) -> Box<dyn AudioStream>;
 }
 
 /// A source kind: its descriptor (`kind.describe`) and how to create its sources.
@@ -112,6 +144,10 @@ pub struct Context {
     /// with. `None` until the host injects the platform's backends; `media` sources
     /// then fail with [`SourceError::NoBackend`].
     pub media: Option<Arc<dyn MediaDecoders>>,
+    /// The browser engine `browser` sources open their pages in (ADR-0021). `None`
+    /// until the host injects one; `browser` sources then fail with
+    /// [`SourceError::NoBackend`].
+    pub browser: Option<Arc<dyn BrowserBackend>>,
 }
 
 impl std::fmt::Debug for Context {
@@ -121,6 +157,7 @@ impl std::fmt::Debug for Context {
             .field("limits", &self.limits)
             .field("audio", &self.audio)
             .field("media", &self.media.as_ref().map(|_| "MediaDecoders"))
+            .field("browser", &self.browser.as_ref().map(|_| "BrowserBackend"))
             .finish()
     }
 }

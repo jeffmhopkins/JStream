@@ -35,12 +35,16 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   hands out the one painted last. `next_change(at)` says when that frame is next
   replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
   says the program mix shows the source again after plans that didn't reach it; a kind
-  may restart there, and the default does nothing. `audio()` gives a kind's own sound
-  (`MediaAudio`, a `media` file's), for the engine to mix; the default is `None`.
-  `update(settings)` applies a change
+  may restart there, and the default does nothing. `sound()` gives a kind's sound that
+  plays while the program shows it (`MediaAudio`, a `media` file's), for the engine to
+  mix; the default is `None`. `update(settings)` applies a change
   to `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
   needs a new source instead. `painter()` (default `None`) returns the source's
-  `Painter`.
+  `Painter`. A source whose picture is on the GPU also returns it from `gpu_frame`
+  (`None` by default), and one that makes its own audio whether or not it is shown
+  returns it from `audio` as a `SourceAudio`: its format, and `open(handler)`, which
+  feeds an `AudioInputHandler` until the returned stream is dropped. Only `browser` and
+  its `youtube_chat` preset have either; `opens_browser(kind)` names those kinds.
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
@@ -61,7 +65,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Context`: the folders behind the `collection` and `app` asset roots
   (`AssetRoots`), the platform's media files (`media`, an
   `Option<Arc<dyn MediaDecoders>>` from `jstream-platform`, `None` until the host
-  injects its backends), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
+  injects its backends), the injected `BrowserBackend` that `browser` and
+  `youtube_chat` sources open their pages in (`browser`; none by default), and `Limits`
+  on what a file may decode to: 256 MiB files, 16384 px
   sides and 1 GiB of decoded memory by default. The image's size is checked before
   anything is allocated for it, and the decoded-memory cap counts the frames kept plus
   the working buffers held while decoding: a GIF's canvas and its "restore to
@@ -233,8 +239,30 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   20 kHz (or half the sample rate). The `scale` spreads frequencies `log` from
   20 Hz (each octave as wide, the default) or `linear` from 0 Hz, and a bar narrower
   than a bin shows its nearest bin. Bars at least three pixels wide have a
-  one-pixel gap. Neither draws a single source yet: that needs a per-input tap in the
-  mixer.
+  one-pixel gap.
+- `browser` ([ADR-0021](../../docs/adr/0021-browser-source.md)): a web page (`url`,
+  `http://` or `https://`) or the `file` asset (`.html` or `.htm`, which wins when set),
+  opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
+  `Context.browser` ([`jstream-browser`](../jstream-browser/README.md)). An empty URL
+  with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
+  background transparent) is the one live setting: `update` replaces the page's custom
+  CSS without reloading it. Through the engine a `css` edit still reloads the page, until
+  the engine updates live settings in place (core's README › Open items). The page's picture is only on the GPU (`gpu_frame`), so
+  `frame` is a transparent frame of the page's size, and the page's audio is the
+  source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a
+  backend's failure is `SourceError::Browser`. Dropping the source closes the page.
+- `youtube_chat` ("YouTube chat"): a preset of `browser` that shows a live video's chat
+  through YouTube's public popout chat page, with no sign-in and no Google OAuth client
+  (ADR-0051 §1, kept by ADR-0058). `video` takes the video's ID or a `youtube.com/watch?v=`,
+  `youtube.com/live/`, `youtube.com/live_chat?v=` or `youtu.be/` link (with or without
+  `www.` or `m.`); the ID must be letters, digits, `-` and `_` only, so it can't reshape
+  the page's URL, and anything else is refused naming `video`. Empty is a blank page. A
+  channel's `/live` link names no video, so it is refused. `width` (400), `height`
+  (600), `fps` and `css` work as in `browser`; the default CSS (`YOUTUBE_CHAT_CSS`)
+  makes the page transparent and hides the header, ticker and message box, so only
+  messages show. It only shows chat: sending, featuring and moderating need the
+  optional API path. YouTube owns the page, so if YouTube changes it, the default CSS
+  may stop hiding things.
 - `display`, `webcam` and `window` are described only, with the settings B4
   gave them: sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.
@@ -286,18 +314,20 @@ Errors name an asset by the root and path its setting holds, never by the host p
 undecodable file is an error from `create`, never from the edit that set it.
 
 **Dependencies.** `jstream-media` (frames and the media clock), `jstream-platform`
-(the `MediaDecoders` trait the `media` kind plays through; its `fake` feature in
-tests), `jstream-protocol` (descriptors, settings and references), `serde_json`
-(setting values), `thiserror` (`SourceError`), the pure-Rust decoders `png`,
-`zune-jpeg` with `zune-core`, `image-webp` and `gif`, `realfft` (with `rustfft`,
-scalar only) for the spectrum's FFT, and for fonts `skrifa` (with `read-fonts`,
-`font-types`, `bytemuck`, `yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with
-default features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
+(the `MediaDecoders` trait the `media` kind plays through, GPU frames and audio
+handlers; its `fake` feature in tests), `jstream-protocol` (descriptors, settings and
+references), `jstream-browser` (the browser seam), `serde_json` (setting values),
+`thiserror` (`SourceError`), the pure-Rust decoders `png`, `zune-jpeg` with
+`zune-core`, `image-webp` and `gif`, `realfft` (with `rustfft`, scalar only) for the
+spectrum's FFT, and for fonts `skrifa` (with `read-fonts`, `font-types`, `bytemuck`,
+`yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with default features off.
+`ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
 (RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
-distance transform and reading an audio target from settings, and in `source.rs` the
+distance transform, reading an audio target from settings and taking a YouTube video
+ID from an ID or link (`youtube_chat.rs`), and in `source.rs` the
 asset checks refuse a file swapped in from outside the root (Unix) and a junction or
 symbolic link inside the root that leads outside it (Windows, both when the path is
 resolved and in the walk on its own, as a link swapped in after resolving would meet
@@ -342,4 +372,9 @@ frame, silence in the file before the next play stepped over as a gap rather tha
 discontinuity, and a decoder's long blocks still handed on only 100 ms ahead,
 continuous across the block seam. `player.rs`'s own tests loop a stream that starts late
 in the file one frame period apart, and cut a block at a rate where 10 ms isn't a whole
-number of frames, keeping every frame and the pieces contiguous.
+number of frames, keeping every frame and the pieces contiguous. `tests/browser.rs` runs
+the `browser` kind against `jstream-browser`'s fake backend: the page spec it opens, file
+over URL, setting and backend errors, live CSS, closing on drop and the audio hand-off.
+`tests/youtube_chat.rs` runs the `youtube_chat` preset the same way: the popout chat
+page a video or link opens, a blank page for an empty setting, refused links, the
+default CSS and live CSS.

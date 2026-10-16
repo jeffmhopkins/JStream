@@ -1,0 +1,42 @@
+[package]
+name = "jstream-browser-helper"
+version = "0.0.0"
+description = "The browser helper: the DLL CEF's bootstrap exe loads, running CEF's browser process for browser sources with the sandbox on."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 6
+summary = "`jstream-browser-helper` (the sandboxed browser helper's DLL, loaded by CEF's bootstrap exe; ADR-0048)"
+unsafe_allowed = true
+
+# Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and the
+# bootstrap exe's entry point must be an unmangled export (`#[unsafe(no_mangle)]`), which
+# R-UNSAFE-001 allows here (ADR-0048). Every other workspace lint is copied unchanged;
+# keep the two tables in step.
+[lints.rust]
+missing_docs = "warn"    # R-RS-006 (blocking under -D warnings)
+
+[lints.clippy]
+unwrap_used = "deny"                      # R-RS-004
+print_stdout = "deny"                     # R-RS-005
+print_stderr = "deny"                     # R-RS-005
+allow_attributes_without_reason = "deny"  # R-RS-009
+undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
+
+[lib]
+# A DLL for the bootstrap exe; Cargo names it `jstream_browser_helper.dll`, which ships
+# as `jstream-browser-helper.dll` beside the renamed bootstrap.
+crate-type = ["cdylib"]
+
+[features]
+# Built with CEF (Windows): the DLL exports `RunWinMain`. Without it, it exports nothing.
+# Off by default, as building CEF downloads and compiles it (ADR-0046).
+cef = ["jstream-browser/helper"]
+# Compile-checks it without building CEF, for CI's clippy.
+dox = ["cef", "jstream-browser/dox"]
+
+[dependencies]
+jstream-browser.workspace = true

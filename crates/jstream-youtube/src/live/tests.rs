@@ -115,6 +115,35 @@ fn list_broadcasts_parses_a_page_and_tolerates_unknown_values() {
     assert_eq!(second.content_details.bound_stream_id, None);
 }
 
+/// Persistent ("Stream now") broadcasts are listed only when asked for (review N5 on
+/// #167): the type goes out as `broadcastType`, and an ID list refuses one.
+#[test]
+fn a_broadcast_type_filter_is_sent_with_mine() {
+    let transport = FakeTransport::new();
+    transport.respond(200, BROADCASTS);
+    let mut client = signed_in(&transport, vec![Scope::Manage]);
+    client
+        .list_broadcasts_of_type(
+            &BroadcastFilter::Mine,
+            Some(BroadcastType::All),
+            &PageRequest::default(),
+        )
+        .unwrap();
+    let request = only(&transport);
+    assert_eq!(request.query("mine").as_deref(), Some("true"));
+    assert_eq!(request.query("broadcastType").as_deref(), Some("all"));
+
+    let err = client
+        .list_broadcasts_of_type(
+            &BroadcastFilter::Ids(vec!["dQw4w9WgXcQ".into()]),
+            Some(BroadcastType::Persistent),
+            &PageRequest::default(),
+        )
+        .unwrap_err();
+    assert!(matches!(err, YoutubeError::InvalidArgument { .. }), "{err}");
+    assert_eq!(transport.requests().len(), 1, "nothing more was sent");
+}
+
 #[test]
 fn filters_and_page_sizes_are_checked_before_sending() {
     let transport = FakeTransport::new();

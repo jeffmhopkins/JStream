@@ -127,8 +127,10 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Start:** a target that goes between the lookup and the start of the capture is
     `NotFound` (except a reused window handle), as for a target that was never there.
   - **GPU path** (`on_gpu`, for a context `WindowsGpu` opened; another backend's is
-    `InvalidState`). The trait shapes stay as they are: the backend reaches the context
-    through this constructor (see [Open questions](#open-questions)).
+    `InvalidState`). The engine reaches it through `Capture::on_context`, which
+    `WgcCapture` answers with `on_gpu` on either path, so a host builds the CPU backend
+    and the engine moves capture onto its context (see
+    [Open questions](#open-questions)).
     - **Device:** every capture uses the context's D3D11 device, so frames are on the
       context's adapter. A display driven by another adapter is still captured; WGC
       copies across adapters itself.
@@ -157,7 +159,7 @@ The code is ported from spikes S1 to S3. This first cut has:
 
 - **`MfCodecs`** (`Codecs`), Media Foundation codecs
   ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): the **AAC encoder** and
-  the **H.264 encoder from CPU frames**. AAC:
+  the **H.264 encoder**, from CPU frames or from encode targets on the GPU. AAC:
   - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
     Windows that is Microsoft's software AAC encoder. It takes 44.1 or 48 kHz; mono or
     stereo at 96, 128, 160 or 192 kbps, or 5.1 at six times those (576, 768, 960 or
@@ -172,13 +174,38 @@ The code is ported from spikes S1 to S3. This first cut has:
     initialising COM. Sessions are opened from a thread that isn't an STA.
   - **Teardown:** dropping a session ends streaming and calls `ShutdownObject` on the
     activation object, as Microsoft asks. One output sample is reused for every pull.
-  - **H.264 encoder (CPU path):** this takes NV12 `VideoSurface::Cpu` frames and copies
-    them into Media Foundation memory buffers. It is ARCH's fallback path; the zero-copy
-    D3D11 path arrives with the Windows `GpuInterop` implementation
+  - **H.264 encoder, CPU path:** `MfCodecs::new()`'s encoders take NV12, RGBA or BGRA
+    `VideoSurface::Cpu` frames and copy them into Media Foundation memory buffers as
+    NV12, the MFTs' input. RGBA (the compositor's output, which the engine's pipeline
+    encodes) and BGRA are converted first, the way display capture converts WGC's BGRA:
+    BT.709 limited range, left-sited chroma. It is ARCH's fallback path
     ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 6).
-    - **Choosing an encoder:** hardware encoder MFTs come first, then the OS software
-      encoder, following `HardwarePreference`. The first one that accepts the media
-      types wins, and `CodecInfo::hardware` says which kind it was.
+  - **H.264 encoder, GPU path** (step 5): `Codecs::on_context` on a context `WindowsGpu`
+    opened (another backend's is `InvalidState`) gives the same backend on that context.
+    Its video encoders take that context's NV12 encode targets (`VideoSurface::Gpu`) and
+    nothing else: a CPU frame, or a GPU frame that isn't one of its encode targets, is
+    `Unsupported`. Audio is unchanged.
+    - **Choosing an encoder:** only hardware encoder MFTs on the context's adapter
+      (`MFTEnum2` with the adapter's LUID) that say they are D3D11-aware
+      (`MF_SA_D3D11_AWARE`). Each gets a DXGI device manager on the context's D3D11
+      device (`MFT_MESSAGE_SET_D3D_MANAGER`) before its media types, which are the CPU
+      path's. A configuration that avoids hardware is `Unsupported`, and so is a machine
+      where no such MFT accepts it; the engine then opens a CPU encoder
+      (`jstream-encode`'s `VideoSession::open_on`).
+    - **Input:** each encode target is copied on the GPU into a texture from a sample
+      allocator on the same device (eight at most, with the encode targets' bind flags),
+      and that sample is encoded. So the target goes back to its producer as soon as the
+      copy is queued, however long the MFT holds its input. When the MFT holds all eight,
+      the frame is refused as `Busy`, which the session drops and counts.
+    - **Sync:** the copy waits on the context's fence for the target's last staged
+      write, and D3D11 then signals the context's release fence, which the target's next
+      staged write waits for (`WindowsGpu` below). Neither waits on the CPU. The encoder
+      drops the frame once the copy is queued, so a producer writes a target again only
+      when it holds the frame's only clone.
+  - **H.264, both paths:**
+    - **Choosing an encoder** on the CPU path: hardware encoder MFTs come first, then the
+      OS software encoder, following `HardwarePreference`. The first one that accepts the
+      media types wins, and `CodecInfo::hardware` says which kind it was.
     - **Configuration:** CBR or peak-constrained VBR, the keyframe interval as the GOP
       size, no B-frames (so packets come out in presentation order and `dts == pts`),
       low latency, the High profile, and BT.709 limited range. `ICodecAPI` settings are
@@ -291,27 +318,29 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Not yet:** frames on the GPU (they follow the zero-copy work).
 
 - **`WindowsGpu`** (`GpuInterop`, [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)
-  step 2, plus the D3D11 device that steps 1 and 5 will use; ported from spike S1):
+  step 2, plus the D3D11 device that steps 1 and 5 use; ported from spike S1):
   - **`open_device`** opens the DX12 wgpu device on the media adapter. That is the
     hardware adapter that drives the primary display, else the first hardware adapter
     with NV12 textures. It also creates a multithread-protected D3D11 device on the same
-    adapter, and a fence shared between D3D11 and D3D12. The `AdapterId` carries the
-    adapter's LUID and PCI vendor ID.
-  - **Capture** reaches the context's D3D11 device through `WgcCapture::on_gpu`, above.
+    adapter, and two fences shared between D3D11 and D3D12: the context's fence and the
+    release fence. The `AdapterId` carries the adapter's LUID and PCI vendor ID.
+  - **Capture** reaches the context's D3D11 device through `WgcCapture::on_gpu`, and the
+    H.264 encoder through `MfCodecs`' `Codecs::on_context`, both above.
   - **`encode_target`** allocates an NV12 texture with a shared NT handle on the D3D11
     side, opens it on D3D12, and wraps it as a `wgpu::Texture` through wgpu-hal (in the
     `COMMON` state, which wgpu calls `PRESENT`).
   - **Fence values:** only the wgpu queue signals the context's fence. Each
     `FrameSync::stage` waits for the value that makes the texture ready and signals the
     next value of one counter per device, so values only increase. D3D11 signals fences
-    of its own (capture's, per stream), because two queues signalling one counter's
-    values could complete out of order and move a fence back. A queue of another device
-    (or backend) is `InvalidState`.
+    of its own, because two queues signalling one counter's values could complete out of
+    order and move a fence back: capture's, per stream, and the context's release fence,
+    after each read of an encode target. One lock covers taking a release value and
+    signalling it, so its values increase too. An encode target's stage waits on the
+    release fence for its last read. A queue of another device (or backend) is
+    `InvalidState`.
   - **Driver lifetime:** the raw D3D11 and D3D12 objects live in platform state that
     also holds a `wgpu::Device` clone, declared last, so `d3d12.dll` stays loaded until
     they are released.
-  - **Not yet:** the encoders' D3D11 side. They don't take GPU frames yet; see
-    [Open questions](#open-questions).
 
 - **`WindowsVcam`** (`VcamSink`), the virtual camera's engine side
   ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). It is the producer of
@@ -410,15 +439,15 @@ The code is ported from spikes S1 to S3. This first cut has:
   `Moved`, the last when a portable install was moved after registering. That comparison
   is tested on every platform.
 
-**Not yet:** Media Foundation video decoders, encoders and the virtual camera taking
-`VideoSurface::Gpu`, and
-a `Backends` constructor, which needs all of them.
+**Not yet:** Media Foundation's packet-level video decoders (`MfCodecs`; media files
+decode through `MfMediaDecoders`), the virtual camera taking
+`VideoSurface::Gpu`, and a `Backends` constructor, which needs all of them.
 
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
-packet flags, positions across a device move), the capture helpers (BGRA to NV12 with
+packet flags, positions across a device move), the capture helpers (BGRA and RGBA to NV12 with
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the H.264
-helpers (configuration check, NV12 packing, `pts` mapping), the GPU capture ring's slot
+helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts` mapping), the GPU capture ring's slot
 choice (reuse, drop when full, release on resize), the credential helpers (target names
 of both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
 the Media Foundation check's decision (edition kinds and the advice for each) and the
@@ -426,7 +455,7 @@ video-device helpers (subtypes and frame rates to formats, repeats left out, col
 fallbacks, NV12 and I420 copies, YUY2 to NV12, short buffers, audio pairing by container)
 and the media-file helpers (RGB32 rows to RGBA and BGRA, top-down and bottom-up,
 cropping to an aperture, short buffers, packed sizes and rates, 100 ns times, the
-verbatim path prefix) run on every platform. The QPC clock test, the start-race test (a destroyed message-only
+verbatim path prefix, and the gapless cut of audio priming and padding) run on every platform. The QPC clock test, the start-race test (a destroyed message-only
 window maps to `NotFound`), the credential limits check, the credential round trip (a
 uniquely named credential written, replaced, read and deleted in the real store, a
 non-UTF-8 one refused on read, deleted again on failure), the same through
@@ -435,7 +464,11 @@ same ID, and the Media Foundation probe and edition read run on Windows. Tests a
 display are platform tests: behind the `hw-tests` feature and `#[ignore]`d, because CI
 machines may have no audio devices, no Media Foundation, no GPU and no display
 ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
-target, stages it and checks that the shared fence passes the staged value. The capture
+target, stages it and checks that the shared fence passes the staged value. The GPU
+encode test opens the H.264 encoder on the context, writes a ring of three 720p encode
+targets with wgpu for 60 frames, checking that the encoder has let go of each target
+before it is written again, encodes them, refuses a CPU frame, and checks the packets
+as the CPU encode tests do. The capture
 tests list the displays, capture the primary display for a second, checking the
 frames' format and `pts`, start a capture of a destroyed window, which must be
 `NotFound`, and capture three times in a row in one process. The audio tests list the
@@ -453,11 +486,15 @@ checks that a second producer is refused and that the block is stopped after `st
 video-device tests list devices, formats and paired audio, capture an uncompressed format
 and the largest MJPEG format for two seconds each (checking size, format and `pts`), open
 a device twice (shared or `Busy`), and refuse an unknown device or format; an unplug test
-runs only when `JSTREAM_UNPLUG_TEST` is set. The media-file tests play the video file
-`JSTREAM_TEST_MEDIA` names (over two seconds long): thirty frames in order, opaque and of
-the stream's size, a seek to the middle landing at or before it, a seek past the end
-ending the stream, and the errors for a missing file, a file that isn't media and an
-unsupported pixel format. Run them on a Windows machine with a
+runs only when `JSTREAM_UNPLUG_TEST` is set. The H.264 tests encode two seconds in
+software from NV12 and from RGBA (the engine's input), and in hardware from RGBA. The
+media-file tests play the video file `JSTREAM_TEST_MEDIA` names (over two seconds
+long): thirty frames in order, opaque and of the stream's size, a seek to the middle
+landing at or before it, a seek past the end ending the stream, a second of its audio
+as contiguous `f32` blocks and a seek of it, no audio when none is asked for, and the
+errors for a missing file, a file that isn't media and an unsupported pixel format.
+Run them on a
+Windows machine with a
 microphone, speakers, a display, a webcam and a DX12 GPU with a hardware H.264 encoder:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`. The
 virtual-camera test also needs the `jstream-vcam-windows` DLL registered
@@ -468,13 +505,13 @@ virtual-camera test also needs the `jstream-vcam-windows` DLL registered
 <!-- @section
 -->
 
-- **How the encoders reach the GPU context.** `Codecs::video_encoder` takes no
-  `GpuContext`, but the encoders' D3D11 input needs the context's D3D11 device. Capture
-  kept the trait shapes: `WgcCapture::on_gpu(&GpuContext)` is a Windows constructor, so
-  the host that builds the backends picks the path. The encoders can do the same
-  (`MfCodecs::on_gpu`), or the trait can change so `video_encoder` takes
-  `Option<&GpuContext>` (or `VideoEncoderConfig` names it). That is a `jstream-platform`
-  API decision for E3c.
+- **How the encoders reach the GPU context** (answered): as capture does, through a
+  default trait method, `Codecs::on_context`, which `MfCodecs` answers with a backend
+  on the context. `video_encoder` and `VideoEncoderConfig` are unchanged.
+- **Allocator bind flags.** The GPU path's input textures take the encode targets'
+  bind flags (render target and shader resource), which the adapter is known to
+  allocate in NV12. Whether every vendor's encoder reads those, or some want
+  `D3D11_BIND_VIDEO_ENCODER`, shows only on hardware.
 - **Render times.** `AudioRenderBuffer::time` (when the first frame will play) is always
   `None` for now. `IAudioClock` can give it once the engine needs output sync, for
   example for monitoring with delay compensation.

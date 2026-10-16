@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 4
-summary = "`Source` trait plus built-ins (ADR-0031): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message (ADR-0041) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates."
+summary = "`Source` trait plus built-ins (ADR-0031): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message (ADR-0058) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates."
 unsafe_allowed = false
 
 [lints]
@@ -21,9 +21,13 @@ ab_glyph_rasterizer.workspace = true
 # Image decoders (ADR-0031: pure-Rust image crates, the same on every platform).
 gif.workspace = true
 image-webp.workspace = true
+# The browser backend seam (`BrowserBackend`, ADR-0021): the `browser` kind's pages are
+# opened by an injected backend. Without its `cef` feature it is pure Rust.
+jstream-browser.workspace = true
 jstream-media.workspace = true
-# The media-file backend trait: the `media` kind's demuxer and decoders are injected
-# (ADR-0031).
+# The platform seams sources use: the media-file backend trait (the `media` kind's
+# demuxer and decoders are injected, ADR-0031), and the GPU frame and audio-input types
+# the `Source` seam hands the engine (`gpu_frame`, `audio`).
 jstream-platform.workspace = true
 jstream-protocol.workspace = true
 png.workspace = true
@@ -42,3 +46,5 @@ zune-jpeg.workspace = true
 assert_no_alloc.workspace = true
 # Fake media files for the `media` kind's tests (R-TEST-004).
 jstream-platform = { workspace = true, features = ["fake"] }
+# The in-memory browser backend for the `browser` kind's tests (R-TEST-004).
+jstream-browser = { workspace = true, features = ["fake"] }

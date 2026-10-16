@@ -51,7 +51,7 @@ A report is in scope when it breaks one of these. The rules they cite are the au
 - **The control API:** every connection needs the control token or a paired device's
   token (the pairing exchange aside, which needs an open one-time code, and the fixed
   pairing page on a TLS listener; a browser may hold a device token as a cookie, never the
-  control token), and the listener
+  control token), a device token is accepted only over loopback or TLS, and the listener
   binds to localhost by default and checks `Host`, and `Origin` when one is present
   ([R-SEC-002](docs/RULES.md#R-SEC-002)).
 - **WASM plugins** get no filesystem or network access unless the manifest declares it

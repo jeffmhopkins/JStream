@@ -2,7 +2,9 @@
 //! one mixer input, added when the source is created and removed when it is deleted. A
 //! source that can't be recorded is unavailable and doesn't fail the output; a failed
 //! stream is reopened, and an application is found again when it restarts. A media
-//! file's sound (C9b) is one more input, fed while the program shows the file.
+//! file's sound (C9b) is one more input, fed while the program shows the file, and a
+//! `browser` source's page audio is an input too, from when its page opens until it
+//! closes.
 
 use super::{add, batch, block_on, connected, create, drain, edits, output_call, output_state};
 use crate::audio_sources::AudioStatus;
@@ -329,9 +331,13 @@ fn a_media_files_sound_is_mixed_while_the_program_shows_it() {
     let engine = engine_with(&audio, &clock, media.clone());
     let control = connected(&engine);
     let mut events = control.events();
+    // The engine canonicalizes the path itself, so the fake is keyed by the canonical
+    // path; the setting drops Windows' verbatim `\\?\` prefix, which an `absolute`
+    // asset path refuses as two leading separators.
+    let setting = path.to_string_lossy();
     let file = Reference::Asset {
         root: AssetRoot::Absolute,
-        path: path.to_string_lossy().into_owned(),
+        path: setting.strip_prefix(r"\\?\").unwrap_or(&setting).to_owned(),
     };
     let video: Settings = Settings(
         [
@@ -462,6 +468,80 @@ fn a_media_files_sound_is_mixed_while_the_program_shows_it() {
     ));
     assert_eq!(metered(&mut events), ["clip"]);
 
+    // Its input runs the source's audio filters (ADR-0026): a gain of -60 dB brings its
+    // metered peak down a thousandfold, and removing the filter brings the level back.
+    // The mixer runs as the fake device takes blocks, here silence from the microphone
+    // and desktop, so the peak is the file's.
+    let peak = |events: &mut jstream_control::EventStream| {
+        for _ in 0..10 {
+            audio.deliver(480, 0.0);
+            clock.advance(10_000);
+            engine.replan();
+            thread::sleep(Duration::from_millis(2));
+        }
+        engine.emit_meters_tick();
+        drain(events)
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::MetersTick { sources, .. } => Some(
+                    sources
+                        .into_iter()
+                        .find(|s| s.source_id.as_str() == "clip")
+                        .map_or(0.0, |s| s.peak[0].get().max(s.peak[1].get())),
+                ),
+                _ => None,
+            })
+            .unwrap_or(0.0)
+    };
+    // Each fake block holds one level, from 1/128 to 1/2.
+    let heard = |peak: f32| peak >= 1.0 / 128.0;
+    assert!(
+        eventually(|| heard(peak(&mut events))),
+        "the file is metered"
+    );
+    let owner = || jstream_protocol::FilterOwner::Source {
+        source_id: SourceId::new("clip"),
+    };
+    batch(
+        &control,
+        Batch::single(Edit::FilterAdd {
+            owner: owner(),
+            chain: jstream_protocol::FilterChain::Audio,
+            filter_id: jstream_protocol::FilterId::new("quiet"),
+            kind: "gain".into(),
+            settings: Settings([("gain_db".to_owned(), json!(-60.0))].into_iter().collect()),
+            enabled: None,
+            index: None,
+        }),
+    )
+    .expect("filter.add");
+    // Two ticks, so the first drops a peak held from before the filter. The loudest
+    // block, 1/2, comes out at 0.0005.
+    assert!(
+        eventually(|| {
+            peak(&mut events);
+            let quiet = peak(&mut events);
+            quiet > 0.0 && quiet < 0.001
+        }),
+        "the gain filter runs on the file's input"
+    );
+    batch(
+        &control,
+        Batch::single(Edit::FilterRemove {
+            owner: owner(),
+            filter_id: jstream_protocol::FilterId::new("quiet"),
+        }),
+    )
+    .expect("filter.remove");
+    assert!(
+        eventually(|| {
+            peak(&mut events);
+            heard(peak(&mut events))
+        }),
+        "the level comes back once the filter is removed"
+    );
+
     // Deleting the source removes its input.
     batch(
         &control,
@@ -573,6 +653,163 @@ fn a_bus_a_source_draws_feeds_its_scope_while_an_output_runs() {
         "the program mix has no send from the desktop: {window:?}"
     );
     block_on(control.call(output_call("yt", false))).expect("output.stop");
+}
+
+/// Sources that open through the browser backend, `browser` and its `youtube_chat`
+/// preset, are built again when the host gives the engine its backend after they
+/// exist (review B1 on #375).
+#[test]
+fn browser_presets_open_once_the_backend_arrives() {
+    use jstream_browser::PageLocation;
+    use jstream_browser::fake::FakeBrowser;
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            audio_source("page", "browser", Some(("url", "https://example.com/"))),
+            audio_source("chat", "youtube_chat", Some(("video", "dQw4w9WgXcQ"))),
+        ]),
+    )
+    .expect("sources");
+    // Long enough for both builds to fail for want of a backend.
+    thread::sleep(Duration::from_millis(200));
+
+    let browser = FakeBrowser::new();
+    let _engine = engine.with_browser(browser.clone());
+    assert!(
+        eventually(|| browser.pages().len() == 2),
+        "{:?}",
+        browser.pages().len()
+    );
+    let mut opened: Vec<String> = browser
+        .pages()
+        .iter()
+        .map(|page| match &page.spec().location {
+            PageLocation::Web(url) => url.to_string(),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    opened.sort();
+    assert_eq!(
+        opened,
+        [
+            "https://example.com/",
+            "https://www.youtube.com/live_chat?is_popout=1&v=dQw4w9WgXcQ"
+        ]
+    );
+}
+
+#[test]
+fn a_browser_page_is_recorded_alongside_the_defaults() {
+    use jstream_browser::fake::FakeBrowser;
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let browser = FakeBrowser::new();
+    let engine = engine(&audio, &clock).with_browser(browser.clone());
+    let control = connected(&engine);
+    let mut events = control.events();
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+
+    batch(
+        &control,
+        Batch::single(audio_source(
+            "page",
+            "browser",
+            Some(("url", "https://example.com/")),
+        )),
+    )
+    .expect("page");
+    assert!(eventually(
+        || status(&engine, "page") == Some(AudioStatus::Recording)
+    ));
+    let pages = browser.pages();
+    assert_eq!(pages.len(), 1);
+    // The routing finds the page's input, as it does an audio source's.
+    engine.emit_meters_tick();
+    let metered = drain(&mut events)
+        .into_iter()
+        .rev()
+        .find_map(|event| match event {
+            Event::MetersTick { sources, .. } => Some(sources),
+            _ => None,
+        });
+    assert!(
+        metered.is_some_and(|sources| sources.iter().any(|s| s.source_id.as_str() == "page")),
+        "the page is metered"
+    );
+    // A page's audio isn't an audio source: the defaults stay.
+    assert_eq!(
+        inputs(&audio),
+        names(&[
+            AudioInputTarget::DefaultInput,
+            AudioInputTarget::DefaultOutputLoopback
+        ])
+    );
+
+    // Turning the page's audio off closes its input but keeps the page; turning it on
+    // records the same page again.
+    let page_metered = |events: &mut jstream_control::EventStream| {
+        engine.emit_meters_tick();
+        drain(events)
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::MetersTick { sources, .. } => Some(sources),
+                _ => None,
+            })
+            .is_some_and(|sources| sources.iter().any(|s| s.source_id.as_str() == "page"))
+    };
+    let set_audio = |enabled| Edit::SourceSetAudio {
+        source_id: SourceId::new("page"),
+        enabled: Some(enabled),
+        follow: None,
+        gain_db: None,
+        muted: None,
+    };
+    batch(&control, Batch::single(set_audio(false))).expect("audio off");
+    assert!(eventually(|| status(&engine, "page").is_none()));
+    assert!(!page_metered(&mut events), "an off page isn't metered");
+    assert_eq!(browser.pages().len(), 1);
+    assert!(!pages[0].is_closed());
+    batch(&control, Batch::single(set_audio(true))).expect("audio on");
+    assert!(eventually(
+        || status(&engine, "page") == Some(AudioStatus::Recording)
+    ));
+    assert!(page_metered(&mut events), "the page is metered again");
+    assert_eq!(browser.pages().len(), 1);
+
+    // A new address opens a new page, whose audio replaces the old page's.
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("page"),
+            patch: Settings(
+                [("url".to_owned(), json!("https://example.org/"))]
+                    .into_iter()
+                    .collect(),
+            ),
+        }),
+    )
+    .expect("new address");
+    assert!(eventually(
+        || browser.pages().len() == 2 && pages[0].is_closed()
+    ));
+    assert!(eventually(
+        || status(&engine, "page") == Some(AudioStatus::Recording)
+    ));
+
+    // Deleting the source closes its page and its input.
+    batch(&control, Batch::single(delete("page"))).expect("delete page");
+    assert!(eventually(|| browser.pages().iter().all(|p| p.is_closed())));
+    assert!(eventually(|| status(&engine, "page").is_none()));
+
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(eventually(|| audio.open_streams() == 0));
 }
 
 /// #459: a `waveform` drawing a source gets that source's audio after its own fader,
