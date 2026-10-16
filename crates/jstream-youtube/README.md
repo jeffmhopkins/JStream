@@ -122,8 +122,8 @@ column, never quoted. The refresh token is kept in the OS credential store throu
 anywhere itself.
 
 The engine (`jstream-core`, roadmap Y3) holds one `LiveClient`, keeps its refresh token
-in the `OAuthTokenStore` and exposes these calls as protocol commands, and so as MCP
-tools.
+in the `OAuthTokenStore` and exposes these calls as protocol commands for the UI. MCP
+leaves them out: YouTube is for people, not agents (ADR-0058 §3).
 
 **Not yet:** sending chat as the channel, the engine's chat polling and its
 `youtube.chat.feature` action, audience stats from ADR-0041, and quota accounting.

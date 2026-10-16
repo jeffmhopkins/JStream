@@ -327,7 +327,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:10ae8d0666b76a96", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the YouTube bullet lists 0.20's actions, queries, events and youtube target, says no token or key crosses the protocol, and that it needs a Google OAuth client, the built-in one (ADR-0058, empty for now) or a developer's override; matches the protocol crate and README; holds" }
+stamp = { hash = "b3:45ee7931cbf29cd7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the YouTube bullet lists 0.20's actions, queries, events and youtube target, says no token or key crosses the protocol and that it needs the built-in OAuth client (ADR-0058, empty for now) or a developer's override; the protocol README it covers now also says MCP leaves YouTube out, consistent with ARCH#mcp; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:de0e3c78ff4cd78e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the YouTube bullet lists 0.20's actions, queries, events and youtube target, says no token or key crosses the protocol and that all of it needs the user's own OAuth client; matches the protocol crate, mock.rs and server session changes; holds" }
@@ -966,7 +966,7 @@ stamp = { hash = "b3:5e57186692ba906c", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:f807ee756428181c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs; the client is now the built-in one or a developer override, and without one calls fail saying the build has no OAuth client (NO_YOUTUBE_CLIENT); holds" }
+stamp = { hash = "b3:81ed8048ebfda706", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: the YouTube section (sign-in/out ordering, rotated token stored before release, quota prefix, ingest resolved outside locks, health thread, lock order) matches youtube.rs and engine.rs, with the built-in client or a developer override; the protocol README's new note that MCP leaves YouTube out changes nothing core describes; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:a5a44bb12a653b5f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs; the client is now the built-in one or a developer override, and without one calls fail saying the build has no OAuth client (NO_YOUTUBE_CLIENT); holds" }
@@ -1512,7 +1512,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:5b96261143804d2d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the Output bullet names RTMP to a YouTube broadcast by ID and the broadcast_id rule (non-empty, at most 128 bytes, ASCII letters, digits, - and _; field kind.target.broadcast_id or target.broadcast_id), matching target.rs, apply.rs and the new tests; the wave's asset-path rules sit beside it; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:f807ee756428181c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the Output bullet names RTMP to a YouTube broadcast by ID and the broadcast_id rule, matching target.rs, apply.rs and the tests; the protocol README's youtube.status wording change (no client vs user's own) touches nothing graph describes; holds" }
+stamp = { hash = "b3:81ed8048ebfda706", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the Output bullet names RTMP to a YouTube broadcast by ID and the broadcast_id rule, matching target.rs and apply.rs; the protocol README's notes on which client YouTube needs and MCP leaving it out touch nothing graph describes; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2031,7 +2031,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:f807ee756428181c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: 0.20 is explained as YouTube (commands, events, the youtube target and an action's optional result) and matches youtube.rs and the snapshots; youtube.status's unavailable now means the engine has no OAuth client (as while the built-in one is empty, ADR-0058) rather than the user bringing their own; the wave's #402 DOS-device and absolute-path rules are kept; holds" }
+stamp = { hash = "b3:81ed8048ebfda706", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: 0.20 is explained as YouTube (commands, events, the youtube target and an action's optional result), matching youtube.rs and the snapshots; the YouTube intro now says the calls are for the UI and MCP offers none, refuses youtube targets and drops YouTube events (ADR-0058 §3), and unavailable means the engine has no OAuth client; the wave's #402 rules are kept; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2727,7 +2727,7 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
 ["CRATE-jstream-youtube#purpose"."body"]
-stamp = { hash = "b3:6e1dc3d35d21d396", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §1: list_broadcasts_of_type with the broadcastType filter is described as live.rs implements and tests it; Not yet drops the protocol, MCP and engine wiring; the oauth bullet adds the empty BUILT_IN_CLIENT_ID and BUILT_IN_CLIENT_SECRET constants (re-exported from lib.rs) that the maintainer fills in; holds" }
+stamp = { hash = "b3:9232af18dece160f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements it; the empty BUILT_IN_CLIENT_ID/SECRET constants; the engine paragraph now says the calls are protocol commands for the UI and MCP leaves them out (§3), replacing 'and so as MCP tools'; Not yet unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:ac6493f8088539b9" }
