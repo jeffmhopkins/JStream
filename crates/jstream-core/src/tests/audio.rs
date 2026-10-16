@@ -313,6 +313,38 @@ fn a_browser_page_is_recorded_alongside_the_defaults() {
         ])
     );
 
+    // Turning the page's audio off closes its input but keeps the page; turning it on
+    // records the same page again.
+    let page_metered = |events: &mut jstream_control::EventStream| {
+        engine.emit_meters_tick();
+        drain(events)
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::MetersTick { sources, .. } => Some(sources),
+                _ => None,
+            })
+            .is_some_and(|sources| sources.iter().any(|s| s.source_id.as_str() == "page"))
+    };
+    let set_audio = |enabled| Edit::SourceSetAudio {
+        source_id: SourceId::new("page"),
+        enabled: Some(enabled),
+        follow: None,
+        gain_db: None,
+        muted: None,
+    };
+    batch(&control, Batch::single(set_audio(false))).expect("audio off");
+    assert!(eventually(|| status(&engine, "page").is_none()));
+    assert!(!page_metered(&mut events), "an off page isn't metered");
+    assert_eq!(browser.pages().len(), 1);
+    assert!(!pages[0].is_closed());
+    batch(&control, Batch::single(set_audio(true))).expect("audio on");
+    assert!(eventually(
+        || status(&engine, "page") == Some(AudioStatus::Recording)
+    ));
+    assert!(page_metered(&mut events), "the page is metered again");
+    assert_eq!(browser.pages().len(), 1);
+
     // A new address opens a new page, whose audio replaces the old page's.
     batch(
         &control,
