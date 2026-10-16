@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:d1f543dee016fef6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge-only round (main merged in): re-read against main's changes and this PR's browser additions; both hold together" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -128,8 +127,10 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Start:** a target that goes between the lookup and the start of the capture is
     `NotFound` (except a reused window handle), as for a target that was never there.
   - **GPU path** (`on_gpu`, for a context `WindowsGpu` opened; another backend's is
-    `InvalidState`). The trait shapes stay as they are: the backend reaches the context
-    through this constructor (see [Open questions](#open-questions)).
+    `InvalidState`). The engine reaches it through `Capture::on_context`, which
+    `WgcCapture` answers with `on_gpu` on either path, so a host builds the CPU backend
+    and the engine moves capture onto its context (see
+    [Open questions](#open-questions)).
     - **Device:** every capture uses the context's D3D11 device, so frames are on the
       context's adapter. A display driven by another adapter is still captured; WGC
       copies across adapters itself.
@@ -419,9 +420,10 @@ virtual-camera test also needs the `jstream-vcam-windows` DLL registered
 
 - **How the encoders reach the GPU context.** `Codecs::video_encoder` takes no
   `GpuContext`, but the encoders' D3D11 input needs the context's D3D11 device. Capture
-  kept the trait shapes: `WgcCapture::on_gpu(&GpuContext)` is a Windows constructor, so
-  the host that builds the backends picks the path. The encoders can do the same
-  (`MfCodecs::on_gpu`), or the trait can change so `video_encoder` takes
+  has a Windows constructor, `WgcCapture::on_gpu(&GpuContext)`, and a default trait
+  method, `Capture::on_context`, through which the engine moves it onto its context.
+  The encoders can do the same (`MfCodecs::on_gpu` behind a `Codecs` default method),
+  or the trait can change so `video_encoder` takes
   `Option<&GpuContext>` (or `VideoEncoderConfig` names it). That is a `jstream-platform`
   API decision for E3c.
 - **Render times.** `AudioRenderBuffer::time` (when the first frame will play) is always

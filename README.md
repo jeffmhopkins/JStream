@@ -43,14 +43,14 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | Milestone | Progress | Merged | In review | Planned |
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
-| [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `████████░░` 83% | 15 | 2 | 1 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 86% | 30 | 2 | 3 |
+| [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `█████████░` 89% | 16 | 1 | 1 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 86% | 30 | 3 | 2 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 30% | 6 | 8 | 6 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 13% | 1 | 0 | 7 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 26% | 6 | 11 | 6 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 11% | 1 | 1 | 7 |
 
-75 of 107 items are merged; 7 of those still wait on a run on Windows hardware.
+76 of 111 items are merged; 8 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -72,7 +72,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M1a</b> Thin slice to YouTube: 15 of 18 merged</summary>
+<summary><b>M1a</b> Thin slice to YouTube: 16 of 18 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -88,7 +88,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | A6 | Daemon --collection and audit log | ✅ merged | #232 |
 | A4 | Go-live runbook and smoke | 🧪 merged, Windows run pending: smoke script run | #234 |
 | E3a | GPU capture frames | ✅ merged | #173 |
-| E3b | Render takes GPU frames | 🔍 in review | #219 |
+| E3b | Render takes GPU frames | 🧪 merged, Windows run pending: windows_gpu hardware test (#334) | #219 |
 | Y1 | jstream-youtube crate | ✅ merged | #167 |
 | Y2 | OAuth token store | ✅ merged | #169 |
 | YA | ADR-0041 one sign-in | ✅ merged | #214 |
@@ -130,7 +130,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | D4 | No-allocation test | ✅ merged | #191 |
 | D7b | Filter chains in the mixer | ✅ merged | #231 |
 | D5 | Audio in the protocol | ✅ merged | #240 |
-| D6 | when_shown activity gain | ⏳ planned |  |
+| D6 | when_shown activity gain | 🔍 in review | #299 |
 | E1 | Render snapshots, GPU lifetime | ✅ merged | #172, #215 |
 | F1 | fMP4 muxer | ✅ merged | #151 |
 | F2a | Recording file sink | ✅ merged | #156 |
@@ -172,7 +172,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M2</b> UI: 6 of 20 merged</summary>
+<summary><b>M2</b> UI: 6 of 23 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -188,6 +188,8 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U1 | Preview stream | 🔍 in review | #251 |
 | U5 | Tauri desktop app | 🧪 merged, Windows run pending: desktop app check | #258 |
 | Q3 | UI end-to-end tests | 🔍 in review | #309 |
+| Q4 | Performance benchmarks | 🔍 in review | #361 |
+| Q5 | Threat model | 🔍 in review | #358 |
 | T1 | Studio mode and transitions | 🔍 in review | #260 |
 | T1u | Studio-mode UI | ⏳ planned |  |
 | E2 | Video mixes | 🔍 in review | #259 |
@@ -196,17 +198,19 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | C9 | Media file source | 🔍 in review | #245 |
 | W1 | Audio waveform and spectrum sources | ⏳ planned |  |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned |  |
+| K2 | Keyframe scenes: model and evaluator | 🔍 in review | #350 |
 
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 1 of 8 merged</summary>
+<summary><b>M3</b> Depth and reach: 1 of 9 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ⏳ planned |  |
-| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned |  |
+| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned | #359 |
+| 3D1 | 3D transforms: rendering ADR and spike | 🔍 in review | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned |  |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
 | WA1 | WASM automation plugins | ⏳ planned |  |
@@ -251,7 +255,6 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token \
 ## Platforms
 <!-- @section
 depends_on = ["docs/adr/0008-windows-support-policy.md"]
-verified = { hash = "b3:174bb43ca018529b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Linux row's link moved from superseded ADR-0003 to ADR-0031, which restates the Linux codec-path deferral unchanged; Windows fact marker and ADR-0008 policy, macOS row unchanged" }
 -->
 
 | Platform | Status | Support |
@@ -273,6 +276,10 @@ verified = { hash = "b3:174bb43ca018529b", by = "agent:claude@session_01QBbMRwRu
   the item status the [Progress](#progress) table is generated from
 - [docs/runbooks/go-live.md](docs/runbooks/go-live.md): taking the daemon live on Windows,
   and the smoke script that checks it
+- [docs/runbooks/waves.md](docs/runbooks/waves.md): which wave branch a PR targets, and
+  how a wave lands in `main`
+- [docs/security/threat-model.md](docs/security/threat-model.md): what JStream protects, from
+  whom, the controls at each trust boundary, and the open gaps
 - [CLAUDE.md](CLAUDE.md): the entry point for builder agents
 - [REVIEW.md](REVIEW.md): the reviewer agent's instructions; its verdict gates merges
 - [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and

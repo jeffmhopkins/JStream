@@ -10,6 +10,7 @@ use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::future::Future;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::Path;
 use std::sync::Arc;
 #[cfg(any(all(windows, feature = "cef"), test))]
 use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
@@ -236,17 +237,20 @@ fn opener(
 }
 
 /// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token`, with MCP's
-/// streamable-HTTP transport on. Each connection and each MCP session gets its own
-/// session (its own `client_id`); all of them share the engine.
+/// streamable-HTTP transport on, and the web UI's files from `ui_dir` when given. Each
+/// connection and each MCP session gets its own session (its own `client_id`); all of
+/// them share the engine.
 pub async fn bind(
     engine: Arc<Engine>,
     port: u16,
     token: Token,
+    ui_dir: Option<&Path>,
 ) -> Result<Server, jstream_server::ServerError> {
     let connector: Connector = Arc::new(move || Box::new(engine.connect()));
     let mut config = ServerConfig::new(token);
     config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     config.mcp = true;
+    config.ui_dir = ui_dir.map(Path::to_path_buf);
     Server::bind(config, connector).await
 }
 
@@ -331,6 +335,7 @@ mod tests {
             engine(&options, Arc::new(AuditMemory::new())).expect("an engine"),
             0,
             token,
+            None,
         )
         .await
         .expect("binds");
@@ -417,6 +422,7 @@ mod tests {
             engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
             0,
             token.clone(),
+            None,
         )
         .await
         .expect("binds");
@@ -425,6 +431,7 @@ mod tests {
             engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
             port,
             token,
+            None,
         )
         .await
         .err()
@@ -742,18 +749,10 @@ mod tests {
             inner: browser.clone(),
             calls: Mutex::new(Vec::new()),
         });
-        let engine = super::browse(Engine::new(), recording.clone(), None);
-        assert_eq!(
-            *recording.calls.lock().expect("calls"),
-            ["use_device"],
-            "the device first"
-        );
-        assert!(!browser.has_device(), "no device was given");
-        let control = session(&engine).await;
-        timely(
-            control.call(Call::Batch(Batch::single(Edit::SourceCreate {
-                source_id: SourceId::new("page"),
-                name: "Page".to_owned(),
+        let page = |id: &str| {
+            Call::Batch(Batch::single(Edit::SourceCreate {
+                source_id: SourceId::new(id),
+                name: id.to_owned(),
                 kind: SourceKind::Builtin {
                     kind: "browser".into(),
                 },
@@ -763,22 +762,44 @@ mod tests {
                         .collect(),
                 ),
                 duplicated_from: None,
-            }))),
-        )
-        .await
-        .expect("source.create");
-        timely(async {
-            while browser.pages().is_empty() {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await;
-        let pages = browser.pages();
-        assert_eq!(pages.len(), 1);
-        assert!(!pages[0].is_closed());
+            }))
+        };
+
+        // A source that exists before the backend arrives (as from `--collection`)
+        // opens when it does, on the device the backend was already given.
+        let engine = Engine::new();
+        let control = session(&engine).await;
+        timely(control.call(page("before")))
+            .await
+            .expect("source.create");
+        let engine = super::browse(engine, recording.clone(), None);
+        /// Waits until `browser` has opened `count` pages.
+        async fn pages(browser: &FakeBrowser, count: usize) {
+            timely(async {
+                while browser.pages().len() < count {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await;
+        }
+        pages(&browser, 1).await;
         assert_eq!(
             *recording.calls.lock().expect("calls"),
-            ["use_device", "open"]
+            ["use_device", "open"],
+            "the device first, then the existing source's page"
         );
+        assert!(!browser.has_device(), "no device was given");
+
+        // A source added later opens too.
+        timely(control.call(page("after")))
+            .await
+            .expect("source.create");
+        pages(&browser, 2).await;
+        assert!(browser.pages().iter().all(|page| !page.is_closed()));
+        assert_eq!(
+            *recording.calls.lock().expect("calls"),
+            ["use_device", "open", "open"]
+        );
+        drop(engine);
     }
 }

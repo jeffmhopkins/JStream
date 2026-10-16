@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:ab65af276c937d72", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1, merging main's D5 (#240): Audio sources bullet now says one input per audio source and per running source's own audio (a browser page's) whose audio is on, each listed for the routing, defaults while no audio-only source; Engine::with_browser and the live-source rebuild of browser entries checked against engine.rs and live.rs" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -80,17 +79,21 @@ state machine. Contents:
   one program stage: the render thread reads the platform capture mailbox, composites
   the program mix from the render snapshot the control side publishes
   (`runtime/render.rs`) and reads the frame back, and the mixer thread polls the media
-  clock. Encode threads live in the encoder sessions, one per encoder profile in use,
-  shared by the outputs on that profile. Each output's own thread muxes FLV and
-  publishes it, or muxes MP4 and records it
+  clock. The render thread composites on the platform's GPU context when the interop
+  opens one, and samples the captured textures there with no CPU copy when the capture
+  backend can deliver them; otherwise it uses CPU frames, and its own device without a
+  context (see *Runtime*). Encode threads live in the encoder sessions, one per encoder
+  profile in use, shared by the outputs on that profile. Each output's own thread muxes
+  FLV and publishes it, or muxes MP4 and records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
   (`runtime/vcam.rs`).
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
-  mixer input has its fader and its sends (silenced while it is `muted`);
-  `meters.tick` carries their levels about ten times a second, with the master's true
+  mixer input has its fader and its sends (silenced while it is `muted`), scaled by
+  its activity gain (`activity.rs`): a `when_shown` source is heard only while the
+  Program mix shows it; `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
   `audio.reset_loudness` restarts its integrated loudness.
 - **History** (`history.rs`): per-client undo and redo
@@ -123,10 +126,16 @@ state machine. Contents:
   `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
   thread's output size (the capture filling it with no scene, the program scaled from
-  the canvas, a `display` source showing the capture) and nested-scene layers reused
+  the canvas, a `display` source showing the capture, the same for a GPU capture of
+  another size) and nested-scene layers reused
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
-  published snapshot (CPU stand-in), the pipeline against the platform fakes
+  published snapshot (CPU stand-in), which capture path an output takes and each
+  fallback, and an output compositing GPU capture frames, on a software device that
+  stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
+  the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, behind
+  `hw-tests` and ignored), the
+  pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
   stage-failure, late-tick, teardown, final-tick, link-loss, stalled-stop and
   blocked-send stop tests run without one),
@@ -163,13 +172,14 @@ state machine. Contents:
   engine in-process. The audio routing (`audio.rs` and
   `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
   batches and undo, `meters.tick` while a mixer is attached and none after,
-  `audio.reset_loudness`, and the master's true peak and loudness; `src/tests/audio.rs`
+  `audio.reset_loudness`, the master's true peak and loudness, and a `when_shown`
+  source's activity gain following scene switches, shown and hidden items and undo
+  (`activity.rs` checks reachability itself); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
   off closes its input and its meter and turning it on opens them again. The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
-Not here yet: live values, `when_shown`'s activity
-gain (D6), the audio and outputs snapshots, a GPU encode target, and
+Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
 the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -182,7 +192,6 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1a017eadc356877f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1, merging main's D5 (#240): the own-audio paragraph (Recorded::Own, synced on install, compared by identity) now says it closes when audio is off and opens muted and listed for the routing, as audio_sources.rs's open_own does; main's routing and clock-swap text holds beside it" }
 -->
 
 ### Engine and sessions
@@ -232,7 +241,9 @@ the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. D
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
-values and saved collection files in `src/tests.rs`, `src/tests/` and `tests/mcp.rs`). All of them
+values and saved collection files in `src/tests.rs`, `src/tests/` and `tests/mcp.rs`), and
+on Windows `jstream-platform-windows` (the GPU capture hardware test,
+`src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature). All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
@@ -408,14 +419,16 @@ changed. `video.snapshot` reads `rev` and the published snapshot together under 
 lock and hands both to the snapshot thread.
 
 `snapshot::compose` draws a `Shot` for both threads through a `jstream-render`
-`ResourceCache` keyed by `GpuKey`: a source's upload, the capture's, a nested scene's
-layer at its depth, and the program at the canvas size. An unchanged frame is not
+`ResourceCache` keyed by `GpuKey`: a source's upload, the capture's (an upload of a
+CPU frame, or an import of the platform's texture, `ResourceCache::import`), a nested
+scene's layer at its depth, and the program at the canvas size. An unchanged frame is not
 uploaded again, and each nested scene is redrawn into the layer it had
 (`render_into`), so a steady frame allocates no texture. Images no frame references
 are retired and freed after the GPU has finished with them. The program scene is drawn
 at the canvas: straight to the output when that is the canvas size (`video.snapshot`),
 else into a layer that a last pass scales to the output (the render thread draws at the
-encoder size). Without a program scene the output is the capture filling it, or black.
+encoder size). Without a program scene the output is the capture scaled to fill it, or
+black.
 A `display` source with no stored frame shows the pipeline's capture on the render
 thread and nothing in `video.snapshot`, which has no capture; a stored frame wins.
 That mapping holds until per-source capture exists.
@@ -618,6 +631,14 @@ brings the mixer in line with the collection under the collection lock:
   waits on the mixer thread ([R-RT-003](../../docs/RULES.md#R-RT-003)), and the
   `Routed` lock is the last one taken. The program stage's microphone and desktop
   inputs are not sources and keep sending to the master at unity.
+- each such input's activity gain (`activity.rs`, ADR-0028's "shown"): 1 for a source
+  that follows `always`; for a `when_shown` one, `min(1, Σ w)` over the roots that
+  reach it through visible items and nested scene sources whose audio is on. The roots
+  are the program scene (weight 1) and every nested scene source whose audio is on and
+  follows `always` (weight 1 each). The mixer applies it after the input's fader and
+  meter, scaling every send, and ramps to it over one block, so a cut never clicks
+  and the meter still reads a source that is off program. `scene.switch` and a batch
+  that moves program sync too, after program is reconciled.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
 reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
@@ -801,7 +822,11 @@ emits `stopping` and `stopped` as from `active`.
 The render thread reads the platform capture mailbox, composites the program mix of
 the render snapshot (see *Snapshots*) at 30 frames per second, repeats the last
 capture when the mailbox is empty, and reads the composite back as RGBA8 because this
-cut has no GPU encode target. Each tick first calls `RenderReader::adopt`, which
+cut has no GPU encode target. Which device it composites on, and how the capture
+reaches it, is chosen when the program stage opens (see [Runtime](#runtime)). On the GPU path it
+keeps the newest `GpuFrame` until a newer one replaces it, and the cache attaches the
+frame's hold only to the frame that draws it, so a held capture slot is the frame on
+screen and nothing more. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
 the snapshot it held to the program stage's `jstream-collector` thread. The GPU images the
@@ -837,11 +862,12 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 The render thread reuses its capture, composite and readback buffers, and its GPU
 textures through the cache. Each tick allocates one frame-sized buffer, the frame the
 encoder session takes ownership of (`VideoInput::push` cannot hand buffers back), the
-item list `compose` fills once per tick, the frame-fence callback, and the
-premultiplied copy of a capture that changed. A virtual camera's tap reuses the
-buffers its camera thread hands back, so it allocates only until they circulate; the
-camera thread allocates the BGRA frame it publishes, one per frame, off the render
-thread. The mixer likewise copies each block
+item list `compose` fills once per tick, the frame-fence callback, the premultiplied
+copy of a CPU capture that changed, and on the GPU path an import (a bind group) the
+first time each of the platform's capture textures is shown. A virtual camera's tap
+reuses the buffers its camera thread hands back, so it allocates only until they
+circulate; the camera thread allocates the BGRA frame it publishes, one per frame, off
+the render thread. The mixer likewise copies each block
 into the buffer `AudioInput::push` keeps. Not measured. The mixer thread
 polls the audio sources' inputs into 48 kHz stereo blocks. Encode
 sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
@@ -1021,7 +1047,8 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
-- `when_shown`'s activity gain (D6), filter
+- Activity gains that fade with a transition (T1: only cuts exist, so every weight
+  is 0 or 1), filter
   chains in the protocol (the mixer has them since D7b; the routing sets none yet), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
@@ -1034,7 +1061,6 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:ee964bed8bad32e1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -1047,7 +1073,21 @@ Design) at the encoder size: the program scene and the scenes it nests, with eve
 `display` source that has no stored frame showing the captured display. With no scene
 it draws the capture filling the frame. It repeats the last capture when the mailbox
 is empty, and reads the frame back. This cut encodes that CPU readback, and the
-readback is counted. The mixer thread polls the media clock and pushes 48 kHz stereo
+readback is counted (`OutputStats::readbacks`).
+
+**Capture path** (ARCH › GPU pipeline, step 6). Opening the program stage asks the
+platform's `GpuInterop` for its device. With one, the render thread's compositor opens on that
+`GpuContext`, and the capture backend is asked for a copy of itself on the context
+(`Capture::on_context`); a capture started from that copy delivers `GpuFrame`s, which
+the render thread samples where they are, with no CPU copy, and counts
+(`OutputStats::gpu_captures`). Each fallback is logged and keeps the output running on
+CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
+opens its own device, software adapter first), a backend with no GPU path or one that
+refuses the context, and a GPU capture that does not start. The render loop drops the
+held frame, the compositor and the capture stream before the context, so the
+platform's state goes first as `GpuContext` requires.
+
+The mixer thread polls the media clock and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs (see *Audio sources* in Design; the
 microphone and the desktop loopback while the collection has none), and meters each
 master block's true peak and loudness. Once the stage is up, the engine routes the
