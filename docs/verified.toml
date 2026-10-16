@@ -204,10 +204,10 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:9ca86438d4d9c457", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
+stamp = { hash = "b3:6daf20bd020ce509", by = "agent:youtube-sign-in", note = "Re-read: noun list now says youtube.* are UI-only with no tool, and youtube.* events are not returned to agents (ADR-0058 §3); R-API-002 carries the matching exception; the jstream-mcp README design says the same; access bullet unchanged" }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
-stamp = { hash = "b3:8eea55b34b97d6a9" }
+stamp = { hash = "b3:340acdb9358d89b0", by = "agent:youtube-sign-in", note = "Re-read: noun list now says youtube.* are UI-only with no tool, and youtube.* events are not returned to agents (ADR-0058 §3); R-API-002 carries the matching exception; the jstream-mcp README design says the same; access bullet unchanged" }
 
 ["ARCH#mcp"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -219,7 +219,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:3556c783961d4f89", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: MCP section names no timeout constants; still accurate after the hello bound" }
+stamp = { hash = "b3:8e8b691cee224983", by = "agent:youtube-sign-in", note = "Re-read: noun list now says youtube.* are UI-only with no tool, and youtube.* events are not returned to agents (ADR-0058 §3); R-API-002 carries the matching exception; the jstream-mcp README design says the same; access bullet unchanged" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
 stamp = { hash = "b3:0bc178fa258b5061" }
@@ -1569,10 +1569,10 @@ stamp = { hash = "b3:534ac6c88886c8f2" }
 stamp = { hash = "b3:943bb9518712a4b5" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:314c5701cc782d41", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: 3 s hello bound for initialize and tool-call hello matches HELLO_TIMEOUT in server.rs; error-table row matches the disconnected retry message" }
+stamp = { hash = "b3:f267fe3e5cfdd2c9", by = "agent:youtube-sign-in", note = "Re-read: tools grouped by noun from the protocol schema; added that the youtube noun gets no tool per ADR-0058 §3 (exclusion lands with the YouTube commands); ARCH MCP now says the same" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:9ca86438d4d9c457" }
+stamp = { hash = "b3:6daf20bd020ce509", by = "agent:youtube-sign-in", note = "Re-read: tools grouped by noun from the protocol schema; added that the youtube noun gets no tool per ADR-0058 §3 (exclusion lands with the YouTube commands); ARCH MCP now says the same" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -2046,7 +2046,7 @@ stamp = { hash = "b3:00861431b6c9fa35", by = "agent:youtube-sign-in", note = "Re
 stamp = { hash = "b3:1783d2b84f435d63" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-002"]
-stamp = { hash = "b3:8eea55b34b97d6a9" }
+stamp = { hash = "b3:340acdb9358d89b0", by = "agent:youtube-sign-in", note = "Re-read against R-API-002's new youtube exception: this section's noun.verb naming and tag-is-name claims still hold; youtube.stats link unchanged" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -2991,7 +2991,7 @@ stamp = { hash = "b3:66add461f96cc3f3", by = "agent:claude@session_01SHnfsdCupik
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["RULES#compatibility"."body"]
-stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): R-API-003 holds: schema stays 1 and a pre-D5 v1 file now loads with its audio sources' master sends, as it did on main" }
+stamp = { hash = "b3:7c0a5283f684f83d", by = "agent:youtube-sign-in", note = "Re-read: R-ARCH-001 and R-API-002 now carry the youtube exception ADR-0058 §3 requires; the other rules in the section are unchanged and consistent with it" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:7ab4accbf98f6662" }
