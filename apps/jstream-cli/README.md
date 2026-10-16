@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:63ace699b3b92650", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b merge of #223 at 2971eae (main at 94fb25d, protocol 0.20): re-read; main's audio, vcam and e2e text holds beside this PR's optional YouTube client and MCP youtube-tool wiring" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -35,8 +34,7 @@ Contents (a first cut):
 - **Blocking** (`block.rs`): a thread-parking `block_on` for `Control`'s futures.
 - **MCP proxy** (`mcp.rs`): `jstream-cli mcp`, the stdio MCP proxy
   ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): `jstream-mcp`'s server over the
-  same session the other commands open, listing the `youtube` tool only when the engine
-  has YouTube.
+  same session the other commands open.
 
 Not here yet: a default address and token file ([open question 5](#design)). A real
 engine is served by [`jstream-daemon`](../jstream-daemon/README.md#usage): point
@@ -48,7 +46,6 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:9118e0f489571a80", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b merge of #223 at 2971eae (main at 94fb25d, protocol 0.20): re-read; main's audio, vcam and e2e text holds beside this PR's optional YouTube client and MCP youtube-tool wiring" }
 -->
 
 ```sh
@@ -208,10 +205,6 @@ for example:
   with one undo history; `hello` is sent at `initialize` (the proxy has already
   connected, and the server closes a connection that hasn't said `hello` in time), with
   the MCP client's name (`clientInfo.name`) instead of `jstream-cli`.
-- **The `youtube` tool only when the engine has YouTube.** Before serving, the proxy
-  asks `youtube.status` over a second, short session (as `jstream-cli`). It lists the
-  `youtube` tool unless the answer is `unavailable`, which is what an engine without a
-  user-supplied OAuth client says, or the question fails.
 - **A lost engine doesn't stop the proxy.** Each tool call that needs the engine is then
   answered with the `disconnected` tool error, and `describe_api` still works, as does
   `events`, which returns what was buffered and says the feed ended. The proxy doesn't
@@ -246,7 +239,6 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:78923f34c25a90cd", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b merge of #223 at 2971eae (main at 94fb25d, protocol 0.20): re-read; main's audio, vcam and e2e text holds beside this PR's optional YouTube client and MCP youtube-tool wiring" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -290,11 +282,7 @@ verified = { hash = "b3:78923f34c25a90cd", by = "agent:claude@session_01YKRrREb5
   no runtime). Like `ws`, it is always built, with no feature: `mcp` is part of what the
   CLI is for (ARCH), and it adds no third-party crate. It doesn't send `hello` first,
   unlike the other commands: the server does, at `initialize`, with the MCP client's
-  name, so the audit log names the agent rather than the CLI. Whether to list the
-  `youtube` tool (`Server::with_youtube`) is asked over a separate short session for
-  the same reason: asking over the proxy's own would say `hello` as the CLI first. A
-  failed question hides the tool and doesn't stop the proxy, since the tool would fail
-  on such an engine anyway. A lost connection follows `jstream-mcp`'s
+  name, so the audit log names the agent rather than the CLI. A lost connection follows `jstream-mcp`'s
   design: a `disconnected` tool error per call that the model can read and act on,
   while the transport keeps going until the MCP client closes stdin. Exiting instead
   would surface to the agent only as a crashed server. The proxy doesn't reconnect by
@@ -307,7 +295,7 @@ verified = { hash = "b3:78923f34c25a90cd", by = "agent:claude@session_01YKRrREb5
   code `io`.
 - **Tests.** The unit tests drive `mcp` through `run` with in-memory input and output
   (`initialize`, `tools/list`, `tools/call`, a refused connection, a lost one and a
-  failing input), `mcp.rs`'s own test checks when the `youtube` tool is listed, and
+  failing input), and
   `tests/mcp.rs` runs the binary's `mcp` against a real `jstream-server` on a loopback
   port, through a server shutdown, and with an agent that idles past a short handshake
   timeout after `initialize` and still has its session. `jstream-server` and tokio (for the runtime the test

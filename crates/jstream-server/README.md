@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:61fa63eb0229dfa0", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: Configuration bullet adds whether MCP lists the youtube tool (ServerConfig::mcp_youtube); matches config.rs" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -34,8 +33,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Web UI** (`ui.rs`): the UI bundle's files from `ServerConfig::ui_dir`, with their
   types and a Content Security Policy.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
-  origins, connection limits, the MCP switch, its limits and whether it lists the
-  `youtube` tool, the UI directory) and
+  origins, connection limits, the MCP switch and its limits, the UI directory) and
   `Token`, the control token.
 - **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
   an accepted upgrade request in time.
@@ -58,7 +56,6 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:666ecd34d6ecd1ef", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b merge of #223 at 2971eae (main at 94fb25d, protocol 0.20): re-read; main's audio, vcam and e2e text holds beside this PR's optional YouTube client and MCP youtube-tool wiring" }
 -->
 
 ### Listening and admission
@@ -134,6 +131,10 @@ the default:
 | `max_connections` | 32 open WebSocket connections | An upgrade that passes the checks above gets 503 and no session. The slot is taken just before the upgrade and freed when the connection ends. |
 | `header_read_timeout` | 10 s from accept to an accepted upgrade request | The connection is dropped, unanswered. |
 | `handshake_timeout` | 10 s from accept to a successful `hello` | The connection is closed with close code 1008 (see *Sessions*). |
+
+`Server::bind` refuses a zero limit or timeout, and a zero `max_mcp_sessions` or
+`mcp_idle_timeout` (see *MCP over streamable HTTP*), with `ServerError::InvalidLimit` before opening the
+socket, since the server would refuse or drop everything.
 
 The header-read timeout is kept on the socket, by the listener (`listener.rs`), since
 hyper's own isn't reachable through `axum::serve`: until the upgrade handler accepts a
@@ -245,11 +246,18 @@ task speaks the envelope
 
 `serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
 open connection (close code 1001), so their clients' pending and later calls fail with
-`Disconnected` and their event streams end. Whenever the server closes a connection,
-it first ends the session's event subscription, then sends what the outbox still holds
-before the close frame. A client that doesn't take them within a short timeout
-(`CLOSE_TIMEOUT`) is dropped without one, so a client that stopped reading can't keep
-its connection or session open.
+`Disconnected` and their event streams end. A connection handles nothing it reads once
+the server is shutting down, so a call sent after the shutdown is never answered. It
+returns once every WebSocket connection has finished closing (as below), so a host that
+exits right after it doesn't cut a close short. Whenever the server closes a
+connection, it first ends the session's event subscription, then sends what the outbox
+still holds before the close frame, then reads and drops what the client still sends
+until the client's own close frame or the end of the stream, and only then closes the
+socket. Closing it with client data unread would make the kernel reset the connection,
+and on macOS and Windows a reset discards what the client hasn't read yet, the close
+frame and last replies included. A client that doesn't finish this within a short
+timeout (`CLOSE_TIMEOUT`) is dropped, so a client that stopped reading can't keep its
+connection or session open, nor hold up the shutdown.
 
 ### MCP over streamable HTTP
 
@@ -285,10 +293,7 @@ bytes from the OS's random source (`getrandom`) as 32 hex digits. It is not a se
 that admits anyone: every request still needs the token. Requests that carry no session
 share one stateless server, opened at the first of them, so those clients share a
 session ([jstream-mcp › Open questions](../jstream-mcp/README.md#open-questions)).
-Requests to one session may run concurrently. Each server lists the `youtube` tool
-(`jstream_mcp::Server::with_youtube`) only with `ServerConfig::mcp_youtube` on, which
-`ServerConfig::new` leaves off: the host turns it on when its engine has a YouTube
-setup, from an OAuth client the user configured.
+Requests to one session may run concurrently.
 
 **Limits.** At most `max_mcp_sessions` (default 16) sessions are open. One unused for
 `mcp_idle_timeout` (default 30 minutes) is ended, and its `Control` session dropped,

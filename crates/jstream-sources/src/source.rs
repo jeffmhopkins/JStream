@@ -1,7 +1,9 @@
 //! The `Source` and `SourceKind` seams, and what a source is created with.
 
 use crate::SourceError;
-use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_browser::BrowserBackend;
+use jstream_media::{AudioFormat, MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame};
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
 use std::fs::File;
 use std::io::Read;
@@ -38,6 +40,35 @@ pub trait Source: Send {
     /// [`SourceError::NotLive`] when a non-live parameter changed, and
     /// [`SourceError::Setting`] when a value doesn't have its descriptor's type.
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError>;
+
+    /// The source's frame as a texture on the engine's GPU device, for kinds whose
+    /// frames never reach the CPU (`browser`, ADR-0021): when it is `Some`, it is what
+    /// the source shows, and [`frame`](Self::frame) is only a transparent stand-in of
+    /// the same size. `None` (the default, and a GPU source before its first frame)
+    /// means [`frame`](Self::frame) is the source's picture.
+    fn gpu_frame(&mut self) -> Option<GpuFrame> {
+        None
+    }
+
+    /// The source's own audio, for kinds that produce sound as well as frames
+    /// (`browser`), which the engine records into a mixer input as it records a device.
+    /// `None` (the default) means the source has none. The same source returns the same
+    /// audio for as long as it runs.
+    fn audio(&self) -> Option<Arc<dyn SourceAudio>> {
+        None
+    }
+}
+
+/// A source's own audio ([`Source::audio`]): a stream the engine records into a mixer
+/// input the way it records an audio device (`AudioIo::open_input` in
+/// `jstream-platform`).
+pub trait SourceAudio: Send + Sync {
+    /// The format packets arrive in: interleaved `f32`, at a fixed rate and layout.
+    fn format(&self) -> AudioFormat;
+
+    /// Starts handing packets to `handler`, on the source's own audio thread, until the
+    /// returned stream is dropped. Opening again replaces the earlier handler.
+    fn open(&self, handler: Box<dyn AudioInputHandler>) -> Box<dyn AudioStream>;
 }
 
 /// A source kind: its descriptor (`kind.describe`) and how to create its sources.
@@ -58,14 +89,28 @@ pub trait SourceKind: Send + Sync {
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError>;
 }
 
-/// What sources are created with: where asset references point, and how much a
-/// decoded asset may take.
-#[derive(Clone, Debug, Default)]
+/// What sources are created with: where asset references point, how much a decoded
+/// asset may take, and the backends the kinds that need one run on.
+#[derive(Clone, Default)]
 pub struct Context {
     /// The folders behind asset roots.
     pub assets: AssetRoots,
     /// Size limits for decoded assets.
     pub limits: Limits,
+    /// The browser engine `browser` sources open their pages in (ADR-0021). `None`
+    /// until the host injects one; `browser` sources then fail with
+    /// [`SourceError::NoBackend`].
+    pub browser: Option<Arc<dyn BrowserBackend>>,
+}
+
+impl std::fmt::Debug for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Context")
+            .field("assets", &self.assets)
+            .field("limits", &self.limits)
+            .field("browser", &self.browser.as_ref().map(|_| "BrowserBackend"))
+            .finish()
+    }
 }
 
 /// The folders behind the `collection` and `app` asset roots. `absolute` paths need

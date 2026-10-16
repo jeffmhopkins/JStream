@@ -172,12 +172,13 @@ impl Engine {
         self
     }
 
-    /// Gives the engine YouTube (ADR-0041): the user's own Google OAuth client, the
-    /// HTTPS transport and the store for the account's refresh token. The host calls this
-    /// only when the user configured a client; JStream embeds none. The YouTube actions
+    /// Gives the engine YouTube (ADR-0041): a Google OAuth client, the HTTPS transport
+    /// and the store for the account's refresh token. The host passes
+    /// [`YoutubeSetup::built_in`] when the build has a built-in client (ADR-0058), or a
+    /// developer's override built with [`YoutubeSetup::new`]. The YouTube actions
     /// and queries then work, and an output with a `youtube` target can start. Without
     /// it, YouTube's API features are off: `youtube.status` reports `unavailable`, the
-    /// other YouTube calls fail with `action_failed` saying no client is configured, and
+    /// other YouTube calls fail with `action_failed` saying the build has no client, and
     /// clients hide them. Reads the store once, here: a token kept by an earlier sign-in
     /// signs the engine in. Configure this before [`connect`](Self::connect).
     #[must_use]
@@ -252,7 +253,7 @@ impl Engine {
                 .live
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
-            state.audio.sync(state.graph.state());
+            state.audio.sync(state.graph.state(), state.live.audio());
             state.route_audio();
             // The loaded collection is what the program mix draws now.
             state.publish_render();
@@ -323,6 +324,21 @@ impl Engine {
         host.has_vcam.store(vcam.is_some(), Ordering::Release);
         *lock(&host.vcam) = vcam;
         *lock(&host.backends) = Some(backends);
+        self
+    }
+
+    /// Gives `browser` sources the browser engine they open their pages in (ADR-0021).
+    /// Without one, a `browser` source shows nothing and logs that no backend is set.
+    /// The host also hands the backend a GPU device (`use_device`): for now one it opens
+    /// on the media adapter itself, since the engine doesn't hand out its own yet.
+    #[must_use]
+    pub fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
+        {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state.live.set_browser(browser);
+            state.live.sync(state.graph.state());
+        }
         self
     }
 
@@ -425,7 +441,9 @@ impl Engine {
             let mut state = lock(&self.shared.state);
             let state = &mut *state;
             let inputs = state.audio.inputs();
-            state.routing.attach(mixer, state.graph.state(), &inputs)
+            state
+                .routing
+                .attach(mixer, state.graph.state(), state.studio.program(), &inputs)
         };
         let shared = Arc::clone(&self.shared);
         Box::new(move || lock(&shared.state).routing.detach(generation))
@@ -1998,8 +2016,7 @@ impl State {
     ) {
         self.outputs.sync(self.graph.state());
         self.live.sync(self.graph.state());
-        self.audio.sync(self.graph.state());
-        self.route_audio();
+        self.audio.sync(self.graph.state(), self.live.audio());
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -2010,6 +2027,8 @@ impl State {
         // Edits that deleted the program scene, or created the first scene, move
         // program before the mix is planned; that event follows their `state.changed`.
         let moved = self.studio.reconcile(self.graph.state());
+        // After program is reconciled: a scene edit can change what is shown.
+        self.route_audio();
         self.publish_render();
         self.subscribers.emit(
             &Event::StateChanged {
@@ -2044,7 +2063,9 @@ impl State {
             Action::SceneSwitch { scene_id } => {
                 if self.studio.switch(self.graph.state(), &scene_id)? {
                     // The program mix shows the new scene from the next frame: a cut.
+                    // Its `when_shown` audio follows, ramping over one mixer block.
                     self.publish_render();
+                    self.route_audio();
                     self.emit_studio(client_id, request_id, wake);
                 }
                 return Ok(CallResult::Action { result: None });
@@ -2128,7 +2149,8 @@ impl State {
     /// inputs included.
     fn route_audio(&mut self) {
         let inputs = self.audio.inputs();
-        self.routing.sync(self.graph.state(), &inputs);
+        self.routing
+            .sync(self.graph.state(), self.studio.program(), &inputs);
     }
 
     /// Emits a `meters.tick` if the program mixer runs, first routing any audio source
@@ -2161,7 +2183,10 @@ impl State {
 impl LiveHost for Shared {
     fn install(&self, built: Built) {
         let mut state = lock(&self.state);
+        let state = &mut *state;
         if state.live.install(built) {
+            // A source built with audio of its own is recorded from now on.
+            state.audio.sync(state.graph.state(), state.live.audio());
             state.publish_render();
         }
     }

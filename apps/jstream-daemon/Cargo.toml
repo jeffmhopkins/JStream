@@ -43,7 +43,8 @@ tracing-subscriber.workspace = true
 # key store, and the Media Foundation check that runs at startup.
 [target.'cfg(windows)'.dependencies]
 jstream-platform-windows.workspace = true
-# `HttpsTransport`, the transport YouTube's calls go through (`Engine::with_youtube`).
+# `HttpsTransport`, the transport YouTube's calls go through (`Engine::with_youtube`), and
+# `BUILT_IN_CLIENT_ID`, to skip the transport while the built-in client is empty.
 jstream-youtube.workspace = true
 
 [dev-dependencies]

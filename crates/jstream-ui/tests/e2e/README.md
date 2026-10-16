@@ -19,7 +19,6 @@ input on the canvas.
 ## Harness
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests/e2e/*.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:26b46b328e65174f", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "deny fix: the harness dropped anyhow (banned outside apps, R-RS-003) for Box<dyn Error>; behaviour and text unchanged" }
 -->
 
 - **The mock daemon** (`mock-daemon/`, the test-only crate `jstream-ui-e2e`) puts
@@ -49,15 +48,14 @@ verified = { hash = "b3:26b46b328e65174f", by = "agent:claude@session_016cfwAwen
 ## What the tests cover
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/specs/**"]
-verified = { hash = "b3:8c305e610d98ee84", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 -->
 
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
   connects with the browser's credentials; the status bar shows the URL, protocol and
   revision; disconnecting returns to the form with the token field empty; a refused
   upgrade shows its reason; the token never appears in the page, its storage or its
-  cookies. A URL the page's policy refuses leaves the form on "Connecting…" (#305): that
-  test is marked `test.fail` until the browser client is fixed.
+  cookies. A URL the page's policy refuses shows a reason and re-enables Connect,
+  although Chromium sends that socket an `error` event and no `close` (#305).
 - **Outputs** (`outputs.spec.js`): adding a stream and a recording; a stream can't start
   or go live until its key is set; the key field empties on save and the key never
   appears in the page; go live and end stream; clearing the key; deleting; editing the
@@ -71,7 +69,6 @@ verified = { hash = "b3:8c305e610d98ee84", by = "agent:claude@session_016cfwAwen
 ## Running them
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/playwright.config.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:dbac1e8d9fa742df", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 -->
 
 ```sh

@@ -153,18 +153,6 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
     } = proxy(&url, "mcp-e2e-token");
 
     initialize(&mut stdin, &mut stdout);
-    // The mock engine has no YouTube setup, so the proxy hides YouTube's tool.
-    let tools = exchange(
-        &mut stdin,
-        &mut stdout,
-        &json!({"jsonrpc": "2.0", "id": 9, "method": "tools/list"}),
-    );
-    let names: Vec<_> = tools["result"]["tools"]
-        .as_array()
-        .map(|tools| tools.iter().filter_map(|t| t["name"].as_str()).collect())
-        .unwrap_or_default();
-    assert!(names.contains(&"scene"), "{tools}");
-    assert!(!names.contains(&"youtube"), "{tools}");
     let created = exchange(
         &mut stdin,
         &mut stdout,

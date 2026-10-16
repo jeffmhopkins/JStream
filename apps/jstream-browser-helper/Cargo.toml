@@ -1,0 +1,26 @@
+[package]
+name = "jstream-browser-helper"
+version = "0.0.0"
+description = "CEF's subprocess exe for browser sources: Chromium's renderer, GPU and utility processes start as it, so the engine's exe never does."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 6
+summary = "`jstream-browser-helper` (CEF's subprocess exe, ADR-0046)"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[features]
+# Built with CEF (Windows): the exe hands its process to CEF. Without it, it only says it
+# was built without CEF. Off by default, as in `jstream-browser`.
+cef = ["jstream-browser/cef"]
+# Compile-checks it without building CEF, for CI's clippy.
+dox = ["cef", "jstream-browser/dox"]
+
+[dependencies]
+jstream-browser.workspace = true

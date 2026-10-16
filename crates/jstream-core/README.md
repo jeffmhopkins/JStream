@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:e0b07486a2609f25", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; YouTube bullet and with_youtube in the builder list sit beside D5's audio text; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -33,7 +32,8 @@ state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
-  `with_history_limit` and `with_collection_file`;
+  `with_history_limit`, `with_browser` (the browser engine `browser` sources open pages
+  in) and `with_collection_file`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -43,9 +43,11 @@ state machine. Contents:
   history and the subscribers behind one lock, and the drop ledger behind another, and executes
   batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
 - **YouTube** (`youtube.rs`, [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)):
-  `with_youtube(YoutubeSetup)` gives the engine the user's own Google OAuth client
-  (JStream ships none, so a host calls it only when the user configured one), the HTTPS
-  transport and the `OAuthTokenStore`. It holds one `jstream-youtube` `LiveClient`
+  `with_youtube(YoutubeSetup)` gives the engine a Google OAuth client, the HTTPS
+  transport and the `OAuthTokenStore`. `YoutubeSetup::built_in` uses JStream's built-in
+  client (`jstream_youtube::BUILT_IN_CLIENT_ID`, ADR-0058), and is `None` while that is
+  empty, as it is until the maintainer fills it in; `YoutubeSetup::new` takes another
+  client, for a developer override. It holds one `jstream-youtube` `LiveClient`
   (one account, its refresh token stored under the fixed opaque ID `TOKEN_ACCOUNT`, so
   no email or other personal detail names the credential) and runs the `youtube.*`
   actions and queries with no engine lock held. `youtube.sign_in` asks for the full
@@ -76,9 +78,10 @@ state machine. Contents:
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
   on, added when the source is created or turned on and removed when it is deleted or
-  turned off, and listed for the audio routing,
-  which sets its fader, mute and sends; while there is none, the default microphone
-  and desktop audio, sent to master at unity (see *Audio sources* in
+  turned off, and one for each running source with audio of its own whose audio is on,
+  a `browser` page's; each is listed for the audio routing, which sets its fader, mute
+  and sends. While there is no audio-only source, the default microphone and desktop
+  audio are recorded too, sent to master at unity (see *Audio sources* in
   [Design](#design)).
 - **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
@@ -100,8 +103,9 @@ state machine. Contents:
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
-  mixer input has its fader and its sends (silenced while it is `muted`);
-  `meters.tick` carries their levels about ten times a second, with the master's true
+  mixer input has its fader and its sends (silenced while it is `muted`), scaled by
+  its activity gain (`activity.rs`): a `when_shown` source is heard only while the
+  Program mix shows it; `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
   `audio.reset_loudness` restarts its integrated loudness.
 - **History** (`history.rs`): per-client undo and redo
@@ -178,13 +182,14 @@ state machine. Contents:
   engine in-process. The audio routing (`audio.rs` and
   `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
   batches and undo, `meters.tick` while a mixer is attached and none after,
-  `audio.reset_loudness`, and the master's true peak and loudness; `src/tests/audio.rs`
+  `audio.reset_loudness`, the master's true peak and loudness, and a `when_shown`
+  source's activity gain following scene switches, shown and hidden items and undo
+  (`activity.rs` checks reachability itself); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
   off closes its input and its meter and turning it on opens them again. The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
-Not here yet: live values, `when_shown`'s activity
-gain (D6), the audio and outputs snapshots, a GPU encode target, and
+Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
 the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -197,7 +202,6 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:22589b5428690b80", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; start_pipeline merges own_target (record, vcam) with the youtube target; YouTube text from round 7 fixes holds beside D5 audio and G3b vcam text; tests paragraph lists both" }
 -->
 
 ### Engine and sessions
@@ -300,7 +304,7 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **YouTube** actions and queries (`youtube.*`) run with no engine lock held, since
   most call the Live API (see *YouTube* under *Outputs*). Without `with_youtube`,
   YouTube's API features are off: `youtube.status` answers `unavailable` and the others
-  `action_failed` saying no OAuth client is configured, and clients hide them.
+  `action_failed` saying the build has no OAuth client, and clients hide them.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -455,7 +459,12 @@ animation restarts with it. A build that fails is logged at `warn` with the sour
 and an error that never names a host path, and the source draws nothing; a kind that
 is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 (`audio_input`, `desktop_audio`, `app_audio`, whose descriptors have no video) get no
-`Source`: the program stage records them (*Audio sources*).
+`Source`: the program stage records them (*Audio sources*). A `browser` source opens
+its page in the backend the host gave `with_browser` (none by default, so it draws
+nothing and logs `NoBackend`); giving one rebuilds the `browser` sources already there.
+Its page's picture is a GPU frame the program mix doesn't draw yet, so it shows as
+transparent. `LiveSources::audio` lists every running source's own audio
+(`Source::audio`) for *Audio sources*.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source, or none while the source's
@@ -490,7 +499,18 @@ pass). Each recording input registers an `AudioInputDrops` source while it recor
 so its drops are latched when it closes. Opening a device never runs under the
 collection lock; the thread takes only its own lock, the wanted set's and the drop
 ledger's. When the program stage stops it joins the thread and closes every input
-after the mixer thread has stopped. While the collection has no audio source, the
+after the mixer thread has stopped.
+
+A running source with audio of its own (a `browser` page's, from
+`LiveSources::audio`) is wanted too, as `Recorded::Own`: `sync` takes those beside the
+graph, and also runs whenever a build installs, so a page's audio is recorded once its
+source is built. Its input is added in the format the source reports and fed by
+`SourceAudio::open`, and is replaced when the source is built again (compared by
+identity) and closed when it is deleted or its audio is turned off. Like an audio
+source's, it opens muted and is listed for the routing. A failed stream is reopened
+like a device's. Such audio doesn't count as an audio source for the defaults below.
+
+While the collection has no audio source, the
 program records the default microphone and desktop audio, as it did before audio
 sources existed, so an earlier collection is not silent; the first audio source
 replaces them, and keeps them away while its audio is off. Whether a source is recording or unavailable is not reported to
@@ -622,6 +642,14 @@ brings the mixer in line with the collection under the collection lock:
   waits on the mixer thread ([R-RT-003](../../docs/RULES.md#R-RT-003)), and the
   `Routed` lock is the last one taken. The program stage's microphone and desktop
   inputs are not sources and keep sending to the master at unity.
+- each such input's activity gain (`activity.rs`, ADR-0028's "shown"): 1 for a source
+  that follows `always`; for a `when_shown` one, `min(1, Σ w)` over the roots that
+  reach it through visible items and nested scene sources whose audio is on. The roots
+  are the program scene (weight 1) and every nested scene source whose audio is on and
+  follows `always` (weight 1 each). The mixer applies it after the input's fader and
+  meter, scaling every send, and ramps to it over one block, so a cut never clicks
+  and the meter still reads a source that is off program. `scene.switch` and a batch
+  that moves program sync too, after program is reconciled.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
 reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
@@ -674,8 +702,9 @@ plus the video sessions and hardware sessions open
 guess a hardware cap. A hardware session limit fails the start with the encoder's own
 error for now, not a session-limit code.
 
-**YouTube.** `with_youtube(YoutubeSetup)` gives the engine the user's own Google OAuth
-client (JStream embeds none; without one YouTube's API features are off), the HTTPS
+**YouTube.** `with_youtube(YoutubeSetup)` gives the engine a Google OAuth client
+(JStream's built-in one, empty for now, or a developer's override; without one
+YouTube's API features are off), the HTTPS
 transport and an `OAuthTokenStore` (`youtube.rs`,
 [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)). JStream holds one
 account: its refresh token sits under the fixed account ID `TOKEN_ACCOUNT`
@@ -1067,7 +1096,8 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
-- `when_shown`'s activity gain (D6), filter
+- Activity gains that fade with a transition (T1: only cuts exist, so every weight
+  is 0 or 1), filter
   chains in the protocol (the mixer has them since D7b; the routing sets none yet), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
@@ -1080,7 +1110,6 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:ee964bed8bad32e1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

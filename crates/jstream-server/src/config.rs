@@ -68,6 +68,10 @@ impl fmt::Debug for Token {
 }
 
 /// How the server listens and whom it lets in.
+///
+/// Every connection limit and timeout must be greater than zero:
+/// [`Server::bind`](crate::Server::bind) refuses a zero one
+/// ([`ServerError::InvalidLimit`]).
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     /// The address to listen on. [`ServerConfig::new`] uses `127.0.0.1` and an ephemeral
@@ -110,11 +114,6 @@ pub struct ServerConfig {
     /// How long an MCP session may go unused before it is ended, and its `Control`
     /// session with it. [`ServerConfig::new`] sets 30 minutes.
     pub mcp_idle_timeout: Duration,
-    /// Whether MCP lists the `youtube` tool
-    /// ([`jstream_mcp::Server::with_youtube`]). The host sets it when the engine has a
-    /// YouTube setup, from an OAuth client the user configured; [`ServerConfig::new`]
-    /// leaves it off, so the tool is hidden.
-    pub mcp_youtube: bool,
     /// The web UI's built bundle (`trunk build`'s `dist` directory), served at every
     /// path the API doesn't use, behind the same checks, with a browser's `Basic`
     /// credentials carrying the token. [`Server::bind`](crate::Server::bind) refuses one
@@ -138,15 +137,69 @@ impl ServerConfig {
             mcp: false,
             max_mcp_sessions: MAX_MCP_SESSIONS,
             mcp_idle_timeout: MCP_IDLE_TIMEOUT,
-            mcp_youtube: false,
             ui_dir: None,
+        }
+    }
+
+    /// Refuses a zero connection limit or timeout ([`ServerError::InvalidLimit`]): the
+    /// server would refuse or drop every connection or MCP session. Checked by
+    /// [`Server::bind`](crate::Server::bind) before anything is opened.
+    pub(crate) fn check_limits(&self) -> Result<(), ServerError> {
+        let zero = [
+            ("max_connections", self.max_connections == 0),
+            ("handshake_timeout", self.handshake_timeout.is_zero()),
+            ("header_read_timeout", self.header_read_timeout.is_zero()),
+            ("max_mcp_sessions", self.max_mcp_sessions == 0),
+            ("mcp_idle_timeout", self.mcp_idle_timeout.is_zero()),
+        ];
+        match zero.into_iter().find(|&(_, is_zero)| is_zero) {
+            Some((field, _)) => Err(ServerError::InvalidLimit { field }),
+            None => Ok(()),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Token;
+    use super::{ServerConfig, Token};
+    use crate::error::ServerError;
+    use std::time::Duration;
+
+    /// Sets one field of a config to zero.
+    type Zero = fn(&mut ServerConfig);
+
+    /// #140 N3: a zero limit or timeout is refused, naming the field; the defaults pass.
+    #[test]
+    fn zero_limits_and_timeouts_are_refused() {
+        let Ok(token) = Token::new("abc") else {
+            panic!("a valid token");
+        };
+        let config = ServerConfig::new(token);
+        assert!(config.check_limits().is_ok(), "the defaults");
+        let cases: [(&str, Zero); 5] = [
+            ("max_connections", |c| c.max_connections = 0),
+            ("handshake_timeout", |c| {
+                c.handshake_timeout = Duration::ZERO
+            }),
+            ("header_read_timeout", |c| {
+                c.header_read_timeout = Duration::ZERO
+            }),
+            ("max_mcp_sessions", |c| c.max_mcp_sessions = 0),
+            ("mcp_idle_timeout", |c| c.mcp_idle_timeout = Duration::ZERO),
+        ];
+        for (name, zero) in cases {
+            let mut bad = config.clone();
+            zero(&mut bad);
+            match bad.check_limits() {
+                Err(ServerError::InvalidLimit { field }) => assert_eq!(field, name),
+                other => panic!("{name}: expected InvalidLimit, got {other:?}"),
+            }
+        }
+        let mut small = config;
+        small.max_connections = 1;
+        small.handshake_timeout = Duration::from_millis(1);
+        assert!(small.check_limits().is_ok(), "small but nonzero");
+    }
 
     #[test]
     fn tokens_must_fit_a_header_and_never_print() {

@@ -13,11 +13,11 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:1dd9fbbaa96189c9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; youtube noun listed only when the host adds it, beside main's audio, bus and send; holds" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
-Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)). It is written against
+Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)), except YouTube's account
+features, which are for people, through the UI (ADR-0058 §3). It is written against
 `dyn Control` and `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host hands it a session, in process
 or over the WebSocket API. Layer 3: it builds on `jstream-control` (layer 2) and needs no
@@ -29,9 +29,11 @@ Contents (a first cut; [Design](#design) explains the choices):
   serves. A `video.snapshot` result leads with an image content block, the only place
   its PNG appears.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
-  and the decoding of tool arguments into protocol calls.
+  less the people-only `youtube.*` ops (`PEOPLE_ONLY`), and the decoding of tool
+  arguments into protocol calls.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
-  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`.
+  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`;
+  `youtube.*` events are dropped.
 - **JSON-RPC** (`jsonrpc.rs`): parsing one message and building replies.
 - **stdio transport** (`stdio.rs`): `serve_stdio`, newline-delimited messages over any
   `BufRead`/`Write` pair.
@@ -45,7 +47,6 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:e5907cbd6e00ed5a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; default list is main's 18 tools, with_youtube adds the 19th, snapshot taken with it (tests.rs); holds" }
 -->
 
 ### Tools
@@ -56,14 +57,14 @@ generated from the protocol's JSON Schema when a `Server` is built: every varian
 named after its noun
 takes it as its `op` argument. A command added to the protocol becomes an op with no
 change here, and a new noun becomes a new tool. The generated list is in the snapshot
-below; its shape is the following. `Server::new` leaves the `youtube` tool out, since
-YouTube's API features are off unless the user configured their own Google OAuth
-client; a host whose engine has a YouTube setup lists it with `Server::with_youtube`.
-The snapshot is taken with it.
+below; its shape is the following. The protocol's `youtube.*` ops get no tool, and a
+call naming one is an unknown op, so none reaches the engine: YouTube is for people,
+through the UI (ADR-0058 §3). The `events` feed drops `youtube.*` events for the same
+reason. `describe_api` still returns the whole schema, YouTube included.
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio`, `video`, and `youtube` when the host adds it, today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -148,7 +149,9 @@ client introduces itself: at `initialize` (handshake-based revisions) with
 `jstream-server` closes a connection that hasn't completed its handshake within its
 handshake timeout ([jstream-server › Design](../jstream-server/README.md#design)), so the
 session must open before the agent goes idle, not at its first tool call. If that
-`hello` fails, the request still succeeds, and a client that skips both (a stateless
+`hello` fails, or isn't answered within 3 s (well under that handshake timeout, so an
+engine that accepted the connection and then hangs doesn't hold `initialize` until it
+closes), the request still succeeds, and a client that skips both (a stateless
 client going straight to `tools/call`) gets its `hello` before the next tool call that
 needs the engine, which reports a failure. Later names don't change the session.
 `describe_api`, argument errors and `events` reads never call the engine
@@ -189,7 +192,8 @@ Consequences). A tick carries running totals, so the feed keeps only the newest 
 outside the buffer, and every read returns it as `stats`; an agent still sees the drop
 counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
 counted in `dropped`. `meters.tick`, about ten a second while the mixer runs, is kept
-the same way as `meters`: each one is a full reading of the levels. A read drains
+the same way as `meters`: each one is a full reading of the levels. `youtube.*` events
+are dropped as they arrive and take no `seq`: YouTube is for people (ADR-0058 §3). A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 
@@ -218,8 +222,9 @@ buffer and page sizes, so agents don't need this page.
 
 ### Async and transports
 
-`Server::handle` is an `async fn` whose future is `Send` and only awaits the `Control`
-futures, so any executor can run it, and `jstream-server` can mount it inside axum.
+`Server::handle` is an `async fn` whose future is `Send` and awaits only the `Control`
+futures and the hello wait's timer, which its own thread wakes, so any executor can run
+it, and `jstream-server` can mount it inside axum.
 `serve_stdio` needs none: it reads a line, drives that message's future on the calling
 thread with a small `block_on` (park until woken, built on `std::task::Wake`), writes the
 reply line and flushes. That works for any `Control` whose futures are woken by their

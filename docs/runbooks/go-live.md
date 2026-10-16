@@ -17,7 +17,6 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:284f1e027ec86853", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: stale via daemon Usage (YouTube bullet wording, MCP tool hidden without a client); these steps don't use YouTube sign-in; hold" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +35,6 @@ verified = { hash = "b3:284f1e027ec86853", by = "agent:claude@session_01YKRrREb5
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:ba7c243526825eb1", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b B3 round: stale via daemon Usage after the merge; generic RTMP steps don't use YouTube sign-in; hold" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -100,7 +98,6 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:c20cf5b8c66b3093", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b merge of #223 at 2971eae (main at 94fb25d, protocol 0.20): re-read; main's audio, vcam and e2e text holds beside this PR's optional YouTube client and MCP youtube-tool wiring" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
@@ -163,15 +160,16 @@ Going live to YouTube needs no OAuth client: use the steps above with YouTube's 
 server URL and stream key from YouTube Studio.
 
 Signing in, to manage broadcasts through the API, is optional and Windows only. It
-needs a Google Cloud OAuth client of type "Desktop app" that you create yourself, with
-the YouTube Data API v3 enabled; this build ships none. The `youtube.*` calls below go
-through MCP's `youtube` tool, which is listed once a client is set, or through the
-WebSocket API; `jstream-cli` has no YouTube commands yet. Then:
+uses JStream's own OAuth client (ADR-0058), which this build doesn't have yet, so a
+run for now uses a developer's Google Cloud OAuth client of type "Desktop app", with the
+YouTube Data API v3 enabled. The `youtube.*` calls below are a person's: they go over
+the WebSocket API, since MCP has no `youtube` tool (ADR-0058) and `jstream-cli` has no
+YouTube commands yet. Then:
 
 1. Start the daemon with `--youtube-client <the client's JSON>`, or with
    `JSTREAM_YOUTUBE_CLIENT_ID` (and `JSTREAM_YOUTUBE_CLIENT_SECRET`) set
    ([daemon › Usage](../../apps/jstream-daemon/README.md#usage)). Without either,
-   `youtube.status` answers `unavailable` and MCP lists no `youtube` tool.
+   `youtube.status` answers `unavailable` until the built-in client is filled in.
 2. `youtube.status` answers `signed_out`. Call `youtube.sign_in`, open the consent URL
    it returns, and approve.
 3. `youtube.status` answers `signed_in`. The refresh token is in Credential Manager, so
@@ -182,7 +180,7 @@ WebSocket API; `jstream-cli` has no YouTube commands yet. Then:
    `youtube.health_changed` reports the stream's health.
 5. Starting the output doesn't take the broadcast live: broadcasts are created without
    auto-start. Once the health is good, call `youtube.transition_broadcast` with `to:
-   testing` to preview it (optional), then `to: live`.
+   testing`, then `to: live`.
 6. To end, call `youtube.transition_broadcast` with `to: complete`, then stop the
    output.
 7. `youtube.sign_out` removes the token.

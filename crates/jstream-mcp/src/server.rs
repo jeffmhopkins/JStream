@@ -12,8 +12,13 @@ use crate::tools::{Invocation, Tools};
 use jstream_control::{Control, ControlError};
 use jstream_protocol::{Hello, PROTOCOL_VERSION, ProtocolError, WireError, json_schema};
 use serde_json::{Map, Value, json};
+use std::future::{Future, poll_fn};
+use std::pin::pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::task::{Poll, Waker};
+use std::thread;
+use std::time::Duration;
 use tracing::Instrument;
 
 /// The MCP revision served statelessly, with per-request metadata.
@@ -28,14 +33,15 @@ const SERVER_NAME: &str = "jstream-mcp";
 /// The client name sent in the engine `hello` when the MCP client gave none.
 const DEFAULT_CLIENT_NAME: &str = "jstream-mcp";
 
-/// The tool [`Server::with_youtube`] adds: YouTube's API features, which are off unless
-/// the user configured their own Google OAuth client.
-const YOUTUBE_TOOL: &str = "youtube";
-
 /// How long a modern client may cache `server/discover` and `tools/list`: the tools are
-/// generated at build time, so they only change with the binary and the host's
-/// configuration.
+/// generated at build time, so they only change with the binary.
 const TOOLS_TTL_MS: u64 = 3_600_000;
+
+/// How long `initialize` and `server/discover` wait for the engine's answer to `hello`
+/// before answering anyway. Well under `jstream-server`'s 10 s handshake timeout, so an
+/// engine that accepted the connection but never answers doesn't hold the request until
+/// that close.
+const OPEN_EARLY_TIMEOUT: Duration = Duration::from_secs(3);
 
 const META: &str = "_meta";
 const META_PROTOCOL_VERSION: &str = "io.modelcontextprotocol/protocolVersion";
@@ -74,8 +80,8 @@ enum Era {
 /// them for the `events` tool.
 ///
 /// [`handle`](Server::handle) answers one message. It needs no particular executor: the
-/// future only awaits the [`Control`] futures. [`serve_stdio`](crate::serve_stdio) runs it
-/// over a byte stream.
+/// future awaits only the [`Control`] futures and the hello wait's timer, which its own
+/// thread wakes. [`serve_stdio`](crate::serve_stdio) runs it over a byte stream.
 ///
 /// Logging (R-RS-005): each server has an `mcp_session` span, every request runs in an
 /// `mcp_request` span under it naming the method, and each tool call in a `tool_call`
@@ -91,31 +97,32 @@ pub struct Server {
     feed: OnceLock<Feed>,
     /// Set by `initialize`.
     legacy: Mutex<Option<LegacySession>>,
+    /// How long [`Server::open_early`] waits for `hello`.
+    open_early_timeout: Duration,
 }
 
 impl Server {
     /// A server over `control`, a session that has not sent `hello` yet (or has: a
     /// second `hello` returns the same identity).
     ///
-    /// It lists every tool but `youtube`: YouTube's API features are off unless the
-    /// user configured a Google OAuth client, and then the host adds the tool with
-    /// [`with_youtube`](Self::with_youtube).
+    /// It has no `youtube` tool and never forwards a `youtube.*` request or event:
+    /// YouTube is for people, through the UI (ADR-0058 §3).
     pub fn new(control: Arc<dyn Control>) -> Self {
         Server {
             control,
             span: tracing::info_span!("mcp_session"),
-            tools: Tools::generate().without(YOUTUBE_TOOL),
+            tools: Tools::generate(),
             opened: AtomicBool::new(false),
             feed: OnceLock::new(),
             legacy: Mutex::new(None),
+            open_early_timeout: OPEN_EARLY_TIMEOUT,
         }
     }
 
-    /// Lists the `youtube` tool too. The host calls this when the engine has a YouTube
-    /// setup, from an OAuth client the user configured.
-    #[must_use]
-    pub fn with_youtube(mut self) -> Self {
-        self.tools = Tools::generate();
+    /// The same server with another wait for `hello` at `initialize`, for tests.
+    #[cfg(test)]
+    pub(crate) fn with_open_early_timeout(mut self, timeout: Duration) -> Self {
+        self.open_early_timeout = timeout;
         self
     }
 
@@ -421,15 +428,20 @@ impl Server {
     }
 
     /// Opens the engine session when the MCP client introduces itself (`initialize`,
-    /// `server/discover`). A failure doesn't fail the request: the next tool call that
-    /// needs the engine tries again and reports it.
+    /// `server/discover`). A failure, or no answer within the open-early timeout, doesn't
+    /// fail the request: the next tool call that needs the engine tries again and reports
+    /// it.
     async fn open_early(&self, client_name: Option<String>) {
         let client_name = client_name.unwrap_or_else(|| DEFAULT_CLIENT_NAME.to_owned());
-        if let Err(error) = self.open(client_name).await {
-            tracing::warn!(
+        match with_timeout(self.open(client_name), self.open_early_timeout).await {
+            Some(Ok(())) => {}
+            Some(Err(error)) => tracing::warn!(
                 error = %error,
                 "could not open the engine session; the next tool call tries again"
-            );
+            ),
+            None => tracing::warn!(
+                "the engine didn't answer hello in time; the next tool call tries again"
+            ),
         }
     }
 
@@ -468,6 +480,80 @@ impl Server {
              block and its size.",
             groups.join(", ")
         )
+    }
+}
+
+/// Runs `future` for at most `limit`: its output, or `None` if the time ran out first
+/// (the future is then dropped). It needs no async runtime: a timer thread, started only
+/// if `future` doesn't finish on its first poll, wakes the task when the time is up, and
+/// exits early once the wait is over either way.
+async fn with_timeout<F: Future>(future: F, limit: Duration) -> Option<F::Output> {
+    let mut future = pin!(future);
+    let mut timer: Option<Timer> = None;
+    poll_fn(|cx| {
+        if let Poll::Ready(output) = future.as_mut().poll(cx) {
+            return Poll::Ready(Some(output));
+        }
+        let timer = timer.get_or_insert_with(|| Timer::start(limit));
+        if timer.fired(cx.waker()) {
+            Poll::Ready(None)
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
+
+/// What a [`Timer`] and its thread share.
+#[derive(Default)]
+struct TimerState {
+    fired: bool,
+    cancelled: bool,
+    waker: Option<Waker>,
+}
+
+/// A one-shot timer on its own thread, cancelled when dropped.
+struct Timer(Arc<(Mutex<TimerState>, Condvar)>);
+
+impl Timer {
+    fn start(limit: Duration) -> Timer {
+        let shared = Arc::new((Mutex::new(TimerState::default()), Condvar::new()));
+        let theirs = Arc::clone(&shared);
+        let spawned = thread::Builder::new()
+            .name("jstream-mcp-timer".into())
+            .spawn(move || {
+                let (state, cancel) = &*theirs;
+                let (mut state, _) = cancel
+                    .wait_timeout_while(lock(state), limit, |s| !s.cancelled)
+                    .unwrap_or_else(PoisonError::into_inner);
+                if !state.cancelled {
+                    state.fired = true;
+                    if let Some(waker) = state.waker.take() {
+                        waker.wake();
+                    }
+                }
+            });
+        if spawned.is_err() {
+            // No thread to time it: stop waiting at once rather than possibly forever.
+            lock(&shared.0).fired = true;
+        }
+        Timer(shared)
+    }
+
+    /// Whether the time is up; if not, `waker` is woken when it is.
+    fn fired(&self, waker: &Waker) -> bool {
+        let mut state = lock(&self.0.0);
+        if !state.fired {
+            state.waker = Some(waker.clone());
+        }
+        state.fired
+    }
+}
+
+impl Drop for Timer {
+    fn drop(&mut self) {
+        lock(&self.0.0).cancelled = true;
+        self.0.1.notify_all();
     }
 }
 

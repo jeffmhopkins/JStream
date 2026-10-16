@@ -1,12 +1,12 @@
-//! YouTube setup: an optional Google OAuth client the user supplies (JStream ships
-//! none), read at runtime and never committed (R-SEC-001), and handing it to the
-//! engine with `Engine::with_youtube` (ADR-0041).
+//! YouTube setup: a developer's Google OAuth client that overrides JStream's built-in
+//! one (ADR-0058), read at runtime and never committed (R-SEC-001), and handing it to
+//! the engine with `Engine::with_youtube` (ADR-0041).
 //!
 //! The client comes from `--youtube-client <file>`, the JSON Google Cloud gives for a
 //! "Desktop app" OAuth client, else from the `JSTREAM_YOUTUBE_CLIENT_ID` and
-//! `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables. Without either, YouTube
-//! answers `unavailable`. The secret is held as a `Secret`, so it never prints, and no
-//! error here quotes the file's contents.
+//! `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables. Without either, the daemon
+//! uses the built-in client (`serve.rs`). The secret is held as a `Secret`, so it never
+//! prints, and no error here quotes the file's contents.
 //!
 //! Docs: apps/jstream-daemon/README.md#design
 
@@ -26,7 +26,7 @@ pub const CLIENT_ID_ENV: &str = "JSTREAM_YOUTUBE_CLIENT_ID";
 /// The environment variable holding the client's secret, if it has one.
 pub const CLIENT_SECRET_ENV: &str = "JSTREAM_YOUTUBE_CLIENT_SECRET";
 
-/// The user's OAuth client.
+/// A developer's OAuth client.
 #[derive(Debug)]
 pub struct Client {
     /// The client ID (`….apps.googleusercontent.com`). Not secret, but never logged.

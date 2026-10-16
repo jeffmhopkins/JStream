@@ -1157,9 +1157,8 @@ fn mcp_serves_initialize_list_and_call_over_one_session() {
     assert_eq!(created["structuredContent"]["result"]["rev"], 1);
     let listed = &replies[3]["result"]["structuredContent"]["result"]["result"];
     assert_eq!(listed["scenes"][0]["scene_id"], "main", "{listed}");
-    // One session serves the whole run, besides the short one that asks whether the
-    // engine has YouTube; and the edit reached the engine.
-    assert_eq!(sessions.load(Ordering::SeqCst), 2);
+    // One session for the whole run, and the edit reached the engine.
+    assert_eq!(sessions.load(Ordering::SeqCst), 1);
     assert_eq!(engine.rev(), Rev(1));
 }
 
