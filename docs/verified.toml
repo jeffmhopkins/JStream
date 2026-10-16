@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:c770cb1be82c095d", by = "agent:youtube-sign-in", note = "Re-read jstream-youtube and jstream-sources rows: summaries now cite ADR-0058; nothing else changed" }
+stamp = { hash = "b3:5f7fe15c91914954", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the wave swapped ADR-0041 for ADR-0058 on the youtube and sources rows; the jstream-browser row (cef = engine side driving the helper, helper = CEF code) and the apps row's jstream-browser-helper DLL still match this PR" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -1359,7 +1359,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:7ddca28c57cfba05", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
+stamp = { hash = "b3:69eee667f84adbfe", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the wave's vcam, delay-load and media_foundation.rs text is unchanged by this PR; the browser-sources bullet still matches host.rs/browser.rs (backend on the media clock, device from WindowsGpu::open_device, CEF only in the sandboxed helper started on the first page)" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1455,7 +1455,7 @@ stamp = { hash = "b3:45624952598c1f3a" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against #327: covers now includes tests/**, and the Tests bullet names the new integration test tests/delay_load.rs (media_foundation_is_delay_loaded, Windows MSVC only), which reads the built jstream.exe's PE headers and requires each DLL in build.rs's delay-load list in the delay-import table and none in the import table; the unit-test list and the rest of the contents are unchanged" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:160fa02a88ac65c0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
+stamp = { hash = "b3:7de4cf8f66e3da87", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the wave's --no-vcam option and virtual-camera bullet sit beside the browser-sources paragraph, which still matches ADR-0048 (app links no CEF, needs the helper exe, DLL and CEF runtime beside it, feature off until packaged)" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
 stamp = { hash = "b3:ac2977e8c9f522c0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the Browser sources paragraph now says the helper is CEF's bootstrap exe renamed plus jstream-browser-helper.dll and CEF's files, that the app doesn't build or link CEF so it starts without them, and that the cef feature stays off until the runtime and helper are packaged, matching Cargo.toml's comment and CefConfig::beside_exe" }
@@ -1878,7 +1878,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:c770cb1be82c095d", by = "agent:youtube-sign-in", note = "Re-read for a dependency change that only swapped the ADR-0051 link for ADR-0058 (and, for protocol, marked YouTube UI-only); this section makes no YouTube or OAuth claim that changes" }
+stamp = { hash = "b3:5f7fe15c91914954", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: its dependency on ARCH#crate-map changed only in the youtube and sources rows' ADR links; jstream-platform's row (GpuInterop with wgpu types) and the unsafe rule this section relies on are unchanged" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
