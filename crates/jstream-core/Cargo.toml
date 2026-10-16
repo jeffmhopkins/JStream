@@ -58,6 +58,9 @@ jstream-mcp.workspace = true
 serde_json.workspace = true
 # The shared parity fixture that `jstream-graph` and the mock are held to.
 jstream-protocol = { workspace = true, features = ["fixtures"] }
+# Decodes the preview stream's JPEGs in its tests; already in the tree for the image
+# source (`jstream-sources`).
+zune-jpeg.workspace = true
 
 [target.'cfg(windows)'.dev-dependencies]
 # The ignored hardware test of the GPU capture path (`src/tests/windows_gpu.rs`): the

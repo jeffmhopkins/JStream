@@ -677,7 +677,7 @@ status = "planned"
 id = "U1"
 milestone = "M2"
 title = "Preview stream"
-status = "review"
+status = "done"
 prs = [251]
 
 [[item]]
@@ -781,7 +781,8 @@ prs = [163]
 id = "E3c"
 milestone = "M3"
 title = "Encode from GPU frames"
-status = "planned"
+status = "review"
+prs = [325]
 
 [[item]]
 id = "X1"

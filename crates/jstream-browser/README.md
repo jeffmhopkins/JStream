@@ -88,7 +88,7 @@ without building CEF):
 
 **The hardware check.** `examples/page_check.rs` opens the built-in test page (or
 `--url`) through the CEF backend on the engine's own device and QPC clock, as the daemon
-will, and reports the frames and audio that arrive, a custom-CSS change the page reacts
+will once the engine hands out its device, and reports the frames and audio that arrive, a custom-CSS change the page reacts
 to, and the shutdown time. It runs on Windows with the `cef` feature only.
 
 <a id="open-items"></a>
