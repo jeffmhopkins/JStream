@@ -42,10 +42,6 @@ updates:
       # 1.12 moves to `rand` 0.10, a second `rand` beside tungstenite's 0.9 (R-DEP-005).
       - dependency-name: proptest
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      # 0.8 adds `alloca`, which compiles C with `cc` and is not on lint-deps' native-code
-      # allowlist (R-DEP-002). Held at 0.7 until that is decided (#431; PR #398 failed).
-      - dependency-name: criterion
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     commit-message:
       prefix: build
       include: scope
