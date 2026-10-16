@@ -89,8 +89,11 @@ fn read_token(path: Option<String>) -> Result<String, CliError> {
 const MAX_KEY_INPUT: u64 = 4096;
 
 /// Reads the stream key for `output set-key`: the file's text, or else all of `input`
-/// (stdin), without surrounding whitespace (a key has none, and a file or a pipe usually
-/// ends with a newline). At most [`MAX_KEY_INPUT`] bytes are read. No message repeats
+/// (stdin), without a leading byte-order mark (Windows PowerShell 5.1 writes one on a
+/// pipe, and Notepad's "UTF-8 with BOM" starts a file with one, #438) and without
+/// surrounding whitespace (a key has none, and a file or a pipe usually ends with a
+/// newline). At most [`MAX_KEY_INPUT`] bytes are read. A key with a control or
+/// non-ASCII character is refused: no streaming service issues one. No message repeats
 /// any of what was read.
 fn read_key(key_file: Option<&str>, input: &mut dyn BufRead) -> Result<SecretString, CliError> {
     let mut text = String::new();
@@ -114,12 +117,18 @@ fn read_key(key_file: Option<&str>, input: &mut dyn BufRead) -> Result<SecretStr
             "{source} holds more than {MAX_KEY_INPUT} bytes, which is not a stream key"
         )));
     }
-    let key = text.trim();
+    let key = text.strip_prefix('\u{FEFF}').unwrap_or(&text).trim();
     if key.is_empty() {
         return Err(CliError::Usage(match key_file {
             Some(path) => format!("the key file `{path}` is empty"),
             None => "no stream key on stdin: pipe it in, or pass `--key-file <path>`".into(),
         }));
+    }
+    if key.chars().any(|c| c.is_control() || !c.is_ascii()) {
+        return Err(CliError::Usage(format!(
+            "{source} holds a stream key with a control or non-ASCII character, which no \
+             streaming service accepts (the key is not shown)"
+        )));
     }
     Ok(SecretString::new(key))
 }
