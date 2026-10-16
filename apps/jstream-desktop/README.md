@@ -11,7 +11,7 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["apps/jstream-desktop/src/**"]
+covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
 -->
 
@@ -43,7 +43,10 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
   script's escaping, the command line, the virtual camera's status values, the data
-  folder and the capped log file).
+  folder and the capped log file), and one integration test, `tests/delay_load.rs`
+  (Windows MSVC only), which reads the built `jstream.exe`'s PE headers to check that
+  each Media Foundation DLL `build.rs` delay-loads is delay-loaded and none is a
+  load-time import.
 
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
 virtual camera's registration mode (`jstream.exe --register-vcam`, which
@@ -107,7 +110,7 @@ folder, and its log `logs\cef.log`.
 <a id="design"></a>
 ## Design
 <!-- @section
-covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
+covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/media_foundation.rs", "apps/jstream-desktop/tests/delay_load.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
 -->
 
@@ -159,14 +162,22 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-
   with the reason (HTML-escaped, with a policy that allows nothing) and no bootstrap
   script. A missing bundle is found after the engine started, so the engine is stopped
   first. As in the daemon, the build script delay-loads the Media Foundation DLLs with
-  MSVC, so the app starts on a Windows without them and can say so.
+  MSVC, so the app starts on a Windows without them and can say so. The list
+  (`mfplat.dll`, `mf.dll`, `mfreadwrite.dll`, `mfsensorgroup.dll`) is in
+  `media_foundation.rs`, which `build.rs` and `tests/delay_load.rs` both include. That
+  test reads the built `jstream.exe`'s import tables, as the daemon's does: each listed
+  DLL must be in the delay-import table and none in the import table. So CI's Windows
+  test job fails when `/DELAYLOAD` stops applying, or when a listed DLL is no longer
+  imported (the linker only warns, LNK4199, which doesn't fail CI). A new Media
+  Foundation import listed nowhere still gets past it.
 - **Windows only, for now.** Tauri is a Windows-only dependency, so Linux CI builds
-  and tests everything but the window (`shell.rs`) without GTK or WebKitGTK. Tauri's
-  other platforms still appear in `cargo metadata`, so `deny.toml` and the lint-deps
-  allowlist list their duplicates and native crates, each marked as never built for
-  Windows where that holds. `tauri.conf.json` names the app and its icon; the bundler
-  is off (the portable folder is ADR-0020's), and so are Tauri's CSP injection and
-  global API. `tauri-build` writes ACL schemas to `gen/`, which is not committed.
+  and tests everything but the window (`shell.rs`) and `tests/delay_load.rs` without
+  GTK or WebKitGTK. Tauri's other platforms still appear in `cargo metadata`, so
+  `deny.toml` and the lint-deps allowlist list their duplicates and native crates,
+  each marked as never built for Windows where that holds. `tauri.conf.json` names the
+  app and its icon; the bundler is off (the portable folder is ADR-0020's), and so are
+  Tauri's CSP injection and global API. `tauri-build` writes ACL schemas to `gen/`,
+  which is not committed.
 - **Browser sources, behind a feature.** With `cef`, the engine gets a CEF backend
   (`jstream-browser`) on the backends' media clock, so pages' audio is stamped on the
   clock the mixer runs on. Its pages paint onto a device of the media adapter the app
