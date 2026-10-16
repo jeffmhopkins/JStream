@@ -10,8 +10,9 @@ use crate::block::{block_on, next_event};
 use crate::exit::{self, CliError};
 use crate::mcp;
 use jstream_control::protocol::{
-    Action, Call, CallResult, Event, Hello, ItemInfo, OutputInfo, OutputKind, PROTOCOL_VERSION,
-    QueryResult, Response, RtmpTarget, SecretString, SourceInfo, SourceKind, Welcome,
+    Action, ActionResult, Call, CallResult, Event, Hello, ItemInfo, OutputInfo, OutputKind,
+    PROTOCOL_VERSION, QueryResult, Response, RtmpTarget, SecretString, SourceInfo, SourceKind,
+    Welcome,
 };
 use jstream_control::{Control, ControlError, EventStream, WsConfig, WsControl};
 use serde_json::json;
@@ -294,6 +295,31 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
         Action::SceneSwitch { scene_id } => {
             writeln!(out, "{} accepted for {scene_id} ({id})", action.name())?;
         }
+        Action::DeviceRevoke { device_id } => {
+            writeln!(out, "device {device_id} revoked ({id})")?;
+        }
+        Action::PairingStart => match &response.result {
+            CallResult::Action {
+                result:
+                    Some(ActionResult::PairingStart {
+                        code,
+                        expires_in_secs,
+                    }),
+            } => {
+                // The code is the answer: printed for the user to type on the device,
+                // never logged (R-SEC-001).
+                writeln!(out, "pairing code: {}", code.expose())?;
+                writeln!(
+                    out,
+                    "enter it on the device within {expires_in_secs} s; it works once"
+                )?;
+            }
+            _ => writeln!(
+                out,
+                "{} accepted, but no code came back ({id})",
+                action.name()
+            )?,
+        },
         other => writeln!(out, "{} accepted ({id})", other.name())?,
     }
     Ok(())
@@ -305,7 +331,7 @@ fn write_response(out: &mut dyn Write, response: &Response, json: bool) -> Resul
     }
     match &response.result {
         CallResult::Batch { rev } => writeln!(out, "applied: rev {rev} ({})", response.id)?,
-        CallResult::Action {} => writeln!(out, "accepted ({})", response.id)?,
+        CallResult::Action { .. } => writeln!(out, "accepted ({})", response.id)?,
         CallResult::Query { result } => write_query(out, result)?,
         _ => line(out, &response.result)?,
     }
@@ -352,6 +378,26 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
         QueryResult::OutputList { rev, outputs } => {
             writeln!(out, "rev {rev}")?;
             write_outputs(out, "", outputs)?;
+        }
+        QueryResult::DeviceList { devices } => {
+            if devices.is_empty() {
+                writeln!(out, "no paired devices")?;
+                return Ok(());
+            }
+            let rows = devices.iter().map(|device| {
+                vec![
+                    device.device_id.to_string(),
+                    device.name.clone(),
+                    device.paired_at.to_string(),
+                    device.last_used_at.to_string(),
+                ]
+            });
+            table(
+                out,
+                "",
+                &["ID", "NAME", "PAIRED (UNIX S)", "LAST USED (UNIX S)"],
+                rows.collect(),
+            )?;
         }
         QueryResult::StudioGet { program_scene } => match program_scene {
             Some(scene_id) => writeln!(out, "program: {scene_id}")?,

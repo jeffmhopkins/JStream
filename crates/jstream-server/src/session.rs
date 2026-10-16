@@ -6,7 +6,8 @@
 //! forwards the session's events once the handshake has succeeded. It ends when the
 //! client closes, the session's event stream ends (the engine went away), the server
 //! shuts down (a message read once it is shutting down is not handled, so no request is
-//! answered after the shutdown), or the handshake hasn't succeeded by its deadline
+//! answered after the shutdown), the paired device whose token admitted it is revoked
+//! (close code 1008, ADR-0044), or the handshake hasn't succeeded by its deadline
 //! (`ServerConfig::handshake_timeout`, counted from when the connection was accepted;
 //! close code 1008), even if the client's `hello` is still waiting for the engine's
 //! answer; dropping the session then ends its event streams.
@@ -110,11 +111,12 @@ async fn handshake(
 }
 
 /// Runs one connection until it ends. A connection whose handshake hasn't succeeded by
-/// `hello_by` is closed.
+/// `hello_by` is closed, and so is one whose device `revoked` signals.
 pub(crate) async fn run(
     socket: WebSocket,
     control: Box<dyn Control>,
     mut shutdown: watch::Receiver<bool>,
+    mut revoked: Option<watch::Receiver<bool>>,
     hello_by: Instant,
 ) {
     let (sink, mut incoming) = socket.split();
@@ -134,6 +136,9 @@ pub(crate) async fn run(
         }
         tokio::select! {
             () = stopping(&mut shutdown) => break Ok(Some(shutting_down())),
+            () = revocation(&mut revoked) => {
+                break Ok(Some(close(close_code::POLICY, "the device was revoked")));
+            }
             () = &mut handshake_deadline, if ids.client_id.is_none() => {
                 break Ok(Some(close(close_code::POLICY, "no handshake in time")));
             }
@@ -281,6 +286,18 @@ pub(crate) async fn run(
 async fn stopping(shutdown: &mut watch::Receiver<bool>) {
     // An error means the server was dropped: that stops the connection too.
     let _ = shutdown.wait_for(|stopping| *stopping).await;
+}
+
+/// Completes once the device that admitted the connection is revoked or lapses; never
+/// for a connection the control token admitted.
+async fn revocation(revoked: &mut Option<watch::Receiver<bool>>) {
+    match revoked {
+        // An error means the watch was dropped, which only revocation does.
+        Some(watch) => {
+            let _ = watch.wait_for(|revoked| *revoked).await;
+        }
+        None => std::future::pending().await,
+    }
 }
 
 /// Whether the server is shutting down (or gone) now: what [`stopping`] waits for.
@@ -678,7 +695,7 @@ mod tests {
     fn reply(id: &str) -> ServerMessage {
         ServerMessage::Response(Response {
             id: RequestId::new(id),
-            result: CallResult::Action {},
+            result: CallResult::action(),
         })
     }
 

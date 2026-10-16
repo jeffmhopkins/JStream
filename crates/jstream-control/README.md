@@ -173,6 +173,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `output.status`, but it is not in the collection, so `output.list` and `state.get`
   don't report it and `output.set_key` answers `not_found` for it. It runs no
   encoders, so `output.status` reports no encoder session and zero sessions;
+- the pairing calls (`pairing.start`, `device.list`, `device.revoke`) answered with
+  `unsupported`, as the in-process engine answers them: only a server in front of a
+  session serves them
+  ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md));
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII

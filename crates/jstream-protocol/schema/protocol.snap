@@ -187,6 +187,67 @@ source: crates/jstream-protocol/src/fixtures.rs
             "scene_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
+          "properties": {
+            "type": {
+              "const": "pairing.start",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Revokes a paired device: its token stops working at once, and its open\nconnections are closed. Fails with `not_found` for a device that isn't paired\n(or whose token lapsed after 30 days unused). Answered by the server, like\n`pairing.start`.",
+          "properties": {
+            "device_id": {
+              "$ref": "#/$defs/DeviceId",
+              "description": "The device to revoke, as `device.list` reports it."
+            },
+            "type": {
+              "const": "device.revoke",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "device_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ActionResult": {
+      "description": "What an action answered, for the few actions whose answer carries data. Its `type`\ntag repeats the action's name.",
+      "oneOf": [
+        {
+          "description": "The answer to `pairing.start`: the one-time pairing code, sent to the client that\nstarted pairing and to no one else (ADR-0044).",
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/SecretString",
+              "description": "The code: 8 characters of Crockford's base32 alphabet, written `XXXX-XXXX`.\nThe host shows it; the device posts it to `POST /api/v1/pair`. Never logged."
+            },
+            "expires_in_secs": {
+              "description": "How long the code stays open, in seconds (120).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "pairing.start",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "code",
+            "expires_in_secs"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -476,11 +537,22 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The action was accepted. Its progress is reported by events.",
+          "description": "The action was accepted. Its progress is reported by events. An action whose\nanswer carries data (`pairing.start`) has it in `result`; the others omit it.",
           "properties": {
             "kind": {
               "const": "action",
               "type": "string"
+            },
+            "result": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ActionResult"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What the action answered, tagged by the action's name, for the actions that\nanswer something. Absent for every other action, and from a server older\nthan 0.21."
             }
           },
           "required": [
@@ -680,6 +752,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         }
       ]
+    },
+    "DeviceId": {
+      "description": "A paired device: one browser or other client admitted with its own device token\n(ADR-0044). Assigned by the server when the device pairs.",
+      "type": "string"
+    },
+    "DeviceInfo": {
+      "description": "One paired device, as `device.list` reports it. Its token is never reported.",
+      "properties": {
+        "device_id": {
+          "$ref": "#/$defs/DeviceId",
+          "description": "The device's ID, which `device.revoke` takes."
+        },
+        "last_used_at": {
+          "description": "When its token was last presented, in seconds since the Unix epoch (UTC), to the\nhour. A token unused for 30 days lapses and the device is dropped.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The name it gave when it paired. The audit log names its sessions\n`device:<name>`.",
+          "type": "string"
+        },
+        "paired_at": {
+          "description": "When it paired, in seconds since the Unix epoch (UTC).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "device_id",
+        "name",
+        "paired_at",
+        "last_used_at"
+      ],
+      "type": "object"
     },
     "DropCounts": {
       "description": "Running totals of frames and packets the pipeline has dropped since the engine\nstarted (R-RT-004).\n\nEach field sums one kind of drop across every stage that counts it. A stage that\ndoes not count that kind contributes nothing. Totals only grow: a client computes\nan interval by subtracting the previous tick.\n\nSilence a stage inserts to cover a gap (an audio underrun, a device gap, encoder\ngap-fill) is not a drop and is not included.\n\nA missing field parses as 0, so a counter added in a later minor version can be left\nout by an older sender (R-API-001). Unknown fields are ignored.",
@@ -1782,6 +1890,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "bus",
           "description": "An audio bus.",
+          "type": "string"
+        },
+        {
+          "const": "device",
+          "description": "A paired device (0.21). Only an error answering `device.revoke` names it, so a\nclient older than 0.21, which sends none, never reads it.",
           "type": "string"
         }
       ]
@@ -3109,6 +3222,19 @@ source: crates/jstream-protocol/src/fixtures.rs
             "target"
           ],
           "type": "object"
+        },
+        {
+          "description": "Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it\npaired and was last used, never its token. Answered by the server that admits\nclients, not the engine: a `Control` with no server in front fails with\n`unsupported`.",
+          "properties": {
+            "type": {
+              "const": "device.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -3540,6 +3666,27 @@ source: crates/jstream-protocol/src/fixtures.rs
             "edits"
           ],
           "type": "object"
+        },
+        {
+          "description": "The result of `device.list`. Devices are not collection state, so it carries no\n`rev`.",
+          "properties": {
+            "devices": {
+              "description": "The paired devices, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/DeviceInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "device.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "devices"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -3753,7 +3900,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "SecretString": {
-      "description": "A secret string, such as a stream key, sent by a client to the engine.\n\nOn the wire it is a plain JSON string. In Rust it never prints: its `Debug` is\n`\"***\"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).\nA value that is not a string fails to parse with a message that doesn't repeat it.\nThe engine never sends one back (R-SEC-001).",
+      "description": "A secret string, such as a stream key sent by a client to the engine, or the\npairing code a server answers `pairing.start` with.\n\nOn the wire it is a plain JSON string. In Rust it never prints: its `Debug` is\n`\"***\"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).\nA value that is not a string fails to parse with a message that doesn't repeat it.\nThe engine never sends one back, and a pairing code travels only in that one answer\n(R-SEC-001).",
       "type": "string"
     },
     "SendInfo": {
@@ -4350,6 +4497,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The call is valid, but whoever answered it doesn't serve it: `pairing.start`,\n`device.list` and `device.revoke` sent to an engine with no server in front.\nRetrying won't help.",
+          "properties": {
+            "call": {
+              "description": "The call's name (`pairing.start`).",
+              "type": "string"
+            },
+            "code": {
+              "const": "unsupported",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "call"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The engine hit a bug or an unexpected condition. The request may be retried.",
           "properties": {
             "code": {
@@ -4390,5 +4555,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.20"
+  "title": "JStream protocol 0.21"
 }

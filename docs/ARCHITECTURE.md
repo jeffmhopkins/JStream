@@ -579,6 +579,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
+- **Pairing** (protocol 0.21, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
+  action `pairing.start` answers a one-time code (an action result, the one place it is
+  sent), which a device trades at `POST /api/v1/pair` for a device token of its own;
+  `device.list` and the action `device.revoke` manage the paired devices. They concern
+  whom a listener admits, so `jstream-server` answers them, and a session with no server
+  in front answers `unsupported`
+  ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
@@ -657,7 +664,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the browser, where the token travels as a subprotocol because a page can't set
   `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)). `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
-  default, with the token required and `Origin`/`Host` validated
+  default, with the token (the control token, or a paired device's on loopback until TLS)
+  required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
   for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
@@ -684,7 +692,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
+  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events

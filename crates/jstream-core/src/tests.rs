@@ -531,7 +531,7 @@ fn events_reach_every_subscriber_in_order() {
     let by_agent = block_on(agent.call(Call::Batch(Batch::single(create("a"))))).expect("batch");
     let by_user = block_on(user.call(Call::Batch(Batch::single(create("b"))))).expect("batch");
     let started = block_on(agent.call(output_call("yt", true))).expect("start");
-    assert_eq!(started.result, CallResult::Action {});
+    assert_eq!(started.result, CallResult::action());
 
     let changed = |state| Event::OutputStateChanged {
         output_id: OutputId::new("yt"),
@@ -617,7 +617,7 @@ fn scene_switch_changes_program_without_an_edit() {
     assert_eq!(program(&agent), Some(SceneId::new("a")));
 
     let switch = block_on(agent.call(switch_call("b"))).expect("switch");
-    assert_eq!(switch.result, CallResult::Action {});
+    assert_eq!(switch.result, CallResult::action());
     assert_eq!(engine.rev(), Rev(1), "a switch is not an edit");
     assert_eq!(drain(&mut events), vec![switched("b", &agent, switch.id)]);
     assert_eq!(program(&user), Some(SceneId::new("b")));

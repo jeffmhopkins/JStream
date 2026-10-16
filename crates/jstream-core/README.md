@@ -232,6 +232,13 @@ WebSocket API does, minus serialization:
   a poll loop that parks until woken, and it needs no async runtime. It never fails
   with `Disconnected`. `output.start` and `output.stop` still block inside `call`
   while devices open and threads join.
+- `pairing.start`, `device.list` and `device.revoke` fail with `unsupported`: they
+  concern whom a listener admits, which only the server in front of the session knows,
+  and it answers them before they reach the engine
+  ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)). Behind a server
+  they never reach the engine, so the audit log doesn't record them; the server logs
+  them. A device's `hello` reaches the engine as `device:<name>`, so the audit
+  log names it.
 
 ### Dependencies
 

@@ -1433,3 +1433,76 @@ fn mcp_over_the_mock_connection() {
         "stopped"
     );
 }
+
+/// A session that answers the pairing calls as `jstream-server` does, over the mock.
+struct Pairing(MockControl);
+
+impl Control for Pairing {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        self.0.hello(hello)
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        use jstream_control::protocol::{
+            Action, ActionResult, CallResult, DeviceId, DeviceInfo, Query, QueryResult, RequestId,
+            SecretString,
+        };
+        let result = match call {
+            Call::Action {
+                action: Action::PairingStart,
+            } => CallResult::Action {
+                result: Some(ActionResult::PairingStart {
+                    code: SecretString::new("7K3M-9QXA"),
+                    expires_in_secs: 120,
+                }),
+            },
+            Call::Query {
+                query: Query::DeviceList,
+            } => CallResult::Query {
+                result: QueryResult::DeviceList {
+                    devices: vec![DeviceInfo {
+                        device_id: DeviceId::new("dev_1"),
+                        name: "Tablet".into(),
+                        paired_at: 1_790_000_000,
+                        last_used_at: 1_790_003_600,
+                    }],
+                },
+            },
+            other => return self.0.call(other),
+        };
+        Box::pin(async move {
+            Ok(Response {
+                id: RequestId::new("server_1"),
+                result,
+            })
+        })
+    }
+
+    fn events(&self) -> EventStream {
+        self.0.events()
+    }
+}
+
+#[test]
+fn pairing_golden() {
+    let engine = MockEngine::new();
+    let connector = |_: &Connection| -> Result<Box<dyn Control>, CliError> {
+        Ok(Box::new(Pairing(engine.connect())))
+    };
+    assert_eq!(
+        run_with(&connector, &["pair"]),
+        ok("pairing code: 7K3M-9QXA\nenter it on the device within 120 s; it works once\n")
+    );
+    let json = run_with(&connector, &["--json", "pair"]);
+    assert_eq!(json.code, exit::OK);
+    let value: Value = serde_json::from_str(json.out.trim()).expect("one JSON line");
+    assert_eq!(value["result"]["result"]["code"], "7K3M-9QXA");
+    let listed = run_with(&connector, &["device", "list"]);
+    assert_eq!(listed.code, exit::OK, "{}", listed.err);
+    assert!(
+        listed.out.starts_with("ID     NAME    PAIRED (UNIX S)")
+            && listed.out.contains("dev_1  Tablet  1790000000"),
+        "{}",
+        listed.out
+    );
+}

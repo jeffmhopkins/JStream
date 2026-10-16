@@ -15,24 +15,32 @@
 //!   the client initializes again.
 //! - **`DELETE`** with `Mcp-Session-Id` ends that session. **`GET`** (an SSE stream for
 //!   server-initiated messages) is `405`: the server sends none.
+//! - **Credentials.** A session belongs to the credential that opened it, the control
+//!   token or one paired device's token (ADR-0044), and a request presenting another one
+//!   doesn't find it (`404`). Requests without a session ID share one stateless server
+//!   per credential. A session or stateless server a device opened ends once that device
+//!   is revoked or lapses, checked whenever a request arrives; its token is refused at
+//!   once anyway.
 //! - **Limits.** At most `ServerConfig::max_mcp_sessions` sessions are open; an
 //!   `initialize` beyond that is `503`. A session unused for
 //!   `ServerConfig::mcp_idle_timeout` is ended, checked whenever a request arrives.
 //!   Bodies over 4 MiB are `413`, refused from `Content-Length` before they are read.
 
-use crate::gate::Refusal;
+use crate::devices::Now;
+use crate::gate::{Credential, Refusal};
 use crate::listener::Accepted;
-use crate::{App, Connector, MAX_MESSAGE_BYTES, ServerConfig};
+use crate::{App, MAX_MESSAGE_BYTES, ServerConfig};
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use jstream_mcp::{LEGACY_VERSIONS, MODERN_VERSION, Server as McpServer};
+use jstream_protocol::DeviceId;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -55,12 +63,12 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 /// The MCP sessions of one server.
 pub(crate) struct Mcp {
-    connector: Connector,
     max_sessions: usize,
     idle_timeout: Duration,
     sessions: Mutex<HashMap<String, Session>>,
-    /// The server for requests without `Mcp-Session-Id`, opened at the first one.
-    stateless: OnceLock<Arc<McpServer>>,
+    /// The servers for requests without `Mcp-Session-Id`, one per credential (`None` for
+    /// the control token), each opened at its credential's first such request.
+    stateless: Mutex<HashMap<Option<DeviceId>, Arc<McpServer>>>,
     /// Numbers the sessions, for their spans and log lines.
     numbers: AtomicU64,
 }
@@ -70,6 +78,8 @@ struct Session {
     server: Arc<McpServer>,
     number: u64,
     last_used: Instant,
+    /// The device whose token opened it; `None` for the control token.
+    device: Option<DeviceId>,
 }
 
 /// Why a session couldn't be opened.
@@ -81,41 +91,70 @@ enum StartError {
 }
 
 impl Mcp {
-    pub(crate) fn new(config: &ServerConfig, connector: Connector) -> Mcp {
+    pub(crate) fn new(config: &ServerConfig) -> Mcp {
         Mcp {
-            connector,
             max_sessions: config.max_mcp_sessions,
             idle_timeout: config.mcp_idle_timeout,
             sessions: Mutex::new(HashMap::new()),
-            stateless: OnceLock::new(),
+            stateless: Mutex::new(HashMap::new()),
             numbers: AtomicU64::new(0),
         }
     }
 
-    /// A new MCP server over a new `Control` session, created in an `mcp_client` span so
-    /// the engine's session span and the MCP server's own nest under it.
-    fn open(&self, kind: &'static str, peer: SocketAddr) -> (u64, Arc<McpServer>) {
+    /// A new MCP server over a new `Control` session admitted by `credential`, created in
+    /// an `mcp_client` span so the engine's session span and the MCP server's own nest
+    /// under it.
+    fn open(
+        &self,
+        app: &App,
+        kind: &'static str,
+        peer: SocketAddr,
+        credential: Credential,
+    ) -> (u64, Arc<McpServer>) {
         let number = self.numbers.fetch_add(1, Ordering::Relaxed) + 1;
         let span = tracing::info_span!("mcp_client", id = number, kind);
         let server = span.in_scope(|| {
-            tracing::info!(peer = %peer, "mcp session opened");
-            Arc::new(McpServer::new(Arc::from((self.connector)())))
+            match credential.device() {
+                Some(device_id) => {
+                    tracing::info!(peer = %peer, device_id = %device_id, "mcp session opened");
+                }
+                None => tracing::info!(peer = %peer, "mcp session opened"),
+            }
+            Arc::new(McpServer::new(Arc::from(app.open(credential))))
         });
         (number, server)
     }
 
-    /// The shared server for requests without a session ID.
-    fn stateless(&self, peer: SocketAddr) -> Arc<McpServer> {
-        Arc::clone(
-            self.stateless
-                .get_or_init(|| self.open("stateless", peer).1),
-        )
+    /// The shared server for `credential`'s requests without a session ID.
+    fn stateless(&self, app: &App, peer: SocketAddr, credential: Credential) -> Arc<McpServer> {
+        let mut stateless = lock(&self.stateless);
+        let now = Now::current().unix;
+        stateless.retain(|device, _| {
+            device
+                .as_ref()
+                .is_none_or(|id| app.devices.contains(id, now))
+        });
+        let key = credential.device().cloned();
+        let server = stateless
+            .entry(key)
+            .or_insert_with(|| self.open(app, "stateless", peer, credential).1);
+        Arc::clone(server)
     }
 
-    /// Ends the sessions unused for `idle_timeout`.
-    fn expire(&self, sessions: &mut HashMap<String, Session>) {
+    /// Ends the sessions unused for `idle_timeout`, and those whose device is no longer
+    /// paired.
+    fn expire(&self, app: &App, sessions: &mut HashMap<String, Session>) {
         let now = Instant::now();
+        let unix = Now::current().unix;
         sessions.retain(|_, session| {
+            if session
+                .device
+                .as_ref()
+                .is_some_and(|id| !app.devices.contains(id, unix))
+            {
+                tracing::info!(id = session.number, "mcp session ended: device revoked");
+                return false;
+            }
             let live = now.duration_since(session.last_used) < self.idle_timeout;
             if !live {
                 tracing::info!(id = session.number, "mcp session ended: idle");
@@ -125,41 +164,51 @@ impl Mcp {
     }
 
     /// Opens a session for an `initialize`, returning its ID and server.
-    fn start(&self, peer: SocketAddr) -> Result<(String, Arc<McpServer>), StartError> {
+    fn start(
+        &self,
+        app: &App,
+        peer: SocketAddr,
+        credential: Credential,
+    ) -> Result<(String, Arc<McpServer>), StartError> {
         let mut bytes = [0u8; SESSION_ID_BYTES];
         getrandom::fill(&mut bytes).map_err(StartError::Random)?;
         let id: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
         let mut sessions = lock(&self.sessions);
-        self.expire(&mut sessions);
+        self.expire(app, &mut sessions);
         if sessions.len() >= self.max_sessions {
             return Err(StartError::Full);
         }
-        let (number, server) = self.open("session", peer);
+        let device = credential.device().cloned();
+        let (number, server) = self.open(app, "session", peer, credential);
         sessions.insert(
             id.clone(),
             Session {
                 server: Arc::clone(&server),
                 number,
                 last_used: Instant::now(),
+                device,
             },
         );
         Ok((id, server))
     }
 
-    /// The session with this ID, marked as used now.
-    fn find(&self, id: &str) -> Option<Arc<McpServer>> {
+    /// The session with this ID, if `credential` opened it, marked as used now.
+    fn find(&self, app: &App, id: &str, credential: &Credential) -> Option<Arc<McpServer>> {
         let mut sessions = lock(&self.sessions);
-        self.expire(&mut sessions);
+        self.expire(app, &mut sessions);
         let session = sessions.get_mut(id)?;
+        if session.device.as_ref() != credential.device() {
+            return None;
+        }
         session.last_used = Instant::now();
         Some(Arc::clone(&session.server))
     }
 
     /// Ends the session with this ID, if it is open. Its `Control` session is dropped once
     /// its requests in flight finish.
-    fn end(&self, id: &str, reason: &'static str) -> bool {
+    fn end(&self, app: &App, id: &str, reason: &'static str) -> bool {
         let mut sessions = lock(&self.sessions);
-        self.expire(&mut sessions);
+        self.expire(app, &mut sessions);
         match sessions.remove(id) {
             Some(session) => {
                 tracing::info!(id = session.number, reason, "mcp session ended");
@@ -183,16 +232,17 @@ pub(crate) async fn handle(
     body: Body,
 ) -> Response {
     let peer = accepted.peer;
-    if let Err(refusal) = app.gate.admit(&headers, peer) {
-        return refusal.into_response();
-    }
+    let credential = match app.gate.admit(&headers, peer) {
+        Ok(credential) => credential,
+        Err(refusal) => return refusal.into_response(),
+    };
     let Some(mcp) = &app.mcp else {
         return StatusCode::NOT_FOUND.into_response();
     };
     accepted.request_read();
     match method {
-        Method::POST => post(mcp, &headers, body, peer).await,
-        Method::DELETE => delete(mcp, &headers),
+        Method::POST => post(&app, mcp, &headers, body, peer, credential).await,
+        Method::DELETE => delete(&app, mcp, &headers, &credential),
         _ => (
             StatusCode::METHOD_NOT_ALLOWED,
             [(header::ALLOW, "POST, DELETE")],
@@ -203,7 +253,14 @@ pub(crate) async fn handle(
 }
 
 /// `POST`: one JSON-RPC message.
-async fn post(mcp: &Mcp, headers: &HeaderMap, body: Body, peer: SocketAddr) -> Response {
+async fn post(
+    app: &App,
+    mcp: &Mcp,
+    headers: &HeaderMap,
+    body: Body,
+    peer: SocketAddr,
+    credential: Credential,
+) -> Response {
     if !is_json(headers) {
         return (
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
@@ -244,14 +301,16 @@ async fn post(mcp: &Mcp, headers: &HeaderMap, body: Body, peer: SocketAddr) -> R
     if is_initialize(message) {
         // A client that handshakes again on its session replaces it, rather than
         // leaving it to the idle timeout.
-        if let Some(id) = session_id {
-            mcp.end(id, "replaced by a new initialize");
+        if let Some(id) = session_id
+            && mcp.find(app, id, &credential).is_some()
+        {
+            mcp.end(app, id, "replaced by a new initialize");
         }
-        return initialize(mcp, message, peer).await;
+        return initialize(app, mcp, message, peer, credential).await;
     }
     let server = match session_id {
-        None => mcp.stateless(peer),
-        Some(id) => match mcp.find(id) {
+        None => mcp.stateless(app, peer, credential),
+        Some(id) => match mcp.find(app, id, &credential) {
             Some(server) => server,
             None => {
                 return (
@@ -266,8 +325,14 @@ async fn post(mcp: &Mcp, headers: &HeaderMap, body: Body, peer: SocketAddr) -> R
 }
 
 /// An `initialize`: a new session, kept only if the handshake succeeds.
-async fn initialize(mcp: &Mcp, message: &str, peer: SocketAddr) -> Response {
-    let (id, server) = match mcp.start(peer) {
+async fn initialize(
+    app: &App,
+    mcp: &Mcp,
+    message: &str,
+    peer: SocketAddr,
+    credential: Credential,
+) -> Response {
+    let (id, server) = match mcp.start(app, peer, credential) {
         Ok(started) => started,
         Err(StartError::Full) => {
             Refusal::McpSessions.log(peer);
@@ -292,15 +357,18 @@ async fn initialize(mcp: &Mcp, message: &str, peer: SocketAddr) -> Response {
             response.headers_mut().insert(SESSION_ID, value);
         }
     } else {
-        mcp.end(&id, "initialize failed");
+        mcp.end(app, &id, "initialize failed");
     }
     response
 }
 
-/// `DELETE`: ends the session the client names.
-fn delete(mcp: &Mcp, headers: &HeaderMap) -> Response {
+/// `DELETE`: ends the session the client names, if its credential opened it.
+fn delete(app: &App, mcp: &Mcp, headers: &HeaderMap, credential: &Credential) -> Response {
     match single(headers, &SESSION_ID) {
-        Ok(Some(id)) if mcp.end(id, "deleted by the client") => {
+        Ok(Some(id))
+            if mcp.find(app, id, credential).is_some()
+                && mcp.end(app, id, "deleted by the client") =>
+        {
             StatusCode::NO_CONTENT.into_response()
         }
         Ok(Some(_)) => (StatusCode::NOT_FOUND, "unknown or expired MCP session\n").into_response(),
