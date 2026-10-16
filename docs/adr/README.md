@@ -32,7 +32,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0015](0015-review-and-governance.md) | Agent review gate and governance with a single GitHub account | superseded | — | [ADR-0019](0019-review-gate-v2.md) |
 | [ADR-0016](0016-docs-as-checked-graph-v2.md) | Documentation as a hash-checked graph (v2: metadata in comments) | accepted | — |  |
 | [ADR-0017](0017-adr-decision-tiers.md) | Decision tiers: which ADRs need the maintainer | superseded | maintainer | [ADR-0043](0043-narrow-maintainer-tier.md) |
-| [ADR-0018](0018-ci-supply-chain-policy.md) | CI supply-chain policy: pinned actions, Dependabot, current runtimes | accepted | maintainer |  |
+| [ADR-0018](0018-ci-supply-chain-policy.md) | CI supply-chain policy: pinned actions, Dependabot, current runtimes | superseded | maintainer | [ADR-0056](0056-ci-supply-chain-policy-v2.md) |
 | [ADR-0019](0019-review-gate-v2.md) | Agent review gate v2: owner-only, round-aware verdicts | accepted | maintainer |  |
 | [ADR-0020](0020-portable-windows-distribution.md) | Portable Windows distribution: run the exe, no installer | accepted | maintainer |  |
 | [ADR-0021](0021-browser-source.md) | Browser (web page) source | accepted | maintainer |  |
@@ -54,13 +54,21 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0038](0038-adr-status-banner-and-index.md) | Generated ADR status banners and index | accepted | maintainer |  |
 | [ADR-0039](0039-hash-ignores-metadata-and-row-dependencies.md) | Doc hashes ignore metadata blocks; row-level crate-map dependencies | accepted | maintainer |  |
 | [ADR-0040](0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md) | Scene structure: orphaned overrides, shared groups and deleted hotkey targets | accepted | maintainer |  |
-| [ADR-0041](0041-youtube-interaction-scope-v3.md) | YouTube interaction scope v3: one sign-in | accepted | maintainer |  |
+| [ADR-0041](0041-youtube-interaction-scope-v3.md) | YouTube interaction scope v3: one sign-in | superseded | maintainer | [ADR-0051](0051-youtube-without-a-required-oauth-client.md) |
 | [ADR-0042](0042-narrow-hot-architecture-sections.md) | Narrow the hot architecture sections: manifest views, app entry points, threading model | accepted | maintainer |  |
 | [ADR-0043](0043-narrow-maintainer-tier.md) | Decision tiers v2: the maintainer decides product-level calls only | accepted | maintainer |  |
 | [ADR-0044](0044-pairing-remote-browsers.md) | Pairing remote browsers with a one-time code | accepted | maintainer |  |
 | [ADR-0045](0045-leptos-web-ui.md) | One web UI on Leptos, confirmed for M2 | accepted | agent |  |
+| [ADR-0046](0046-browser-crate-and-helper.md) | Browser sources live in their own crate, with a helper exe | accepted | agent |  |
 | [ADR-0047](0047-browser-pairing-page-and-device-cookie.md) | A browser pairs on a token-free page and keeps its device token in a cookie | accepted | maintainer |  |
+| [ADR-0048](0048-sandboxed-browser-helper.md) | Browser pages run in a sandboxed helper process | accepted | agent |  |
 | [ADR-0049](0049-keyframe-scene-model-and-evaluation.md) | Keyframe scenes: the override model, live values and switching between keyframes | accepted | agent |  |
 | [ADR-0050](0050-3d-transforms-rendering.md) | Drawing 3D item transforms | accepted | agent |  |
+| [ADR-0051](0051-youtube-without-a-required-oauth-client.md) | YouTube v4: no required OAuth client | superseded | maintainer | [ADR-0058](0058-youtube-sign-in-with-a-jstream-client.md) |
 | [ADR-0053](0053-per-input-verification-ledger.md) | Per-input verification stamps in one ledger file | accepted | agent |  |
+| [ADR-0054](0054-platform-ci-after-review.md) | Run the Windows, macOS and end-to-end CI jobs after review | accepted | agent |  |
+| [ADR-0055](0055-wave-branches.md) | Wave branches: PRs batch into a wave, and only the wave's PR into main runs full CI | accepted | agent |  |
+| [ADR-0056](0056-ci-supply-chain-policy-v2.md) | CI supply-chain policy v2: Dependabot also updates the end-to-end tests' npm packages | accepted | agent |  |
+| [ADR-0057](0057-server-answers-credential-calls.md) | The server answers the credential calls, and actions may answer with data | accepted | agent |  |
+| [ADR-0058](0058-youtube-sign-in-with-a-jstream-client.md) | YouTube sign-in with JStream's own OAuth client, for people only | accepted | maintainer |  |
 <!-- @generated end adr-index -->

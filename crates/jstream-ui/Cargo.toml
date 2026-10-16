@@ -22,6 +22,8 @@ futures-util.workspace = true
 jstream-control = { workspace = true, features = ["ws"] }
 jstream-protocol.workspace = true
 leptos.workspace = true
+# Settings values in the properties form.
+serde_json.workspace = true
 
 [dev-dependencies]
 jstream-control = { workspace = true, features = ["mock"] }

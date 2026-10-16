@@ -77,6 +77,11 @@ opaque_id!(
     EncoderProfileId
 );
 opaque_id!(
+    /// A paired device: one browser or other client admitted with its own device token
+    /// (ADR-0044). Assigned by the server when the device pairs.
+    DeviceId
+);
+opaque_id!(
     /// An audio bus in the collection (ADR-0028). [`BusId::master`] names the master
     /// bus, which every collection has.
     BusId
