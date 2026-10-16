@@ -122,7 +122,11 @@ encoder, so Linux can't stream until question 2 below is answered.
 loaded with `dlopen` (through `libloading`) when a backend first needs them. The workspace
 builds and tests on any Linux machine, and in CI, without their headers or `-sys` crates,
 and `deny.toml` and the lint-deps native allowlist don't change. A missing library is a
-`MissingComponent` error that names the package to install.
+`MissingComponent` error that names the package to install. This departs on purpose from
+[R-UNSAFE-004](../RULES.md#R-UNSAFE-004)'s preference for the `pipewire` crate: that crate
+generates its bindings with `bindgen` against the installed headers, so every Linux machine that
+builds the workspace, CI included, would need libpipewire's headers and libclang.
+The hand-written declarations cover only the calls the crate makes.
 
 **9. Out of scope for now**, each its own later decision:
 - the **virtual camera** (v4l2loopback needs a kernel module and root, so it gets its own
