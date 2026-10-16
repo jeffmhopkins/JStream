@@ -41,7 +41,7 @@ Contents ([Design](#design) explains the choices):
   `plan_summary` and `fresh_id`.
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
   (`sources.rs`), the properties form (`properties.rs`) and the delete confirmation
-  they share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel, an inspector
+  they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel, an inspector
   page (creating, editing and deleting outputs, their stream keys, start and stop,
   go-live and the pipeline's health), and the calls and logic behind it, tested
   natively against `MockEngine`; and `mixer.rs`: `Mixer`, the audio mixer along the
@@ -160,9 +160,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   audio is on, when it is heard (`always` or `when_shown`) and its send into each bus
   (on or off, and its gain). A nested scene's strip has only the routing toggles,
   since it has no fader or sends of its own. Each bus gets a strip too, the master
-  first, with renaming and (except the master) deleting, which the engine refuses
-  (the mixer shows its reason, and the strip stays) while a `waveform` or `spectrum`
-  draws the bus; the master's adds its
+  first, with renaming and (except the master) deleting. A delete reads `delete.plan`
+  first, as a scene's or source's does: the strip asks, saying how many `waveform` or
+  `spectrum` settings drawing the bus the plan clears, and sends the plan's edits
+  expecting the plan's revision. The master's adds its
   momentary, short-term and integrated loudness, its true peak, and a button that
   resets the integrated loudness (`audio.reset_loudness`). New buses take the first
   free `bus-N` ID; the button is off at the protocol's bus limit (`MAX_BUSES`, 16).

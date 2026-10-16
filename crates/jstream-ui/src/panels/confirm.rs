@@ -1,5 +1,5 @@
-//! The confirmation the scene and source panels show before a delete: the question,
-//! what else the `delete.plan` takes with it, and Delete or Cancel.
+//! The confirmation the scene and source panels and the mixer's bus strips show before a
+//! delete: the question, what else the `delete.plan` takes with it, and Delete or Cancel.
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
