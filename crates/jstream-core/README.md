@@ -435,9 +435,10 @@ That mapping holds until per-source capture exists.
 **Live sources.** `live::LiveSources` keeps one running `jstream-sources` `Source` per
 source in the collection with a built-in kind, built from the registry
 (`Registry::create`) with the source's settings. `sync` runs under the collection lock
-after every applied batch, undo and redo and a collection file's load: it queues a
-build for a source that is new or whose settings changed, and drops the instance of a
-deleted one. Building reads and decodes files, so it runs on `jstream-sources`, a
+after every applied batch, undo and redo, a collection file's load and the host's
+injection of media files (`with_backends`), which rebuilds every source so a `media`
+source loaded before it plays: it queues a build for a source that is new or whose
+settings changed, and drops the instance of a deleted one. Building reads and decodes files, so it runs on `jstream-sources`, a
 thread the engine starts with its first build, never under the collection lock; the
 thread then installs the source under the lock and re-plans. Each build is numbered,
 and only the latest build asked for a source installs, so a slow build can't replace
