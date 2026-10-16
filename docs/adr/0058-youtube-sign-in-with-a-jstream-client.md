@@ -162,3 +162,5 @@ the client stays in "Testing", for listed test users only.
     that cite it, ARCHITECTURE, `ROADMAP.md`, the go-live runbook and
     `docs/external.toml`'s `yt-live-api` entry. The go-live runbook's "bring your own
     client" section becomes "sign in".
+  - The README's feature list and its "anything the UI can do, an agent can do" line,
+    and ADR-0006's readers, note YouTube's API features as the one exception.
