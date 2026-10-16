@@ -1290,7 +1290,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:c65c43538952c785", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live on Windows lists wave/m2's MfMediaDecoders with its delay-loaded mfplat.dll and mfreadwrite.dll, matching serve.rs, beside main's browser sources (cef), device file, pairing on loopback and paths data directory; core's design dep re-read (its Dependencies now name arc-swap and the browser and zune-jpeg dev-dependencies, and the audio sources text both page and media inputs), none of which changes what the daemon wires; holds" }
+stamp = { hash = "b3:be7eddc231af3bee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet now says live and rtmp live in live.rs in the library target and that serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) is moved verbatim, so the rest of the bullet and Live on Windows still hold. serve.rs keeps engine, windows_backends, cef_browser, browse, bind and signals as described. Dependencies unchanged: the lib uses only core, platform and protocol" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:ff127ae33472bb22", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): stale only via core#design. Re-read the whole section; the core facts it relies on (one Engine, connect per session, placeholder outputs without backends, with_publish_opener/output_kind, with_browser after with_backends, AuditFile, with_collection_file) are unchanged by #466 (scopes only) and by this merge's core edits; serve.rs wiring and MfMediaDecoders/cef/device file text from the earlier sync still hold. No edit." }
@@ -1313,6 +1313,12 @@ stamp = { hash = "b3:a750642233d72b2c" }
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/crash.rs"]
 stamp = { hash = "b3:5c5aac8c1b12a291" }
 
+["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/lib.rs"]
+stamp = { hash = "b3:3452a33a8b6b712b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet now says live and rtmp live in live.rs in the library target and that serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) is moved verbatim, so the rest of the bullet and Live on Windows still hold. serve.rs keeps engine, windows_backends, cef_browser, browse, bind and signals as described. Dependencies unchanged: the lib uses only core, platform and protocol" }
+
+["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/live.rs"]
+stamp = { hash = "b3:c0121a362811be3d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet now says live and rtmp live in live.rs in the library target and that serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) is moved verbatim, so the rest of the bullet and Live on Windows still hold. serve.rs keeps engine, windows_backends, cef_browser, browse, bind and signals as described. Dependencies unchanged: the lib uses only core, platform and protocol" }
+
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/logs.rs"]
 stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data-directory bullet now names jstream-platform's paths module (portable marker handled), Dependencies lists the data directory under jstream-platform, open question 5 says the log default uses it and the token/collection don't yet; matches logs.rs; sits beside main's #328 delay-load text without overlap" }
 
@@ -1323,13 +1329,13 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:c2c25e12aa4a88f0", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live on Windows lists wave/m2's MfMediaDecoders with its delay-loaded mfplat.dll and mfreadwrite.dll, matching serve.rs, beside main's browser sources (cef), device file, pairing on loopback and paths data directory; core's design dep re-read (its Dependencies now name arc-swap and the browser and zune-jpeg dev-dependencies, and the audio sources text both page and media inputs), none of which changes what the daemon wires; holds" }
+stamp = { hash = "b3:2f9defb072cdb5be", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: publish-opener bullet now says live and rtmp live in live.rs in the library target and that serve.rs passes them the Windows backends and Credential Manager while live.rs's tests and tests/e2e.rs pass the fakes; opener behaviour (Weak handle, reasons, no key in errors) is moved verbatim, so the rest of the bullet and Live on Windows still hold. serve.rs keeps engine, windows_backends, cef_browser, browse, bind and signals as described. Dependencies unchanged: the lib uses only core, platform and protocol" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:3d09afaa16bc23bd", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: serve.rs's Windows backends now add wave/m2's MfMediaDecoders (Backends::media) beside main's cef browser wiring and device file, and tests/e2e.rs's fakes add FakeMediaDecoders; the contents and tests bullets hold for both; fixed the not-yet line, which said YouTube sign-in waits on Engine::with_youtube although core has it: the daemon doesn't call it yet" }
+stamp = { hash = "b3:80a43291d887f007", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291) and this PR's serve.rs doc edit: serve.rs still builds a live engine on Windows that with the cef feature opens browser sources; the crate map's apps row now says the daemon always links jstream-browser, which matches its Cargo.toml" }
@@ -1343,6 +1349,12 @@ stamp = { hash = "b3:a750642233d72b2c" }
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/crash.rs"]
 stamp = { hash = "b3:5c5aac8c1b12a291" }
 
+["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/lib.rs"]
+stamp = { hash = "b3:3452a33a8b6b712b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
+
+["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/live.rs"]
+stamp = { hash = "b3:c0121a362811be3d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
+
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/logs.rs"]
 stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: logs.rs's default dir now comes from jstream_platform::paths::data_dir (its own data_dir() removed); the Startup bullet's 'creates the log directory' still holds; main's WindowsVcam/delay-load text unaffected" }
 
@@ -1353,7 +1365,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:c2c25e12aa4a88f0", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: serve.rs's Windows backends now add wave/m2's MfMediaDecoders (Backends::media) beside main's cef browser wiring and device file, and tests/e2e.rs's fakes add FakeMediaDecoders; the contents and tests bullets hold for both; fixed the not-yet line, which said YouTube sign-in waits on Engine::with_youtube although core has it: the daemon doesn't call it yet" }
+stamp = { hash = "b3:2f9defb072cdb5be", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -1365,7 +1377,7 @@ stamp = { hash = "b3:b998d11ccf5da7ab", by = "agent:wave-owner", note = "Tests b
 stamp = { hash = "b3:fa55ac483c3bac65" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/e2e.rs"]
-stamp = { hash = "b3:16843bae45198421", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: serve.rs's Windows backends now add wave/m2's MfMediaDecoders (Backends::media) beside main's cef browser wiring and device file, and tests/e2e.rs's fakes add FakeMediaDecoders; the contents and tests bullets hold for both; fixed the not-yet line, which said YouTube sign-in waits on Engine::with_youtube although core has it: the daemon doesn't call it yet" }
+stamp = { hash = "b3:fe3aa0db9a6120ab", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: Contents now lists live.rs in the new lib target (lib.rs) as the live engine wiring, moved out of serve.rs; Serving says serve.rs makes the Windows engine live through it; Tests moves the opener and live-engine unit tests to live.rs and says tests/e2e.rs runs the library's live and rtmp, the wiring serve.rs uses, instead of its deleted copy. Why-a-crate and the rest unchanged. cargo test -p jstream-daemon passes on Linux, e2e included" }
 
 ["CRATE-jstream-daemon#usage"."body"]
 stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: main's --ui-dir row and P1's Log files bullet (data folder, portable marker) sit beside the wave's pairing device file; #298 moves CEF into the sandboxed helper but adds no flag; the usage rows match args.rs; holds" }
@@ -1410,7 +1422,7 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the browser bullet no longer says a cef build links libcef.dll at load time; with ADR-0048 CEF runs only in the helper, which starts on the first page, so a missing helper or CEF files fail that source, as browser.rs's doc now says; the device and clock text holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:7fab9e900fc13cc2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: host.rs now also gives the engine wave/m2's MfMediaDecoders; it imports from mfplat.dll and mfreadwrite.dll, which media_foundation.rs already delay-loads for the app, so the delay-load text, the 'same wiring as the daemon' claim and main's browser-source and pairing text hold" }
+stamp = { hash = "b3:06716d0fec03e3e5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: only host.rs's doc comment changed, naming the daemon's live::live in live.rs instead of serve::live; 'the same wiring as the daemon' in The engine behind the API still holds, no code changed" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's paths-based data folder and #298's browser bullet (CEF only in the sandboxed helper, a missing helper fails the source, not the app) match lib.rs and browser.rs; Design names no data module; holds" }
@@ -1449,7 +1461,7 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the apps/* row still says the desktop links sources and jstream-browser with cef; browser.rs now drives the sandboxed helper (its doc names ADR-0048 and says the app doesn't link CEF), and the Browser sources bullet still describes it; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:7fab9e900fc13cc2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: host.rs's Windows backends add wave/m2's MfMediaDecoders (Backends::media) beside main's virtual camera switch and cef browser backend; the purpose's 'a live one, wired as the daemon's is' still holds, and the contents and not-yet list are unchanged; holds" }
+stamp = { hash = "b3:06716d0fec03e3e5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#278: only host.rs's doc comment changed, pointing the daemon wiring it mirrors at apps/jstream-daemon/src/live.rs (moved from serve.rs); the Engine host bullet ('wired as the daemon's is') still holds, no code changed" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1 removes data.rs (lib.rs keeps the wave's cef-gated browser module, drops data); the contents list and tests (delay-load test kept, data-folder test gone) match; #298's not-yet line keeps browser sources off by default; holds" }
