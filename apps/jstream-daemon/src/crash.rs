@@ -5,7 +5,7 @@
 //! panicking thread's name, the panic's location and message, and a backtrace. It holds
 //! nothing else: no environment, no command line, no settings. Registered secrets (the
 //! control token, and every stream key and OAuth refresh token that passes through a
-//! [`Redacting`] credential store) are replaced by `***` wherever they appear
+//! `Redacting` credential store) are replaced by `***` wherever they appear
 //! (R-SEC-001), and only their BLAKE3 digests are kept for that, never their text. The
 //! newest [`MAX_REPORTS`] reports are kept.
 //!

@@ -1311,7 +1311,7 @@ stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:a750642233d72b2c" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/crash.rs"]
-stamp = { hash = "b3:e410260fa9cad7e8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read for #353: Live on Windows and Crash reports now say live() wraps the key store in crash::Redacting, which registers every key stored or read (and refresh tokens once the daemon has an OAuth store) with the crash redaction; opener bullet still holds (connect_rtmp errors carry no key, now tested). Checked the server design dependency's new Stream keys bullet. Tests: crash::tests::a_redacting_store_registers_what_it_stores_and_loads, a_panic_writes_a_redacted_report, serve::tests::a_failing_rtmp_publish_never_names_the_key passed." }
+stamp = { hash = "b3:ee54dab708e0640a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "crash.rs's module doc now names Redacting as plain code instead of an intra-doc link, because Redacting is cfg(any(windows, test)) and the link broke cargo doc on Linux. No behaviour change. Re-read the crash-report and Tests bullets: they still describe crash::Redacting and the redacted child-process test correctly. cargo doc -p jstream-daemon with -D warnings passes." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/logs.rs"]
 stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data-directory bullet now names jstream-platform's paths module (portable marker handled), Dependencies lists the data directory under jstream-platform, open question 5 says the log default uses it and the token/collection don't yet; matches logs.rs; sits beside main's #328 delay-load text without overlap" }
@@ -1341,7 +1341,7 @@ stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:a750642233d72b2c" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/crash.rs"]
-stamp = { hash = "b3:e410260fa9cad7e8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read for #353: the Tests bullet now names the crash hook test loading a stream key and refresh token through crash::Redacting and serve.rs's a_failing_rtmp_publish_never_names_the_key (real connect_rtmp against loopback servers); contents list otherwise unchanged. Tests: cargo test -p jstream-daemon passed." }
+stamp = { hash = "b3:ee54dab708e0640a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "crash.rs's module doc now names Redacting as plain code instead of an intra-doc link, because Redacting is cfg(any(windows, test)) and the link broke cargo doc on Linux. No behaviour change. Re-read the crash-report and Tests bullets: they still describe crash::Redacting and the redacted child-process test correctly. cargo doc -p jstream-daemon with -D warnings passes." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/logs.rs"]
 stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: logs.rs's default dir now comes from jstream_platform::paths::data_dir (its own data_dir() removed); the Startup bullet's 'creates the log directory' still holds; main's WindowsVcam/delay-load text unaffected" }
