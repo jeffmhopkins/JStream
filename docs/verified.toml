@@ -1089,7 +1089,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:45aa02b6469b1a8a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). body: this PR's only change is the RTMP stop-drain sentence that output_loop checks the deadline before each of a pass's video and audio sends, which matches pipeline.rs; the rest is wave/m1's text. tests.rs: StalledPeer's stalled sends drop to 50 ms and it still ignores stop_by, and Design doesn't describe the fake's timing" }
+stamp = { hash = "b3:03d4b1668b4755e0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "tests.rs: only the virtual-camera test's wait changed, to five frames of each start's own, matching readbacks being counted per program stage launch; no runtime code changed, and the Virtual camera design text (tap, camera thread, start, stop, sink kept) is untouched by it" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's browser paragraph says a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser and the new tests/audio.rs case; the wave's B7 opacity/blend/filter text is in other paragraphs; holds" }
@@ -1197,7 +1197,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:45aa02b6469b1a8a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). tests.rs: the Tests bullet's stalled-stop test (a peer that stops reading while a stop's deadline runs out) still describes StalledPeer with its 50 ms stalled sends; the rest of tests.rs is wave/m1's" }
+stamp = { hash = "b3:03d4b1668b4755e0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "tests.rs: the virtual-camera test now waits for five frames per start (counted from the log length before that start) instead of a cumulative 5*run, since readbacks is per start (#415); the Tests list still holds: it publishes BGRA at the canvas size and starts again after a stop, as listed" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }

@@ -4119,12 +4119,16 @@ mod cpu_pipeline {
         );
 
         for run in 1..=2u64 {
+            // `readbacks` counts this start's ticks only, and the previous run may have
+            // published any number of frames past its five, so this run waits for five
+            // frames of its own (#415).
+            let before = log.lock().expect("vcam log").pixels.len();
             start_output(&control, &mut events, "cam");
             assert!(
                 pump_until(&fakes.clock, &fakes.audio, || {
-                    log.lock().expect("vcam log").pixels.len() >= 5 * run as usize
+                    log.lock().expect("vcam log").pixels.len() >= before + 5
                 }),
-                "the camera got no frames"
+                "start {run}: the camera got no frames"
             );
             let stats = engine.output_stats().expect("running");
             assert_eq!(
@@ -4132,7 +4136,13 @@ mod cpu_pipeline {
                 "the virtual camera encodes nothing"
             );
             assert_eq!(stats.audio.received, 0, "the virtual camera has no audio");
-            assert!(stats.readbacks >= 5);
+            // Each frame published was read back first, on this start's render thread.
+            assert!(
+                stats.readbacks >= 5,
+                "start {run}: {} readbacks for {} frames published",
+                stats.readbacks,
+                log.lock().expect("vcam log").pixels.len() - before
+            );
 
             block_on(control.call(output_call("cam", false))).expect("output.stop");
             assert_eq!(
