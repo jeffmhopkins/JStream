@@ -617,7 +617,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                 eprintln!("stale: {s}");
             }
             eprintln!(
-                "docs merge-main: merged {} stamp conflict(s) and regenerated {} file(s); {} stale \
+                "docs merge-main: merged {} stamp conflict(s) and resolved {} @generated conflict(s); {} stale \
                  section(s) to re-read, then `cargo xtask docs verify <DOC#anchor> --by <who> \
                  --note \"<what you checked>\"`",
                 m.stamps.len(),
