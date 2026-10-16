@@ -7,9 +7,10 @@
 //! waits for the decision on how capture reaches the GPU context (README › Open
 //! questions). Targets are named as `id` describes.
 
-// Platform-independent, so they are tested on every platform.
+// Platform-independent, so they are tested on every platform. `convert` is shared with
+// `codec`'s H.264 encoder, which converts RGBA frames with it.
 #[cfg(any(windows, test))]
-mod convert;
+pub(crate) mod convert;
 #[cfg(any(windows, test))]
 mod id;
 // Shared with `video_device`, whose capture streams publish to the same mailbox.

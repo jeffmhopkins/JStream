@@ -1,7 +1,9 @@
-//! H.264 encoding through Media Foundation encoder MFTs, from CPU NV12 frames or from
-//! NV12 encode targets on the GPU.
+//! H.264 encoding through Media Foundation encoder MFTs, from CPU NV12 or RGBA frames or
+//! from NV12 encode targets on the GPU.
 //!
-//! On the CPU path, frames are copied into a Media Foundation memory buffer. On the GPU
+//! The MFTs take NV12. On the CPU path, an NV12 frame is copied into a Media Foundation
+//! memory buffer, and an RGBA frame (the engine's composite) is first converted to NV12
+//! in BT.709 limited range by the capture path's converter (`capture::convert`). On the GPU
 //! path (ARCH › GPU pipeline, step 5), opened through `MfCodecs`' `Codecs::on_context`,
 //! the MFT runs on the context's D3D11 device through a DXGI device manager, and each
 //! encode target is copied on the GPU into a texture from the MFT's own sample allocator
@@ -16,8 +18,12 @@
 
 use std::collections::VecDeque;
 
-use jstream_platform::media::{Codec, MediaTime, PixelFormat, Rounding, Timebase, VideoFrame};
+use jstream_platform::media::{
+    Codec, ColorInfo, MediaTime, PixelFormat, Rounding, Timebase, VideoFrame, VideoFrameInfo,
+};
 use jstream_platform::{PlatformError, RateControl, VideoEncoderConfig};
+
+use crate::capture::convert::rgba_to_nv12;
 
 /// What the MFT is configured with, derived from a [`VideoEncoderConfig`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,17 +41,17 @@ pub(crate) struct Settings {
 /// Checks a configuration and derives the MFT settings.
 ///
 /// # Errors
-/// [`PlatformError::Unsupported`] for another codec, an input other than NV12, odd
-/// dimensions (NV12 halves them for chroma), a zero keyframe interval, a zero bit rate or
+/// [`PlatformError::Unsupported`] for another codec, an input other than NV12 or RGBA,
+/// odd dimensions (NV12 halves them for chroma), a zero keyframe interval, a zero bit rate or
 /// a VBR peak below its mean.
 pub(crate) fn check(config: &VideoEncoderConfig) -> Result<Settings, PlatformError> {
     let unsupported = |what: String| Err(PlatformError::Unsupported { what });
     if config.codec != Codec::H264 {
         return unsupported(format!("{:?} from the H.264 encoder", config.codec));
     }
-    if config.input_format != PixelFormat::Nv12 {
+    if !matches!(config.input_format, PixelFormat::Nv12 | PixelFormat::Rgba8) {
         return unsupported(format!(
-            "H.264 from {:?} (the encoder takes NV12)",
+            "H.264 from {:?} (the encoder takes NV12 or RGBA)",
             config.input_format
         ));
     }
@@ -109,6 +115,93 @@ pub(crate) fn pack_nv12(frame: &VideoFrame, out: &mut [u8]) -> Result<(), Platfo
         }
     }
     Ok(())
+}
+
+/// The CPU path's staging: one packed NV12 frame for the MFT and, for RGBA input, the
+/// NV12 frame each RGBA frame is converted into first. Both are allocated once.
+#[derive(Debug)]
+pub(crate) struct CpuStaging {
+    format: PixelFormat,
+    /// For RGBA input, the converted frame; `None` for NV12 input.
+    nv12: Option<VideoFrame>,
+    packed: Vec<u8>,
+}
+
+impl CpuStaging {
+    /// Staging for frames of a configuration [`check`] accepted.
+    ///
+    /// # Errors
+    /// [`PlatformError::Unsupported`] for an input other than NV12 or RGBA, and
+    /// [`PlatformError::Media`] when the frame size overflows.
+    pub(crate) fn new(config: &VideoEncoderConfig) -> Result<Self, PlatformError> {
+        let size = config.size;
+        let nv12 = match config.input_format {
+            PixelFormat::Nv12 => None,
+            PixelFormat::Rgba8 => Some(VideoFrame::zeroed(VideoFrameInfo {
+                size,
+                format: PixelFormat::Nv12,
+                color: ColorInfo::default(),
+                pts: MediaTime::zero(hns()),
+            })?),
+            other => {
+                return Err(PlatformError::Unsupported {
+                    what: format!("H.264 from {other:?} (the encoder takes NV12 or RGBA)"),
+                });
+            }
+        };
+        Ok(Self {
+            format: config.input_format,
+            nv12,
+            packed: vec![0; size.width() as usize * size.height() as usize * 3 / 2],
+        })
+    }
+
+    /// The input format the staging takes.
+    pub(crate) fn format(&self) -> PixelFormat {
+        self.format
+    }
+
+    /// `frame` as packed NV12 for the MFT, converted first when it is RGBA.
+    ///
+    /// # Errors
+    /// [`PlatformError::Unsupported`] for a frame in another format or of another size
+    /// than the configuration's, and [`PlatformError::InvalidState`] when an RGBA frame's
+    /// plane is too small.
+    pub(crate) fn stage(&mut self, frame: &VideoFrame) -> Result<&[u8], PlatformError> {
+        let info = frame.info();
+        if info.format != self.format {
+            return Err(PlatformError::Unsupported {
+                what: format!(
+                    "a {:?} frame on an H.264 encoder configured for {:?}",
+                    info.format, self.format
+                ),
+            });
+        }
+        match &mut self.nv12 {
+            None => pack_nv12(frame, &mut self.packed)?,
+            Some(nv12) => {
+                if info.size != nv12.info().size {
+                    return Err(PlatformError::Unsupported {
+                        what: format!(
+                            "a {}x{} frame on an H.264 encoder configured for {}x{}",
+                            info.size.width(),
+                            info.size.height(),
+                            nv12.info().size.width(),
+                            nv12.info().size.height()
+                        ),
+                    });
+                }
+                // RGBA has one plane, and `VideoFrame` checked it against the size.
+                let plane = frame.plane(0).ok_or(PlatformError::InvalidState {
+                    what: "H.264 RGBA input",
+                    state: "the frame has no plane",
+                })?;
+                rgba_to_nv12(plane.data(), plane.stride(), nv12)?;
+                pack_nv12(nv12, &mut self.packed)?;
+            }
+        }
+        Ok(&self.packed)
+    }
 }
 
 /// The frames in flight: the time each was sent to the encoder with (100 ns units) and
@@ -200,7 +293,7 @@ mod encoder {
     use windows::Win32::System::Variant::VARIANT;
     use windows::core::{GUID, Interface};
 
-    use super::{InFlight, Settings, check, pack_nv12};
+    use super::{CpuStaging, InFlight, Settings, check};
     use crate::codec::mf::{self, Found, MfRuntime, Mft, Output, PullMode, RetypeArgs};
     use crate::com::{OsResult, os_error};
     use crate::gpu::EncodeGpu;
@@ -214,8 +307,8 @@ mod encoder {
 
     /// What the encoder's frames are copied into.
     enum Input {
-        /// One packed NV12 frame of staging, for CPU frames.
-        Cpu(Vec<u8>),
+        /// Staging for CPU frames: NV12, or RGBA converted to NV12.
+        Cpu(CpuStaging),
         /// The MFT's input textures, for encode targets.
         Gpu(GpuInput),
     }
@@ -369,7 +462,8 @@ mod encoder {
     unsafe impl Send for MfH264Encoder {}
 
     impl MfH264Encoder {
-        /// Opens an H.264 encoder that takes CPU NV12 frames: a hardware MFT first
+        /// Opens an H.264 encoder that takes CPU NV12 or RGBA frames, as the
+        /// configuration's `input_format` says: a hardware MFT first
         /// (unless the preference avoids hardware), then the software one (unless it
         /// requires hardware). The first that accepts the configuration wins.
         pub(crate) fn open(config: &VideoEncoderConfig) -> Result<Self, PlatformError> {
@@ -378,11 +472,13 @@ mod encoder {
 
         /// Opens an H.264 encoder that takes encode targets on `gpu`'s context: the
         /// first D3D11-aware hardware MFT on its adapter that accepts the configuration
-        /// and the context's device.
+        /// and the context's device. Encode targets are NV12, so the configuration's
+        /// `input_format` must be too.
         ///
         /// # Errors
-        /// [`PlatformError::Unsupported`] when the configuration avoids hardware or no
-        /// such MFT accepts it, and [`PlatformError::Os`] when MF fails.
+        /// [`PlatformError::Unsupported`] when the configuration avoids hardware, its
+        /// input isn't NV12 or no such MFT accepts it, and [`PlatformError::Os`] when MF
+        /// fails.
         pub(crate) fn open_on(
             config: &VideoEncoderConfig,
             gpu: &EncodeGpu,
@@ -392,6 +488,14 @@ mod encoder {
                     what: "H.264 from GPU frames with hardware avoided (only hardware \
                            encoders read D3D11 textures)"
                         .into(),
+                });
+            }
+            if config.input_format != PixelFormat::Nv12 {
+                return Err(PlatformError::Unsupported {
+                    what: format!(
+                        "H.264 from {:?} GPU frames (encode targets are NV12)",
+                        config.input_format
+                    ),
                 });
             }
             Self::open_with(config, Some(gpu))
@@ -437,14 +541,7 @@ mod encoder {
                                 _manager: manager.clone(),
                                 gpu: gpu.clone(),
                             }),
-                            _ => {
-                                let size = config.size;
-                                Input::Cpu(vec![
-                                    0;
-                                    size.width() as usize * size.height() as usize * 3
-                                        / 2
-                                ])
-                            }
+                            _ => Input::Cpu(CpuStaging::new(config)?),
                         };
                         Ok((mft, events, output, input))
                     });
@@ -682,21 +779,26 @@ mod encoder {
                 });
             }
             let info = *frame.info();
-            if info.size != self.config.size || info.format != PixelFormat::Nv12 {
+            let expected = match &self.input {
+                Input::Cpu(staging) => staging.format(),
+                Input::Gpu(_) => PixelFormat::Nv12,
+            };
+            if info.size != self.config.size || info.format != expected {
                 return Err(PlatformError::Unsupported {
                     what: format!(
-                        "a {:?} {}x{} frame (configured for NV12 {}x{})",
+                        "a {:?} {}x{} frame (configured for {:?} {}x{})",
                         info.format,
                         info.size.width(),
                         info.size.height(),
+                        expected,
                         self.config.size.width(),
                         self.config.size.height()
                     ),
                 });
             }
             let sample = match (&mut self.input, frame) {
-                (Input::Cpu(nv12), VideoSurface::Cpu(frame)) => {
-                    pack_nv12(&frame, nv12)?;
+                (Input::Cpu(staging), VideoSurface::Cpu(frame)) => {
+                    let nv12 = staging.stage(&frame)?;
                     let time = self.in_flight.send(info.pts)?;
                     mf::sample_from(nv12, time, self.settings.frame_hns)?
                 }
@@ -892,7 +994,7 @@ mod tests {
     };
     use jstream_platform::{HardwarePreference, PlatformError, RateControl, VideoEncoderConfig};
 
-    use super::{InFlight, check, hns, pack_nv12};
+    use super::{CpuStaging, InFlight, check, hns, pack_nv12};
 
     fn config() -> VideoEncoderConfig {
         VideoEncoderConfig {
@@ -950,6 +1052,57 @@ mod tests {
         let mut c = config();
         c.rate_control = RateControl::Cbr { kbps: 0 };
         assert!(refused(c));
+    }
+
+    #[test]
+    fn takes_rgba_as_the_cpu_output_pipeline_sends_it() {
+        // Issue #424: the engine's CPU pipeline asks for RGBA, which was refused.
+        let mut c = config();
+        c.input_format = PixelFormat::Rgba8;
+        assert_eq!(check(&c).expect("RGBA"), check(&config()).expect("NV12"));
+    }
+
+    #[test]
+    fn stages_rgba_as_packed_nv12() {
+        let mut c = config();
+        c.input_format = PixelFormat::Rgba8;
+        c.size = FrameSize::new(4, 2).expect("size");
+        let mut staging = CpuStaging::new(&c).expect("staging");
+        assert_eq!(staging.format(), PixelFormat::Rgba8);
+        // Pure red, with 8 bytes of padding after each row.
+        let mut data = Vec::new();
+        for _ in 0..2 {
+            data.extend([255, 0, 0, 255].repeat(4));
+            data.extend([0xEE; 8]);
+        }
+        let info = VideoFrameInfo {
+            size: c.size,
+            format: PixelFormat::Rgba8,
+            color: ColorInfo::default(),
+            pts: MediaTime::zero(Timebase::NANOS),
+        };
+        let frame = VideoFrame::new(info, vec![Plane::new(data, 24)]).expect("frame");
+        // BT.709 limited red: Y 63, U 102, V 240.
+        assert_eq!(
+            staging.stage(&frame).expect("stage"),
+            [63, 63, 63, 63, 63, 63, 63, 63, 102, 240, 102, 240]
+        );
+        // An NV12 frame, or RGBA at another size, is refused.
+        assert!(staging.stage(&nv12(4, 2, 4)).is_err());
+        let big = VideoFrame::zeroed(VideoFrameInfo {
+            size: FrameSize::new(6, 2).expect("size"),
+            ..info
+        })
+        .expect("frame");
+        assert!(staging.stage(&big).is_err());
+        // NV12 staging packs as before, and refuses RGBA.
+        let mut c = config();
+        c.size = FrameSize::new(4, 4).expect("size");
+        let mut staging = CpuStaging::new(&c).expect("staging");
+        assert_eq!(staging.stage(&nv12(4, 4, 8)).expect("stage").len(), 24);
+        assert!(staging.stage(&frame).is_err());
+        c.input_format = PixelFormat::Bgra8;
+        assert!(CpuStaging::new(&c).is_err());
     }
 
     fn nv12(w: u32, h: u32, stride: usize) -> VideoFrame {

@@ -1878,7 +1878,7 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:574e358c2bd2905b", by = "agent:claude", note = "E3c over wave/m1's E3b text: CPU/GPU H.264 path bullets (MFTEnum2 with the context LUID, MF_SA_D3D11_AWARE, DXGI device manager; 8-sample allocator and Busy; copy waits on the context fence, then signals the release fence) match codec/h264.rs and gpu/encode.rs; WindowsGpu's two fences and the release-value lock; GPU encode test paragraph; Not yet drops encoders; open question answered via Codecs::on_context. Dep: platform #purpose now adds the Codecs::on_context and FrameSync::platform bullets, which this README's MfCodecs GPU path implements as stated; E3b's WgcCapture::on_gpu capture text is unchanged" }
+stamp = { hash = "b3:ba39743a3cc76fc5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the whole section against #424: updated the H.264 CPU path (NV12 or RGBA input, RGBA converted by WGC's BGRA/RGBA converter), the GPU path (non-NV12 input_format refused), and the WGC frames note; rest (AAC, both-paths config, video devices, WindowsGpu) unaffected" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "E3c over wave/m1's E3b text: CPU/GPU H.264 path bullets (MFTEnum2 with the context LUID, MF_SA_D3D11_AWARE, DXGI device manager; 8-sample allocator and Busy; copy waits on the context fence, then signals the release fence) match codec/h264.rs and gpu/encode.rs; WindowsGpu's two fences and the release-value lock; GPU encode test paragraph; Not yet drops encoders; open question answered via Codecs::on_context. Dep: platform #purpose now adds the Codecs::on_context and FrameSync::platform bullets, which this README's MfCodecs GPU path implements as stated; E3b's WgcCapture::on_gpu capture text is unchanged" }
@@ -1920,7 +1920,7 @@ stamp = { hash = "b3:d47d64ab0a716fca" }
 stamp = { hash = "b3:3294ae8699585eea" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/convert.rs"]
-stamp = { hash = "b3:c69cc7614d14a3de" }
+stamp = { hash = "b3:6fc910e9e290c471", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the whole section against #424: updated the H.264 CPU path (NV12 or RGBA input, RGBA converted by WGC's BGRA/RGBA converter), the GPU path (non-NV12 input_format refused), and the WGC frames note; rest (AAC, both-paths config, video devices, WindowsGpu) unaffected" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/id.rs"]
 stamp = { hash = "b3:a5976c69be087903" }
@@ -1929,7 +1929,7 @@ stamp = { hash = "b3:a5976c69be087903" }
 stamp = { hash = "b3:a15cf56d9898996a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/mod.rs"]
-stamp = { hash = "b3:05a494ad3dae5f79" }
+stamp = { hash = "b3:f6ed2724ebc1dc51", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the whole section against #424: updated the H.264 CPU path (NV12 or RGBA input, RGBA converted by WGC's BGRA/RGBA converter), the GPU path (non-NV12 input_format refused), and the WGC frames note; rest (AAC, both-paths config, video devices, WindowsGpu) unaffected" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/ring.rs"]
 stamp = { hash = "b3:bc308dcc158e28d4" }
@@ -1947,7 +1947,7 @@ stamp = { hash = "b3:bcbc90e406de91b4" }
 stamp = { hash = "b3:0b4fe8918cdd233a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/h264.rs"]
-stamp = { hash = "b3:6bff7e228d42f94e" }
+stamp = { hash = "b3:678cd2c407fa9382", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the whole section against #424: updated the H.264 CPU path (NV12 or RGBA input, RGBA converted by WGC's BGRA/RGBA converter), the GPU path (non-NV12 input_format refused), and the WGC frames note; rest (AAC, both-paths config, video devices, WindowsGpu) unaffected" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mf.rs"]
 stamp = { hash = "b3:b132c98638f816bf" }

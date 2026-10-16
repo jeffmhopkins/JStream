@@ -91,8 +91,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     display (for a window, the display it is on), else on the default hardware adapter.
   - **Frames:** a free-threaded frame pool of two BGRA buffers. On each `FrameArrived`,
     on a WinRT thread-pool thread, the frame is copied into a staging texture, read back
-    and converted to NV12 in BT.709 limited range, which is what the H.264 encoder's CPU
-    path takes. Chroma is left-sited, the H.264 default: each chroma sample filters the
+    and converted to NV12 in BT.709 limited range, which is what the H.264 encoder's MFTs
+    take. The same converter turns the H.264 encoder's RGBA input into NV12. Chroma is left-sited, the H.264 default: each chroma sample filters the
     two rows of its block with a `[1 2 1]` tap centred on the block's left column. NV12
     needs even dimensions, so an odd width or height loses its last column or row. When
     the content size changes, the pool is recreated at the new size, and the frames
@@ -174,15 +174,18 @@ The code is ported from spikes S1 to S3. This first cut has:
     initialising COM. Sessions are opened from a thread that isn't an STA.
   - **Teardown:** dropping a session ends streaming and calls `ShutdownObject` on the
     activation object, as Microsoft asks. One output sample is reused for every pull.
-  - **H.264 encoder, CPU path:** `MfCodecs::new()`'s encoders take NV12
-    `VideoSurface::Cpu` frames and copy them into Media Foundation memory buffers. It is
-    ARCH's fallback path
+  - **H.264 encoder, CPU path:** `MfCodecs::new()`'s encoders take NV12 or RGBA
+    `VideoSurface::Cpu` frames, as the configuration's `input_format` says, and copy them
+    into Media Foundation memory buffers. The MFTs take only NV12, so an RGBA frame (the
+    engine's CPU output pipeline sends its composite as RGBA) is first converted to NV12
+    on the CPU by WGC capture's converter below: BT.709 limited range, left-sited chroma.
+    It is ARCH's fallback path
     ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 6).
   - **H.264 encoder, GPU path** (step 5): `Codecs::on_context` on a context `WindowsGpu`
     opened (another backend's is `InvalidState`) gives the same backend on that context.
     Its video encoders take that context's NV12 encode targets (`VideoSurface::Gpu`) and
-    nothing else: a CPU frame, or a GPU frame that isn't one of its encode targets, is
-    `Unsupported`. Audio is unchanged.
+    nothing else: a CPU frame, a GPU frame that isn't one of its encode targets, or a
+    configuration whose `input_format` isn't NV12, is `Unsupported`. Audio is unchanged.
     - **Choosing an encoder:** only hardware encoder MFTs on the context's adapter
       (`MFTEnum2` with the adapter's LUID) that say they are D3D11-aware
       (`MF_SA_D3D11_AWARE`). Each gets a DXGI device manager on the context's D3D11

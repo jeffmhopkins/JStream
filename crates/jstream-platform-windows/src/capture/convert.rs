@@ -1,7 +1,10 @@
-//! BGRA to NV12 on the CPU, for the capture fallback path (ARCH › GPU pipeline, step 6).
+//! BGRA or RGBA to NV12 on the CPU, for the capture and encode fallback paths (ARCH ›
+//! GPU pipeline, step 6).
 //!
-//! WGC delivers 8-bit BGRA. The H.264 encoder's CPU path takes NV12 in BT.709 limited
-//! range (`ColorInfo::default()`), so that is what this produces. The samples are treated
+//! WGC delivers 8-bit BGRA, and the engine's CPU output pipeline composites 8-bit RGBA.
+//! The Media Foundation H.264 encoder takes NV12 in BT.709 limited range
+//! (`ColorInfo::default()`), so that is what this produces from either; the two layouts
+//! differ only in where red and blue sit. The samples are treated
 //! as gamma-encoded R'G'B', as every capture and encode pipeline does.
 //!
 //! Chroma is **left-sited**, the H.264 default (`chroma_sample_location_type` 0, which
@@ -49,11 +52,34 @@ pub(crate) fn bgra_to_nv12(
     stride: usize,
     frame: &mut VideoFrame,
 ) -> Result<(), PlatformError> {
+    to_nv12::<2, 0>("BGRA", src, stride, frame)
+}
+
+/// As [`bgra_to_nv12`], from an RGBA image: the engine's composited CPU frames.
+///
+/// # Errors
+/// As for [`bgra_to_nv12`].
+pub(crate) fn rgba_to_nv12(
+    src: &[u8],
+    stride: usize,
+    frame: &mut VideoFrame,
+) -> Result<(), PlatformError> {
+    to_nv12::<0, 2>("RGBA", src, stride, frame)
+}
+
+/// The converter for a 4-byte layout with red at byte `R`, green at 1 and blue at `B`;
+/// `layout` names it in errors.
+fn to_nv12<const R: usize, const B: usize>(
+    layout: &str,
+    src: &[u8],
+    stride: usize,
+    frame: &mut VideoFrame,
+) -> Result<(), PlatformError> {
     let info = *frame.info();
     if info.format != PixelFormat::Nv12 || info.color != ColorInfo::default() {
         return Err(PlatformError::Unsupported {
             what: format!(
-                "BGRA to {:?} in {:?} (the converter writes BT.709 limited NV12)",
+                "{layout} to {:?} in {:?} (the converter writes BT.709 limited NV12)",
                 info.format, info.color
             ),
         });
@@ -70,7 +96,7 @@ pub(crate) fn bgra_to_nv12(
         .and_then(|b| b.checked_add(row_bytes));
     if stride < row_bytes || needed.is_none_or(|n| src.len() < n) {
         return Err(PlatformError::InvalidState {
-            what: "BGRA to NV12",
+            what: "RGB to NV12",
             state: "the source is smaller than the frame",
         });
     }
@@ -82,7 +108,7 @@ pub(crate) fn bgra_to_nv12(
         let s = src_row(y);
         if let Some(dst) = frame.row_mut(0, y) {
             for (d, p) in dst.iter_mut().zip(s.chunks_exact(4)) {
-                let (b, g, r) = (i32::from(p[0]), i32::from(p[1]), i32::from(p[2]));
+                let (b, g, r) = (i32::from(p[B]), i32::from(p[1]), i32::from(p[R]));
                 let v = 16 + ((Y_R * r + Y_G * g + Y_B * b + (1 << 15)) >> 16);
                 *d = v.clamp(16, 235) as u8;
             }
@@ -108,7 +134,7 @@ pub(crate) fn bgra_to_nv12(
                     };
                     row(top) + row(bottom)
                 };
-                let (sb, sg, sr) = (sum(0), sum(1), sum(2));
+                let (sb, sg, sr) = (sum(B), sum(1), sum(R));
                 let u = 128 + ((U_R * sr + U_G * sg + U_B * sb + (1 << 18)) >> 19);
                 let v = 128 + ((V_R * sr + V_G * sg + V_B * sb + (1 << 18)) >> 19);
                 d[0] = u.clamp(16, 240) as u8;
@@ -126,7 +152,7 @@ mod tests {
         VideoFrameInfo,
     };
 
-    use super::{bgra_to_nv12, even_size};
+    use super::{bgra_to_nv12, even_size, rgba_to_nv12};
 
     fn frame(w: u32, h: u32) -> VideoFrame {
         VideoFrame::zeroed(VideoFrameInfo {
@@ -174,6 +200,35 @@ mod tests {
                     .all(|c| c == [yuv.1, yuv.2])
             );
         }
+    }
+
+    #[test]
+    fn rgba_matches_bgra() {
+        // The same reference colours from RGBA: only red and blue swap places.
+        for (rgb, yuv) in [
+            ((255, 0, 0), (63, 102, 240)),
+            ((0, 255, 0), (173, 42, 26)),
+            ((0, 0, 255), (32, 240, 118)),
+        ] {
+            let (r, g, b) = rgb;
+            let src = [r, g, b, 255].repeat(4 * 2);
+            let mut f = frame(4, 2);
+            rgba_to_nv12(&src, 16, &mut f).expect("convert");
+            assert_eq!(yuv_of(&f), yuv, "{rgb:?}");
+        }
+        // A non-uniform image gives the same planes from either layout.
+        let pixels: Vec<(u8, u8, u8)> = (0..6 * 4)
+            .map(|i: u8| (i * 10, 255 - i * 7, i * 3 + 40))
+            .collect();
+        let bgra: Vec<u8> = pixels.iter().flat_map(|&(r, g, b)| [b, g, r, 0]).collect();
+        let rgba: Vec<u8> = pixels.iter().flat_map(|&(r, g, b)| [r, g, b, 0]).collect();
+        let (mut from_bgra, mut from_rgba) = (frame(6, 4), frame(6, 4));
+        bgra_to_nv12(&bgra, 24, &mut from_bgra).expect("BGRA");
+        rgba_to_nv12(&rgba, 24, &mut from_rgba).expect("RGBA");
+        assert_eq!(from_bgra.planes(), from_rgba.planes());
+        // An odd-sized frame is refused, as for BGRA.
+        let mut odd = frame(3, 2);
+        assert!(rgba_to_nv12(&[0; 24], 12, &mut odd).is_err());
     }
 
     #[test]
