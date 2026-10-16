@@ -60,7 +60,7 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
   that are only between stamps or only inside `@generated` blocks, moves inline stamps a branch from before ADR-0053 still
-  has, and lists the sections left stale.
+  has, and lists the sections left stale with the notes the branch had written on each.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -326,7 +326,9 @@ other conflict, including one in a file that also has stamp conflicts, is left e
 git wrote it, and the merge stays open for you to finish by hand. When every conflict was
 resolved this way it commits the merge, runs
 `docs migrate` and commits what that changed separately, and prints the sections that are
-now stale, for `docs verify` after a re-read.
+now stale, for `docs verify` after a re-read. Under each one it prints the notes this
+branch wrote on that section since its merge base, because the re-verify replaces them
+([Verification notes](#notes)).
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes
@@ -417,6 +419,10 @@ holds**. The note says what was checked and why it still holds, e.g.:
   of every entry whose input changed since the previous verify. An earlier note on such an
   entry survives only in git history (`docs log`), so the last note on each entry must
   cover the PR's whole change to that input: it is the one the reviewer reads.
+- After `docs merge-main`, each stale section needs its own note: what its earlier note
+  said about this PR's change, plus what the merge changed in that section's inputs.
+  `merge-main` prints the earlier notes under each stale section for this. One stock note
+  across every stale section, such as "rechecked after merging main", fails review.
 - A verify that only drops removed inputs, or finds no input changed, records no `by` or
   `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. Say in
   the PR what you re-read after removing a covered file.
@@ -563,8 +569,9 @@ It also generates one block from data rather than from docs:
   deliver it, and `docs check` fails when it doesn't parse or breaks those rules. A PR
   that delivers or advances an item updates its entry, so the README changes with the
   work. `cargo xtask docs progress` compares the file with the merged history (the
-  `(#N)` of each squash commit, and item IDs that PR titles name in parentheses) and
-  prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
+  `(#N)` of each squash commit, the `(#N)` of each `* …` line in a wave's landing squash,
+  which lists the PRs the wave carried, and item IDs that PR titles name in parentheses)
+  and prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
   never fails a PR, because a PR's own merge commit doesn't exist yet.
 
 <a id="governance"></a>
@@ -664,8 +671,8 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
 - **Clients** ([R-ARCH-003](RULES.md#R-ARCH-003)): `jstream-ui`, `jstream-mcp`,
   `jstream-server` and `jstream-cli` never reach `jstream-core`, directly or through other
   members. The finding shows the path.
-- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform and vcam crates
-  on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
+- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam, browser and
+  browser-helper crates on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
   member that declares `false`, every library and binary crate root must carry
   `#![forbid(unsafe_code)]` (alone or among other lints, possibly wrapped over several
   lines) among its leading inner attributes: only whitespace, comments and other inner
@@ -677,7 +684,10 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
   heuristic: a build-dependency on `cc`, `cmake`, `autotools` or `nasm-rs`, or on a build
   helper that has one of them as a normal dependency, one level down (`cxx-build` → `cc`).
   Deeper chains, and build scripts that run a compiler without those crates, are not
-  detected; the `deny.toml` bans and review cover them.
+  detected; the `deny.toml` bans and review cover them. The graph is the one default
+  features resolve, so a package that only an off-by-default feature reaches (CEF's
+  `cef-dll-sys`, behind `jstream-browser`'s `helper` feature) isn't checked: its allowlist
+  entry records the decision, and `cargo deny check --all-features` still sees it.
 - **Workspace dependencies** ([R-DEP-003](RULES.md#R-DEP-003)): every entry in a member's
   `[dependencies]`, `[dev-dependencies]` and `[build-dependencies]` tables, including
   `[target.<cfg>.…]` ones, is `<dep>.workspace = true`, with its version in the root

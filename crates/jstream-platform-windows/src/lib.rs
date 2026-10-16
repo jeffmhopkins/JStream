@@ -4,8 +4,9 @@
 //! codecs (`MfCodecs`), webcams and capture cards (`MfVideoDevices`, with the MJPEG
 //! decode hook `MfMjpegDecoder`), GPU interop (`WindowsGpu`), the Credential Manager
 //! store for stream keys (`WindowsCredentials`), the virtual camera's engine side
-//! (`WindowsVcam`), and `check_media_foundation`, which reports a Windows N edition
-//! without Media Foundation; video decoders follow. Layer 2, and one of the few crates allowed
+//! (`WindowsVcam`), local media files through the Media Foundation Source Reader
+//! (`MfMediaDecoders`), and `check_media_foundation`, which reports a Windows N edition
+//! without Media Foundation; packet video decoders follow. Layer 2, and one of the few crates allowed
 //! `unsafe` (R-UNSAFE-001): every OS call is wrapped here behind safe APIs.
 //!
 //! The backends exist only on Windows. On other platforms the crate builds empty except
@@ -20,6 +21,7 @@ mod codec;
 #[cfg(windows)]
 mod com;
 mod credential;
+mod decode;
 #[cfg(windows)]
 mod gpu;
 // Its decision logic is tested on every platform.
@@ -43,6 +45,8 @@ pub use codec::MfCodecs;
 pub use credential::CredentialTarget;
 #[cfg(windows)]
 pub use credential::WindowsCredentials;
+#[cfg(windows)]
+pub use decode::MfMediaDecoders;
 #[cfg(windows)]
 pub use gpu::WindowsGpu;
 #[cfg(windows)]

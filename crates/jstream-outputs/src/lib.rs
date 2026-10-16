@@ -2,10 +2,10 @@
 //! already-built FLV tag bodies to an ingest server such as YouTube's, over TCP
 //! (`rtmp://`) or TLS (`rtmps://`, rustls with the `ring` provider), and reconnects
 //! with backoff when the connection drops, and the recording file sink ([`record`]),
-//! which writes encoded packets as fragmented MP4. The `Output` trait and the
-//! virtual-camera output come later.
+//! which writes encoded packets as fragmented MP4. The `Output` trait comes
+//! later; the virtual-camera output runs in `jstream-core`'s runtime.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-outputs/README.md#purpose, docs/adr/0041-youtube-interaction-scope-v3.md, docs/adr/0031-source-types-and-decoding-scope.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-outputs/README.md#purpose, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md, docs/adr/0031-source-types-and-decoding-scope.md
 
 #![forbid(unsafe_code)]
 

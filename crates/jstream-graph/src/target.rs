@@ -1,5 +1,5 @@
-//! Validation of an output's target: the RTMP(S) server URL an output publishes to,
-//! and the file a recording output writes.
+//! Validation of an output's target: the RTMP(S) server URL an output publishes to, the
+//! YouTube broadcast it is bound to, and the file a recording output writes.
 //!
 //! The collection is saved in plain text, so a URL must never carry a credential
 //! (R-SEC-001, docs/RULES.md#R-SEC-001). The stream key goes to the OS credential store
@@ -53,6 +53,28 @@ pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
         Some("" | ".") | None => Some("must end in a file name"),
         Some(_) => None,
     }
+}
+
+/// The longest YouTube broadcast ID accepted, in bytes. YouTube's are 11.
+pub(crate) const MAX_BROADCAST_ID_LEN: usize = 128;
+
+/// Why `id` is not an acceptable YouTube broadcast ID, or `None` when it is: YouTube's
+/// IDs are ASCII letters, digits, `-` and `_`. The check keeps anything else out of the
+/// Live API query the engine builds from it.
+pub(crate) fn broadcast_id_problem(id: &str) -> Option<&'static str> {
+    if id.is_empty() {
+        return Some("must not be empty");
+    }
+    if id.len() > MAX_BROADCAST_ID_LEN {
+        return Some("must be at most 128 bytes");
+    }
+    if !id
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Some("must be ASCII letters, digits, `-` and `_`");
+    }
+    None
 }
 
 /// Why `url` is not an acceptable RTMP(S) server URL, or `None` when it is.
