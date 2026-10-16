@@ -74,8 +74,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `zune-jpeg`'s internal planes, which for a progressive JPEG hold the whole image's
   coefficients (2 bytes per sample of each colour component, so 6 bytes a pixel for
   full-resolution YCbCr) while it decodes, bounded only by the side
-  limit. `Context` also carries the `AudioScope` the `waveform` and `spectrum`
-  sources draw; with none they draw silence.
+  limit. `Context` also carries the `AudioScopes` the `waveform` and `spectrum`
+  sources find their audio in; with none they draw silence.
 - `AudioScope`: the latest audio of one mix, as mono (the mean of left and right), in
   a lock-free ring of 16384 samples (341 ms at 48 kHz) stored as atomics. One thread
   pushes interleaved stereo blocks; any number read the latest window of up to 2048
@@ -87,6 +87,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   source's `Painter`, on the thread that paints, never on the mixer thread
   ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)'s audio → render
   path).
+- `AudioScopes`: where those sources find their scope, by their `audio` setting: the
+  program mix's (`program()`, which always exists), or a bus's (`bus(id)`, made the
+  first time it is asked for). `retain(drawn)` keeps a scope for each bus in `drawn`
+  and drops the others; `buses()` lists them. The engine keeps one and feeds every
+  scope in it from its mixer thread. Its lock is taken only to find, make or drop a
+  bus's scope, never by the thread that pushes.
 
 **Kinds.**
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
@@ -187,7 +193,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   when the next play's first frame is due. An audio block of another
   format stops the source, as a frame of another size does.
 - `waveform` and `spectrum` (C10) draw the latest 2048 samples (43 ms at 48 kHz) of
-  the `Context`'s `AudioScope`, which in the engine is the program mix. `create`
+  the `AudioScope` their `audio` setting names in the `Context`'s `AudioScopes`
+  (#362): `null`, the default, is the program mix, the master after its filters as
+  the outputs hear it; a `bus` reference is that bus after its fader, before the
+  master's filters. The parameter's description says so, and a change of it needs a
+  new source; a value that isn't a bus reference or `null` is a setting error. The
+  graph checks that the bus exists and refuses to delete it while a source draws it. `create`
   paints the first frame; after that their `Painter` draws a new one each 1/30 s tick
   of `at` (`next_change` is the next tick; with no scope, `None`), row by row into a
   pool of up to four frames reused once no one holds them, so a frame handed out
@@ -207,8 +218,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   20 kHz (or half the sample rate). The `scale` spreads frequencies `log` from
   20 Hz (each octave as wide, the default) or `linear` from 0 Hz, and a bar narrower
   than a bin shows its nearest bin. Bars at least three pixels wide have a
-  one-pixel gap. Both read the program mix only: a bus or a single source needs the
-  protocol's bus entity and a per-source tap in the mixer first.
+  one-pixel gap. Neither draws a single source yet: that needs a per-input tap in the
+  mixer.
 - `display`, `webcam` and `window` are described only, with the settings B4
   gave them: sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.
@@ -287,10 +298,15 @@ ring (latest window, wrap-around, and a reader racing a writer never seeing a to
 window), the frame ticks and easing, and draw both kinds from known audio: each
 waveform column's range, the dB scale, a tone lighting its own spectrum bar, every
 log bar showing, smoothing and a still ring falling to silence, a silent source
-settling on one frame and polling slowly until a live change redraws it, and which
-settings are live. `tests/scope_no_alloc.rs`, its own binary under `assert_no_alloc`'s allocator,
-checks that a push, a read, and painting and taking both kinds' frames don't allocate
-once the pool has filled. `tests/media.rs` plays
+settling on one frame and polling slowly until a live change redraws it, which
+settings are live, and the `audio` setting (#362): both kinds describe it as a bus
+reference defaulting to the program mix
+(`the_audio_setting_names_a_bus_and_defaults_to_the_program_mix`), a source draws the
+mix it names and not the other (`a_scope_source_draws_the_mix_its_audio_setting_names`),
+and the lookup keeps one scope per drawn bus (`the_lookup_keeps_one_scope_per_drawn_bus`).
+`tests/scope_no_alloc.rs`, its own binary under `assert_no_alloc`'s allocator,
+checks that a push, a read, and painting and taking both kinds' frames, of the
+program mix and of a bus, don't allocate once the pool has filled. `tests/media.rs` plays
 `jstream-platform`'s fake media files (`FakeMediaDecoders`, frames told apart by
 colour): frames on the clock, the last frame held, looping and the seek after a gap,
 speed and a speed change, restarting when shown, turning `loop` on after the end, no

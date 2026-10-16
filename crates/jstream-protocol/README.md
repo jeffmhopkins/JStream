@@ -62,7 +62,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   a `meters.tick` carries.
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
-  `kind.describe`, `delete.plan` (with its `DeleteTarget`) and `studio.get`, with
+  `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source or a bus)
+  and `studio.get`, with
   `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo` and `ItemInfo`
   shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
@@ -71,7 +72,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)): `KindDescriptor`,
   `ParamDescriptor` and `ParamType`, the shapes that describe a source or filter kind's
   parameters, and `Settings`, a map from parameter ID to a JSON value, whose `scene`,
-  `source` and `asset` references are tagged objects (`Reference`). The per-value checks
+  `source`, `bus` and `asset` references are tagged objects (`Reference`). The per-value checks
   (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No kind is defined here.
@@ -93,9 +94,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
-  audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
-  `audio.reset_loudness`); 0.18 added the `virtual_cam` output kind, 0.17
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.24 because of bus
+  references (the `bus` parameter type and reference, which the `waveform` and
+  `spectrum` kinds' `audio` setting uses, a `bus` `delete.plan` target, and
+  `bus.delete` refused while one refers to its bus); 0.20 to 0.23 belong to
+  milestone 1 changes that are not merged here yet; 0.19 added audio (sources' audio,
+  buses, sends, `bus.list`, `meters.tick` and `audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
   `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
@@ -153,8 +157,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":19},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":19},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":20},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":20},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -282,7 +286,9 @@ bus, post-fader, at a gain: `send.set { source_id, bus_id, gain_db }` creates on
 changes its gain, `send.remove` removes it. Only a source with a channel of its own
 sends, so not a `scene` source. A new channel source sends to the master at 0 dB.
 Deleting a bus removes the sends into it, and deleting a source removes its sends;
-the inverses put them back. Every gain is in dB from −100 to +24; silence is `muted`.
+the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
+reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
+`bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
 Buses never feed buses (ADR-0028), so a send always runs from a source to a bus, and
 an audio routing cycle can't be expressed. A routing check comes with filters, the
@@ -309,13 +315,14 @@ never a type per kind.
 - A `ParamDescriptor` has an `id`, a `type` with its constraints flattened into the same
   object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
-  `accept`; `scene`; `source` with an optional `media`), a `default`, a `label`, an
+  `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24), a `default`, a `label`, an
   optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
 - Values are plain JSON. Colours are `#rrggbb`, or `#rrggbbaa` when `alpha` is set.
   References are tagged objects: `{"type":"scene","scene_id":…}`,
-  `{"type":"source","source_id":…}` and `{"type":"asset","root":…,"path":…}`, with
+  `{"type":"source","source_id":…}`, `{"type":"bus","bus_id":…}` (0.24) and
+  `{"type":"asset","root":…,"path":…}`, with
   `root` one of `collection`, `app` and `absolute`. A reference parameter also accepts
   `null`. `Settings::references` finds every reference in a map without the descriptor.
 - `source.create` takes optional `settings`. The engine checks each entry against the
@@ -327,7 +334,7 @@ never a type per kind.
   type, a number out of range, an unknown enum option, a bad colour, an over-long
   string, or a bad asset path are `invalid_argument` with `field =
   edits.N.settings.<id>` (or `edits.N.patch.<id>`). Values are never clamped. A
-  reference to a missing scene or source is `not_found`. A `source` reference that
+  reference to a missing scene, source or bus is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
   `collection` and `app` are relative, with `/` separators and no `..` segment, drive
   letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
@@ -339,16 +346,17 @@ never a type per kind.
   path that reaches the same hosts and devices). An asset that doesn't exist yet is
   accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
-  scenes, and scene and source references in settings form one dependency graph. An
+  scenes, and scene, source and bus references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
   `source.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
-  scene `a`). Asset references are not edges.
+  scene `a`). A bus depends on nothing, so a bus reference never closes one. Asset
+  references are not edges.
 - **Deletes are refused while anything refers to the target**, with no cascading edit
   ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   `source.delete` is refused while an item places the source, and `scene.delete` while a
-  `scene` source shows the scene; either is refused while a setting refers to its
-  target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
+  `scene` source shows the scene; either, and `bus.delete` (0.24), is refused while a
+  setting refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
   `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
   or the source whose setting refers to it (`settings.<param>`). `delete.plan` returns
   the batch that removes them with the target (see [Queries](#design)).
@@ -467,15 +475,18 @@ Queries read and never change `rev`. Those that read the collection state carry 
   has no scene). Runtime state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
-- `delete.plan {target}`: the batch that deletes a scene or source (`target` is
-  `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
-  everything that refers to it, as `edits` and the `rev` it was planned at, or
-  `not_found` for a missing target. In order, the edits remove the items that place a
+- `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
+  `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
+  `{"type":"bus","bus_id":…}`) with everything that refers to it, as `edits` and the
+  `rev` it was planned at, or `not_found` for a missing target (and
+  `invalid_argument` on `target.bus_id` for the master, which is never deleted). In order, the edits remove the items that place a
   deleted source, set every settings reference to a deleted object to `null` (one
   `source.set_settings` per source, which keeps the source), delete the `scene` sources
   that show a deleted scene, and last delete the target. Deleting a scene deletes the
   `scene` sources that show it, and the cascade stops there, since deleting a source
-  deletes no scene. A target nothing refers to plans just its own delete. The client
+  deletes no scene. A bus is held only by settings references, which the plan clears;
+  its `bus.delete` takes its sends. A target nothing refers to plans just its own
+  delete. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
   refused if the state moved on, and its undo is the batch's inverse.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
@@ -529,8 +540,9 @@ default master send) for whatever audio differs from the kind's defaults; undoin
 `bus.create`, `bus.set_fader` unless the fader was at its default, and a `send.set` for
 each send the bus had; `source.set_audio`, `bus.set_fader` and `send.set` are each
 undone by the same edit with the old values, and a new send by `send.remove`. Deleting a source that items still
-place or a setting refers to, or a scene that a `scene` source shows or a setting refers
-to, is rejected, so no edit removes more than the object it names. `jstream-graph`'s property
+place or a setting refers to, a scene that a `scene` source shows or a setting refers
+to, or a bus a setting refers to, is rejected, so no edit removes more than the object
+it names (a bus's sends are part of it). `jstream-graph`'s property
 test checks that applying a random batch and then its inverse restores the state
 exactly. A new edit that can't state its inverse in edits needs new edits first.
 

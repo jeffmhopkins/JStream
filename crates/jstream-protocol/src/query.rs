@@ -5,7 +5,7 @@ use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
-use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{BusId, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::output::OutputInfo;
 use crate::settings::Settings;
@@ -80,9 +80,9 @@ pub enum Query {
     /// Lists the collection's audio buses, ordered by ID, and every send into them.
     #[serde(rename = "bus.list")]
     BusList,
-    /// The batch that deletes a scene or source together with everything that refers to
-    /// it, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`
-    /// lists those `blockers`). The plan removes the items that place a deleted source,
+    /// The batch that deletes a scene, source or bus together with everything that
+    /// refers to it, which `scene.delete`, `source.delete` and `bus.delete` alone refuse
+    /// (their `invalid_argument` lists those `blockers`). The plan removes the items that place a deleted source,
     /// deletes the `scene` sources that show a deleted scene (and their items), and sets
     /// settings references to the target to `null`, keeping the sources that hold them.
     /// The client shows it, then sends its `edits` as an ordinary batch with
@@ -95,7 +95,7 @@ pub enum Query {
     },
 }
 
-/// What a `delete.plan` deletes: a scene or a source.
+/// What a `delete.plan` deletes: a scene, a source or (since 0.24) a bus.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -109,6 +109,11 @@ pub enum DeleteTarget {
     Source {
         /// The source to delete.
         source_id: SourceId,
+    },
+    /// A bus other than the master. Since 0.24.
+    Bus {
+        /// The bus to delete.
+        bus_id: BusId,
     },
 }
 

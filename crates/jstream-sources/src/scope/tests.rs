@@ -113,7 +113,7 @@ fn source(kind: &str, scope: Option<Arc<AudioScope>>, overrides: Value) -> Box<d
         }
     }
     let ctx = Context {
-        audio: scope,
+        audio: scope.map(|program| Arc::new(AudioScopes::with_program(program))),
         ..Context::default()
     };
     registry
@@ -316,6 +316,149 @@ fn colours_bars_smoothing_and_scale_are_live_and_size_is_not() {
             "{kind}"
         );
     }
+}
+
+/// A scope source of `kind` looking its audio up in `scopes`, with `overrides` on its
+/// defaults.
+fn drawing(kind: &str, scopes: &Arc<AudioScopes>, overrides: Value) -> Box<dyn Source> {
+    let registry = Registry::builtin();
+    let mut settings: Settings = registry
+        .descriptor(kind)
+        .expect("a scope kind")
+        .params
+        .iter()
+        .map(|p| (p.id.clone(), p.default.clone()))
+        .collect();
+    if let Value::Object(map) = overrides {
+        for (k, v) in map {
+            settings.insert(k, v);
+        }
+    }
+    let ctx = Context {
+        audio: Some(Arc::clone(scopes)),
+        ..Context::default()
+    };
+    registry
+        .create(kind, &settings, &ctx)
+        .expect("a scope source")
+}
+
+/// #362: both kinds describe an `audio` bus reference, `null` (the program mix) by
+/// default, that says what it draws, and restarts the source when it changes.
+#[test]
+fn the_audio_setting_names_a_bus_and_defaults_to_the_program_mix() {
+    let registry = Registry::builtin();
+    for kind in ["waveform", "spectrum"] {
+        let descriptor = registry.descriptor(kind).expect("a kind");
+        let audio = descriptor
+            .params
+            .iter()
+            .find(|p| p.id == "audio")
+            .expect("an audio parameter");
+        assert_eq!(audio.ty, jstream_protocol::ParamType::Bus, "{kind}");
+        assert_eq!(audio.default, Value::Null, "{kind}");
+        assert!(!audio.live, "{kind}");
+        let note = audio.description.as_deref().unwrap_or_default();
+        assert!(
+            note.contains("program mix") && note.contains("bus"),
+            "{note}"
+        );
+
+        let mut s = source(kind, None, json!({}));
+        let mut settings: Settings = descriptor
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert("audio", json!({"type": "bus", "bus_id": "vod"}));
+        assert!(
+            matches!(s.update(&settings), Err(SourceError::NotLive { param }) if param == "audio"),
+            "{kind}"
+        );
+    }
+}
+
+/// #362: a source draws the scope its `audio` setting names: the program mix's by
+/// default, or a bus's, and not the other.
+#[test]
+fn a_scope_source_draws_the_mix_its_audio_setting_names() {
+    let scopes = Arc::new(AudioScopes::new());
+    // One column, nine rows: silence lights row 4, a steady +0.5 row 2.
+    let look = json!({"width": 1, "height": 9, "color": "#ff0000", "background": "#0000ff"});
+    let with_audio = |audio: Value| {
+        let mut look = look.clone();
+        look["audio"] = audio;
+        look
+    };
+    scopes
+        .bus(&BusId::new("vod"))
+        .push(RATE, &stereo((0..WINDOW).map(|_| 0.5)));
+    let mut program = drawing("waveform", &scopes, look.clone());
+    let mut vod = drawing(
+        "waveform",
+        &scopes,
+        with_audio(json!({"type": "bus", "bus_id": "vod"})),
+    );
+    let lit = |frame: &VideoFrame| {
+        (0..9)
+            .filter(|&y| pixel(frame, 0, y) == RED)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(lit(&draw(&mut vod, ms(0))), [2], "the bus");
+    assert_eq!(
+        lit(&draw(&mut program, ms(0))),
+        [4],
+        "the program mix is silent"
+    );
+
+    // The program mix moves; the bus's source keeps drawing the bus.
+    scopes
+        .program()
+        .push(RATE, &stereo((0..WINDOW).map(|_| -0.5)));
+    assert_eq!(lit(&draw(&mut program, ms(40))), [6], "the program mix");
+    assert_eq!(lit(&draw(&mut vod, ms(40))), [2], "still the bus");
+
+    // A value that isn't a bus reference is refused.
+    let registry = Registry::builtin();
+    let mut settings: Settings = registry
+        .descriptor("spectrum")
+        .expect("a kind")
+        .params
+        .iter()
+        .map(|p| (p.id.clone(), p.default.clone()))
+        .collect();
+    settings.insert("audio", json!({"type": "source", "source_id": "mic"}));
+    assert!(matches!(
+        registry.create("spectrum", &settings, &Context::default()),
+        Err(SourceError::Setting { param, .. }) if param == "audio"
+    ));
+}
+
+/// #362: the lookup keeps a scope for each drawn bus, hands every source of a bus the
+/// same one, and drops the scope of a bus no source draws any more.
+#[test]
+fn the_lookup_keeps_one_scope_per_drawn_bus() {
+    let scopes = AudioScopes::new();
+    let vod = BusId::new("vod");
+    assert!(Arc::ptr_eq(&scopes.bus(&vod), &scopes.scope(Some(&vod))));
+    assert!(Arc::ptr_eq(scopes.program(), &scopes.scope(None)));
+    let kept = scopes.bus(&vod);
+    scopes.retain(&[vod.clone(), BusId::master()].into_iter().collect());
+    let ids = |scopes: &AudioScopes| {
+        scopes
+            .buses()
+            .into_iter()
+            .map(|(bus, _)| bus.as_str().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ids(&scopes), ["master", "vod"]);
+    assert!(Arc::ptr_eq(&kept, &scopes.bus(&vod)), "kept, not remade");
+    scopes.retain(&BTreeSet::new());
+    assert!(ids(&scopes).is_empty());
+    assert!(
+        !Arc::ptr_eq(&kept, &scopes.bus(&vod)),
+        "dropped, then made again"
+    );
 }
 
 #[test]

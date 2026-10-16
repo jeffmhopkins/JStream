@@ -2957,6 +2957,62 @@ mod tests {
         assert_eq!(ib.source_id.as_str(), "a_src");
     }
 
+    /// #362: a bus a source's settings draw can't be deleted until they are cleared, as
+    /// the engine refuses it (`jstream-graph`), in the same batch or before.
+    #[test]
+    fn a_bus_a_source_draws_cannot_be_deleted() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let wave = |bus: serde_json::Value| Edit::SourceSetSettings {
+            source_id: SourceId::new("wave"),
+            patch: [("audio", bus)].into_iter().collect(),
+        };
+        batch(
+            &*control,
+            Batch {
+                edits: vec![
+                    Edit::BusCreate {
+                        bus_id: BusId::new("vod"),
+                        name: "VOD".into(),
+                    },
+                    Edit::SourceCreate {
+                        source_id: SourceId::new("wave"),
+                        name: "Waveform".into(),
+                        kind: SourceKind::Builtin {
+                            kind: "waveform".into(),
+                        },
+                        settings: Settings::new(),
+                        duplicated_from: None,
+                    },
+                    wave(serde_json::json!({"type": "bus", "bus_id": "vod"})),
+                ],
+                expected_rev: None,
+                idempotency_key: None,
+            },
+        )
+        .expect("created");
+        let delete = Edit::BusDelete {
+            bus_id: BusId::new("vod"),
+        };
+        let error = batch(&*control, Batch::single(delete.clone())).expect_err("refused");
+        assert!(
+            matches!(
+                error.protocol(),
+                Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.bus_id"
+            ),
+            "{error:?}"
+        );
+        batch(
+            &*control,
+            Batch {
+                edits: vec![wave(serde_json::Value::Null), delete],
+                expected_rev: None,
+                idempotency_key: None,
+            },
+        )
+        .expect("cleared, then deleted");
+    }
+
     /// Every batch the shared parity fixture rejects fails with exactly the error
     /// `Graph::apply` returns for it, and applies nothing.
     #[test]

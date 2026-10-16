@@ -420,11 +420,12 @@ fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
 
 /// The edits that build `file`'s collection from an empty one, each with the object it
 /// creates for the error message. The canvas comes first (when not the default), then
-/// scenes, empty, in display order and with their roles; then sources, each after the
+/// scenes, empty, in display order and with their roles; then the buses with their
+/// faders, which a source's settings may refer to; then sources, each after the
 /// sources its settings refer to; then items, encoder profiles, and outputs, each with
-/// its profile; then the buses, the sends (the sources made their default master sends,
-/// so when the file lists sends a source without one has it removed), and each
-/// source's audio settings.
+/// its profile; then the sends (the sources made their default master sends, so when
+/// the file lists sends a source without one has it removed), and each source's audio
+/// settings.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -446,6 +447,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             },
         ));
     }
+    rebuild_buses(file, &mut edits);
     let sources: BTreeMap<&SourceId, &FileSource> =
         file.sources.iter().map(|s| (&s.id, s)).collect();
     let mut placed = BTreeSet::new();
@@ -525,9 +527,10 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
     Ok(edits)
 }
 
-/// Pushes the edits that give the rebuilt collection `file`'s buses, sends and source
-/// audio settings, after its sources exist.
-fn rebuild_audio(graph: &Graph, file: &File, edits: &mut Vec<(String, Edit)>) {
+/// Pushes the edits that give the rebuilt collection `file`'s buses and their faders,
+/// before its sources: a bus depends on nothing, and a source's settings may refer to
+/// one (a `waveform`'s `audio`).
+fn rebuild_buses(file: &File, edits: &mut Vec<(String, Edit)>) {
     let default = default_master();
     for bus in &file.buses {
         let object = format!("bus `{}`", bus.id);
@@ -561,6 +564,11 @@ fn rebuild_audio(graph: &Graph, file: &File, edits: &mut Vec<(String, Edit)>) {
             ));
         }
     }
+}
+
+/// Pushes the edits that give the rebuilt collection `file`'s sends and source audio
+/// settings, after its sources exist.
+fn rebuild_audio(graph: &Graph, file: &File, edits: &mut Vec<(String, Edit)>) {
     for source in &file.sources {
         let object = format!("source `{}`", source.id);
         let default = audio::default_audio(&source.kind, &graph.kinds);

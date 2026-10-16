@@ -34,7 +34,8 @@ Contents ([Design](#design) explains the choices):
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
-  share: the collection as `state.get` last reported it (`Collection`), the program
+  share: the collection as `state.get` last reported it (`Collection`, with its buses
+  for the bus picker), the program
   scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
   last failed call. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
@@ -116,7 +117,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
   read once per kind and kept), with no code per kind (ADR-0025): a checkbox, number
   (and slider when bounded), select, colour, text, asset (root and path) or reference
-  select per parameter type, in the descriptor's order, grouped by `group`, advanced
+  select (of the scenes, the other sources, or the buses, with None for `null`, which
+  for a `waveform`'s or `spectrum`'s `audio` is the program mix) per parameter type, in the descriptor's order, grouped by `group`, advanced
   ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
@@ -158,7 +160,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   audio is on, when it is heard (`always` or `when_shown`) and its send into each bus
   (on or off, and its gain). A nested scene's strip has only the routing toggles,
   since it has no fader or sends of its own. Each bus gets a strip too, the master
-  first, with renaming and (except the master) deleting; the master's adds its
+  first, with renaming and (except the master) deleting, which the engine refuses
+  (the mixer shows its reason, and the strip stays) while a `waveform` or `spectrum`
+  draws the bus; the master's adds its
   momentary, short-term and integrated loudness, its true peak, and a button that
   resets the integrated loudness (`audio.reset_loudness`). New buses take the first
   free `bus-N` ID; the button is off at the protocol's bus limit (`MAX_BUSES`, 16).

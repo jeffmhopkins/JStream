@@ -261,10 +261,10 @@ stamp = { hash = "b3:b655210653447199" }
 stamp = { hash = "b3:a6d28eab770c4e2f" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:0e74948f820c5cef" }
+stamp = { hash = "b3:9f66b3f0e83970fb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: persist/mod.rs now rebuilds the buses (and their faders) before the sources, since a source's settings may refer to a bus; persist/tests.rs adds a_source_drawing_a_bus_round_trips. The section's claims (JSON with schema_version and forward migrations, a loaded collection checked as edits are, kind-version refusal) are unchanged and still hold; the rebuild order is described in jstream-graph's README." }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:a35871c2c608136a" }
+stamp = { hash = "b3:909d2f33510f8322", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: persist/mod.rs now rebuilds the buses (and their faders) before the sources, since a source's settings may refer to a bus; persist/tests.rs adds a_source_drawing_a_bus_round_trips. The section's claims (JSON with schema_version and forward migrations, a loaded collection checked as edits are, kind-version refusal) are unchanged and still hold; the rebuild order is described in jstream-graph's README." }
 
 ["ARCH#principles"."body"]
 stamp = { hash = "b3:5af84c5cc7c0a12d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited principle 8: listeners require a token and check Host, and Origin when present, matching R-SEC-002's new wording; other principles unchanged" }
@@ -279,7 +279,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:d638c6ca8019b15d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B5, filters join the audio edits once they are in the protocol, the mixer has chains since D7b; rest holds at 0.19" }
+stamp = { hash = "b3:7eee2436993b0389", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -291,7 +291,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:07915c072e50c894" }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:68844d565b849575", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: the section describes kind.list/kind.describe on the wire and says nothing about the mock's answers; the mock now listing no kinds changes no protocol fact." }
+stamp = { hash = "b3:abfbeaac8c94d1c8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:e55527bc3d425ace" }
@@ -303,10 +303,10 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:506d7d83f33ef2bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: the section describes kind.list/kind.describe on the wire and says nothing about the mock's answers; the mock now listing no kinds changes no protocol fact." }
+stamp = { hash = "b3:ab208f4640c937c2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
-stamp = { hash = "b3:b7822be8282d16e2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
+stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
@@ -321,19 +321,19 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:e0766c33a8e95e79", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
+stamp = { hash = "b3:89b6377c02b5c7a5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:e08032e34676ac01" }
+stamp = { hash = "b3:b87c68ff1ec27a15", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:35bcec3fef20824d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
+stamp = { hash = "b3:2ee90ba64d0e29cc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:053c2d2ceab0bcee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
+stamp = { hash = "b3:e7a1710941b10268", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -351,7 +351,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:c012a3b785dfd6b5" }
+stamp = { hash = "b3:cf2150d9f8d3ebbf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -363,7 +363,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:9ecb3e00ddd134c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:7c230fe311147750", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
@@ -375,16 +375,16 @@ stamp = { hash = "b3:489f2e86af7bf320" }
 stamp = { hash = "b3:d6aa367b923f0078", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:13f2fa2d982a7e24" }
+stamp = { hash = "b3:18a0bbcfc0c77448", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:bd9e9739fcfba182", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:c594f42e1b065295" }
+stamp = { hash = "b3:29a8f3270014c222", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-server/Cargo.toml"]
 stamp = { hash = "b3:e9241efe87e7e719" }
@@ -738,7 +738,7 @@ stamp = { hash = "b3:3e63f714aef88590" }
 stamp = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the jstream-control Mock change (#401, mock kind.list answers an empty list): the CLI design states nothing about which queries the mock answers; --mock, block_on and mock-feature bullets still hold." }
+stamp = { hash = "b3:b2b0815752c7d7b0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: dep jstream-control design changed only by the mock refusing bus.delete while a setting refers to the bus; this section's design (hand-rolled parser, no runtime, output) never mentions buses or delete.plan, and the CLI has no audio edits, so it holds." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
@@ -807,10 +807,10 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c7379cddeb275056" }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Mock subsection against #401: edited the kind.list sentence (kind.list answers with no kinds; kind.describe and delete.plan still answer internal), checked by mock test kind_list_lists_no_kinds; the rest of the trait, async, WebSocket and open questions is unaffected." }
+stamp = { hash = "b3:b2b0815752c7d7b0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs refuses bus.delete while a setting holds a bus reference, as the graph does; mock.rs adds a_bus_a_source_draws_cannot_be_deleted. Edited the audio checks bullet to list it. ARCH#protocol's new bus delete.plan/blockers text is consistent: the mock still answers delete.plan with internal and its refusals carry no blockers, as stated here." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:7eee2436993b0389", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale only through ARCH#protocol, whose change is the bus-reference version number (0.20 to 0.24). Control's Design names no protocol version for bus references; the mock's refusal of bus.delete while referenced is unchanged." }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -831,10 +831,10 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:506d7d83f33ef2bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Mock subsection against #401: edited the kind.list sentence (kind.list answers with no kinds; kind.describe and delete.plan still answer internal), checked by mock test kind_list_lists_no_kinds; the rest of the trait, async, WebSocket and open questions is unaffected." }
+stamp = { hash = "b3:ab208f4640c937c2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs refuses bus.delete while a setting holds a bus reference, as the graph does; mock.rs adds a_bus_a_source_draws_cannot_be_deleted. Edited the audio checks bullet to list it. ARCH#protocol's new bus delete.plan/blockers text is consistent: the mock still answers delete.plan with internal and its refusals carry no blockers, as stated here." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
-stamp = { hash = "b3:b7822be8282d16e2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; mock's 16-bus limit check unchanged, now the protocol's MAX_BUSES" }
+stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs refuses bus.delete while a setting holds a bus reference, as the graph does; mock.rs adds a_bus_a_source_draws_cannot_be_deleted. Edited the audio checks bullet to list it. ARCH#protocol's new bus delete.plan/blockers text is consistent: the mock still answers delete.plan with internal and its refusals carry no blockers, as stated here." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
@@ -861,10 +861,10 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:506d7d83f33ef2bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: mock.rs now answers kind.list with an empty list; the Mock bullet (in-memory implementation for testing clients) still holds, no API change." }
+stamp = { hash = "b3:ab208f4640c937c2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs's delete_bus now refuses a bus a source's settings refer to (Reference::Bus), and mock.rs adds the test a_bus_a_source_draws_cannot_be_deleted; the trait, errors, mock, WebSocket client and shared-name contents listed here are unchanged, so the section holds." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
-stamp = { hash = "b3:b7822be8282d16e2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; mock now imports MAX_BUSES from the protocol, contents unchanged" }
+stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs's delete_bus now refuses a bus a source's settings refer to (Reference::Bus), and mock.rs adds the test a_bus_a_source_draws_cannot_be_deleted; the trait, errors, mock, WebSocket client and shared-name contents listed here are unchanged, so the section holds." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
@@ -876,16 +876,16 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:b34153aa27190371", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m2: holds with both #427's live-sources sync on with_backends (line 439) and this PR's MAX_BUSES compile-time assert (line 645)" }
+stamp = { hash = "b3:f17bf31fc1689b5b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the jstream-control Mock change (#401): the differential script (tests.rs) does not call kind.list, so 'the engine's answers are the mock's' still holds; 'unimplemented calls answer internal, as the mock does' still true for kind.describe and delete.plan." }
+stamp = { hash = "b3:b2b0815752c7d7b0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:ec2bc63eec3cae5c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: added the MAX_BUSES compile-time assert to Audio routing; rest re-read, holds" }
+stamp = { hash = "b3:40ae5bbe2cbf2885", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through protocol#design and ARCH#protocol, whose only change is the bus-reference version (0.20 to 0.24). Core's Design describes the bus scopes and ScopeTaps without naming a protocol version, so it holds." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:7eee2436993b0389", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through protocol#design and ARCH#protocol, whose only change is the bus-reference version (0.20 to 0.24). Core's Design describes the bus scopes and ScopeTaps without naming a protocol version, so it holds." }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -900,7 +900,7 @@ stamp = { hash = "b3:82b99f798fcea13a" }
 stamp = { hash = "b3:5e06b48ac662790f" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio.rs"]
-stamp = { hash = "b3:6680424ad2d7c1d2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: added the MAX_BUSES compile-time assert to Audio routing; rest re-read, holds" }
+stamp = { hash = "b3:0ef73f5df3fbd57c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio_sources.rs"]
 stamp = { hash = "b3:82865b433d5487da", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b after C9/C10 landed: body's Live sources text adds Source::audio kept beside the source, end_plan (audible exactly when the plan reached it, so hidden or off-program is silent), take_audio handing build number and time zero to AudioSources::sync_live, beside C10's AudioScope text; the Audio sources paragraph says each live source with sound opens a muted Routed input with its fader, sends (master send at creation) and activity gain, fed only while the program's own plan reaches it (#322 B2), not opened while its audio is off; the program stage text mixes media sound and still pushes blocks into C10's scope. audio_sources.rs (sync_live, Wants, open_live, changed, packets), engine.rs (end_plan and sync_live in publish_render, audio_packets), live.rs (LiveAudio, end_plan, take_audio, audio_changed), runtime/pipeline.rs (clock to the stage), tests/audio.rs (the media-sound test) and tests/sources.rs (FakeClip.audio: None) match it; holds" }
@@ -915,7 +915,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:8c3f67cfeec353f0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design (Live sources, Snapshots, locks) against #422 fix; added that injecting media files via with_backends re-syncs and rebuilds every live source" }
+stamp = { hash = "b3:04dc37af6a7d714d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -930,7 +930,7 @@ stamp = { hash = "b3:29301fe6ecd05436" }
 stamp = { hash = "b3:06fe384b67b62cfe" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
-stamp = { hash = "b3:898f974dc31019ad", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design (Live sources, Snapshots, locks) against #422 fix; added that injecting media files via with_backends re-syncs and rebuilds every live source" }
+stamp = { hash = "b3:cf685959a88e3440", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
@@ -939,13 +939,13 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:3282a56e39d2024c", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b after C9/C10 landed: body's Live sources text adds Source::audio kept beside the source, end_plan (audible exactly when the plan reached it, so hidden or off-program is silent), take_audio handing build number and time zero to AudioSources::sync_live, beside C10's AudioScope text; the Audio sources paragraph says each live source with sound opens a muted Routed input with its fader, sends (master send at creation) and activity gain, fed only while the program's own plan reaches it (#322 B2), not opened while its audio is off; the program stage text mixes media sound and still pushes blocks into C10's scope. audio_sources.rs (sync_live, Wants, open_live, changed, packets), engine.rs (end_plan and sync_live in publish_render, audio_packets), live.rs (LiveAudio, end_plan, take_audio, audio_changed), runtime/pipeline.rs (clock to the stage), tests/audio.rs (the media-sound test) and tests/sources.rs (FakeClip.audio: None) match it; holds" }
+stamp = { hash = "b3:ad227ebebf4f2694", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/render.rs"]
-stamp = { hash = "b3:8ffcf66ee4ab36b2" }
+stamp = { hash = "b3:656e36496606cc22", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/sink.rs"]
 stamp = { hash = "b3:9597d8d3fe05859a" }
@@ -966,10 +966,10 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:148ee1eac5b0932a", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9 merged with C10: the Live sources paragraph keeps C10's Painter text and adds that a media file decodes ahead on a thread of its own (so frame calls under the lock never draw or decode), begin_plan and the last plan that reached each source, Source::show (restart, first showing included), Backends::media, NoBackend before injection, and the rebuild on injection. engine.rs (set_media in with_backends, set_source_media, begin_plan in plan_with) and live.rs (set_media beside set_audio_scope, plan/planned, show; install sets planned and still shares painters) match it. tests.rs, tests/audio.rs: FakeMediaDecoders as Backends.media. tests/sources.rs: the two media-file tests (restart when shown again; first showing long after build, #245 B2) beside C10's waveform test; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:b052187c011b4068", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b after C9/C10 landed: body's Live sources text adds Source::audio kept beside the source, end_plan (audible exactly when the plan reached it, so hidden or off-program is silent), take_audio handing build number and time zero to AudioSources::sync_live, beside C10's AudioScope text; the Audio sources paragraph says each live source with sound opens a muted Routed input with its fader, sends (master send at creation) and activity gain, fed only while the program's own plan reaches it (#322 B2), not opened while its audio is off; the program stage text mixes media sound and still pushes blocks into C10's scope. audio_sources.rs (sync_live, Wants, open_live, changed, packets), engine.rs (end_plan and sync_live in publish_render, audio_packets), live.rs (LiveAudio, end_plan, take_audio, audio_changed), runtime/pipeline.rs (clock to the stage), tests/audio.rs (the media-sound test) and tests/sources.rs (FakeClip.audio: None) match it; holds" }
+stamp = { hash = "b3:8f36be6a8802c14d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio_routing.rs"]
-stamp = { hash = "b3:732249ad50d11c2c" }
+stamp = { hash = "b3:3cc9587904a3ba2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
@@ -981,7 +981,7 @@ stamp = { hash = "b3:c9688aabcb558c82" }
 stamp = { hash = "b3:8e4476577ffaec09", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design (Live sources, Snapshots, locks) against #422 fix; added that injecting media files via with_backends re-syncs and rebuilds every live source" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:0a81ed018cad5861", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b, re-verified from wave/m2's stamps after C9 (077b375) and C10 landed: body's Audio sources bullet adds one input per live source with sound of its own (a media file) whose audio is on, routed the same way and fed while the program shows it, and the tests bullet adds the media-sound test beside C10's scope test. audio_sources.rs: sync_live, the test-only packets count, Wants (targets plus live minus sources whose audio is off), wanted_inputs/recorded_inputs, open_live opening a muted Routed input fed by MediaAudio::open, changed() keeping status by Wants::names. engine.rs: test-only audio_packets; publish_render calls live.end_plan() and passes take_audio() to audio.sync_live. live.rs: LiveAudio, Running.audio and ticket, audio_changed set on sync/install/clock swap, end_plan (set_audible when the plan reached the source), take_audio; C10's painters kept in install and sync. runtime/pipeline.rs: the program stage gets the media clock for the feeders. tests/audio.rs: engine_with, show_clip, run_for and a_media_files_sound_is_mixed_while_the_program_shows_it (mixed beside the defaults, silent while hidden, metered, closed while audio is off, removed on delete), beside C10's scope test. tests/sources.rs: FakeClip.audio becomes None; holds" }
+stamp = { hash = "b3:161aa3ea9633e3b6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: audio.rs keeps a scope per bus a setting draws and publishes ScopeTaps to the mixer thread; engine.rs/live.rs hold and pass AudioScopes; runtime/pipeline.rs feeds each drawn bus's Mixer::bus_block into its scope; runtime/render.rs adds Garbage::Scopes. Edited the live-sources and Audio bullets and the tests paragraph: a_bus_a_source_draws_feeds_its_scope_while_an_output_runs (tests/audio.rs) and a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus (tests/audio_routing.rs)." }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -990,7 +990,7 @@ stamp = { hash = "b3:d63649ff29b26532" }
 stamp = { hash = "b3:5e06b48ac662790f" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio.rs"]
-stamp = { hash = "b3:6680424ad2d7c1d2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; only a compile-time assert added in audio.rs, contents hold" }
+stamp = { hash = "b3:0ef73f5df3fbd57c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: audio.rs keeps a scope per bus a setting draws and publishes ScopeTaps to the mixer thread; engine.rs/live.rs hold and pass AudioScopes; runtime/pipeline.rs feeds each drawn bus's Mixer::bus_block into its scope; runtime/render.rs adds Garbage::Scopes. Edited the live-sources and Audio bullets and the tests paragraph: a_bus_a_source_draws_feeds_its_scope_while_an_output_runs (tests/audio.rs) and a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus (tests/audio_routing.rs)." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio_sources.rs"]
 stamp = { hash = "b3:82865b433d5487da", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b, re-verified from wave/m2's stamps after C9 (077b375) and C10 landed: body's Audio sources bullet adds one input per live source with sound of its own (a media file) whose audio is on, routed the same way and fed while the program shows it, and the tests bullet adds the media-sound test beside C10's scope test. audio_sources.rs: sync_live, the test-only packets count, Wants (targets plus live minus sources whose audio is off), wanted_inputs/recorded_inputs, open_live opening a muted Routed input fed by MediaAudio::open, changed() keeping status by Wants::names. engine.rs: test-only audio_packets; publish_render calls live.end_plan() and passes take_audio() to audio.sync_live. live.rs: LiveAudio, Running.audio and ticket, audio_changed set on sync/install/clock swap, end_plan (set_audible when the plan reached the source), take_audio; C10's painters kept in install and sync. runtime/pipeline.rs: the program stage gets the media clock for the feeders. tests/audio.rs: engine_with, show_clip, run_for and a_media_files_sound_is_mixed_while_the_program_shows_it (mixed beside the defaults, silent while hidden, metered, closed while audio is off, removed on delete), beside C10's scope test. tests/sources.rs: FakeClip.audio becomes None; holds" }
@@ -1005,7 +1005,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:8c3f67cfeec353f0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against #422 fix: media sources still play through the injected backends' media files; with_backends and Live sources summary still hold" }
+stamp = { hash = "b3:04dc37af6a7d714d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: audio.rs keeps a scope per bus a setting draws and publishes ScopeTaps to the mixer thread; engine.rs/live.rs hold and pass AudioScopes; runtime/pipeline.rs feeds each drawn bus's Mixer::bus_block into its scope; runtime/render.rs adds Garbage::Scopes. Edited the live-sources and Audio bullets and the tests paragraph: a_bus_a_source_draws_feeds_its_scope_while_an_output_runs (tests/audio.rs) and a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus (tests/audio_routing.rs)." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1020,7 +1020,7 @@ stamp = { hash = "b3:29301fe6ecd05436" }
 stamp = { hash = "b3:06fe384b67b62cfe" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
-stamp = { hash = "b3:898f974dc31019ad", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against #422 fix: media sources still play through the injected backends' media files; with_backends and Live sources summary still hold" }
+stamp = { hash = "b3:cf685959a88e3440", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: audio.rs keeps a scope per bus a setting draws and publishes ScopeTaps to the mixer thread; engine.rs/live.rs hold and pass AudioScopes; runtime/pipeline.rs feeds each drawn bus's Mixer::bus_block into its scope; runtime/render.rs adds Garbage::Scopes. Edited the live-sources and Audio bullets and the tests paragraph: a_bus_a_source_draws_feeds_its_scope_while_an_output_runs (tests/audio.rs) and a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus (tests/audio_routing.rs)." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
@@ -1029,13 +1029,13 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:3282a56e39d2024c", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b, re-verified from wave/m2's stamps after C9 (077b375) and C10 landed: body's Audio sources bullet adds one input per live source with sound of its own (a media file) whose audio is on, routed the same way and fed while the program shows it, and the tests bullet adds the media-sound test beside C10's scope test. audio_sources.rs: sync_live, the test-only packets count, Wants (targets plus live minus sources whose audio is off), wanted_inputs/recorded_inputs, open_live opening a muted Routed input fed by MediaAudio::open, changed() keeping status by Wants::names. engine.rs: test-only audio_packets; publish_render calls live.end_plan() and passes take_audio() to audio.sync_live. live.rs: LiveAudio, Running.audio and ticket, audio_changed set on sync/install/clock swap, end_plan (set_audible when the plan reached the source), take_audio; C10's painters kept in install and sync. runtime/pipeline.rs: the program stage gets the media clock for the feeders. tests/audio.rs: engine_with, show_clip, run_for and a_media_files_sound_is_mixed_while_the_program_shows_it (mixed beside the defaults, silent while hidden, metered, closed while audio is off, removed on delete), beside C10's scope test. tests/sources.rs: FakeClip.audio becomes None; holds" }
+stamp = { hash = "b3:ad227ebebf4f2694", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: audio.rs keeps a scope per bus a setting draws and publishes ScopeTaps to the mixer thread; engine.rs/live.rs hold and pass AudioScopes; runtime/pipeline.rs feeds each drawn bus's Mixer::bus_block into its scope; runtime/render.rs adds Garbage::Scopes. Edited the live-sources and Audio bullets and the tests paragraph: a_bus_a_source_draws_feeds_its_scope_while_an_output_runs (tests/audio.rs) and a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus (tests/audio_routing.rs)." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/render.rs"]
-stamp = { hash = "b3:8ffcf66ee4ab36b2" }
+stamp = { hash = "b3:656e36496606cc22", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: audio.rs keeps a scope per bus a setting draws and publishes ScopeTaps to the mixer thread; engine.rs/live.rs hold and pass AudioScopes; runtime/pipeline.rs feeds each drawn bus's Mixer::bus_block into its scope; runtime/render.rs adds Garbage::Scopes. Edited the live-sources and Audio bullets and the tests paragraph: a_bus_a_source_draws_feeds_its_scope_while_an_output_runs (tests/audio.rs) and a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus (tests/audio_routing.rs)." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/sink.rs"]
 stamp = { hash = "b3:9597d8d3fe05859a" }
@@ -1056,10 +1056,10 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:148ee1eac5b0932a", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9 merged with C10: body's Live sources bullet says the program mix advances animations and videos, tells a source when it shows it again, and media sources play through the injected backends' media files, beside C10's waveform/spectrum sentence. engine.rs: with_backends calls live.set_media(backends.media), test-only set_source_media, plan_with calls live.begin_plan(). live.rs: set_media (Context.media, rebuilds every source) beside C10's set_audio_scope, plan/planned numbering, Running.planned set in install beside C10's painter sharing, and Source::show when a plan reaches a source after plans that didn't. tests.rs, tests/audio.rs, tests/scenarios.rs: FakeMediaDecoders as Backends.media. tests/sources.rs: a_media_file_plays_on_the_clock_and_restarts_when_shown_again and a_media_file_first_shown_long_after_it_was_built_plays_from_the_start (#245 B2), after C10's waveform test and main's #293 FakeClock test; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:b052187c011b4068", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b, re-verified from wave/m2's stamps after C9 (077b375) and C10 landed: body's Audio sources bullet adds one input per live source with sound of its own (a media file) whose audio is on, routed the same way and fed while the program shows it, and the tests bullet adds the media-sound test beside C10's scope test. audio_sources.rs: sync_live, the test-only packets count, Wants (targets plus live minus sources whose audio is off), wanted_inputs/recorded_inputs, open_live opening a muted Routed input fed by MediaAudio::open, changed() keeping status by Wants::names. engine.rs: test-only audio_packets; publish_render calls live.end_plan() and passes take_audio() to audio.sync_live. live.rs: LiveAudio, Running.audio and ticket, audio_changed set on sync/install/clock swap, end_plan (set_audible when the plan reached the source), take_audio; C10's painters kept in install and sync. runtime/pipeline.rs: the program stage gets the media clock for the feeders. tests/audio.rs: engine_with, show_clip, run_for and a_media_files_sound_is_mixed_while_the_program_shows_it (mixed beside the defaults, silent while hidden, metered, closed while audio is off, removed on delete), beside C10's scope test. tests/sources.rs: FakeClip.audio becomes None; holds" }
+stamp = { hash = "b3:8f36be6a8802c14d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: audio.rs keeps a scope per bus a setting draws and publishes ScopeTaps to the mixer thread; engine.rs/live.rs hold and pass AudioScopes; runtime/pipeline.rs feeds each drawn bus's Mixer::bus_block into its scope; runtime/render.rs adds Garbage::Scopes. Edited the live-sources and Audio bullets and the tests paragraph: a_bus_a_source_draws_feeds_its_scope_while_an_output_runs (tests/audio.rs) and a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus (tests/audio_routing.rs)." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio_routing.rs"]
-stamp = { hash = "b3:732249ad50d11c2c" }
+stamp = { hash = "b3:3cc9587904a3ba2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: audio.rs keeps a scope per bus a setting draws and publishes ScopeTaps to the mixer thread; engine.rs/live.rs hold and pass AudioScopes; runtime/pipeline.rs feeds each drawn bus's Mixer::bus_block into its scope; runtime/render.rs adds Garbage::Scopes. Edited the live-sources and Audio bullets and the tests paragraph: a_bus_a_source_draws_feeds_its_scope_while_an_output_runs (tests/audio.rs) and a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus (tests/audio_routing.rs)." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
@@ -1077,7 +1077,7 @@ stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:abbe7b25a9e379ed", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9 merged with C10: body's Live sources bullet says the program mix advances animations and videos, tells a source when it shows it again, and media sources play through the injected backends' media files, beside C10's waveform/spectrum sentence. engine.rs: with_backends calls live.set_media(backends.media), test-only set_source_media, plan_with calls live.begin_plan(). live.rs: set_media (Context.media, rebuilds every source) beside C10's set_audio_scope, plan/planned numbering, Running.planned set in install beside C10's painter sharing, and Source::show when a plan reaches a source after plans that didn't. tests.rs, tests/audio.rs, tests/scenarios.rs: FakeMediaDecoders as Backends.media. tests/sources.rs: a_media_file_plays_on_the_clock_and_restarts_when_shown_again and a_media_file_first_shown_long_after_it_was_built_plays_from_the_start (#245 B2), after C10's waveform test and main's #293 FakeClock test; holds" }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:bd163390cd9cf30d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: body says the program stage mixes the audio sources' inputs and the media files' sound, beside C10's push into the audio scope; runtime/pipeline.rs passes the media clock into the audio-sources stage so the media feeders stamp packets on it; holds" }
+stamp = { hash = "b3:60159cb0a42c4db5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: pipeline.rs's mixer thread now also pushes each drawn bus's block into its scope, adopting the ScopeTaps list lock-free and freeing replaced and final lists through Garbage::Scopes (render.rs); edited the mixer-thread and collector sentences accordingly. The rest (render loop, sessions, outputs, panics) is unchanged." }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
@@ -1089,13 +1089,13 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:3282a56e39d2024c", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: body says the program stage mixes the audio sources' inputs and the media files' sound, beside C10's push into the audio scope; runtime/pipeline.rs passes the media clock into the audio-sources stage so the media feeders stamp packets on it; holds" }
+stamp = { hash = "b3:ad227ebebf4f2694", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: pipeline.rs's mixer thread now also pushes each drawn bus's block into its scope, adopting the ScopeTaps list lock-free and freeing replaced and final lists through Garbage::Scopes (render.rs); edited the mixer-thread and collector sentences accordingly. The rest (render loop, sessions, outputs, panics) is unchanged." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/render.rs"]
-stamp = { hash = "b3:8ffcf66ee4ab36b2" }
+stamp = { hash = "b3:656e36496606cc22", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: pipeline.rs's mixer thread now also pushes each drawn bus's block into its scope, adopting the ScopeTaps list lock-free and freeing replaced and final lists through Garbage::Scopes (render.rs); edited the mixer-thread and collector sentences accordingly. The rest (render loop, sessions, outputs, panics) is unchanged." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/sink.rs"]
 stamp = { hash = "b3:9597d8d3fe05859a" }
@@ -1107,7 +1107,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:5e072f7a4c74a305", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: body adds MfMediaDecoders to the Windows backend list and to the delay-load DLL list (mfplat.dll, mfreadwrite.dll); serve.rs wires MfMediaDecoders::new() as Backends.media, matching it. Dep core#design gains C9's media text (begin_plan, Source::show, Backends::media, NoBackend) beside C10's painters, none of which the daemon text restates; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:b34153aa27190371", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m2: only its core#design dependency moved; the daemon still loads the collection then injects backends, which the merged core section describes" }
+stamp = { hash = "b3:f17bf31fc1689b5b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: dep jstream-core design changed by the per-bus audio scopes (AudioScopes, ScopeTaps hand-off, mixer thread feeding bus blocks); the daemon only hosts the engine and injects backends, nothing here names the scope or the mixer thread, so it holds." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
@@ -1407,10 +1407,10 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:21668f51b28f0233" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:d9660dacf87e3d45", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: graph's MAX_BUSES is now the protocol's; said so in the Bus bullet; rest re-read" }
+stamp = { hash = "b3:011fc55efbe66bc4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: apply.rs check_value finds a bus reference's bus (not_found); deps.rs adds Node::Bus (edges none, blockers from settings), audio.rs delete_bus refuses with blockers, plan.rs plans a bus target (master refused), persist/mod.rs rebuilds buses before sources. Edited the settings, dangling-reference, bus, no-cycles, delete.plan and loading-order paragraphs, and the tests list: a_bus_reference_must_name_a_bus, a_drawn_bus_is_deleted_only_with_its_references_cleared (tests.rs) and a_source_drawing_a_bus_round_trips (persist/tests.rs). The protocol design dep's new bus reference text matches." }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:ec2bc63eec3cae5c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: graph's MAX_BUSES is now the protocol's; said so in the Bus bullet; rest re-read" }
+stamp = { hash = "b3:40ae5bbe2cbf2885", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through protocol#design, whose only change is the version number for bus references (0.20 to 0.24). Graph's Purpose describes Node::Bus edges and the bus delete plan without a version, so it holds." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1419,13 +1419,13 @@ stamp = { hash = "b3:95dbeb7275d807fb" }
 stamp = { hash = "b3:e56cc35cd8c998eb", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: stale only through dep ARCH#data-model (media among the built kinds, videos on the media clock). The graph Model text describes State and kind descriptors, unaffected; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/apply.rs"]
-stamp = { hash = "b3:c7daf39cfbbae267" }
+stamp = { hash = "b3:8d5e5a7d02a937ca", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: apply.rs check_value finds a bus reference's bus (not_found); deps.rs adds Node::Bus (edges none, blockers from settings), audio.rs delete_bus refuses with blockers, plan.rs plans a bus target (master refused), persist/mod.rs rebuilds buses before sources. Edited the settings, dangling-reference, bus, no-cycles, delete.plan and loading-order paragraphs, and the tests list: a_bus_reference_must_name_a_bus, a_drawn_bus_is_deleted_only_with_its_references_cleared (tests.rs) and a_source_drawing_a_bus_round_trips (persist/tests.rs). The protocol design dep's new bus reference text matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/audio.rs"]
-stamp = { hash = "b3:9ad74ccd253c4638", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: graph's MAX_BUSES is now the protocol's; said so in the Bus bullet; rest re-read" }
+stamp = { hash = "b3:ae81c7919deb2073", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: apply.rs check_value finds a bus reference's bus (not_found); deps.rs adds Node::Bus (edges none, blockers from settings), audio.rs delete_bus refuses with blockers, plan.rs plans a bus target (master refused), persist/mod.rs rebuilds buses before sources. Edited the settings, dangling-reference, bus, no-cycles, delete.plan and loading-order paragraphs, and the tests list: a_bus_reference_must_name_a_bus, a_drawn_bus_is_deleted_only_with_its_references_cleared (tests.rs) and a_source_drawing_a_bus_round_trips (persist/tests.rs). The protocol design dep's new bus reference text matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/deps.rs"]
-stamp = { hash = "b3:b1dc233b2dfda255" }
+stamp = { hash = "b3:3d3873145171c580", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: apply.rs check_value finds a bus reference's bus (not_found); deps.rs adds Node::Bus (edges none, blockers from settings), audio.rs delete_bus refuses with blockers, plan.rs plans a bus target (master refused), persist/mod.rs rebuilds buses before sources. Edited the settings, dangling-reference, bus, no-cycles, delete.plan and loading-order paragraphs, and the tests list: a_bus_reference_must_name_a_bus, a_drawn_bus_is_deleted_only_with_its_references_cleared (tests.rs) and a_source_drawing_a_bus_round_trips (persist/tests.rs). The protocol design dep's new bus reference text matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/encoder.rs"]
 stamp = { hash = "b3:42485db0e5133b45" }
@@ -1440,13 +1440,13 @@ stamp = { hash = "b3:d9029dcff96ab00a", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:a6d28eab770c4e2f" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:0e74948f820c5cef" }
+stamp = { hash = "b3:9f66b3f0e83970fb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: apply.rs check_value finds a bus reference's bus (not_found); deps.rs adds Node::Bus (edges none, blockers from settings), audio.rs delete_bus refuses with blockers, plan.rs plans a bus target (master refused), persist/mod.rs rebuilds buses before sources. Edited the settings, dangling-reference, bus, no-cycles, delete.plan and loading-order paragraphs, and the tests list: a_bus_reference_must_name_a_bus, a_drawn_bus_is_deleted_only_with_its_references_cleared (tests.rs) and a_source_drawing_a_bus_round_trips (persist/tests.rs). The protocol design dep's new bus reference text matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:a35871c2c608136a" }
+stamp = { hash = "b3:909d2f33510f8322", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: apply.rs check_value finds a bus reference's bus (not_found); deps.rs adds Node::Bus (edges none, blockers from settings), audio.rs delete_bus refuses with blockers, plan.rs plans a bus target (master refused), persist/mod.rs rebuilds buses before sources. Edited the settings, dangling-reference, bus, no-cycles, delete.plan and loading-order paragraphs, and the tests list: a_bus_reference_must_name_a_bus, a_drawn_bus_is_deleted_only_with_its_references_cleared (tests.rs) and a_source_drawing_a_bus_round_trips (persist/tests.rs). The protocol design dep's new bus reference text matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/plan.rs"]
-stamp = { hash = "b3:c5dfc4f94c042e67" }
+stamp = { hash = "b3:89d6d953028fbd28", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: apply.rs check_value finds a bus reference's bus (not_found); deps.rs adds Node::Bus (edges none, blockers from settings), audio.rs delete_bus refuses with blockers, plan.rs plans a bus target (master refused), persist/mod.rs rebuilds buses before sources. Edited the settings, dangling-reference, bus, no-cycles, delete.plan and loading-order paragraphs, and the tests list: a_bus_reference_must_name_a_bus, a_drawn_bus_is_deleted_only_with_its_references_cleared (tests.rs) and a_source_drawing_a_bus_round_trips (persist/tests.rs). The protocol design dep's new bus reference text matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/read.rs"]
 stamp = { hash = "b3:490d41a1b4731026" }
@@ -1455,7 +1455,7 @@ stamp = { hash = "b3:490d41a1b4731026" }
 stamp = { hash = "b3:675f46eea33b1c83", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
-stamp = { hash = "b3:534ac6c88886c8f2" }
+stamp = { hash = "b3:f033ec24565424f0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: apply.rs check_value finds a bus reference's bus (not_found); deps.rs adds Node::Bus (edges none, blockers from settings), audio.rs delete_bus refuses with blockers, plan.rs plans a bus target (master refused), persist/mod.rs rebuilds buses before sources. Edited the settings, dangling-reference, bus, no-cycles, delete.plan and loading-order paragraphs, and the tests list: a_bus_reference_must_name_a_bus, a_drawn_bus_is_deleted_only_with_its_references_cleared (tests.rs) and a_source_drawing_a_bus_round_trips (persist/tests.rs). The protocol design dep's new bus reference text matches." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/touched.rs"]
 stamp = { hash = "b3:943bb9518712a4b5" }
@@ -1944,7 +1944,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:ec2bc63eec3cae5c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
+stamp = { hash = "b3:40ae5bbe2cbf2885", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -1962,16 +1962,16 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:e08032e34676ac01" }
+stamp = { hash = "b3:b87c68ff1ec27a15", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:35bcec3fef20824d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
+stamp = { hash = "b3:2ee90ba64d0e29cc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:053c2d2ceab0bcee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
+stamp = { hash = "b3:e7a1710941b10268", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -1989,7 +1989,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:c012a3b785dfd6b5" }
+stamp = { hash = "b3:cf2150d9f8d3ebbf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read against ParamType::Bus/Reference::Bus (kind.rs, settings.rs), DeleteTarget::Bus (query.rs), the bus.delete doc (command.rs), 0.20 (version.rs) and the regenerated protocol.snap/examples.snap (new bus param type, DeleteTarget bus variant, r34 bus delete.plan, 0.20 handshake). Edited: param type list, reference forms, not_found for a missing bus, bus references as edges that never close a cycle, bus.delete refused with blockers, delete.plan bus target and master refusal, the Buses paragraph, the undo paragraph, and the hello/welcome examples to 0.20." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2001,7 +2001,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:9ecb3e00ddd134c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:7c230fe311147750", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
@@ -2013,19 +2013,19 @@ stamp = { hash = "b3:489f2e86af7bf320" }
 stamp = { hash = "b3:d6aa367b923f0078", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:13f2fa2d982a7e24" }
+stamp = { hash = "b3:18a0bbcfc0c77448", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:bd9e9739fcfba182", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:c594f42e1b065295" }
+stamp = { hash = "b3:29a8f3270014c222", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:aa8c93640ba59120", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
+stamp = { hash = "b3:5836d48c0fd669b3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -2034,7 +2034,7 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:053c2d2ceab0bcee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
+stamp = { hash = "b3:e7a1710941b10268", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2052,7 +2052,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:c012a3b785dfd6b5" }
+stamp = { hash = "b3:cf2150d9f8d3ebbf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: kind.rs adds ParamType::Bus (check, schema, is_reference), settings.rs Reference::Bus with the bus tag in from_value, query.rs DeleteTarget::Bus, command.rs documents bus.delete refused while referenced, version.rs bumps to 0.20, fixtures.rs adds a bus param and a bus delete.plan example. Edited the Kinds-and-settings bullet (bus references), the Queries bullet (DeleteTarget kinds) and the version history line (0.20). Tests: kind::tests::references_accept_null_and_only_their_own_tag and settings::tests::references_are_found_without_a_descriptor now cover bus." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2064,7 +2064,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
+stamp = { hash = "b3:9ecb3e00ddd134c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:7c230fe311147750", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
@@ -2076,16 +2076,16 @@ stamp = { hash = "b3:489f2e86af7bf320" }
 stamp = { hash = "b3:d6aa367b923f0078", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:13f2fa2d982a7e24" }
+stamp = { hash = "b3:18a0bbcfc0c77448", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
+stamp = { hash = "b3:bd9e9739fcfba182", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:c594f42e1b065295" }
+stamp = { hash = "b3:29a8f3270014c222", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-render#design"."body"]
 stamp = { hash = "b3:7f2a94f0736d9611", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
@@ -2208,10 +2208,10 @@ stamp = { hash = "b3:eaa109533b8798d8" }
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the jstream-control Mock change (#401, mock kind.list answers an empty list): the server design never states the mock's query answers; admission, UI, sessions and MCP text unaffected." }
+stamp = { hash = "b3:b2b0815752c7d7b0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: deps jstream-control design (mock refuses bus.delete while referenced) and ARCH protocol (bus references, bus delete.plan, 0.20) changed; the server forwards any dyn Control call and checks the handshake version generically, so nothing here needs the new types. Holds." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:7eee2436993b0389", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through ARCH#protocol, whose only change is the bus-reference version (0.20 to 0.24). The server's Design negotiates PROTOCOL_VERSION from the protocol crate and names no specific minor, so it holds." }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:9bcfb0336f6adad9" }
@@ -2283,7 +2283,7 @@ stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:b579a5049a591416", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#447 merged with wave/m2 (#448), per input. body: re-read the whole Purpose section; the media audio paragraph keeps #447's 10 ms pieces (decode thread cuts longer decoder blocks, feeder hands each on as one packet within 100 ms) beside #448's silence-in-the-file-as-a-gap sentence, and they don't contradict (the gap step works on any packet size); the Tests paragraph now lists both PRs' tests. audio.rs: from #448, silence up to 1 s with nothing dropped advances the device position instead of flagging a discontinuity, as the paragraph says; PACKET_US pub(super) from #447. player.rs: #447's Sound::pieces and PIECE_US, #448's per-stream first-frame offset so a play lasts from each stream's first frame to its end; unit tests a_loop_follows_on_from_a_stream_that_starts_late and pieces_at_a_rate_without_whole_10_ms_keep_every_frame_and_stay_contiguous, both now named in the Tests paragraph. tests/media.rs: #448's silence_before_the_next_play_is_a_gap_not_a_discontinuity and #447's long_decoded_blocks_are_handed_on_only_shortly_ahead, both named in the Tests paragraph; holds" }
+stamp = { hash = "b3:ee9b5cf0b25f722d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: scope/mod.rs adds AudioScopes (program scope, per-bus scopes made on demand, retain, buses) and reads the audio setting (drawn_bus); waveform.rs/spectrum.rs add the non-live audio bus param with the what-it-draws description (N1); source.rs makes Context.audio an Option<Arc<AudioScopes>>; lib.rs exports AudioScopes. Edited the Context bullet, added an AudioScopes bullet, rewrote the waveform/spectrum audio text (null = program mix post master chain, bus = post fader pre master chain, single source still missing) and the tests paragraph: the_audio_setting_names_a_bus_and_defaults_to_the_program_mix, a_scope_source_draws_the_mix_its_audio_setting_names, the_lookup_keeps_one_scope_per_drawn_bus (scope/tests.rs) and scope_no_alloc.rs now drawing a bus too." }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:dfba6103702005f0" }
@@ -2313,7 +2313,7 @@ stamp = { hash = "b3:6ae3f673fe0d6d0b" }
 stamp = { hash = "b3:c4299f8d4d3cdecb" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/lib.rs"]
-stamp = { hash = "b3:0f6fcd35e8c0bc32", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: body adds audio() on Source (MediaAudio, default None), and in the media bullet audio-only files showing one transparent pixel, the decode thread reading audio in step with video (1 s ahead, latest second kept while no stream is open), the feeder (10 ms ticks, 10 ms packets, 100 ms lead, media-clock stamps, 20 ms late drop, discontinuity on a jump), heard only while shown and at speed 1, audio-only catch-up seek, sound outlasting the video playing on under the last frame, and the audio tests. lib.rs: pub use media::MediaAudio. source.rs: Source::audio default None, MediaAudio import beside C10's AudioScope. media/audio.rs: MediaAudio (format, set_audible, open), MediaAudioStream and the Feed thread (run, take, hand_on). media/mod.rs: blank frame for audio-only files, set_timing, audio(), next_change waiting on queued audio once video is over. media/player.rs: Sound, Timing, Start, shared state with the audio queue, AUDIO_AHEAD_US, seek_locked clearing both queues, Decode::next reading in step, sound() trimming to skip_to, ended() with the play length as max of both ends, video_over (#322 B1). tests/media.rs: the Recorder handler and audio_is_handed_on_ahead_of_the_timeline_while_heard, a_restart_starts_the_audio_again_as_a_discontinuity, audio_at_another_speed_is_silent, a_file_with_only_audio_plays_it_and_loops_seamlessly, sound_that_outlasts_the_picture_plays_on_under_the_last_frame, a_looping_file_shows_its_first_frame_again_once_the_sound_ends; holds" }
+stamp = { hash = "b3:d45e085bda6e2e7a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: scope/mod.rs adds AudioScopes (program scope, per-bus scopes made on demand, retain, buses) and reads the audio setting (drawn_bus); waveform.rs/spectrum.rs add the non-live audio bus param with the what-it-draws description (N1); source.rs makes Context.audio an Option<Arc<AudioScopes>>; lib.rs exports AudioScopes. Edited the Context bullet, added an AudioScopes bullet, rewrote the waveform/spectrum audio text (null = program mix post master chain, bus = post fader pre master chain, single source still missing) and the tests paragraph: the_audio_setting_names_a_bus_and_defaults_to_the_program_mix, a_scope_source_draws_the_mix_its_audio_setting_names, the_lookup_keeps_one_scope_per_drawn_bus (scope/tests.rs) and scope_no_alloc.rs now drawing a bus too." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/media/audio.rs"]
 stamp = { hash = "b3:d38089f7c063f4c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#447 merged with wave/m2 (#448), per input. body: re-read the whole Purpose section; the media audio paragraph keeps #447's 10 ms pieces (decode thread cuts longer decoder blocks, feeder hands each on as one packet within 100 ms) beside #448's silence-in-the-file-as-a-gap sentence, and they don't contradict (the gap step works on any packet size); the Tests paragraph now lists both PRs' tests. audio.rs: from #448, silence up to 1 s with nothing dropped advances the device position instead of flagging a discontinuity, as the paragraph says; PACKET_US pub(super) from #447. player.rs: #447's Sound::pieces and PIECE_US, #448's per-stream first-frame offset so a play lasts from each stream's first frame to its end; unit tests a_loop_follows_on_from_a_stream_that_starts_late and pieces_at_a_rate_without_whole_10_ms_keep_every_frame_and_stay_contiguous, both now named in the Tests paragraph. tests/media.rs: #448's silence_before_the_next_play_is_a_gap_not_a_discontinuity and #447's long_decoded_blocks_are_handed_on_only_shortly_ahead, both named in the Tests paragraph; holds" }
@@ -2328,19 +2328,19 @@ stamp = { hash = "b3:53a185fedda7b428", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:48243337cf475f45", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9 merged with C10: body's Source bullet keeps C10's Painter and painter() and adds that a media file decodes ahead on its own thread, plus show(at); Context gains media beside C10's audio; the media kind bullet sits before C10's waveform/spectrum bullet; display, webcam and window stay described only; AssetRoots::open, the jstream-platform dependency beside realfft, and tests/media.rs beside the scope tests. source.rs: trait doc names both the media decode thread and Painter, Source::show default, Context.media beside audio with a Debug impl naming both, AssetRoots::open returning the held file and resolved host path, open_held without delete sharing on Windows, open_inside/check_opened returning the canonical path. error.rs: SourceError::NoBackend. registry.rs: MediaKind added beside WaveformKind/SpectrumKind, builtin's doc lists the six kinds that make frames. describe.rs: the media descriptor leaves the described list. lib.rs: crate doc names media, MediaDecoders, Context::media, Source::show and Source::painter, mod media beside mod scope. media/mod.rs: MediaKind (create via AssetRoots::open, first_frame, queue_capacity), Play settings, MediaSource timing (position, clock_at, restart), frame, next_change, show, update. media/player.rs: Player (start, seek, set_looping) and the decode thread (run, seek, decode, end, stop, queue), seeking and decoding with the lock released, with unit tests a_seek_runs_without_the_lock, a_size_change_partway_is_an_error and a_seek_past_an_unknown_end_plays_on_when_looping. tests/media.rs: plays on the clock and holds its last frame, loops and catches up after a gap, speed and a speed change, restart on show, loop turned on after the end, no file, unplayable files, limits; its Context sets audio: None. tests/sources.rs and tests/text.rs: media: None beside C10's audio: None, and text.rs's header re-wrap (C2's N3); holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/scope/mod.rs"]
-stamp = { hash = "b3:c123ba9dbe13bd3a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at #376 (ledger): re-read; Seams restate the Source contract with the Painter seam and AudioScope, Kinds describe waveform/spectrum painting, row-by-row pool, 250 ms settled polling; Tests list the scope tests; matches src/scope, source.rs, registry.rs, lib.rs" }
+stamp = { hash = "b3:5b58d9d9c9094b60", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: scope/mod.rs adds AudioScopes (program scope, per-bus scopes made on demand, retain, buses) and reads the audio setting (drawn_bus); waveform.rs/spectrum.rs add the non-live audio bus param with the what-it-draws description (N1); source.rs makes Context.audio an Option<Arc<AudioScopes>>; lib.rs exports AudioScopes. Edited the Context bullet, added an AudioScopes bullet, rewrote the waveform/spectrum audio text (null = program mix post master chain, bus = post fader pre master chain, single source still missing) and the tests paragraph: the_audio_setting_names_a_bus_and_defaults_to_the_program_mix, a_scope_source_draws_the_mix_its_audio_setting_names, the_lookup_keeps_one_scope_per_drawn_bus (scope/tests.rs) and scope_no_alloc.rs now drawing a bus too." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/scope/spectrum.rs"]
-stamp = { hash = "b3:2fa6b4593901ccfe", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at #376 (ledger): re-read; Seams restate the Source contract with the Painter seam and AudioScope, Kinds describe waveform/spectrum painting, row-by-row pool, 250 ms settled polling; Tests list the scope tests; matches src/scope, source.rs, registry.rs, lib.rs" }
+stamp = { hash = "b3:bef9b80a3ca573d3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: scope/mod.rs adds AudioScopes (program scope, per-bus scopes made on demand, retain, buses) and reads the audio setting (drawn_bus); waveform.rs/spectrum.rs add the non-live audio bus param with the what-it-draws description (N1); source.rs makes Context.audio an Option<Arc<AudioScopes>>; lib.rs exports AudioScopes. Edited the Context bullet, added an AudioScopes bullet, rewrote the waveform/spectrum audio text (null = program mix post master chain, bus = post fader pre master chain, single source still missing) and the tests paragraph: the_audio_setting_names_a_bus_and_defaults_to_the_program_mix, a_scope_source_draws_the_mix_its_audio_setting_names, the_lookup_keeps_one_scope_per_drawn_bus (scope/tests.rs) and scope_no_alloc.rs now drawing a bus too." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/scope/tests.rs"]
-stamp = { hash = "b3:bb78dda578f89530", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at #376 (ledger): re-read; Seams restate the Source contract with the Painter seam and AudioScope, Kinds describe waveform/spectrum painting, row-by-row pool, 250 ms settled polling; Tests list the scope tests; matches src/scope, source.rs, registry.rs, lib.rs" }
+stamp = { hash = "b3:a7dcc1471fcf1b63", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: scope/mod.rs adds AudioScopes (program scope, per-bus scopes made on demand, retain, buses) and reads the audio setting (drawn_bus); waveform.rs/spectrum.rs add the non-live audio bus param with the what-it-draws description (N1); source.rs makes Context.audio an Option<Arc<AudioScopes>>; lib.rs exports AudioScopes. Edited the Context bullet, added an AudioScopes bullet, rewrote the waveform/spectrum audio text (null = program mix post master chain, bus = post fader pre master chain, single source still missing) and the tests paragraph: the_audio_setting_names_a_bus_and_defaults_to_the_program_mix, a_scope_source_draws_the_mix_its_audio_setting_names, the_lookup_keeps_one_scope_per_drawn_bus (scope/tests.rs) and scope_no_alloc.rs now drawing a bus too." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/scope/waveform.rs"]
-stamp = { hash = "b3:e572fba9b4015e38", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at #376 (ledger): re-read; Seams restate the Source contract with the Painter seam and AudioScope, Kinds describe waveform/spectrum painting, row-by-row pool, 250 ms settled polling; Tests list the scope tests; matches src/scope, source.rs, registry.rs, lib.rs" }
+stamp = { hash = "b3:d7f2fd91fb4b302f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: scope/mod.rs adds AudioScopes (program scope, per-bus scopes made on demand, retain, buses) and reads the audio setting (drawn_bus); waveform.rs/spectrum.rs add the non-live audio bus param with the what-it-draws description (N1); source.rs makes Context.audio an Option<Arc<AudioScopes>>; lib.rs exports AudioScopes. Edited the Context bullet, added an AudioScopes bullet, rewrote the waveform/spectrum audio text (null = program mix post master chain, bus = post fader pre master chain, single source still missing) and the tests paragraph: the_audio_setting_names_a_bus_and_defaults_to_the_program_mix, a_scope_source_draws_the_mix_its_audio_setting_names, the_lookup_keeps_one_scope_per_drawn_bus (scope/tests.rs) and scope_no_alloc.rs now drawing a bus too." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/source.rs"]
-stamp = { hash = "b3:1d79c40d2e55e6f8", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: body adds audio() on Source (MediaAudio, default None), and in the media bullet audio-only files showing one transparent pixel, the decode thread reading audio in step with video (1 s ahead, latest second kept while no stream is open), the feeder (10 ms ticks, 10 ms packets, 100 ms lead, media-clock stamps, 20 ms late drop, discontinuity on a jump), heard only while shown and at speed 1, audio-only catch-up seek, sound outlasting the video playing on under the last frame, and the audio tests. lib.rs: pub use media::MediaAudio. source.rs: Source::audio default None, MediaAudio import beside C10's AudioScope. media/audio.rs: MediaAudio (format, set_audible, open), MediaAudioStream and the Feed thread (run, take, hand_on). media/mod.rs: blank frame for audio-only files, set_timing, audio(), next_change waiting on queued audio once video is over. media/player.rs: Sound, Timing, Start, shared state with the audio queue, AUDIO_AHEAD_US, seek_locked clearing both queues, Decode::next reading in step, sound() trimming to skip_to, ended() with the play length as max of both ends, video_over (#322 B1). tests/media.rs: the Recorder handler and audio_is_handed_on_ahead_of_the_timeline_while_heard, a_restart_starts_the_audio_again_as_a_discontinuity, audio_at_another_speed_is_silent, a_file_with_only_audio_plays_it_and_loops_seamlessly, sound_that_outlasts_the_picture_plays_on_under_the_last_frame, a_looping_file_shows_its_first_frame_again_once_the_sound_ends; holds" }
+stamp = { hash = "b3:d406c951e5262855", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: scope/mod.rs adds AudioScopes (program scope, per-bus scopes made on demand, retain, buses) and reads the audio setting (drawn_bus); waveform.rs/spectrum.rs add the non-live audio bus param with the what-it-draws description (N1); source.rs makes Context.audio an Option<Arc<AudioScopes>>; lib.rs exports AudioScopes. Edited the Context bullet, added an AudioScopes bullet, rewrote the waveform/spectrum audio text (null = program mix post master chain, bus = post fader pre master chain, single source still missing) and the tests paragraph: the_audio_setting_names_a_bus_and_defaults_to_the_program_mix, a_scope_source_draws_the_mix_its_audio_setting_names, the_lookup_keeps_one_scope_per_drawn_bus (scope/tests.rs) and scope_no_alloc.rs now drawing a bus too." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/mod.rs"]
 stamp = { hash = "b3:34314ba6e93e9e21" }
@@ -2367,7 +2367,7 @@ stamp = { hash = "b3:fc3b1214b3ce4e96" }
 stamp = { hash = "b3:fe93b150bb45d823", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#447 merged with wave/m2 (#448), per input. body: re-read the whole Purpose section; the media audio paragraph keeps #447's 10 ms pieces (decode thread cuts longer decoder blocks, feeder hands each on as one packet within 100 ms) beside #448's silence-in-the-file-as-a-gap sentence, and they don't contradict (the gap step works on any packet size); the Tests paragraph now lists both PRs' tests. audio.rs: from #448, silence up to 1 s with nothing dropped advances the device position instead of flagging a discontinuity, as the paragraph says; PACKET_US pub(super) from #447. player.rs: #447's Sound::pieces and PIECE_US, #448's per-stream first-frame offset so a play lasts from each stream's first frame to its end; unit tests a_loop_follows_on_from_a_stream_that_starts_late and pieces_at_a_rate_without_whole_10_ms_keep_every_frame_and_stay_contiguous, both now named in the Tests paragraph. tests/media.rs: #448's silence_before_the_next_play_is_a_gap_not_a_discontinuity and #447's long_decoded_blocks_are_handed_on_only_shortly_ahead, both named in the Tests paragraph; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/scope_no_alloc.rs"]
-stamp = { hash = "b3:0ac7407bfad9d889", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at #376 (ledger): re-read; Seams restate the Source contract with the Painter seam and AudioScope, Kinds describe waveform/spectrum painting, row-by-row pool, 250 ms settled polling; Tests list the scope tests; matches src/scope, source.rs, registry.rs, lib.rs" }
+stamp = { hash = "b3:7b4dea7ac982368c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: scope/mod.rs adds AudioScopes (program scope, per-bus scopes made on demand, retain, buses) and reads the audio setting (drawn_bus); waveform.rs/spectrum.rs add the non-live audio bus param with the what-it-draws description (N1); source.rs makes Context.audio an Option<Arc<AudioScopes>>; lib.rs exports AudioScopes. Edited the Context bullet, added an AudioScopes bullet, rewrote the waveform/spectrum audio text (null = program mix post master chain, bus = post fader pre master chain, single source still missing) and the tests paragraph: the_audio_setting_names_a_bus_and_defaults_to_the_program_mix, a_scope_source_draws_the_mix_its_audio_setting_names, the_lookup_keeps_one_scope_per_drawn_bus (scope/tests.rs) and scope_no_alloc.rs now drawing a bus too." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/sources.rs"]
 stamp = { hash = "b3:79fc6ebcb6676fb4", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9 merged with C10: body's Source bullet keeps C10's Painter and painter() and adds that a media file decodes ahead on its own thread, plus show(at); Context gains media beside C10's audio; the media kind bullet sits before C10's waveform/spectrum bullet; display, webcam and window stay described only; AssetRoots::open, the jstream-platform dependency beside realfft, and tests/media.rs beside the scope tests. source.rs: trait doc names both the media decode thread and Painter, Source::show default, Context.media beside audio with a Debug impl naming both, AssetRoots::open returning the held file and resolved host path, open_held without delete sharing on Windows, open_inside/check_opened returning the canonical path. error.rs: SourceError::NoBackend. registry.rs: MediaKind added beside WaveformKind/SpectrumKind, builtin's doc lists the six kinds that make frames. describe.rs: the media descriptor leaves the described list. lib.rs: crate doc names media, MediaDecoders, Context::media, Source::show and Source::painter, mod media beside mod scope. media/mod.rs: MediaKind (create via AssetRoots::open, first_frame, queue_capacity), Play settings, MediaSource timing (position, clock_at, restart), frame, next_change, show, update. media/player.rs: Player (start, seek, set_looping) and the decode thread (run, seek, decode, end, stop, queue), seeking and decoding with the lock released, with unit tests a_seek_runs_without_the_lock, a_size_change_partway_is_an_error and a_seek_past_an_unknown_end_plays_on_when_looping. tests/media.rs: plays on the clock and holds its last frame, loops and catches up after a gap, speed and a speed change, restart on show, loop turned on after the end, no file, unplayable files, limits; its Context sets audio: None. tests/sources.rs and tests/text.rs: media: None beside C10's audio: None, and text.rs's header re-wrap (C2's N3); holds" }
@@ -2427,10 +2427,10 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:601bb40f0c50d5b9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: Mixer bullet now names the protocol's MAX_BUSES for the Add bus limit; rest re-read" }
+stamp = { hash = "b3:59d712432571a13c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: store.rs's Collection now keeps state.get's buses and properties.rs adds a ParamType::Bus reference select listing them. Edited the properties-form bullet (reference select of scenes, sources or buses, None for null = the program mix for a scope's audio) and the bus strip delete note (the engine refuses deleting a bus a waveform or spectrum draws; the mixer shows the reason and keeps the strip). The control design dep only gained the mock's bus.delete refusal, consistent with that." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401 and the jstream-control Mock change: Scenes and sources now says the mock lists no kinds and a failed kind.list offers none but shows its error like any failed call (problem bar, per Routing); rest unchanged." }
+stamp = { hash = "b3:b2b0815752c7d7b0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: store.rs adds Collection.buses and properties.rs a bus picker; this section's design choices (Leptos, session, store, panels) are unchanged by them, and the control design dep only gained the mock's bus.delete refusal, which the UI shows as any refused edit. Holds." }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -2472,7 +2472,7 @@ stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:81728ddff971bf23" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:b9816bcdb2c73579", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+stamp = { hash = "b3:280107d698701337", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: store.rs adds Collection.buses and properties.rs a bus picker; this section's design choices (Leptos, session, store, panels) are unchanged by them, and the control design dep only gained the mock's bus.delete refusal, which the UI shows as any refused edit. Holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
 stamp = { hash = "b3:b24a15b358dcb55b", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
@@ -2484,13 +2484,13 @@ stamp = { hash = "b3:a412fc9db0bf618b", by = "agent:u3a-builder", note = "Re-rea
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:78cd518298c93fde", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401 and the jstream-control Mock change: Scenes and sources now says the mock lists no kinds and a failed kind.list offers none but shows its error like any failed call (problem bar, per Routing); rest unchanged." }
+stamp = { hash = "b3:ddc503de3b1c1bfc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: store.rs adds Collection.buses and properties.rs a bus picker; this section's design choices (Leptos, session, store, panels) are unchanged by them, and the control design dep only gained the mock's bus.delete refusal, which the UI shows as any refused edit. Holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
 stamp = { hash = "b3:4dcd7fc3a18b6bdc", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:4103ec17da961792", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }
+stamp = { hash = "b3:646f54d6d77b149e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: store.rs's Collection now keeps state.get's buses, and properties.rs's form gains a bus reference select (ParamType::Bus) listing them. Edited the Store bullet, the properties-form bullet (reference select of scenes, sources or buses) and the bus strip delete note (refused while a waveform or spectrum draws the bus, reason shown by the mixer)." }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -2532,7 +2532,7 @@ stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:81728ddff971bf23" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:b9816bcdb2c73579", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+stamp = { hash = "b3:280107d698701337", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: store.rs's Collection now keeps state.get's buses, and properties.rs's form gains a bus reference select (ParamType::Bus) listing them. Edited the Store bullet, the properties-form bullet (reference select of scenes, sources or buses) and the bus strip delete note (refused while a waveform or spectrum draws the bus, reason shown by the mixer)." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
 stamp = { hash = "b3:b24a15b358dcb55b", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
@@ -2544,7 +2544,7 @@ stamp = { hash = "b3:a412fc9db0bf618b", by = "agent:u3a-builder", note = "Re-rea
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:78cd518298c93fde", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: Store bullet now lists list_kinds among the call helpers; Studio's fields (kinds, last failed call) unchanged." }
+stamp = { hash = "b3:ddc503de3b1c1bfc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: store.rs's Collection now keeps state.get's buses, and properties.rs's form gains a bus reference select (ParamType::Bus) listing them. Edited the Store bullet, the properties-form bullet (reference select of scenes, sources or buses) and the bus strip delete note (refused while a waveform or spectrum draws the bus, reason shown by the mixer)." }
 
 ["CRATE-jstream-ui-e2e#harness"."body"]
 stamp = { hash = "b3:984dd6f77ea95af9", by = "agent:u3a-builder", note = "Re-read after merging main; connect and inspectorPage fixtures as described; all 18 tests run locally" }
@@ -2964,7 +2964,7 @@ stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:7ab4accbf98f6662" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:7eee2436993b0389", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through ARCH#protocol, whose only change is the bus-reference version number (0.20 to 0.24). R-API-001's rule (a minor bump for additions) is still what #460 follows, and the section names no specific version." }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }

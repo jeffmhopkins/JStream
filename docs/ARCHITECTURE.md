@@ -611,8 +611,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
-  batch that deletes a scene or source with everything that refers to it, and the `rev`
-  it was planned at; `bus.list` (protocol 0.19) → the buses and sends; audio levels are
+  batch that deletes a scene or source (or, from protocol 0.24, a bus) with everything
+  that refers to it, and the `rev` it was planned at; `bus.list` (protocol 0.19) → the buses and sends; audio levels are
   the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
@@ -629,7 +629,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Errors** carry a stable machine-readable `code`, detail fields and a message. A
   `scene.delete` or `source.delete` refused because something still refers to its
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
-  [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
+  [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)), and so does a `bus.delete`
+  refused because a setting draws the bus (protocol 0.24: a `bus` reference, as the
+  `waveform` and `spectrum` kinds' `audio` setting holds).
 - **Binary streams** (WebSocket binary frames): preview video and meters. Not designed
   yet, except the meter frame's fields
   ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak

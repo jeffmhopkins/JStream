@@ -567,7 +567,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "DeleteTarget": {
-      "description": "What a `delete.plan` deletes: a scene or a source.",
+      "description": "What a `delete.plan` deletes: a scene, a source or (since 0.24) a bus.",
       "oneOf": [
         {
           "description": "A scene.",
@@ -602,6 +602,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A bus other than the master. Since 0.24.",
+          "properties": {
+            "bus_id": {
+              "$ref": "#/$defs/BusId",
+              "description": "The bus to delete."
+            },
+            "type": {
+              "const": "bus",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "bus_id"
           ],
           "type": "object"
         }
@@ -1530,7 +1548,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`). Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
+          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -2736,6 +2754,19 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "A bus reference (`{\"type\":\"bus\",\"bus_id\":…}`) or `null`. Since 0.24.",
+          "properties": {
+            "type": {
+              "const": "bus",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -3004,7 +3035,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The batch that deletes a scene or source together with everything that refers to\nit, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`\nlists those `blockers`). The plan removes the items that place a deleted source,\ndeletes the `scene` sources that show a deleted scene (and their items), and sets\nsettings references to the target to `null`, keeping the sources that hold them.\nThe client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
+          "description": "The batch that deletes a scene, source or bus together with everything that\nrefers to it, which `scene.delete`, `source.delete` and `bus.delete` alone refuse\n(their `invalid_argument` lists those `blockers`). The plan removes the items that place a deleted source,\ndeletes the `scene` sources that show a deleted scene (and their items), and sets\nsettings references to the target to `null`, keeping the sources that hold them.\nThe client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
           "properties": {
             "target": {
               "$ref": "#/$defs/DeleteTarget",
@@ -4301,5 +4332,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.19"
+  "title": "JStream protocol 0.24"
 }

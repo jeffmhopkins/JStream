@@ -508,6 +508,73 @@ fn the_program_mix_feeds_the_audio_scope_while_an_output_runs() {
     block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
 
+/// #362: a `waveform` drawing a bus gets that bus's audio from the mixer thread, not
+/// the program mix's: here the desktop sends only into `vod`, so the bus's scope moves
+/// while the program mix stays silent.
+#[test]
+fn a_bus_a_source_draws_feeds_its_scope_while_an_output_runs() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let vod = jstream_protocol::BusId::new("vod");
+    batch(
+        &control,
+        edits(vec![
+            audio_source("desk", "desktop_audio", None),
+            Edit::BusCreate {
+                bus_id: vod.clone(),
+                name: "VOD".into(),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("desk"),
+                bus_id: vod.clone(),
+                gain_db: jstream_protocol::Finite32::ZERO,
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("desk"),
+                bus_id: jstream_protocol::BusId::master(),
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "Waveform".into(),
+                kind: SourceKind::Builtin {
+                    kind: "waveform".into(),
+                },
+                settings: Settings(
+                    [("audio".to_owned(), json!({"type": "bus", "bus_id": "vod"}))]
+                        .into_iter()
+                        .collect(),
+                ),
+                duplicated_from: None,
+            },
+        ]),
+    )
+    .expect("created");
+    let scopes = engine.audio_scopes();
+    let bus = scopes.bus(&vod);
+    let program = engine.audio_scope();
+    let mut window = [0.0f32; 256];
+
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(
+        eventually(|| {
+            audio.deliver(480, 0.25);
+            clock.advance(10_000);
+            let (_, rate) = bus.latest(&mut window);
+            rate == 48_000 && window.iter().any(|&s| s > 0.1)
+        }),
+        "the bus's scope saw no audio: {window:?}"
+    );
+    let (written, _) = program.latest(&mut window);
+    assert!(written > 0, "the program mix is fed too");
+    assert!(
+        window.iter().all(|&s| s.abs() < 1e-3),
+        "the program mix has no send from the desktop: {window:?}"
+    );
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+}
+
 /// The routing (D5) finds the inputs the program stage opens: an audio source that
 /// records is metered in `meters.tick`. Turning its audio off closes its input and drops
 /// its meter, and doesn't bring the default microphone and desktop back; turning it on

@@ -61,7 +61,8 @@ state machine. Contents:
   draws nothing, except that a `display` source shows the output pipeline's capture
   on the render thread (see *Live sources* and *Snapshots* in [Design](#design)).
   Audio-only kinds make no frames and have no live source. The `waveform` and
-  `spectrum` sources draw the program mix's audio from the engine's `AudioScope`.
+  `spectrum` sources draw the program mix's audio, or a bus's, from the engine's
+  `AudioScopes`.
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
   on, added when the source is created or turned on and removed when it is deleted or
@@ -94,7 +95,8 @@ state machine. Contents:
   its activity gain (`activity.rs`): a `when_shown` source is heard only while the
   Program mix shows it; `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
-  `audio.reset_loudness` restarts its integrated loudness.
+  `audio.reset_loudness` restarts its integrated loudness. Every bus a source's
+  settings draw (#362) has a scope the mixer thread feeds from that mixer bus.
 - **History** (`history.rs`): per-client undo and redo
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
   stacks, built from the inverse batches `Graph::apply` returns, and the log of what
@@ -153,8 +155,10 @@ state machine. Contents:
   output running, a failed stream reopened, an application found again under a new
   process ID, a settings change reopening its input, a media file's sound reaching
   its own input beside the defaults, silent while hidden, routed and metered, closed
-  while its audio is off and removed with the source, and the program mix reaching the
-  engine's audio scope while an output runs), the output edits and the
+  while its audio is off and removed with the source, the program mix reaching the
+  engine's audio scope while an output runs, and a bus a `waveform` draws reaching its
+  own scope while the program mix, with no send from that source, stays silent
+  (`a_bus_a_source_draws_feeds_its_scope_while_an_output_runs`)), the output edits and the
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
@@ -171,7 +175,10 @@ state machine. Contents:
   batches and undo, `meters.tick` while a mixer is attached and none after,
   `audio.reset_loudness`, the master's true peak and loudness, and a `when_shown`
   source's activity gain following scene switches, shown and hidden items and undo
-  (`activity.rs` checks reachability itself); `src/tests/audio.rs`
+  (`activity.rs` checks reachability itself), and a drawn bus's scope pointed at the
+  mixer bus its sends feed, none for the program mix, a missing bus refused and the
+  scope dropped with the bus's references
+  (`a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus`); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
   off closes its input and its meter and turning it on opens them again. The live
   sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
@@ -455,9 +462,10 @@ so a hidden item, or a scene that isn't the program, is silent. `take_audio` han
 engine every running source's sound, with its build's number and time zero, when an
 install, a deletion or a new clock changed it; the engine passes that to the audio
 sources (`AudioSources::sync_live`) as it publishes the plan. Every source is built
-with the engine's one `jstream_sources::AudioScope` in its `Context`: the mixer thread
-pushes each program block into it, and the `waveform` and `spectrum` sources draw its
-latest 2048 samples. The program mix runs only while the program stage does, so with
+with the engine's one `jstream_sources::AudioScopes` in its `Context`: the mixer thread
+pushes each program block into its program scope, and each block of a bus a source
+draws into that bus's scope (*Audio routing*), and the `waveform` and `spectrum`
+sources draw the latest 2048 samples of the scope their `audio` setting names. The program mix runs only while the program stage does, so with
 no output running they draw silence, and once settled on it they are checked every
 250 ms rather than every frame.
 
@@ -663,7 +671,17 @@ brings the mixer in line with the collection under the collection lock:
   follows `always` (weight 1 each). The mixer applies it after the input's fader and
   meter, scaling every send, and ramps to it over one block, so a cut never clicks
   and the meter still reads a source that is off program. `scene.switch` and a batch
-  that moves program sync too, after program is reconciled.
+  that moves program sync too, after program is reconciled;
+- the bus scopes (#362): every bus a source's settings refer to (a `waveform` or
+  `spectrum` drawing it) keeps a scope in the engine's `AudioScopes`, and the others
+  are dropped (`AudioScopes::retain`). The list of mixer buses that feed them (the
+  master's `BusControl` for `master`, else the bus's own; a bus the mixer doesn't hold
+  yet is left out) goes to the mixer thread as an immutable `ScopeTaps` list through
+  `arc-swap`, stored only when it changed. The mixer thread loads it without a lock
+  after each block, pushes `Mixer::bus_block` of each into its scope, and hands a list
+  it replaces, and its last one when it stops, to the collector, since it may hold a
+  scope's last reference ([R-RT-003](../../docs/RULES.md#R-RT-003)). The program
+  stage makes the list and hands it to the engine with the mixer's controls.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
 reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
@@ -1102,8 +1120,10 @@ readback is counted. The mixer thread polls the media clock and pushes 48 kHz st
 blocks mixed from the audio sources' inputs and the media files' sound (see *Audio
 sources* in Design; the microphone and the desktop loopback while the collection has
 no audio source), meters each master block's true peak and loudness, and also pushes
-each block into the engine's audio scope for the `waveform` and `spectrum` sources (a
-lock-free ring: no lock, no allocation). Once the stage is up, the engine routes the
+each block into the engine's program audio scope for the `waveform` and `spectrum`
+sources, and each drawn bus's block into its scope (lock-free rings: no lock, no
+allocation; the list of bus scopes comes through `arc-swap`, see *Audio routing* in
+Design). Once the stage is up, the engine routes the
 collection's buses, faders and sends into its mixer until it stops (see *Audio
 routing* in Design). Every running output shares that one program stage (capture,
 render, mixer, audio inputs); the first `output.start` builds it and the
@@ -1126,7 +1146,7 @@ output stops, and `meters.tick` about ten times a second. The render loop publis
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. None of those threads lock the collection: the render thread reads the
 render snapshot, and what the render and mixer threads let go of (replaced snapshots,
-GPU images, finished sessions' inputs) goes to the program stage's
+GPU images, finished sessions' inputs, replaced lists of bus scopes) goes to the program stage's
 `jstream-collector` thread. `output.stop` during `starting` cancels that start and
 emits `stopped` only after the start has dropped its threads. The render and mixer
 threads catch a panic at their boundary ([R-RT-006](../../docs/RULES.md#R-RT-006)); a

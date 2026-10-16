@@ -7,7 +7,8 @@
 //! bus, so the audio graph can't have a cycle. Keys, which can close one, come with the
 //! filters.
 
-use crate::apply::{already_exists, check_id, check_name, invalid, not_found};
+use crate::apply::{already_exists, blocked, check_id, check_name, invalid, not_found};
+use crate::deps::{self, Node};
 use crate::model::{Bus, MAX_BUSES, State};
 use jstream_protocol::{
     AudioFollow, BusId, Edit, EntityKind, Finite32, KindDescriptor, ProtocolError, SourceAudio,
@@ -336,6 +337,13 @@ fn delete_bus(state: &mut State, id: &BusId, at: usize) -> Result<Vec<Edit>, Pro
     }
     if id.is_master() {
         return Err(invalid(at, "bus_id", "the master bus can't be deleted"));
+    }
+    // A settings value that draws the bus (a `waveform` or `spectrum` source's `audio`)
+    // holds it, as a reference holds a scene or source (ADR-0025); its sends go with it.
+    let target = Node::Bus(id.clone());
+    let blockers = deps::blockers(state, &target);
+    if !blockers.is_empty() {
+        return Err(blocked(at, "bus_id", &target, blockers));
     }
     let bus = state
         .buses

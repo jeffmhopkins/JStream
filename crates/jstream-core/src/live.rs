@@ -35,7 +35,7 @@ use std::time::{Duration, Instant};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{MediaClock, MediaDecoders};
 use jstream_protocol::{Settings, SourceId, SourceKind};
-use jstream_sources::{AudioScope, Context, MediaAudio, Painter, Registry, Source, SourceError};
+use jstream_sources::{AudioScopes, Context, MediaAudio, Painter, Registry, Source, SourceError};
 
 use crate::lock;
 use crate::snapshot::Frame;
@@ -187,9 +187,10 @@ impl LiveSources {
         self.worker.wake.notify_all();
     }
 
-    /// The program mix's audio, for the `waveform` and `spectrum` sources.
-    pub(crate) fn set_audio_scope(&mut self, scope: Arc<AudioScope>) {
-        self.ctx.audio = Some(scope);
+    /// The program mix's and the buses' audio, for the `waveform` and `spectrum`
+    /// sources.
+    pub(crate) fn set_audio_scopes(&mut self, scopes: Arc<AudioScopes>) {
+        self.ctx.audio = Some(scopes);
     }
 
     /// The platform's media files, which `media` sources play through. Sources built

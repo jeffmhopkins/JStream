@@ -54,9 +54,9 @@ use jstream_protocol::{
     RateControl as ProfileRate,
 };
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
-use jstream_sources::AudioScope;
+use jstream_sources::AudioScopes;
 
-use crate::audio::{MasterMetering, MixerHandles};
+use crate::audio::{MasterMetering, MixerHandles, ScopeTaps};
 use crate::audio_sources::{AudioInputs, Wanted};
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, DropGuard, DropSnapshot, FnDropSource, VideoEncodeDrops,
@@ -891,6 +891,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             return Err(err);
         }
     };
+    let scope_taps = Arc::new(ScopeTaps::default());
     let mixer_thread = match spawn("jstream-mixer", {
         let clock = Arc::clone(&parts.clock);
         let stop = Arc::clone(&stop);
@@ -899,7 +900,8 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         let out = MixOut {
             inputs: audio_inputs,
             format,
-            scope: engine.audio_scope(),
+            scopes: engine.audio_scopes(),
+            taps: Arc::clone(&scope_taps),
         };
         let mixing = Mixing { mixer, metering };
         move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
@@ -943,6 +945,8 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
                 control: mixer_control,
                 master: program.bus.clone(),
                 meters: master_meters,
+                scopes: engine.audio_scopes(),
+                taps: scope_taps,
             });
             *lock(&program.detach_audio) = Some(detach);
             Ok(Arc::new(program))
@@ -1638,8 +1642,11 @@ struct MixOut {
     inputs: Receiver<AudioInput>,
     /// The blocks' format.
     format: AudioFormat,
-    /// What the `waveform` and `spectrum` sources draw.
-    scope: Arc<AudioScope>,
+    /// What the `waveform` and `spectrum` sources draw: the program mix's scope gets
+    /// each block.
+    scopes: Arc<AudioScopes>,
+    /// The bus scopes, each fed its bus's block.
+    taps: Arc<ScopeTaps>,
 }
 
 /// The mixer thread's boundary: a panic is caught and reported as fatal. The encoders
@@ -1670,9 +1677,10 @@ struct Mixing {
     metering: MasterMetering,
 }
 
-/// Mixes on the media clock, meters the master, and pushes each block into the audio
-/// scope (which neither locks nor allocates) and into every encoder session the program
-/// has handed it, letting go of one that has finished. A rejected block or a poll error
+/// Mixes on the media clock, meters the master, and pushes each block into the program
+/// mix's audio scope and each drawn bus's block into its scope (pushes neither lock nor
+/// allocate, and the list of bus scopes is adopted lock-free), and into every encoder
+/// session the program has handed it, letting go of one that has finished. A rejected block or a poll error
 /// is fatal: both mean the mixer and the encoder disagree about the format, which no
 /// retry fixes.
 fn mixer_loop(
@@ -1689,9 +1697,12 @@ fn mixer_loop(
     let MixOut {
         inputs,
         format,
-        scope,
+        scopes,
+        taps,
     } = out;
     let format = *format;
+    let scope = scopes.program();
+    let mut bus_scopes = taps.reader();
     let samples_len = mixer.config().block_frames.saturating_mul(2);
     let mut samples = vec![0.0f32; samples_len];
     let mut targets: Vec<AudioInput> = Vec::new();
@@ -1700,6 +1711,15 @@ fn mixer_loop(
             Ok(Some(block)) => {
                 metering.process(&samples);
                 scope.push(format.sample_rate(), &samples);
+                let (bus_taps, replaced) = bus_scopes.adopt();
+                for tap in bus_taps {
+                    if let Some(bus) = mixer.bus_block(tap.bus) {
+                        tap.scope.push(format.sample_rate(), bus);
+                    }
+                }
+                if let Some(replaced) = replaced {
+                    collector.free(Garbage::Scopes(replaced));
+                }
                 targets.extend(inputs.try_iter());
                 let mut rejected = None;
                 // The mix itself does not allocate. `AudioInput::push` takes an owned
@@ -1730,6 +1750,7 @@ fn mixer_loop(
             }
         }
     }
+    collector.free(Garbage::Scopes(bus_scopes.into_held()));
 }
 
 struct OutputJob {
