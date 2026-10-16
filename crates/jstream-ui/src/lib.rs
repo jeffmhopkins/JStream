@@ -4,8 +4,8 @@
 //! it never links the engine (R-ARCH-003).
 //!
 //! It holds connecting and the session (`session`), the shell and its routing (`app`),
-//! the state the panels share (`store`), the panels (`panels`) and the preview canvas
-//! (`canvas`).
+//! the state the panels share (`store`), the panels (`panels`), the pairing panel
+//! (`pairing`) and the preview canvas (`canvas`).
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#canvas, crates/jstream-ui/README.md#build, crates/jstream-ui/tests/e2e/README.md#harness, crates/jstream-ui/tests/e2e/README.md#tests, crates/jstream-ui/tests/e2e/README.md#running, docs/adr/0045-leptos-web-ui.md
 
@@ -14,6 +14,7 @@
 pub mod app;
 pub mod canvas;
 pub mod host;
+pub mod pairing;
 pub mod panels;
 pub mod session;
 pub mod store;
