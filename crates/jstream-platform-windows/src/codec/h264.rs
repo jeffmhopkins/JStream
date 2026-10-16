@@ -1,9 +1,10 @@
-//! H.264 encoding through Media Foundation encoder MFTs, from CPU NV12 frames.
+//! H.264 encoding through Media Foundation encoder MFTs, from CPU frames.
 //!
-//! This is the CPU path: frames are copied into a Media Foundation memory buffer. ARCH's
-//! GPU pipeline feeds the encoder D3D11 textures instead; that arrives with the Windows
-//! `GpuInterop` implementation, and the CPU path stays as the fallback (ARCH › GPU
-//! pipeline, step 6).
+//! This is the CPU path: frames are copied into a Media Foundation memory buffer as NV12,
+//! the encoder's input. RGBA and BGRA frames (the compositor's output) are converted to
+//! NV12 on the way ([`Nv12Packer`]). ARCH's GPU pipeline feeds the encoder D3D11
+//! textures instead; that arrives with the Windows `GpuInterop` implementation, and the
+//! CPU path stays as the fallback (ARCH › GPU pipeline, step 6).
 //!
 //! Hardware encoders are tried first and the OS software encoder after them, as
 //! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0031).
@@ -12,8 +13,13 @@
 
 use std::collections::VecDeque;
 
-use jstream_platform::media::{Codec, MediaTime, PixelFormat, Rounding, Timebase, VideoFrame};
+use jstream_platform::media::{
+    Codec, ColorInfo, FrameSize, MediaTime, PixelFormat, Rounding, Timebase, VideoFrame,
+    VideoFrameInfo,
+};
 use jstream_platform::{PlatformError, RateControl, VideoEncoderConfig};
+
+use crate::capture::convert::{RgbOrder, rgb_to_nv12};
 
 /// What the MFT is configured with, derived from a [`VideoEncoderConfig`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,17 +37,20 @@ pub(crate) struct Settings {
 /// Checks a configuration and derives the MFT settings.
 ///
 /// # Errors
-/// [`PlatformError::Unsupported`] for another codec, an input other than NV12, odd
-/// dimensions (NV12 halves them for chroma), a zero keyframe interval, a zero bit rate or
-/// a VBR peak below its mean.
+/// [`PlatformError::Unsupported`] for another codec, an input other than NV12, RGBA or
+/// BGRA, odd dimensions (NV12 halves them for chroma), a zero keyframe interval, a zero
+/// bit rate or a VBR peak below its mean.
 pub(crate) fn check(config: &VideoEncoderConfig) -> Result<Settings, PlatformError> {
     let unsupported = |what: String| Err(PlatformError::Unsupported { what });
     if config.codec != Codec::H264 {
         return unsupported(format!("{:?} from the H.264 encoder", config.codec));
     }
-    if config.input_format != PixelFormat::Nv12 {
+    if !matches!(
+        config.input_format,
+        PixelFormat::Nv12 | PixelFormat::Rgba8 | PixelFormat::Bgra8
+    ) {
         return unsupported(format!(
-            "H.264 from {:?} (the encoder takes NV12)",
+            "H.264 from {:?} (the encoder takes NV12, RGBA or BGRA)",
             config.input_format
         ));
     }
@@ -107,6 +116,73 @@ pub(crate) fn pack_nv12(frame: &VideoFrame, out: &mut [u8]) -> Result<(), Platfo
     Ok(())
 }
 
+/// Turns the encoder's input frames into the contiguous NV12 its MFT takes, reusing its
+/// buffers. NV12 is copied ([`pack_nv12`]). RGBA (what the engine's compositor produces)
+/// and BGRA are converted first, BT.709 limited range with left-sited chroma, the way
+/// display capture converts WGC's BGRA.
+#[derive(Debug)]
+pub(crate) struct Nv12Packer {
+    out: Vec<u8>,
+    /// The converted frame for RGB input; made at the first one.
+    converted: Option<VideoFrame>,
+}
+
+impl Nv12Packer {
+    /// A packer for frames of `size`, which must be even (as [`check`] requires).
+    pub(crate) fn new(size: FrameSize) -> Self {
+        Self {
+            out: vec![0; size.width() as usize * size.height() as usize * 3 / 2],
+            converted: None,
+        }
+    }
+
+    /// Packs `frame` and returns the NV12 bytes.
+    ///
+    /// # Errors
+    /// [`PlatformError::Unsupported`] for a format other than NV12, RGBA or BGRA, and
+    /// [`PlatformError::InvalidState`] when the frame's size isn't the packer's.
+    pub(crate) fn pack(&mut self, frame: &VideoFrame) -> Result<&[u8], PlatformError> {
+        let info = frame.info();
+        let order = match info.format {
+            PixelFormat::Nv12 => {
+                pack_nv12(frame, &mut self.out)?;
+                return Ok(&self.out);
+            }
+            PixelFormat::Rgba8 => RgbOrder::Rgba,
+            PixelFormat::Bgra8 => RgbOrder::Bgra,
+            other => {
+                return Err(PlatformError::Unsupported {
+                    what: format!("packing {other:?} as NV12"),
+                });
+            }
+        };
+        let converted = match &mut self.converted {
+            Some(c) if c.info().size == info.size => c,
+            slot => slot.insert(
+                VideoFrame::zeroed(VideoFrameInfo {
+                    size: info.size,
+                    format: PixelFormat::Nv12,
+                    color: ColorInfo::default(),
+                    pts: info.pts,
+                })
+                .map_err(|_| PlatformError::Unsupported {
+                    what: format!("NV12 at {}x{}", info.size.width(), info.size.height()),
+                })?,
+            ),
+        };
+        // One plane: `VideoFrame` checks the plane count of a packed format.
+        let Some(plane) = frame.plane(0) else {
+            return Err(PlatformError::InvalidState {
+                what: "NV12 packing",
+                state: "the RGB frame has no plane",
+            });
+        };
+        rgb_to_nv12(plane.data(), plane.stride(), order, converted)?;
+        pack_nv12(converted, &mut self.out)?;
+        Ok(&self.out)
+    }
+}
+
 /// The frames in flight: the time each was sent to the encoder with (100 ns units) and
 /// the `pts` it came with, so each packet gets back its frame's exact `pts` however the
 /// frame's time base rounds to 100 ns.
@@ -163,7 +239,7 @@ pub(crate) use encoder::MfH264Encoder;
 mod encoder {
     use std::time::{Duration, Instant};
 
-    use jstream_platform::media::{Codec, Packet, PixelFormat};
+    use jstream_platform::media::{Codec, Packet};
     use jstream_platform::{
         CodecInfo, CodecRole, HardwarePreference, PlatformError, VideoEncoder, VideoEncoderConfig,
         VideoSurface,
@@ -189,7 +265,7 @@ mod encoder {
     use windows::Win32::System::Variant::VARIANT;
     use windows::core::{GUID, Interface};
 
-    use super::{InFlight, Settings, check, pack_nv12};
+    use super::{InFlight, Nv12Packer, Settings, check};
     use crate::codec::mf::{self, Found, MfRuntime, Mft, Output, PullMode, RetypeArgs};
     use crate::com::{OsResult, os_error};
 
@@ -209,8 +285,8 @@ mod encoder {
         /// Inputs an asynchronous MFT has asked for and not yet received.
         need_input: u32,
         in_flight: InFlight,
-        /// Staging for one packed NV12 frame.
-        nv12: Vec<u8>,
+        /// Packs (and converts, for RGB input) each frame for the MFT.
+        packer: Nv12Packer,
         pending: Vec<Packet>,
         drained: bool,
         finished: bool,
@@ -225,7 +301,8 @@ mod encoder {
     unsafe impl Send for MfH264Encoder {}
 
     impl MfH264Encoder {
-        /// Opens an H.264 encoder that takes NV12: a hardware MFT first (unless the
+        /// Opens an H.264 encoder whose MFT takes NV12 (other inputs are converted by
+        /// [`Nv12Packer`]): a hardware MFT first (unless the
         /// preference avoids hardware), then the software one (unless it requires
         /// hardware). The first that accepts the configuration wins.
         pub(crate) fn open(config: &VideoEncoderConfig) -> Result<Self, PlatformError> {
@@ -253,8 +330,6 @@ mod encoder {
             for (found, hardware) in candidates {
                 match Self::configure(&found, config, settings) {
                     Ok((mft, events, output)) => {
-                        let size = config.size;
-                        let frame_bytes = size.width() as usize * size.height() as usize * 3 / 2;
                         return Ok(Self {
                             mft,
                             events,
@@ -269,7 +344,7 @@ mod encoder {
                             settings,
                             need_input: 0,
                             in_flight: InFlight::default(),
-                            nv12: vec![0; frame_bytes],
+                            packer: Nv12Packer::new(config.size),
                             pending: Vec::new(),
                             drained: false,
                             finished: false,
@@ -473,21 +548,22 @@ mod encoder {
                 }
             };
             let info = frame.info();
-            if info.size != self.config.size || info.format != PixelFormat::Nv12 {
+            if info.size != self.config.size || info.format != self.config.input_format {
                 return Err(PlatformError::Unsupported {
                     what: format!(
-                        "a {:?} {}x{} frame (configured for NV12 {}x{})",
+                        "a {:?} {}x{} frame (configured for {:?} {}x{})",
                         info.format,
                         info.size.width(),
                         info.size.height(),
+                        self.config.input_format,
                         self.config.size.width(),
                         self.config.size.height()
                     ),
                 });
             }
-            pack_nv12(&frame, &mut self.nv12)?;
+            let nv12 = self.packer.pack(&frame)?;
             let time = self.in_flight.send(info.pts)?;
-            let sample = mf::sample_from(&self.nv12, time, self.settings.frame_hns)?;
+            let sample = mf::sample_from(nv12, time, self.settings.frame_hns)?;
             // SAFETY: plain COM call; the sample is a live object built above.
             match unsafe { self.mft.transform.ProcessInput(0, &sample, 0) } {
                 Ok(()) => {}
@@ -654,7 +730,7 @@ mod tests {
     };
     use jstream_platform::{HardwarePreference, PlatformError, RateControl, VideoEncoderConfig};
 
-    use super::{InFlight, check, hns, pack_nv12};
+    use super::{InFlight, Nv12Packer, check, hns, pack_nv12};
 
     fn config() -> VideoEncoderConfig {
         VideoEncoderConfig {
@@ -687,6 +763,20 @@ mod tests {
         assert_eq!(s.max_bitrate, Some(8_000_000));
     }
 
+    /// #424: the engine's pipeline hands the encoder the compositor's RGBA frames, and
+    /// every recording and stream on Windows failed to start when this was refused.
+    #[test]
+    fn takes_the_compositors_rgb_output() {
+        for format in [PixelFormat::Rgba8, PixelFormat::Bgra8] {
+            let mut c = config();
+            c.input_format = format;
+            assert_eq!(
+                check(&c).expect("accepted"),
+                check(&config()).expect("valid")
+            );
+        }
+    }
+
     #[test]
     fn refuses_what_the_path_cant_encode() {
         let refused =
@@ -695,7 +785,10 @@ mod tests {
         c.codec = Codec::Aac;
         assert!(refused(c));
         let mut c = config();
-        c.input_format = PixelFormat::Bgra8;
+        c.input_format = PixelFormat::I420;
+        assert!(refused(c));
+        let mut c = config();
+        c.input_format = PixelFormat::P010;
         assert!(refused(c));
         let mut c = config();
         c.size = FrameSize::new(1921, 1080).expect("size");
@@ -746,6 +839,83 @@ mod tests {
         );
         let mut wrong = vec![0; 5];
         assert!(pack_nv12(&frame, &mut wrong).is_err());
+    }
+
+    /// A `w`x`h` packed RGB frame of `format` whose pixel at (x, y) is `px(x, y)` as
+    /// `[r, g, b]`, rows padded to `stride` bytes with 0xEE.
+    fn rgb(
+        format: PixelFormat,
+        w: u32,
+        h: u32,
+        stride: usize,
+        px: impl Fn(u32, u32) -> [u8; 3],
+    ) -> VideoFrame {
+        let info = VideoFrameInfo {
+            size: FrameSize::new(w, h).expect("size"),
+            format,
+            color: ColorInfo::default(),
+            pts: MediaTime::zero(Timebase::NANOS),
+        };
+        let mut data = vec![0xEE; stride * h as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let [r, g, b] = px(x, y);
+                let o = y as usize * stride + x as usize * 4;
+                let bytes = match format {
+                    PixelFormat::Bgra8 => [b, g, r, 255],
+                    _ => [r, g, b, 255],
+                };
+                data[o..o + 4].copy_from_slice(&bytes);
+            }
+        }
+        VideoFrame::new(info, vec![Plane::new(data, stride)]).expect("frame")
+    }
+
+    fn packed(frame: &VideoFrame) -> Vec<u8> {
+        Nv12Packer::new(frame.info().size)
+            .pack(frame)
+            .expect("pack")
+            .to_vec()
+    }
+
+    /// #424: the compositor's RGBA reaches the MFT as BT.709 limited NV12.
+    #[test]
+    fn packs_rgba_and_bgra_as_nv12() {
+        // Black, white and mid grey: luma at the range's ends and middle, neutral chroma.
+        for (value, luma) in [(0, 16), (255, 235), (128, 126)] {
+            let out = packed(&rgb(PixelFormat::Rgba8, 4, 2, 16, |_, _| [value; 3]));
+            assert_eq!(&out[..8], &[luma; 8], "luma of {value}");
+            assert_eq!(&out[8..], &[128; 4], "chroma of {value}");
+        }
+        // Pure red, BT.709 limited range's reference value.
+        let out = packed(&rgb(PixelFormat::Rgba8, 2, 2, 8, |_, _| [255, 0, 0]));
+        assert_eq!(out, [63, 63, 63, 63, 102, 240]);
+        // BGRA of the same pixels, and padded rows, pack the same.
+        let px = |x: u32, y: u32| [(x * 40) as u8, (y * 60) as u8, (x * y * 10) as u8];
+        let tight = packed(&rgb(PixelFormat::Rgba8, 6, 4, 24, px));
+        assert_eq!(packed(&rgb(PixelFormat::Rgba8, 6, 4, 40, px)), tight);
+        assert_eq!(packed(&rgb(PixelFormat::Bgra8, 6, 4, 32, px)), tight);
+    }
+
+    #[test]
+    fn packer_refuses_what_it_cant_pack() {
+        let mut packer = Nv12Packer::new(FrameSize::new(4, 4).expect("size"));
+        // Another size than the packer's.
+        let frame = rgb(PixelFormat::Rgba8, 4, 2, 16, |_, _| [0; 3]);
+        assert!(packer.pack(&frame).is_err());
+        let i420 = VideoFrame::zeroed(VideoFrameInfo {
+            size: FrameSize::new(4, 4).expect("size"),
+            format: PixelFormat::I420,
+            color: ColorInfo::default(),
+            pts: MediaTime::zero(Timebase::NANOS),
+        })
+        .expect("frame");
+        assert!(matches!(
+            packer.pack(&i420),
+            Err(PlatformError::Unsupported { .. })
+        ));
+        // NV12 still packs.
+        assert_eq!(packer.pack(&nv12(4, 4, 8)).expect("pack").len(), 24);
     }
 
     #[test]

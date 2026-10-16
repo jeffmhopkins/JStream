@@ -483,10 +483,10 @@ stamp = { hash = "b3:19aef49cc6131a9d", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7baf4e16b6cfdff1", by = "agent:claude", note = "Whole #376 change to DOCS#verification and #notes re-read: per-input ledger stamps, the guarantee that a merge never leaves a section falsely fresh and a conflict usually leaves it stale, verify writing only changed inputs (removal-only and unchanged verifies record no note), and the last note on each entry covering the PR. docs-duty's verify, generate, migrate, merge-main and never-edit-the-ledger duties still hold" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:f084da70bc550b4e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "#419 whole change to DOCS#verification: it now says merge-main resolves conflicts wholly inside generator-owned @generated blocks, rewriting them once every conflict is resolved, else they keep main's side until docs generate; the docs-duty merge-main line names both conflict kinds and holds" }
+stamp = { hash = "b3:d59b282d9610896d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after DOCS#verification changed only its ADR link (ADR-0018 -> ADR-0056, Dependabot pin bumps ignored in workflow hashes); duty steps (docs check/verify, no hand hashes, generate, merge-main) unchanged and still accurate." }
 
 ["CLAUDE#pr-loop"."body"]
-stamp = { hash = "b3:d756a751285910f0", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read the PR loop against ADR-0043: item 7 now lists the narrowed maintainer tier and says everything else is agent tier, proxy format cited from ADR-0043" }
+stamp = { hash = "b3:f50bf78c7a2c63c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: item 6 now cites ADR-0056, which restates ADR-0018's action-pin pre-approval unchanged (decision item 3); Dependabot auto-merge and CI handling still hold; rest of the loop untouched." }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#output"]
 stamp = { hash = "b3:8b4ecdcf072341c3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0055: auto-merge still waits for the base branch's required checks; on wave/* that is review-gate, which item 1 covers" }
@@ -1770,7 +1770,7 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:7522c9a00d99ef52", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Re-read WindowsVcam Start: probe then HKLM check, matching sink.rs; the N-edition wording holds for this crate's hosts in general. The sink.rs change only moved registered()'s doc back above it (B1)" }
+stamp = { hash = "b3:54752a7a73020412", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via jstream-platform#purpose's new Data folder bullet; this crate's portable-install mentions (key store, Moved registration) agree with paths' marker semantics; holds" }
@@ -1812,7 +1812,7 @@ stamp = { hash = "b3:d47d64ab0a716fca" }
 stamp = { hash = "b3:3294ae8699585eea" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/convert.rs"]
-stamp = { hash = "b3:c69cc7614d14a3de" }
+stamp = { hash = "b3:96e21a6b605c08a9", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/id.rs"]
 stamp = { hash = "b3:a5976c69be087903" }
@@ -1821,7 +1821,7 @@ stamp = { hash = "b3:a5976c69be087903" }
 stamp = { hash = "b3:a15cf56d9898996a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/mod.rs"]
-stamp = { hash = "b3:05a494ad3dae5f79" }
+stamp = { hash = "b3:f70081c751fc7074", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/ring.rs"]
 stamp = { hash = "b3:bc308dcc158e28d4" }
@@ -1839,13 +1839,13 @@ stamp = { hash = "b3:bcbc90e406de91b4" }
 stamp = { hash = "b3:0b4fe8918cdd233a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/h264.rs"]
-stamp = { hash = "b3:a5e1bd2cf0f9cd5e" }
+stamp = { hash = "b3:40424fccd7d72dde", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mf.rs"]
 stamp = { hash = "b3:c5d1fa497918f58d" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mod.rs"]
-stamp = { hash = "b3:e7ff5e49bb280c63" }
+stamp = { hash = "b3:41b4f0c62b4c4b54", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/com.rs"]
 stamp = { hash = "b3:c237392a0b5423fa" }
@@ -2721,7 +2721,7 @@ stamp = { hash = "b3:f3a3a3cd043efa4d", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:34cbbe36abdc6774", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/hash.rs"]
-stamp = { hash = "b3:954859db5a28872d", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
+stamp = { hash = "b3:8849c3355f43050d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/history.rs"]
 stamp = { hash = "b3:e9526047eb0b1865", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
@@ -2766,22 +2766,22 @@ stamp = { hash = "b3:379ee0e3d8c9e499" }
 stamp = { hash = "b3:bd44ff4e86f247fa" }
 
 ["DOCS#governance"."body"]
-stamp = { hash = "b3:45d7638cdee2c505", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for ADR-0038 renumbered from 0036: governance.rs strips only one-'> '-line adr-status blocks from accepted ADRs before comparing; accepted-ADR and Status banner bullets match, protected list unchanged" }
+stamp = { hash = "b3:8351920c7315d119", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }
 
 ["DOCS#governance"."dep:docs/adr/0019-review-gate-v2.md"]
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 
 ["DOCS#governance"."file:.github/workflows/governance.yml"]
-stamp = { hash = "b3:92d196ca1c361213" }
+stamp = { hash = "b3:74359364a23f0470", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
 
 ["DOCS#governance"."file:xtask/src/governance.rs"]
-stamp = { hash = "b3:d2e3fa818c90908d" }
+stamp = { hash = "b3:991579db231715d8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }
 
 ["DOCS#ttl"."body"]
 stamp = { hash = "b3:e67dd72e603695c3", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "Re-read against sweep.yml: new Roadmap progress step runs xtask docs progress (full history from fetch-depth 0) into the issue; added its bullet; deny, docs-due, update dry-run, override audit, one pinned issue and not-built list unchanged" }
 
 ["DOCS#ttl"."file:.github/workflows/sweep.yml"]
-stamp = { hash = "b3:84f32e8fcb8e27a6" }
+stamp = { hash = "b3:397125d6e5564cee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
 
 ["FUZZ#running"."body"]
 stamp = { hash = "b3:9aadff45c171e39f", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r3: Cargo.toml now also forbids unsafe_code and denies undocumented_unsafe_blocks (B1); commands, seeds and layout unchanged" }
@@ -2829,7 +2829,7 @@ stamp = { hash = "b3:18feaae75f4923a3", by = "agent:claude@session_01QBbMRwRuZe7
 stamp = { hash = "b3:c65b46a55b573338" }
 
 ["REVIEW#checks"."body"]
-stamp = { hash = "b3:0c707680ca3d6b3d", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read Step 2 item 3 and the blocking list against ADR-0043: tier checked against ADR-0043, too-high tier non-blocking, decision-comment rules unchanged" }
+stamp = { hash = "b3:4666d5e43e84bb8c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: Governance step 5 now cites ADR-0056; its decision item 3 keeps the same narrow pin-only pre-approval and major-bump changelog read, so the reviewer instructions still hold." }
 
 ["REVIEW#checks"."dep:docs/RULES.md#R-DOC-004"]
 stamp = { hash = "b3:9a94d90984796d06" }
@@ -2847,10 +2847,10 @@ stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 stamp = { hash = "b3:8b4ecdcf072341c3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0055: added that a PR into a wave/* branch gets no after-review dispatch (review-gate.yml returns early on base wave/*); verdict format and decide unchanged" }
 
 ["REVIEW#output"."file:.github/workflows/review-gate.yml"]
-stamp = { hash = "b3:3d6bc12184fe6fba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0055: added that a PR into a wave/* branch gets no after-review dispatch (review-gate.yml returns early on base wave/*); verdict format and decide unchanged" }
+stamp = { hash = "b3:1fdf8e7084ac49ed", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
 
 ["ROADMAP#m0"."body"]
-stamp = { hash = "b3:20d931da187bfda8", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review N5: Demo line now says S1-S4 each have a written result (S4's is ARCH#browser-source); Track B bullets unchanged" }
+stamp = { hash = "b3:4a8d454e82a1390d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
 
 ["ROADMAP#m0"."dep:docs/adr/0016-docs-as-checked-graph-v2.md"]
 stamp = { hash = "b3:eafcbe72ac465f3c" }
@@ -2883,7 +2883,7 @@ stamp = { hash = "b3:7ab4accbf98f6662" }
 stamp = { hash = "b3:d638c6ca8019b15d" }
 
 ["RULES#dependencies"."body"]
-stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
+stamp = { hash = "b3:efd084f9966f6d2d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: R-DEP-007 now cites ADR-0056, which keeps the SHA-pinning rule (item 1) and Dependabot keeping pins current (item 2); other R-DEP rules untouched." }
 
 ["RULES#dependencies"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
@@ -2940,7 +2940,7 @@ stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }
 
 ["RUNBOOK-WAVES#current"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:f084da70bc550b4e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "#419 whole change to DOCS#verification: merge-main now also resolves conflicts wholly inside generator-owned @generated blocks and rewrites them once every conflict is resolved (else they keep main's side until docs generate); the --from sentence names both conflict kinds and holds" }
+stamp = { hash = "b3:d59b282d9610896d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after DOCS#verification changed only its ADR link (ADR-0018 -> ADR-0056); merge-main --from wave and stamp-conflict behaviour unchanged, section still holds." }
 
 ["RUNBOOK-WAVES#landing"."body"]
 stamp = { hash = "b3:6ae91e98d6488857", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }

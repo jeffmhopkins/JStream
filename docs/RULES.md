@@ -398,7 +398,7 @@ applies_to = [".github/workflows/**"]
 -->
 Every third-party action is referenced as `owner/action@<full commit SHA> # vX.Y.Z`. Mutable
 tags (`@v4`) and branches are not allowed. Dependabot keeps the pins current
-([ADR-0018](adr/0018-ci-supply-chain-policy.md)).
+([ADR-0056](adr/0056-ci-supply-chain-policy-v2.md)).
 
 <a id="testing"></a>
 ## Testing

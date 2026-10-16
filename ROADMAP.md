@@ -31,7 +31,7 @@ Two tracks run in parallel.
   changes in covered workflow files, so Dependabot bumps don't stale REVIEW#output. It
   replaces every `bootstrap` hash with a real one.
 - `xtask lint-deps` (layers, `unsafe` declarations, `links=` allowlist, workspace deps),
-  `xtask governance` (must encode ADR-0018's pre-approval for Dependabot pin-only PRs).
+  `xtask governance` (must encode ADR-0056's pre-approval for Dependabot pin-only PRs).
 - `jstream-types`, `jstream-media`, first cut of `jstream-protocol` (edit/action
   classification, schema snapshot tests), `jstream-control`.
 
