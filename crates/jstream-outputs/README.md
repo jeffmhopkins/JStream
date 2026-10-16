@@ -12,13 +12,13 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0051-youtube-without-a-required-oauth-client.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0058-youtube-sign-in-with-a-jstream-client.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
 first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, written in Rust
 as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) requires and needed for the
-generic RTMP/RTMPS output of [ADR-0051](../../docs/adr/0051-youtube-without-a-required-oauth-client.md). The
+generic RTMP/RTMPS output of [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md). The
 second is the **recording file sink** in the `record` module (below). The `Output` trait
 comes later. The virtual-camera output is not here: it runs in `jstream-core`'s runtime
 ([jstream-core › Runtime](../jstream-core/README.md#runtime)). Its JStream dependencies are `jstream-media`

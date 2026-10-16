@@ -20,13 +20,15 @@ OBS, built to be driven equally well by a human or an AI agent.
 - **Scenes, sources, effects**, 3D transforms and crop on a wgpu compositor
 - **Independent video and audio routing**: outputs are not tied to scenes, and audio runs
   through a bus-matrix mixer
-- **Full agentic control over MCP**: anything the UI can do, an agent can do
+- **Full agentic control over MCP**: anything the UI can do, an agent can do, except
+  YouTube's account features, which stay with the person
+  ([ADR-0058](docs/adr/0058-youtube-sign-in-with-a-jstream-client.md))
 - **Headless or desktop**: the engine is a library, embedded in a Tauri app or run as a
   daemon that serves the same web UI to any browser
 
 JStream is built to be driven by a person or by an AI agent. The engine is a library with
 one protocol; the web UI, the desktop app, the CLI and MCP are all clients of it, so
-nothing the UI can do is out of an agent's reach
+nothing the UI can do is out of an agent's reach, YouTube's account features aside
 ([ADR-0001](docs/adr/0001-library-first-engine.md),
 [ADR-0006](docs/adr/0006-mcp-full-access.md)). Windows comes first, and the headless
 engine and MCP come before the GUI ([ADR-0010](docs/adr/0010-headless-first-milestone.md)).

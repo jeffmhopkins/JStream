@@ -2,14 +2,15 @@
 id = "ADR-0051"
 title = "YouTube v4: no required OAuth client"
 kind = "adr"
-status = "accepted"
+status = "superseded"
 tier = "maintainer"
+superseded_by = "docs/adr/0058-youtube-sign-in-with-a-jstream-client.md"
 -->
 
 # ADR-0051: YouTube v4: no required OAuth client
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0058: YouTube sign-in with JStream's own OAuth client, for people only](0058-youtube-sign-in-with-a-jstream-client.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0041](0041-youtube-interaction-scope-v3.md). It restates

@@ -2,14 +2,14 @@
 id = "ADR-0058"
 title = "YouTube sign-in with JStream's own OAuth client, for people only"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0058: YouTube sign-in with JStream's own OAuth client, for people only
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0051](0051-youtube-without-a-required-oauth-client.md) §2 ("the user
