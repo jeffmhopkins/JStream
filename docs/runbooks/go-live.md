@@ -156,14 +156,17 @@ snapshot and the graceful stop. That is what CI or a Linux machine can run.
 <!-- @section
 -->
 
-Going live to YouTube needs no OAuth client: use the steps above with YouTube's RTMPS
-server URL and stream key from YouTube Studio.
+Going live to YouTube needs no sign-in and no Google OAuth client
+([ADR-0058](../adr/0058-youtube-sign-in-with-a-jstream-client.md)): use a plain stream
+key as above, with YouTube's RTMPS server URL from YouTube Studio, and turn on
+auto-start (and auto-stop) for the stream in YouTube Studio, so the broadcast goes live
+when data arrives and ends when it stops.
 
 Signing in, to manage broadcasts through the API, is optional and Windows only. It
-uses JStream's own OAuth client (ADR-0058), which this build doesn't have yet, so a
+uses JStream's own OAuth client (ADR-0058 above), which this build doesn't have yet, so a
 run for now uses a developer's Google Cloud OAuth client of type "Desktop app", with the
 YouTube Data API v3 enabled. The `youtube.*` calls below are a person's: they go over
-the WebSocket API, since MCP has no `youtube` tool (ADR-0058) and `jstream-cli` has no
+the WebSocket API, since MCP has no `youtube` tool and `jstream-cli` has no
 YouTube commands yet. Then:
 
 1. Start the daemon with `--youtube-client <the client's JSON>`, or with

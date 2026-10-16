@@ -4,9 +4,9 @@
 //! `git diff <rev>...HEAD`). Given a `pull_request` event payload (`--event`, or
 //! `GITHUB_EVENT_PATH` in Actions), it fails unless the PR carries the `governance-approved`
 //! label and a non-empty "Governance change" section (R-GOV-001), or is a Dependabot PR that
-//! only changes pinned `uses:` references (ADR-0018). Without a payload it only lists.
+//! only changes pinned `uses:` references (ADR-0056). Without a payload it only lists.
 //!
-//! Docs: docs/DOCS.md#governance, docs/adr/0018-ci-supply-chain-policy.md, docs/adr/0019-review-gate-v2.md
+//! Docs: docs/DOCS.md#governance, docs/adr/0056-ci-supply-chain-policy-v2.md, docs/adr/0019-review-gate-v2.md
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -467,7 +467,7 @@ fn pin(line: &str) -> Option<(&str, bool)> {
 }
 
 /// Whether every change is a modified workflow file whose only differing lines re-pin the
-/// same action to a full commit SHA (ADR-0018's pre-approval).
+/// same action to a full commit SHA (ADR-0056's pre-approval).
 fn pin_only(files: &[FileChange]) -> bool {
     !files.is_empty()
         && files.iter().all(|f| {
@@ -540,7 +540,7 @@ fn decide(changes: &[Change], pr: &Pr, pin_only: bool, accepted: &BTreeSet<Strin
     }
     if pr.author == DEPENDABOT && pin_only {
         return Verdict::Pass(
-            "pre-approved: Dependabot PR that only re-pins `uses:` references (ADR-0018)".into(),
+            "pre-approved: Dependabot PR that only re-pins `uses:` references (ADR-0056)".into(),
         );
     }
     let mut problems = Vec::new();
@@ -1199,7 +1199,7 @@ mod tests {
         let none = BTreeSet::new();
         assert!(matches!(
             decide(&changes, &pr(&[], "", DEPENDABOT), true, &none),
-            Verdict::Pass(why) if why.contains("ADR-0018")
+            Verdict::Pass(why) if why.contains("ADR-0056")
         ));
         // The same diff from anyone else needs the label.
         assert!(matches!(

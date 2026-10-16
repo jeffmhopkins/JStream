@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use crate::{AudioIo, Capture, Codecs, GpuInterop, MediaClock, VcamSink, VideoDevices};
+use crate::{
+    AudioIo, Capture, Codecs, GpuInterop, MediaClock, MediaDecoders, VcamSink, VideoDevices,
+};
 
 /// Everything one platform provides, as the engine receives it: plain data holding the
 /// injected trait objects, so the engine never names a platform crate.
@@ -24,6 +26,8 @@ pub struct Backends {
     /// GPU interop: the engine's device on the media adapter and the shared textures
     /// (README › GPU frames).
     pub gpu: Arc<dyn GpuInterop>,
+    /// Media files: the demuxers and decoders a media-file source plays through.
+    pub media: Arc<dyn MediaDecoders>,
     /// The virtual-camera sink, or `None` when the platform has no virtual camera.
     pub vcam: Option<Box<dyn VcamSink>>,
 }

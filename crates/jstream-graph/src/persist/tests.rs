@@ -50,6 +50,25 @@ fn kinds() -> Vec<KindDescriptor> {
             },
         ],
     });
+    kinds.push(KindDescriptor {
+        kind_id: "scope".into(),
+        category: KindCategory::Source,
+        name: "Scope".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        params: vec![ParamDescriptor {
+            id: "audio".into(),
+            ty: ParamType::Bus,
+            default: Value::Null,
+            label: "Audio".into(),
+            description: None,
+            group: None,
+            advanced: false,
+            visible_if: None,
+            live: false,
+        }],
+    });
     kinds
 }
 
@@ -267,6 +286,7 @@ fn a_file_from_before_audio_keeps_the_master_sends() {
     assert_eq!(
         sends,
         [
+            ("desk".to_owned(), BusId::master(), 0.0),
             ("mic".to_owned(), BusId::master(), 0.0),
             ("mic_copy".to_owned(), BusId::master(), 0.0),
         ]
@@ -300,6 +320,36 @@ fn a_removed_master_send_round_trips() {
     assert_eq!(value["sends"], json!([]));
     let loaded = load(&json);
     assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(loaded.as_ref(), Ok(&graph));
+}
+
+/// #362: a source whose settings draw a bus loads: the buses are made before the
+/// sources, so the reference finds its bus.
+#[test]
+fn a_source_drawing_a_bus_round_trips() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let applied = graph.apply(
+        &[
+            Edit::BusCreate {
+                bus_id: BusId::new("vod"),
+                name: "VOD".into(),
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "wave".into(),
+                kind: SourceKind::Builtin {
+                    kind: "scope".into(),
+                },
+                settings: [("audio", json!({"type": "bus", "bus_id": "vod"}))]
+                    .into_iter()
+                    .collect(),
+                duplicated_from: None,
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let loaded = load(&graph.to_collection_json());
     assert_eq!(loaded.as_ref(), Ok(&graph));
 }
 
@@ -503,6 +553,29 @@ fn placements_and_the_canvas_are_checked() {
         "{:?}",
         load(&canvas)
     );
+}
+
+/// An item's opacity and blend load through `item.add`'s checks, and its reserved
+/// `effects` loads only empty (ADR-0023 §1).
+#[test]
+fn opacity_blend_and_reserved_effects_are_checked() {
+    let empty = edit_file(|v| v["scenes"][0]["items"][0]["effects"] = json!([]));
+    assert_eq!(load(&empty).map(|g| g.rev()), Ok(Rev(2)));
+    let effect = edit_file(|v| v["scenes"][0]["items"][0]["effects"] = json!([{"kind": "blur"}]));
+    assert_eq!(
+        load(&effect),
+        Err(LoadError::Parse(
+            "item `i4`: `effects` is reserved and must be empty".into()
+        ))
+    );
+    for (field, value) in [("opacity", json!(1.5)), ("blend", json!("multiply"))] {
+        let file = edit_file(|v| v["scenes"][0]["items"][0][field] = value.clone());
+        assert!(
+            matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "item `i4`"),
+            "{field}: {:?}",
+            load(&file)
+        );
+    }
 }
 
 /// R-SEC-001: a malformed file's error never quotes a value from it, so it is safe to

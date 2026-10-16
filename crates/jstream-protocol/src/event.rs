@@ -89,7 +89,7 @@ pub enum Event {
         auth: YoutubeAuth,
     },
     /// What YouTube says about the stream a running `youtube` output sends to changed
-    /// (ADR-0041). The engine polls the stream's health while the output runs and sends
+    /// (ADR-0058). The engine polls the stream's health while the output runs and sends
     /// this when the status, the health or the issues differ from the last report, and
     /// once on the first reading.
     #[serde(rename = "youtube.health_changed")]

@@ -8,7 +8,8 @@
 
 use futures_util::StreamExt;
 use jstream_control::protocol::{
-    Batch, Call, CallResult, Edit, Event, Hello, PROTOCOL_VERSION, Query, QueryResult, Rev, SceneId,
+    Action, ActionResult, Batch, Call, CallResult, Edit, Event, Hello, PROTOCOL_VERSION, Query,
+    QueryResult, Rev, SceneId,
 };
 use jstream_control::{Control, ControlError, WsConfig, WsControl};
 use std::io::{BufRead, BufReader, Read};
@@ -630,20 +631,36 @@ fn help_and_version_print_to_stdout() {
     );
 }
 
+/// Posts `body` to the daemon's pairing endpoint at `authority`, returning the status and
+/// the body.
+fn pair_post(authority: &str, body: &str) -> (u16, String) {
+    let request = format!(
+        "POST /api/v1/pair HTTP/1.1\r\nHost: {authority}\r\nContent-Type: application/json\r\n\
+         Connection: close\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
+    exchange(authority, &request)
+}
+
 /// `GET path` on the daemon at `authority` with `authorization`, if any; the status and
 /// the body.
 fn get(authority: &str, path: &str, authorization: Option<&str>) -> (u16, String) {
-    use std::io::Write;
-    let mut stream = std::net::TcpStream::connect(authority).expect("connects");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .expect("a read timeout");
     let authorization = authorization
         .map(|value| format!("Authorization: {value}\r\n"))
         .unwrap_or_default();
     let request = format!(
         "GET {path} HTTP/1.1\r\nHost: {authority}\r\n{authorization}Connection: close\r\n\r\n"
     );
+    exchange(authority, &request)
+}
+
+/// Sends one raw HTTP/1.1 `request` to the daemon at `authority`; the status and the body.
+fn exchange(authority: &str, request: &str) -> (u16, String) {
+    use std::io::Write;
+    let mut stream = std::net::TcpStream::connect(authority).expect("connects");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .expect("a read timeout");
     stream.write_all(request.as_bytes()).expect("sends");
     let mut answer = String::new();
     stream
@@ -656,6 +673,122 @@ fn get(authority: &str, path: &str, authorization: Option<&str>) -> (u16, String
         .and_then(|code| code.parse().ok())
         .unwrap_or(0);
     (status, body.to_owned())
+}
+
+/// ADR-0044 through the daemon: a client starts pairing, a device pairs, its token's
+/// digest lands in the user-only device file beside the token file (never the token),
+/// its calls are audited as `device:<name>`, and a restart keeps it paired.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pairs_a_device_that_survives_a_restart() {
+    let dir = scratch("pairing");
+    let token_file = dir.join("token");
+    let token_arg = token_file.to_str().expect("a UTF-8 path");
+    let logs = dir.join("logs");
+    let logs_arg = logs.to_str().expect("a UTF-8 path");
+    let mut daemon = start(&["--token-file", token_arg, "--log-dir", logs_arg]);
+    let token = std::fs::read_to_string(&token_file).expect("the token file exists");
+    let control = timely(WsControl::connect(WsConfig::new(
+        daemon.url.clone(),
+        token.trim(),
+    )))
+    .await
+    .expect("connects");
+    timely(control.hello(hello())).await.expect("welcome");
+    let started = timely(control.call(Call::Action {
+        action: Action::PairingStart,
+    }))
+    .await
+    .expect("pairing starts on loopback");
+    let CallResult::Action {
+        result: Some(ActionResult::PairingStart { code, .. }),
+    } = started.result
+    else {
+        panic!("no code in {:?}", started.result);
+    };
+    let code = code.expose().to_owned();
+    let authority = daemon
+        .url
+        .trim_start_matches("ws://")
+        .trim_end_matches("/api/v1/ws")
+        .to_owned();
+    let body = format!(r#"{{"code":"{code}","name":"Tablet"}}"#);
+    let (status, answer) = pair_post(&authority, &body);
+    assert_eq!(status, 200, "{answer}");
+    // `{"device_id":"dev_…","token":"<64 hex digits>"}`
+    let device_token = answer
+        .split_once("\"token\":\"")
+        .and_then(|(_, rest)| rest.split('"').next())
+        .expect("a token")
+        .to_owned();
+    assert_eq!(device_token.len(), 64, "{answer}");
+
+    let device_file = dir.join("token.devices");
+    let stored = std::fs::read_to_string(&device_file).expect("the device file beside the token");
+    assert!(
+        stored.contains("Tablet") && !stored.contains(&device_token),
+        "{stored}"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&device_file)
+            .expect("exists")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600, "user-only");
+    }
+
+    let device = timely(WsControl::connect(WsConfig::new(
+        daemon.url.clone(),
+        device_token.as_str(),
+    )))
+    .await
+    .expect("the device token gets in");
+    timely(device.hello(hello())).await.expect("welcome");
+    timely(device.call(Call::Batch(Batch::single(Edit::SceneCreate {
+        scene_id: SceneId::new("tablet"),
+        name: "Tablet".to_owned(),
+        role: None,
+    }))))
+    .await
+    .expect("applied");
+    drop(device);
+    drop(control);
+    // The audit writer thread appends the batch's line just after the answer. Wait for
+    // it: off Unix `stop` kills the daemon, which loses a line still in the queue.
+    audit_with(&logs, "\"client_name\":\"device:Tablet\"");
+    stop(&mut daemon);
+    for file in log_files(&logs) {
+        let log = std::fs::read_to_string(file).expect("readable");
+        assert!(
+            !log.contains(&device_token) && !log.contains(&code),
+            "{log}"
+        );
+    }
+
+    let again = start(&["--token-file", token_arg, "--log-dir", logs_arg]);
+    let device = timely(WsControl::connect(WsConfig::new(
+        again.url.clone(),
+        device_token.as_str(),
+    )))
+    .await
+    .expect("still paired after a restart");
+    timely(device.hello(hello())).await.expect("welcome");
+    drop(again);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The audit log in `logs` once it contains `needle`, polled for up to ten seconds.
+fn audit_with(logs: &Path, needle: &str) -> String {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let audit = std::fs::read_to_string(logs.join("audit.jsonl")).unwrap_or_default();
+        if audit.contains(needle) || Instant::now() >= deadline {
+            assert!(audit.contains(needle), "{audit}");
+            return audit;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 /// Standard base64 of `text`, for `Basic` credentials.

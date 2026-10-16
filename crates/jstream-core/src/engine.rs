@@ -17,6 +17,7 @@ use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
+use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
     Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program, launch_vcam,
@@ -32,9 +33,10 @@ use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
     EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
-    OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    RtmpTarget, SecretString, SourceId, YoutubeAuth,
+    OutputKind, OutputState, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer,
+    RequestId, Rev, RtmpTarget, SecretString, SourceId, YoutubeAuth,
 };
+use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -86,14 +88,20 @@ struct Shared {
     /// Where the collection is saved, if the host named a file. Taken before the
     /// collection lock, never while holding it, so the disk write happens outside it.
     collection_file: Mutex<Option<CollectionFile>>,
+    /// The latest audio of the program mix and of every bus a source draws: the mixer
+    /// thread pushes each block, and the `waveform` and `spectrum` sources draw it.
+    audio_scopes: Arc<AudioScopes>,
     /// The YouTube sign-in and Live API client, if the host gave a setup
     /// ([`Engine::with_youtube`]). On its own lock, taken only to clone the handle: no
     /// YouTube call runs under the collection lock.
     youtube: Mutex<Option<Arc<Youtube>>>,
+    /// The preview thread, which draws and encodes every session's preview streams.
+    previews: PreviewHub,
 }
 
 impl Default for Engine {
     fn default() -> Self {
+        let audio_scopes = Arc::new(AudioScopes::new());
         Self {
             shared: Arc::new_cyclic(|shared: &Weak<Shared>| Shared {
                 state: Mutex::new({
@@ -101,13 +109,16 @@ impl Default for Engine {
                     state.graph = Graph::new().with_kinds(crate::kinds::builtin());
                     let host: Weak<dyn LiveHost> = shared.clone();
                     state.live = LiveSources::new(host);
+                    state.live.set_audio_scopes(Arc::clone(&audio_scopes));
                     state
                 }),
                 snapshots: SnapshotWorker::default(),
                 keys: Mutex::new(None),
                 audit: Audit::default(),
                 collection_file: Mutex::new(None),
+                audio_scopes,
                 youtube: Mutex::new(None),
+                previews: PreviewHub::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -172,7 +183,7 @@ impl Engine {
         self
     }
 
-    /// Gives the engine YouTube (ADR-0041): a Google OAuth client, the HTTPS transport
+    /// Gives the engine YouTube (ADR-0058): a Google OAuth client, the HTTPS transport
     /// and the store for the account's refresh token. The host passes
     /// [`YoutubeSetup::built_in`] when the build has a built-in client (ADR-0058), or a
     /// developer's override built with [`YoutubeSetup::new`]. The YouTube actions
@@ -315,10 +326,16 @@ impl Engine {
     /// life, starting it on each such start and stopping it on the stop.
     #[must_use]
     pub fn with_backends(mut self, mut backends: Backends) -> Self {
-        // Animated sources run on the platform's media clock from here on.
-        lock(&self.shared.state)
-            .live
-            .set_clock(Arc::clone(&backends.clock));
+        // Animated sources run on the platform's media clock from here on, and media
+        // files play through the platform's decoders.
+        {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state.live.set_clock(Arc::clone(&backends.clock));
+            state
+                .live
+                .set_media(Arc::clone(&backends.media), state.graph.state());
+        }
         let host = self.host();
         let vcam = backends.vcam.take();
         host.has_vcam.store(vcam.is_some(), Ordering::Release);
@@ -327,8 +344,9 @@ impl Engine {
         self
     }
 
-    /// Gives `browser` sources the browser engine they open their pages in (ADR-0021).
-    /// Without one, a `browser` source shows nothing and logs that no backend is set.
+    /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
+    /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
+    /// that no backend is set; giving one builds the ones already there again.
     /// The host also hands the backend a GPU device (`use_device`): for now one it opens
     /// on the media adapter itself, since the engine doesn't hand out its own yet.
     #[must_use]
@@ -411,6 +429,18 @@ impl Engine {
     /// The ledger the pipeline's [`DropGuard`](crate::drops::DropGuard) removes from.
     pub(crate) fn drop_ledger(&self) -> Arc<Mutex<DropLedger>> {
         Arc::clone(&self.drops)
+    }
+
+    /// The scopes the mixer thread feeds: the program mix's, and one per bus a source
+    /// draws.
+    pub(crate) fn audio_scopes(&self) -> Arc<AudioScopes> {
+        Arc::clone(&self.shared.audio_scopes)
+    }
+
+    /// The scope the program mix's audio goes to.
+    #[cfg(test)]
+    pub(crate) fn audio_scope(&self) -> Arc<jstream_sources::AudioScope> {
+        Arc::clone(self.shared.audio_scopes.program())
     }
 
     /// A thread that emits `stats.tick` about once a second until `stop` is set.
@@ -524,6 +554,7 @@ impl Engine {
     #[doc(hidden)]
     #[must_use]
     pub fn with_cpu_compositor(self) -> Self {
+        self.shared.previews.set_draw(crate::preview::cpu_draw());
         self.with_draw(crate::runtime::cpu_draw())
     }
 
@@ -612,6 +643,7 @@ impl Engine {
         client_id: &ClientId,
         request_id: &RequestId,
         call: Call,
+        previews: &SessionPreviews,
     ) -> Executed {
         let span = tracing::info_span!(
             "command",
@@ -650,6 +682,11 @@ impl Engine {
         } = call
         {
             self.key_action(action)
+        } else if let Call::Action {
+            action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
+        } = call
+        {
+            self.preview_action(previews, action)
         } else if self.backends_ready()
             && matches!(
                 call,
@@ -716,7 +753,7 @@ impl Engine {
                 Action::YoutubeSignOut => youtube
                     .ok_or_else(unavailable)
                     .and_then(|y| y.sign_out())
-                    .map(|()| CallResult::Action { result: None }),
+                    .map(|()| CallResult::action()),
                 Action::YoutubeCreateBroadcast {
                     title,
                     description,
@@ -776,6 +813,46 @@ impl Engine {
         })
     }
 
+    /// `preview.subscribe` and `preview.unsubscribe`, on the calling session's
+    /// previews. Nothing here holds the collection lock past reading `rev`.
+    fn preview_action(
+        &self,
+        previews: &SessionPreviews,
+        action: Action,
+    ) -> Result<CallResult, ProtocolError> {
+        match action {
+            Action::PreviewSubscribe {
+                channel,
+                max_width,
+                max_height,
+                fps,
+                codecs,
+            } => {
+                let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
+                let rev = lock(&self.shared.state).graph.rev();
+                let codecs = self.media.as_ref().and_then(|host| {
+                    lock(&host.backends)
+                        .as_ref()
+                        .map(|backends| Arc::clone(&backends.codecs))
+                });
+                let shared: Arc<dyn PreviewSource> = self.shared.clone();
+                previews.subscribe(
+                    &self.shared.previews,
+                    Arc::downgrade(&shared),
+                    channel,
+                    settings,
+                    Opening { codecs, rev },
+                )?;
+                Ok(CallResult::Action { result: None })
+            }
+            Action::PreviewUnsubscribe { channel } => {
+                previews.unsubscribe(channel);
+                Ok(CallResult::Action { result: None })
+            }
+            other => Err(not_implemented(other.name())),
+        }
+    }
+
     /// The key store, if the host gave one. The handle is cloned so the store is
     /// called with no engine lock held.
     fn key_store(&self) -> Option<Arc<dyn StreamKeyStore>> {
@@ -807,7 +884,7 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not store the key: {err}"),
                     })?;
-                Ok(CallResult::Action { result: None })
+                Ok(CallResult::action())
             }
             Action::OutputClearKey { output_id } => {
                 let store = self.key_store().ok_or_else(no_key_store)?;
@@ -816,7 +893,7 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not remove the key: {err}"),
                     })?;
-                Ok(CallResult::Action { result: None })
+                Ok(CallResult::action())
             }
             other => Err(not_implemented(other.name())),
         }
@@ -1038,6 +1115,7 @@ impl Engine {
                     *lock(&host.open_timeout),
                     Arc::clone(&state.render),
                     state.audio.wanted(),
+                    canvas_size(&state.graph),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1218,7 +1296,7 @@ impl Engine {
                 if let Some(watch) = health {
                     self.watch_health(&output_id, watch);
                 }
-                Ok(CallResult::Action { result: None })
+                Ok(CallResult::action())
             }
             StartOutcome::Cancelled(running) => {
                 drop(running);
@@ -1308,7 +1386,7 @@ impl Engine {
         settle.state = OutputState::Stopped;
         drop(settle);
         drop(clear_drain);
-        Ok(CallResult::Action { result: None })
+        Ok(CallResult::action())
     }
 
     /// Polls the health of the stream a `youtube` output started on, while the output
@@ -1368,6 +1446,12 @@ impl Engine {
         lock(&self.shared.state).audio.status(source_id)
     }
 
+    /// The packets the mixer input of `source_id` has received, for tests.
+    #[cfg(test)]
+    pub(crate) fn audio_packets(&self, source_id: &SourceId) -> Option<u64> {
+        lock(&self.shared.state).audio.packets(source_id)
+    }
+
     /// Waits until the live sources have built everything asked of them, for tests.
     #[cfg(test)]
     pub(crate) fn settle_sources(&self) -> bool {
@@ -1379,6 +1463,14 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn set_source_clock(&self, clock: Arc<dyn jstream_platform::MediaClock>) {
         lock(&self.shared.state).live.set_clock(clock);
+    }
+
+    /// Plays `media` sources through `media`, for tests that give no full backends.
+    #[cfg(test)]
+    pub(crate) fn set_source_media(&self, media: Arc<dyn jstream_platform::MediaDecoders>) {
+        let mut state = lock(&self.shared.state);
+        let state = &mut *state;
+        state.live.set_media(media, state.graph.state());
     }
 
     /// Re-plans the program mix now, as the live sources' thread does when a frame is
@@ -1430,6 +1522,12 @@ enum OwnTarget {
     Record(PathBuf),
     /// The virtual camera, at the canvas size.
     Vcam(FrameSize),
+}
+
+/// The collection's canvas, width and height.
+fn canvas_size(graph: &Graph) -> (u32, u32) {
+    let canvas = graph.state().canvas();
+    (canvas.width, canvas.height)
 }
 
 /// Where a recording output in the collection records to, or the size a virtual camera
@@ -2058,7 +2156,7 @@ impl State {
             // nothing to restart otherwise, which is no failure.
             Action::AudioResetLoudness {} => {
                 self.routing.reset_loudness();
-                return Ok(CallResult::Action { result: None });
+                return Ok(CallResult::action());
             }
             Action::SceneSwitch { scene_id } => {
                 if self.studio.switch(self.graph.state(), &scene_id)? {
@@ -2068,7 +2166,10 @@ impl State {
                     self.route_audio();
                     self.emit_studio(client_id, request_id, wake);
                 }
-                return Ok(CallResult::Action { result: None });
+                return Ok(CallResult::action());
+            }
+            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+                return Err(served_by_the_server(other.name()));
             }
             other => return Err(not_implemented(other.name())),
         };
@@ -2081,7 +2182,7 @@ impl State {
                 wake,
             );
         }
-        Ok(CallResult::Action { result: None })
+        Ok(CallResult::action())
     }
 
     /// Collection reads go to `Graph::query`; `output.status` reads the outputs and
@@ -2103,6 +2204,7 @@ impl State {
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                 },
+                Query::DeviceList => return Err(served_by_the_server(query.name())),
                 other => return Err(not_implemented(other.name())),
             },
         };
@@ -2131,16 +2233,22 @@ impl State {
             frames,
             frame_versions,
             live,
+            audio,
             render,
             studio,
             ..
         } = self;
         let now = live.now();
+        live.begin_plan();
         let (shot, wake) =
             snapshot::plan_with(graph, studio.program(), &mut |id| match frames.get(id) {
                 Some(frame) => Some((frame.clone(), None)),
                 None => live.frame(id, now, frame_versions),
             });
+        live.end_plan();
+        if let Some(sound) = live.take_audio() {
+            audio.sync_live(sound);
+        }
         render.publish(shot);
         live.wake_at(wake);
     }
@@ -2180,6 +2288,13 @@ impl State {
     }
 }
 
+impl PreviewSource for Shared {
+    fn current(&self) -> (Arc<crate::runtime::RenderSnapshot>, Rev) {
+        let state = lock(&self.state);
+        (state.render.load(), state.graph.rev())
+    }
+}
+
 impl LiveHost for Shared {
     fn install(&self, built: Built) {
         let mut state = lock(&self.state);
@@ -2215,6 +2330,9 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
         "must be at most 1024 bytes"
     } else if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
         "must not contain whitespace or control characters"
+    } else if !key.is_ascii() {
+        // No streaming service issues one; a leading U+FEFF is the usual case (#441).
+        "must contain only ASCII characters"
     } else {
         return Ok(());
     };
@@ -2228,6 +2346,13 @@ fn no_key_store() -> ProtocolError {
 }
 
 /// A protocol variant added after this engine was written.
+/// `unsupported`, for the calls that concern the listener's credentials (`pairing.start`,
+/// `device.list`, `device.revoke`): the server in front of the engine answers them
+/// (ADR-0044), so one that reaches the engine came from a client with no server between.
+fn served_by_the_server(call: &str) -> ProtocolError {
+    ProtocolError::Unsupported { call: call.into() }
+}
+
 fn not_implemented(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the engine does not implement {what} yet"),

@@ -1,14 +1,13 @@
 //! CEF's callbacks: the app (command-line switches), and per page a client with its
-//! render, audio, life-span and load handlers, each forwarding to the page's
+//! render, audio, life-span, load and request handlers, each forwarding to the page's
 //! [`PageShared`]. Plus a task that runs a closure on CEF's UI thread.
 
 use std::os::raw::c_int;
 use std::sync::Arc;
 
 use cef::*;
-use jstream_platform::PlatformError;
 
-use super::{PageShared, gpu};
+use super::PageShared;
 
 /// The handle every one of a page's callback objects carries.
 #[derive(Clone)]
@@ -66,6 +65,7 @@ wrap_client! {
         audio: AudioHandler,
         life_span: LifeSpanHandler,
         load: LoadHandler,
+        request: RequestHandler,
     }
 
     impl Client {
@@ -84,6 +84,10 @@ wrap_client! {
         fn load_handler(&self) -> Option<LoadHandler> {
             Some(self.load.clone())
         }
+
+        fn request_handler(&self) -> Option<RequestHandler> {
+            Some(self.request.clone())
+        }
     }
 }
 
@@ -94,7 +98,8 @@ pub(crate) fn client(page: &Arc<PageShared>) -> Client {
         PageRender::new(page.clone()),
         PageAudioHandler::new(page.clone()),
         PageLifeSpan::new(page.clone()),
-        PageLoad::new(page),
+        PageLoad::new(page.clone()),
+        PageRequests::new(PageResources::new(page)),
     )
 }
 
@@ -141,9 +146,7 @@ wrap_render_handler! {
             let Some(info) = info else {
                 return;
             };
-            let page = &self.page.0;
-            let pts = page.clock.now();
-            gpu::paint(page, info.shared_texture_handle, pts);
+            self.page.0.paint(info.shared_texture_handle);
         }
     }
 }
@@ -188,10 +191,8 @@ wrap_audio_handler! {
             _pts: i64,
         ) {
             // `pts` looks like milliseconds since boot, not CEF's documented Unix time
-            // (ARCH › Browser source); until that is checked, packets are stamped when
-            // they arrive.
+            // (ARCH › Browser source); the engine stamps packets as they arrive instead.
             let page = &self.page.0;
-            let arrived = page.clock.now();
             let channels = page.channels.load(std::sync::atomic::Ordering::Acquire).min(2);
             let Ok(frames) = usize::try_from(frames) else {
                 return;
@@ -212,7 +213,7 @@ wrap_audio_handler! {
                 // for the duration of this callback, which the slice doesn't outlive.
                 *plane = unsafe { std::slice::from_raw_parts(samples, frames) };
             }
-            page.audio.push_planar(&planes[..channels], frames, Some(arrived));
+            page.audio(&planes[..channels], frames);
         }
 
         fn on_audio_stream_error(
@@ -226,12 +227,7 @@ wrap_audio_handler! {
             if page.is_closing() {
                 return;
             }
-            let reason = message.map(|m| m.to_string()).unwrap_or_default();
-            tracing::warn!(%reason, "a browser page's audio stream failed");
-            page.audio.fail(&PlatformError::DeviceLost {
-                what: "the browser page's audio".into(),
-                reason,
-            });
+            page.audio_failed(message.map(|m| m.to_string()).unwrap_or_default());
         }
     }
 }
@@ -290,6 +286,59 @@ wrap_load_handler! {
                 && frame.is_main() == 1
             {
                 self.page.0.loaded(frame);
+            }
+        }
+    }
+}
+
+wrap_request_handler! {
+    pub(crate) struct PageRequests {
+        resources: ResourceRequestHandler,
+    }
+
+    impl RequestHandler {
+        fn resource_request_handler(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _request: Option<&mut Request>,
+            _is_navigation: c_int,
+            _is_download: c_int,
+            _request_initiator: Option<&CefString>,
+            _disable_default_handling: Option<&mut c_int>,
+        ) -> Option<ResourceRequestHandler> {
+            // Every request of the page, navigations included, goes past its policy.
+            Some(self.resources.clone())
+        }
+    }
+}
+
+wrap_resource_request_handler! {
+    pub(crate) struct PageResources {
+        page: Page,
+    }
+
+    impl ResourceRequestHandler {
+        fn on_before_resource_load(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            request: Option<&mut Request>,
+            _callback: Option<&mut Callback>,
+        ) -> ReturnValue {
+            let Some(request) = request else {
+                return ReturnValue::CANCEL;
+            };
+            let url = CefString::from(&request.url()).to_string();
+            let page = &self.page.0;
+            match page.policy.check(&url) {
+                crate::Verdict::Allow => ReturnValue::CONTINUE,
+                crate::Verdict::Deny(_) => {
+                    // The URL may be a local path, which the engine's logs must never
+                    // name: it gets the count.
+                    page.denied();
+                    ReturnValue::CANCEL
+                }
             }
         }
     }

@@ -10,9 +10,11 @@
 //! synchronous codec fits the same pattern. [`request_keyframe`](VideoEncoder::request_keyframe)
 //! forces the next video frame to be a keyframe.
 
+use std::sync::Arc;
+
 use jstream_media::{AudioBuffer, AudioFormat, Codec, FrameSize, Packet, PixelFormat, Timebase};
 
-use crate::{PlatformError, VideoSurface};
+use crate::{GpuContext, PlatformError, VideoSurface};
 
 /// What a codec does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -149,6 +151,24 @@ pub trait Codecs: Send + Sync {
         &self,
         config: &VideoDecoderConfig,
     ) -> Result<Box<dyn VideoDecoder>, PlatformError>;
+
+    /// This backend on `context`'s device: its video encoders take `VideoSurface::Gpu`
+    /// frames, the platform's encode targets on that context
+    /// ([`GpuInterop::encode_target`](crate::GpuInterop::encode_target)), and read them
+    /// without a CPU copy (README › GPU frames). `Ok(None)`, the default, when the
+    /// backend has no GPU path; the engine then keeps this backend and CPU frames.
+    ///
+    /// The encoders it opens take GPU frames only, and drop each frame once they have
+    /// read it, so the producer can write the target again when it holds the frame's
+    /// only clone. Opening one fails with [`PlatformError::Unsupported`] when no encoder
+    /// can read the context's textures; the engine then opens a CPU encoder instead.
+    ///
+    /// # Errors
+    /// [`PlatformError::InvalidState`] for a context another platform opened.
+    fn on_context(&self, context: &GpuContext) -> Result<Option<Arc<dyn Codecs>>, PlatformError> {
+        let _ = context;
+        Ok(None)
+    }
 }
 
 /// One video encoder session, driven by one encode thread (so `Send`, not `Sync`).

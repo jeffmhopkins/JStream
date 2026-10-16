@@ -44,8 +44,8 @@ allow = [
 # for data: the Mozilla root certificates) are build-time only: `cef-dll-sys`'s build
 # script downloads and unpacks CEF with `download-cef`, which reaches `libbz2-rs-sys`
 # through `bzip2` and `webpki-roots` through `ureq`. Neither is linked into any JStream
-# binary, and neither is in the graph unless the `cef` feature of jstream-browser is on
-# (ADR-0046). A license decision is the maintainer's (ADR-0043); these two entries rest
+# binary, and neither is in the graph unless the `helper` feature of jstream-browser is on
+# (ADR-0046, ADR-0048). A license decision is the maintainer's (ADR-0043); these two entries rest
 # on his decision on PR #283 (C8).
 exceptions = [
     { crate = "assert_no_alloc", allow = ["BSD-1-Clause"] },
@@ -66,7 +66,7 @@ skip = [
     { crate = "cpufeatures@0.2.17", reason = "sha1 0.10 (axum and tungstenite WebSocket handshake) uses 0.2; blake3 uses 0.3" },
     { crate = "getrandom@0.2.17", reason = "ring 0.17 (rustls provider, R-DEP-006) uses getrandom 0.2" },
     { crate = "getrandom@0.3.4", reason = "rand_core 0.9 (tungstenite's rand) uses 0.3; tempfile, uuid and the daemon use 0.4" },
-    { crate = "libloading@0.8.9", reason = "ash 0.38 under wgpu-hal, which is pinned exactly (ADR-0004); cef 154 (jstream-browser, feature `cef`) uses 0.9" },
+    { crate = "libloading@0.8.9", reason = "ash 0.38 under wgpu-hal, which is pinned exactly (ADR-0004); cef 154 (jstream-browser, feature `helper`) uses 0.9" },
     { crate = "hashbrown@0.16.1", reason = "gpu-allocator 0.28 under wgpu-hal, which is pinned exactly (ADR-0004)" },
     { crate = "syn@2.0.119", reason = "windows-implement/windows-interface (windows-core 0.62, pinned exactly) and zerocopy-derive still use syn 2" },
     { crate = "windows-sys@0.52.0", reason = "ring 0.17 (rustls provider, R-DEP-006) uses windows-sys 0.52" },
@@ -133,7 +133,7 @@ deny = [
     # R-RS-003: anyhow only in apps and xtask. `leptos_hot_reload` is a dependency of Leptos
     # (jstream-ui, ADR-0045) that uses it internally; no JStream error type is an anyhow one.
     # `tauri`, `tauri-build` and `tauri-utils` (jstream-desktop) use it internally the same way.
-    # `cef-dll-sys` (jstream-browser, feature `cef`) uses it in its build script only.
+    # `cef-dll-sys` (jstream-browser, feature `helper`) uses it in its build script only.
     { crate = "anyhow", wrappers = ["jstream-desktop", "jstream-daemon", "jstream-cli", "xtask", "leptos_hot_reload", "tauri", "tauri-build", "tauri-utils", "cef-dll-sys"], reason = "R-RS-003" },
 ]
 
