@@ -53,12 +53,14 @@ generated from the protocol's JSON Schema when a `Server` is built: every varian
 `Edit`, `Action` and `Query`, and each `HistoryOp`, is named `noun.verb`, and the tool
 named after its noun
 takes it as its `op` argument. A command added to the protocol becomes an op with no
-change here, and a new noun becomes a new tool. The generated list is in the snapshot
+change here, and a new noun becomes a new tool, except `youtube`, whose ops get no
+tool ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3; the
+exclusion lands with the YouTube commands). The generated list is in the snapshot
 below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `video` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `video` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |

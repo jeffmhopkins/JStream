@@ -144,11 +144,15 @@ impl LiveSources {
         self.worker.wake.notify_all();
     }
 
-    /// The browser engine `browser` sources open their pages in. Sources of that kind
-    /// built before have none, so they are built again.
+    /// The browser engine `browser` sources and its presets (`youtube_chat`) open their
+    /// pages in. Sources of those kinds built before have none, so they are built again.
     pub(crate) fn set_browser(&mut self, browser: Arc<dyn BrowserBackend>) {
         self.ctx.browser = Some(browser);
-        for entry in self.entries.values_mut().filter(|e| e.kind == "browser") {
+        for entry in self
+            .entries
+            .values_mut()
+            .filter(|e| jstream_sources::opens_browser(&e.kind))
+        {
             entry.settings = Settings::new();
         }
     }

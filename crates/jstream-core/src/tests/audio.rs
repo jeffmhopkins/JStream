@@ -265,6 +265,54 @@ fn a_settings_change_reopens_the_input_and_stopping_clears_the_status() {
     assert_eq!(status(&engine, "mic"), None);
 }
 
+/// Sources that open through the browser backend, `browser` and its `youtube_chat`
+/// preset, are built again when the host gives the engine its backend after they
+/// exist (review B1 on #375).
+#[test]
+fn browser_presets_open_once_the_backend_arrives() {
+    use jstream_browser::PageLocation;
+    use jstream_browser::fake::FakeBrowser;
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            audio_source("page", "browser", Some(("url", "https://example.com/"))),
+            audio_source("chat", "youtube_chat", Some(("video", "dQw4w9WgXcQ"))),
+        ]),
+    )
+    .expect("sources");
+    // Long enough for both builds to fail for want of a backend.
+    thread::sleep(Duration::from_millis(200));
+
+    let browser = FakeBrowser::new();
+    let _engine = engine.with_browser(browser.clone());
+    assert!(
+        eventually(|| browser.pages().len() == 2),
+        "{:?}",
+        browser.pages().len()
+    );
+    let mut opened: Vec<String> = browser
+        .pages()
+        .iter()
+        .map(|page| match &page.spec().location {
+            PageLocation::Web(url) => url.to_string(),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    opened.sort();
+    assert_eq!(
+        opened,
+        [
+            "https://example.com/",
+            "https://www.youtube.com/live_chat?is_popout=1&v=dQw4w9WgXcQ"
+        ]
+    );
+}
+
 #[test]
 fn a_browser_page_is_recorded_alongside_the_defaults() {
     use jstream_browser::fake::FakeBrowser;
@@ -312,6 +360,38 @@ fn a_browser_page_is_recorded_alongside_the_defaults() {
             AudioInputTarget::DefaultOutputLoopback
         ])
     );
+
+    // Turning the page's audio off closes its input but keeps the page; turning it on
+    // records the same page again.
+    let page_metered = |events: &mut jstream_control::EventStream| {
+        engine.emit_meters_tick();
+        drain(events)
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::MetersTick { sources, .. } => Some(sources),
+                _ => None,
+            })
+            .is_some_and(|sources| sources.iter().any(|s| s.source_id.as_str() == "page"))
+    };
+    let set_audio = |enabled| Edit::SourceSetAudio {
+        source_id: SourceId::new("page"),
+        enabled: Some(enabled),
+        follow: None,
+        gain_db: None,
+        muted: None,
+    };
+    batch(&control, Batch::single(set_audio(false))).expect("audio off");
+    assert!(eventually(|| status(&engine, "page").is_none()));
+    assert!(!page_metered(&mut events), "an off page isn't metered");
+    assert_eq!(browser.pages().len(), 1);
+    assert!(!pages[0].is_closed());
+    batch(&control, Batch::single(set_audio(true))).expect("audio on");
+    assert!(eventually(
+        || status(&engine, "page") == Some(AudioStatus::Recording)
+    ));
+    assert!(page_metered(&mut events), "the page is metered again");
+    assert_eq!(browser.pages().len(), 1);
 
     // A new address opens a new page, whose audio replaces the old page's.
     batch(
