@@ -107,7 +107,9 @@ pub trait MediaDecoder: Send {
     /// Blocks while it is read and decoded. `Ok(None)` at the end of the stream, and
     /// for a file with no decoded audio; after the end, only
     /// [`seek`](MediaDecoder::seek) brings more. A block's `pts` is on the file's
-    /// timeline, like a frame's.
+    /// timeline, like a frame's. The stream is its content only: a backend drops the
+    /// encoder's priming and padding where it can tell them, so a looping file's sound
+    /// joins up without a gap.
     ///
     /// # Errors
     /// As for [`next_video`](MediaDecoder::next_video).

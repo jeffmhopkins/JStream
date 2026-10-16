@@ -146,7 +146,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   clock time onto the file's timeline at `speed` (0.25 to 4), from where it last
   started, and shows the latest frame the timeline has reached; a speed change keeps
   the position. With `loop` the file plays again from the start after its end, the
-  timeline running on; without it the last frame stays, and turning `loop` on
+  timeline running on: a play lasts as long as its longest stream, from that stream's
+  first frame or block to the end of its last, so the next play follows straight on
+  even when a stream starts late in the file (Media Foundation leaves an MP4's B-frame
+  delay in its video times); without it the last frame stays, and turning `loop` on
   afterwards plays on. With `restart_on_show` the file starts again each time the
   program mix shows it after not showing it (`Source::show`), the first time
   included. When the frame shown
@@ -172,7 +175,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   input's ring holds; the device position counts the frames handed on. Audio more
   than 20 ms behind the timeline is dropped, and a jump (a restart, a seek, the source
   shown again) flags the next packet as a discontinuity, so the mixer re-anchors
-  there. It is heard only while the program shows the source and at `speed` 1: at any
+  there. Silence in the file itself, up to a second with nothing dropped (a looping
+  file's sound ending before its picture), is instead a gap in the device position,
+  which the mixer fills where it falls; flagged, the mixer would take the stamp for an
+  outlier and re-anchor some 400 ms later, a second hole. It is heard only while the program shows the source and at `speed` 1: at any
   other speed it is silent, since the mixer steers an input's rate by 0.5 % at most.
   An audio-only file has no frames to catch the timeline up, so the audio thread
   seeks when what it drops is more than a second behind. Audio that outlasts the video

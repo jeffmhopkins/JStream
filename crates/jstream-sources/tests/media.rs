@@ -721,3 +721,43 @@ fn a_looping_file_shows_its_first_frame_again_once_the_sound_ends() {
     assert_eq!(shown(&mut source, 3000), 0);
     assert_eq!(fake.stats().seeks, seeks + 1, "only the loop's seek");
 }
+
+/// #445: where a looping file's sound ends before its picture, the silence until the
+/// next play is a gap in the device position, which the mixer fills where it falls,
+/// not a discontinuity it re-anchors at some 400 ms later as a second hole.
+#[test]
+fn silence_before_the_next_play_is_a_gap_not_a_discontinuity() {
+    let mut clip = with_sound();
+    if let Some(audio) = &mut clip.audio {
+        // 380 ms of sound under 400 ms of picture.
+        audio.blocks = 19;
+    }
+    let (dir, fake) = setup("audio-short-loop", clip);
+    let mut source = create(
+        &ctx(&dir, &fake),
+        &settings(Some("clip.mp4"), true, 1.0, true),
+    )
+    .expect("a source");
+    let (audio, _stream, recorder, clock) = open_audio(source.as_ref());
+    audio.set_audible(true);
+    for t in (20..=500).step_by(20) {
+        at(&mut source, &clock, t);
+        recorder.wait("audio 100 ms ahead", |got| {
+            got.last().is_some_and(|g| g.ms >= t + 90)
+        });
+    }
+    let got = recorder.got();
+    let seam = got
+        .iter()
+        .position(|g| g.ms == 400)
+        .expect("the second play");
+    let (before, after) = (&got[seam - 1], &got[seam]);
+    assert_eq!((before.ms, after.level), (370, FakeAudio::level(0)));
+    assert!(!after.discontinuity, "{after:?}");
+    assert_eq!(
+        after.position,
+        before.position + 480 + 960,
+        "the position steps over the 20 ms of silence"
+    );
+    assert!(got.iter().all(|g| !g.discontinuity), "{got:?}");
+}
