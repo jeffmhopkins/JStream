@@ -275,7 +275,8 @@ ran at about 10 fps, #433): the high-performance adapter without
 `force_fallback_adapter` first, then the software adapter, then
 `RenderError::NoAdapter`. A hardware adapter whose device refuses to open (limits below
 the defaults, a removed or hung GPU) falls back to the software adapter too, and the
-error names both when that fails as well. A machine with no GPU still runs, on lavapipe
+error names both when that fails as well. When the pick already was the software
+adapter (no GPU), its device error is returned without a second try. A machine with no GPU still runs, on lavapipe
 or WARP.
 
 `Compositor::on_context` does not search. It uses the `GpuContext` it is given.

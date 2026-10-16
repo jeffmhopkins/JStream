@@ -135,7 +135,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:112f148ae88f982d" }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:2a2c11deb9493655", by = "agent:claude", note = "body: own device hardware first, software fallback, for every OpenOptions::default/hardware() caller. render README: same with device-open fallback. benches/composite.rs and tests.rs open OpenOptions::hardware(); gpu.rs implements the order and or_software fallback; headless() stays software first; holds" }
+stamp = { hash = "b3:2a2c11deb9493655", by = "agent:claude", note = "body: own-device sentence says hardware adapter first with the software fallback, matching OpenOptions::default = hardware(); render README: device selection lists headless (software first) and hardware orders, the device-open fallback and the no-GPU single try; benches/composite.rs and tests.rs open hardware() and run on lavapipe in CI; gpu.rs: pick_adapter both orders, or_software retry skipped when the pick is already a Cpu adapter, unit test of the fallback; holds" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -153,10 +153,10 @@ stamp = { hash = "b3:1f10a420e9f6a9bc" }
 stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:80271b392d0698e9", by = "agent:claude", note = "body: own device hardware first, software fallback, for every OpenOptions::default/hardware() caller. render README: same with device-open fallback. benches/composite.rs and tests.rs open OpenOptions::hardware(); gpu.rs implements the order and or_software fallback; headless() stays software first; holds" }
+stamp = { hash = "b3:83e2416da0d7291b", by = "agent:claude", note = "body: own-device sentence says hardware adapter first with the software fallback, matching OpenOptions::default = hardware(); render README: device selection lists headless (software first) and hardware orders, the device-open fallback and the no-GPU single try; benches/composite.rs and tests.rs open hardware() and run on lavapipe in CI; gpu.rs: pick_adapter both orders, or_software retry skipped when the pick is already a Cpu adapter, unit test of the fallback; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
-stamp = { hash = "b3:84ad0a8f8034bc13", by = "agent:claude", note = "body: own device hardware first, software fallback, for every OpenOptions::default/hardware() caller. render README: same with device-open fallback. benches/composite.rs and tests.rs open OpenOptions::hardware(); gpu.rs implements the order and or_software fallback; headless() stays software first; holds" }
+stamp = { hash = "b3:84ad0a8f8034bc13", by = "agent:claude", note = "body: own-device sentence says hardware adapter first with the software fallback, matching OpenOptions::default = hardware(); render README: device selection lists headless (software first) and hardware orders, the device-open fallback and the no-GPU single try; benches/composite.rs and tests.rs open hardware() and run on lavapipe in CI; gpu.rs: pick_adapter both orders, or_software retry skipped when the pick is already a Cpu adapter, unit test of the fallback; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:071eeba73136670c" }
@@ -174,7 +174,7 @@ stamp = { hash = "b3:bb5175d8f36e082d" }
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:e4cb52dbc7576be9", by = "agent:claude", note = "body: own device hardware first, software fallback, for every OpenOptions::default/hardware() caller. render README: same with device-open fallback. benches/composite.rs and tests.rs open OpenOptions::hardware(); gpu.rs implements the order and or_software fallback; headless() stays software first; holds" }
+stamp = { hash = "b3:2811fbfa1ef4a38f", by = "agent:claude", note = "body: own-device sentence says hardware adapter first with the software fallback, matching OpenOptions::default = hardware(); render README: device selection lists headless (software first) and hardware orders, the device-open fallback and the no-GPU single try; benches/composite.rs and tests.rs open hardware() and run on lavapipe in CI; gpu.rs: pick_adapter both orders, or_software retry skipped when the pick is already a Cpu adapter, unit test of the fallback; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:0edf4c378e3b8335" }
@@ -192,7 +192,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "body: own device hardware first, software fallback, for every OpenOptions::default/hardware() caller. render README: same with device-open fallback. benches/composite.rs and tests.rs open OpenOptions::hardware(); gpu.rs implements the order and or_software fallback; headless() stays software first; holds" }
+stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "body: own-device sentence says hardware adapter first with the software fallback, matching OpenOptions::default = hardware(); render README: device selection lists headless (software first) and hardware orders, the device-open fallback and the no-GPU single try; benches/composite.rs and tests.rs open hardware() and run on lavapipe in CI; gpu.rs: pick_adapter both orders, or_software retry skipped when the pick is already a Cpu adapter, unit test of the fallback; holds" }
 
 ["ARCH#mcp"."body"]
 stamp = { hash = "b3:9ca86438d4d9c457", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
@@ -213,7 +213,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:8c0c258dab2abccb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:3b0ff5b1a3170e1c", by = "agent:claude", note = "tools.snap: EncoderProfile/HardwarePreference doc strings only; hardware field default stays avoid; holds" }
+stamp = { hash = "b3:3b0ff5b1a3170e1c", by = "agent:claude", note = "tools.snap: only the hardware field's and DEFAULT's doc strings change; the default stays avoid; tool set unchanged; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -327,13 +327,13 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:0005b216ed0493ae", by = "agent:claude", note = "protocol README: hardware list and engine default reworded; protocol.snap: doc strings only, the hardware field default stays avoid; encoder.rs: DEFAULT is prefer, serde default avoid; fixtures.rs: explicit avoid fixture. Section's encoder bullets name no default; holds" }
+stamp = { hash = "b3:0005b216ed0493ae", by = "agent:claude", note = "protocol README: hardware omitted means avoid, DEFAULT hardware when there is one; protocol.snap: only doc strings change, default stays avoid; encoder.rs: DEFAULT.video.hardware = Prefer, #[default] Avoid with its doc, test expects prefer in DEFAULT's JSON; fixtures.rs: the Stream fixture spells avoid explicitly; no wire change; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:62423ac57eda8b9c", by = "agent:claude", note = "protocol README: hardware list and engine default reworded; protocol.snap: doc strings only, the hardware field default stays avoid; encoder.rs: DEFAULT is prefer, serde default avoid; fixtures.rs: explicit avoid fixture. Section's encoder bullets name no default; holds" }
+stamp = { hash = "b3:62423ac57eda8b9c", by = "agent:claude", note = "protocol README: hardware omitted means avoid, DEFAULT hardware when there is one; protocol.snap: only doc strings change, default stays avoid; encoder.rs: DEFAULT.video.hardware = Prefer, #[default] Avoid with its doc, test expects prefer in DEFAULT's JSON; fixtures.rs: the Stream fixture spells avoid explicitly; no wire change; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
@@ -342,7 +342,7 @@ stamp = { hash = "b3:7421b6aaa2a1c085" }
 stamp = { hash = "b3:da4b9ef5e429cca2" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
-stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "protocol README: hardware list and engine default reworded; protocol.snap: doc strings only, the hardware field default stays avoid; encoder.rs: DEFAULT is prefer, serde default avoid; fixtures.rs: explicit avoid fixture. Section's encoder bullets name no default; holds" }
+stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "protocol README: hardware omitted means avoid, DEFAULT hardware when there is one; protocol.snap: only doc strings change, default stays avoid; encoder.rs: DEFAULT.video.hardware = Prefer, #[default] Avoid with its doc, test expects prefer in DEFAULT's JSON; fixtures.rs: the Stream fixture spells avoid explicitly; no wire change; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/envelope.rs"]
 stamp = { hash = "b3:63616c6985c48822" }
@@ -357,7 +357,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:8338ff3a2c0d0fcf", by = "agent:claude", note = "protocol README: hardware list and engine default reworded; protocol.snap: doc strings only, the hardware field default stays avoid; encoder.rs: DEFAULT is prefer, serde default avoid; fixtures.rs: explicit avoid fixture. Section's encoder bullets name no default; holds" }
+stamp = { hash = "b3:8338ff3a2c0d0fcf", by = "agent:claude", note = "protocol README: hardware omitted means avoid, DEFAULT hardware when there is one; protocol.snap: only doc strings change, default stays avoid; encoder.rs: DEFAULT.video.hardware = Prefer, #[default] Avoid with its doc, test expects prefer in DEFAULT's JSON; fixtures.rs: the Stream fixture spells avoid explicitly; no wire change; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -882,13 +882,13 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:402ac4b55b807516", by = "agent:claude", note = "Merge of main (#434): render thread paragraph joined: hardware-first compositor with WARP figure, then #434's canvas sizing and lazy capture conversion; output.start wait says compositor hardware first; pipeline.rs/snapshot.rs/tests.rs carry both changes; holds" }
+stamp = { hash = "b3:402ac4b55b807516", by = "agent:claude", note = "body: Snapshots paragraph says the snapshot thread opens hardware first with lavapipe/WARP fallback (OpenOptions::hardware); output.start says the compositor opens hardware first with the software fallback; render thread paragraph says hardware when present, WARP 720p about 10 fps (#433), next to #434's canvas text; Encoder profiles paragraph names only EncoderProfile::DEFAULT. dep protocol#design: DEFAULT prefers hardware, omitted avoid. pipeline.rs: OPEN_TIMEOUT and gpu_draw docs, hardware(), video_config Avoid->Avoid else Prefer with its Avoid assertion; snapshot.rs: open() and test helpers use hardware(); tests.rs: comment wording only; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:747dd6c2df74d777", by = "agent:claude", note = "body: snapshot thread opens hardware first with lavapipe/WARP fallback; output.start waits for the compositor hardware first (B3 fix); render thread paragraph says OpenOptions::hardware with the WARP 720p measurement. dep protocol#design: EncoderProfile::DEFAULT now prefer, omitted hardware still avoid; Encoder profiles paragraph names only EncoderProfile::DEFAULT, holds. pipeline.rs: video_config Prefer catch-all and gpu_draw hardware(); snapshot.rs hardware(); tests.rs comments only" }
+stamp = { hash = "b3:747dd6c2df74d777", by = "agent:claude", note = "body: Snapshots paragraph says the snapshot thread opens hardware first with lavapipe/WARP fallback (OpenOptions::hardware); output.start says the compositor opens hardware first with the software fallback; render thread paragraph says hardware when present, WARP 720p about 10 fps (#433), next to #434's canvas text; Encoder profiles paragraph names only EncoderProfile::DEFAULT. dep protocol#design: DEFAULT prefers hardware, omitted avoid. pipeline.rs: OPEN_TIMEOUT and gpu_draw docs, hardware(), video_config Avoid->Avoid else Prefer with its Avoid assertion; snapshot.rs: open() and test helpers use hardware(); tests.rs: comment wording only; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d638c6ca8019b15d" }
@@ -945,7 +945,7 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:5235db298913165f", by = "agent:claude", note = "Merge of main (#434): render thread paragraph joined: hardware-first compositor with WARP figure, then #434's canvas sizing and lazy capture conversion; output.start wait says compositor hardware first; pipeline.rs/snapshot.rs/tests.rs carry both changes; holds" }
+stamp = { hash = "b3:5235db298913165f", by = "agent:claude", note = "body: Snapshots paragraph says the snapshot thread opens hardware first with lavapipe/WARP fallback (OpenOptions::hardware); output.start says the compositor opens hardware first with the software fallback; render thread paragraph says hardware when present, WARP 720p about 10 fps (#433), next to #434's canvas text; Encoder profiles paragraph names only EncoderProfile::DEFAULT. dep protocol#design: DEFAULT prefers hardware, omitted avoid. pipeline.rs: OPEN_TIMEOUT and gpu_draw docs, hardware(), video_config Avoid->Avoid else Prefer with its Avoid assertion; snapshot.rs: open() and test helpers use hardware(); tests.rs: comment wording only; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -963,13 +963,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:560347a483c79739", by = "agent:claude", note = "Merge of main (#434): render thread paragraph joined: hardware-first compositor with WARP figure, then #434's canvas sizing and lazy capture conversion; output.start wait says compositor hardware first; pipeline.rs/snapshot.rs/tests.rs carry both changes; holds" }
+stamp = { hash = "b3:560347a483c79739", by = "agent:claude", note = "body: Snapshots paragraph says the snapshot thread opens hardware first with lavapipe/WARP fallback (OpenOptions::hardware); output.start says the compositor opens hardware first with the software fallback; render thread paragraph says hardware when present, WARP 720p about 10 fps (#433), next to #434's canvas text; Encoder profiles paragraph names only EncoderProfile::DEFAULT. dep protocol#design: DEFAULT prefers hardware, omitted avoid. pipeline.rs: OPEN_TIMEOUT and gpu_draw docs, hardware(), video_config Avoid->Avoid else Prefer with its Avoid assertion; snapshot.rs: open() and test helpers use hardware(); tests.rs: comment wording only; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:9010894a5f44cfee", by = "agent:claude", note = "Merge of main (#434): render thread paragraph joined: hardware-first compositor with WARP figure, then #434's canvas sizing and lazy capture conversion; output.start wait says compositor hardware first; pipeline.rs/snapshot.rs/tests.rs carry both changes; holds" }
+stamp = { hash = "b3:9010894a5f44cfee", by = "agent:claude", note = "body: Snapshots paragraph says the snapshot thread opens hardware first with lavapipe/WARP fallback (OpenOptions::hardware); output.start says the compositor opens hardware first with the software fallback; render thread paragraph says hardware when present, WARP 720p about 10 fps (#433), next to #434's canvas text; Encoder profiles paragraph names only EncoderProfile::DEFAULT. dep protocol#design: DEFAULT prefers hardware, omitted avoid. pipeline.rs: OPEN_TIMEOUT and gpu_draw docs, hardware(), video_config Avoid->Avoid else Prefer with its Avoid assertion; snapshot.rs: open() and test helpers use hardware(); tests.rs: comment wording only; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -987,7 +987,7 @@ stamp = { hash = "b3:c9688aabcb558c82" }
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:1a342d3f38c3bae3", by = "agent:claude", note = "Merge of main (#434): test list carries #434's canvas-size/lazy-conversion tests and this PR's 'whatever adapter opens' wording; pipeline.rs has both (output_size, Frames, video_config Avoid assertion, hardware()); snapshot.rs shows_capture plus hardware(); tests.rs comments; holds" }
+stamp = { hash = "b3:1a342d3f38c3bae3", by = "agent:claude", note = "body: test list says video.snapshot and the pixel tests run on whatever adapter opens (software in CI); pipeline.rs: gpu_draw opens hardware(), video_config maps Avoid to Avoid else Prefer, test asserts DEFAULT Prefer and Avoid; snapshot.rs: open and test helpers use hardware(); tests.rs: comments say whatever adapter opens; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1035,7 +1035,7 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:5235db298913165f", by = "agent:claude", note = "Merge of main (#434): test list carries #434's canvas-size/lazy-conversion tests and this PR's 'whatever adapter opens' wording; pipeline.rs has both (output_size, Frames, video_config Avoid assertion, hardware()); snapshot.rs shows_capture plus hardware(); tests.rs comments; holds" }
+stamp = { hash = "b3:5235db298913165f", by = "agent:claude", note = "body: test list says video.snapshot and the pixel tests run on whatever adapter opens (software in CI); pipeline.rs: gpu_draw opens hardware(), video_config maps Avoid to Avoid else Prefer, test asserts DEFAULT Prefer and Avoid; snapshot.rs: open and test helpers use hardware(); tests.rs: comments say whatever adapter opens; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1053,13 +1053,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:560347a483c79739", by = "agent:claude", note = "Merge of main (#434): test list carries #434's canvas-size/lazy-conversion tests and this PR's 'whatever adapter opens' wording; pipeline.rs has both (output_size, Frames, video_config Avoid assertion, hardware()); snapshot.rs shows_capture plus hardware(); tests.rs comments; holds" }
+stamp = { hash = "b3:560347a483c79739", by = "agent:claude", note = "body: test list says video.snapshot and the pixel tests run on whatever adapter opens (software in CI); pipeline.rs: gpu_draw opens hardware(), video_config maps Avoid to Avoid else Prefer, test asserts DEFAULT Prefer and Avoid; snapshot.rs: open and test helpers use hardware(); tests.rs: comments say whatever adapter opens; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:9010894a5f44cfee", by = "agent:claude", note = "Merge of main (#434): test list carries #434's canvas-size/lazy-conversion tests and this PR's 'whatever adapter opens' wording; pipeline.rs has both (output_size, Frames, video_config Avoid assertion, hardware()); snapshot.rs shows_capture plus hardware(); tests.rs comments; holds" }
+stamp = { hash = "b3:9010894a5f44cfee", by = "agent:claude", note = "body: test list says video.snapshot and the pixel tests run on whatever adapter opens (software in CI); pipeline.rs: gpu_draw opens hardware(), video_config maps Avoid to Avoid else Prefer, test asserts DEFAULT Prefer and Avoid; snapshot.rs: open and test helpers use hardware(); tests.rs: comments say whatever adapter opens; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -1095,7 +1095,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:5235db298913165f", by = "agent:claude", note = "Merge of main (#434): pipeline.rs has #434's output_size/Frames and this PR's hardware() and video_config mapping; Runtime text names neither adapter kind nor default; holds" }
+stamp = { hash = "b3:5235db298913165f", by = "agent:claude", note = "pipeline.rs: gpu_draw opens hardware() and video_config maps Avoid to Avoid, else Prefer; the runtime section names neither the adapter nor the encoder default, so it holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1113,7 +1113,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:ec76a643a1a5e0b1", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#247): main's Startup/Listening text now names --ui-dir and the UI directory; P1's data-directory bullet (jstream-platform paths, portable marker), Dependencies entry and open question 5 are unaffected and still match logs.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:402ac4b55b807516", by = "agent:claude", note = "Merge of main (#434): dep core#design now has #434's canvas-sized render text plus this PR's hardware-first compositor; daemon Live on Windows text opens no device at creation; holds" }
+stamp = { hash = "b3:402ac4b55b807516", by = "agent:claude", note = "dep core#design changed in the compositor adapter (hardware first, software fallback) and the encoder default wording; the daemon section opens no device at creation and names no adapter or encoder default; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
@@ -1407,7 +1407,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:747dd6c2df74d777", by = "agent:claude", note = "dep protocol#design: only EncoderProfile::DEFAULT moved to prefer; graph validates profiles through EncoderProfile::problem and states no default; holds" }
+stamp = { hash = "b3:747dd6c2df74d777", by = "agent:claude", note = "dep protocol#design changed only the encoder default wording (DEFAULT prefers hardware, omitted avoid); graph checks profiles through EncoderProfile::problem and names no default; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1680,13 +1680,13 @@ stamp = { hash = "b3:4a6d6e6f01f968f4" }
 stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 
 ["CRATE-jstream-platform#gpu-frames"."body"]
-stamp = { hash = "b3:8ecd6b308600ee0b", by = "agent:claude", note = "body: jstream-render opens its own device hardware first, software fallback. dep ARCH#gpu-pipeline: same statement there; consistent, holds" }
+stamp = { hash = "b3:8ecd6b308600ee0b", by = "agent:claude", note = "body: an own device opens hardware adapter first with the software fallback; dep ARCH#gpu-pipeline says the same; matches OpenOptions::default; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
 stamp = { hash = "b3:70bf626d4367afd8", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main: stale only via ARCH#crate-map (main's jstream-effects row, P1's jstream-platform paths row); GPU frame design text untouched on both sides; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:2a2c11deb9493655", by = "agent:claude", note = "body: jstream-render opens its own device hardware first, software fallback. dep ARCH#gpu-pipeline: same statement there; consistent, holds" }
+stamp = { hash = "b3:2a2c11deb9493655", by = "agent:claude", note = "body: an own device opens hardware adapter first with the software fallback; dep ARCH#gpu-pipeline says the same; matches OpenOptions::default; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:9074e32b08b81d5b" }
@@ -1929,7 +1929,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:747dd6c2df74d777", by = "agent:claude", note = "body: hardware preference list says avoid is what an omitted field means; engine default says hardware when there is one. protocol.snap: only doc strings changed, hardware field default stays avoid (no wire change, R-API-001). encoder.rs and fixtures.rs as described; holds" }
+stamp = { hash = "b3:747dd6c2df74d777", by = "agent:claude", note = "body: hardware preference text says avoid is what an omitted field means and the default profile is hardware when there is one; protocol.snap doc-only; encoder.rs DEFAULT Prefer and #[default] Avoid; fixtures.rs explicit avoid; matches; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -1950,7 +1950,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:e08032e34676ac01" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:62423ac57eda8b9c", by = "agent:claude", note = "body: hardware preference list says avoid is what an omitted field means; engine default says hardware when there is one. protocol.snap: only doc strings changed, hardware field default stays avoid (no wire change, R-API-001). encoder.rs and fixtures.rs as described; holds" }
+stamp = { hash = "b3:62423ac57eda8b9c", by = "agent:claude", note = "body: hardware preference text says avoid is what an omitted field means and the default profile is hardware when there is one; protocol.snap doc-only; encoder.rs DEFAULT Prefer and #[default] Avoid; fixtures.rs explicit avoid; matches; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
@@ -1959,7 +1959,7 @@ stamp = { hash = "b3:7421b6aaa2a1c085" }
 stamp = { hash = "b3:da4b9ef5e429cca2" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
-stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "body: hardware preference list says avoid is what an omitted field means; engine default says hardware when there is one. protocol.snap: only doc strings changed, hardware field default stays avoid (no wire change, R-API-001). encoder.rs and fixtures.rs as described; holds" }
+stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "body: hardware preference text says avoid is what an omitted field means and the default profile is hardware when there is one; protocol.snap doc-only; encoder.rs DEFAULT Prefer and #[default] Avoid; fixtures.rs explicit avoid; matches; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/envelope.rs"]
 stamp = { hash = "b3:63616c6985c48822" }
@@ -1974,7 +1974,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:8338ff3a2c0d0fcf", by = "agent:claude", note = "body: hardware preference list says avoid is what an omitted field means; engine default says hardware when there is one. protocol.snap: only doc strings changed, hardware field default stays avoid (no wire change, R-API-001). encoder.rs and fixtures.rs as described; holds" }
+stamp = { hash = "b3:8338ff3a2c0d0fcf", by = "agent:claude", note = "body: hardware preference text says avoid is what an omitted field means and the default profile is hardware when there is one; protocol.snap doc-only; encoder.rs DEFAULT Prefer and #[default] Avoid; fixtures.rs explicit avoid; matches; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2022,7 +2022,7 @@ stamp = { hash = "b3:7421b6aaa2a1c085" }
 stamp = { hash = "b3:da4b9ef5e429cca2" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
-stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "encoder.rs: DEFAULT.video.hardware is Prefer, serde default stays Avoid, doc strings say so; fixtures.rs: enc_stream fixture keeps an explicit avoid so a fixture still covers it; the Encoder profiles bullet names no default, holds" }
+stamp = { hash = "b3:88763297f5838de5", by = "agent:claude", note = "encoder.rs: DEFAULT now prefers hardware, omitted field still avoid; fixtures.rs: Stream fixture uses explicit avoid; the purpose names no default; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/envelope.rs"]
 stamp = { hash = "b3:63616c6985c48822" }
@@ -2037,7 +2037,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:8338ff3a2c0d0fcf", by = "agent:claude", note = "encoder.rs: DEFAULT.video.hardware is Prefer, serde default stays Avoid, doc strings say so; fixtures.rs: enc_stream fixture keeps an explicit avoid so a fixture still covers it; the Encoder profiles bullet names no default, holds" }
+stamp = { hash = "b3:8338ff3a2c0d0fcf", by = "agent:claude", note = "encoder.rs: DEFAULT now prefers hardware, omitted field still avoid; fixtures.rs: Stream fixture uses explicit avoid; the purpose names no default; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2073,7 +2073,7 @@ stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c594f42e1b065295" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:ab2698848104bc3c", by = "agent:claude", note = "body: Device selection now says a hardware adapter whose device won't open falls back to software (B1) and cites the WARP 720p measurement (N4). gpu.rs implements exactly that (Gpu::open + or_software + its unit test). tests.rs opens hardware(); holds" }
+stamp = { hash = "b3:da3c5603552a2721", by = "agent:claude", note = "body: device selection text for headless and hardware orders, the device-open fallback naming both errors, and the single try when the pick is already the software adapter; gpu.rs implements exactly that (pick_adapter, or_software, DeviceType::Cpu check) with its unit test; tests.rs opens hardware(); holds" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -2097,7 +2097,7 @@ stamp = { hash = "b3:bb5175d8f36e082d" }
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:e4cb52dbc7576be9", by = "agent:claude", note = "body: Device selection now says a hardware adapter whose device won't open falls back to software (B1) and cites the WARP 720p measurement (N4). gpu.rs implements exactly that (Gpu::open + or_software + its unit test). tests.rs opens hardware(); holds" }
+stamp = { hash = "b3:2811fbfa1ef4a38f", by = "agent:claude", note = "body: device selection text for headless and hardware orders, the device-open fallback naming both errors, and the single try when the pick is already the software adapter; gpu.rs implements exactly that (pick_adapter, or_software, DeviceType::Cpu check) with its unit test; tests.rs opens hardware(); holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:0edf4c378e3b8335" }
@@ -2115,19 +2115,19 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "body: Device selection now says a hardware adapter whose device won't open falls back to software (B1) and cites the WARP 720p measurement (N4). gpu.rs implements exactly that (Gpu::open + or_software + its unit test). tests.rs opens hardware(); holds" }
+stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "body: device selection text for headless and hardware orders, the device-open fallback naming both errors, and the single try when the pick is already the software adapter; gpu.rs implements exactly that (pick_adapter, or_software, DeviceType::Cpu check) with its unit test; tests.rs opens hardware(); holds" }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:eb2f076778f0cb9f", by = "agent:claude", note = "body: hardware first by default with software fallback, OpenOptions::headless software first. deps gpu-frames and ARCH#gpu-pipeline say the same. gpu.rs: hardware()/Default, pick_adapter order, or_software device fallback (B1). tests.rs: open() uses hardware(); holds" }
+stamp = { hash = "b3:eb2f076778f0cb9f", by = "agent:claude", note = "body: own device hardware first by default, software fallback keeps ARCH principle 7, headless asks software first; dep platform#gpu-frames and ARCH#gpu-pipeline match that; gpu.rs default = hardware(), or_software with the Cpu-pick skip; tests.rs opens hardware(); holds" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
-stamp = { hash = "b3:8ecd6b308600ee0b", by = "agent:claude", note = "body: hardware first by default with software fallback, OpenOptions::headless software first. deps gpu-frames and ARCH#gpu-pipeline say the same. gpu.rs: hardware()/Default, pick_adapter order, or_software device fallback (B1). tests.rs: open() uses hardware(); holds" }
+stamp = { hash = "b3:8ecd6b308600ee0b", by = "agent:claude", note = "body: own device hardware first by default, software fallback keeps ARCH principle 7, headless asks software first; dep platform#gpu-frames and ARCH#gpu-pipeline match that; gpu.rs default = hardware(), or_software with the Cpu-pick skip; tests.rs opens hardware(); holds" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-render"]
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:2a2c11deb9493655", by = "agent:claude", note = "body: hardware first by default with software fallback, OpenOptions::headless software first. deps gpu-frames and ARCH#gpu-pipeline say the same. gpu.rs: hardware()/Default, pick_adapter order, or_software device fallback (B1). tests.rs: open() uses hardware(); holds" }
+stamp = { hash = "b3:2a2c11deb9493655", by = "agent:claude", note = "body: own device hardware first by default, software fallback keeps ARCH principle 7, headless asks software first; dep platform#gpu-frames and ARCH#gpu-pipeline match that; gpu.rs default = hardware(), or_software with the Cpu-pick skip; tests.rs opens hardware(); holds" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2154,7 +2154,7 @@ stamp = { hash = "b3:bb5175d8f36e082d" }
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:e4cb52dbc7576be9", by = "agent:claude", note = "body: hardware first by default with software fallback, OpenOptions::headless software first. deps gpu-frames and ARCH#gpu-pipeline say the same. gpu.rs: hardware()/Default, pick_adapter order, or_software device fallback (B1). tests.rs: open() uses hardware(); holds" }
+stamp = { hash = "b3:2811fbfa1ef4a38f", by = "agent:claude", note = "body: own device hardware first by default, software fallback keeps ARCH principle 7, headless asks software first; dep platform#gpu-frames and ARCH#gpu-pipeline match that; gpu.rs default = hardware(), or_software with the Cpu-pick skip; tests.rs opens hardware(); holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:0edf4c378e3b8335" }
@@ -2172,10 +2172,10 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "body: hardware first by default with software fallback, OpenOptions::headless software first. deps gpu-frames and ARCH#gpu-pipeline say the same. gpu.rs: hardware()/Default, pick_adapter order, or_software device fallback (B1). tests.rs: open() uses hardware(); holds" }
+stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "body: own device hardware first by default, software fallback keeps ARCH principle 7, headless asks software first; dep platform#gpu-frames and ARCH#gpu-pipeline match that; gpu.rs default = hardware(), or_software with the Cpu-pick skip; tests.rs opens hardware(); holds" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:d8d1968b44b1c7f3", by = "agent:claude", note = "body: tests open the compositor hardware first, CI gets the software adapter. tests.rs line 30 open() uses OpenOptions::hardware(); holds" }
+stamp = { hash = "b3:d8d1968b44b1c7f3", by = "agent:claude", note = "body: tests open the compositor hardware first, CI gets the software adapter; benches take the GPU when present and the bench workflow records lavapipe; tests.rs Opened uses hardware(); holds" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
@@ -2187,7 +2187,7 @@ stamp = { hash = "b3:7db1a4e21a6cee80" }
 stamp = { hash = "b3:e2b28a2df72d9e17" }
 
 ["CRATE-jstream-render#testing"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "body: tests open the compositor hardware first, CI gets the software adapter. tests.rs line 30 open() uses OpenOptions::hardware(); holds" }
+stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "body: tests open the compositor hardware first, CI gets the software adapter; benches take the GPU when present and the bench workflow records lavapipe; tests.rs Opened uses hardware(); holds" }
 
 ["CRATE-jstream-server#design"."body"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }

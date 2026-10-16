@@ -58,8 +58,11 @@ impl Gpu {
         desc.flags = wgpu::InstanceFlags::empty().with_env();
         let instance = wgpu::Instance::new(desc);
         let adapter = pick_adapter(&instance, options.software)?;
+        // Without a GPU the hardware pick already returned the software adapter, and
+        // asking for it again would only fail the same way.
+        let software = adapter.get_info().device_type == wgpu::DeviceType::Cpu;
         let opened = Self::from_adapter(adapter);
-        if options.software {
+        if options.software || software {
             return opened;
         }
         // A hardware adapter can be returned and still refuse its device (limits below
