@@ -993,7 +993,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:da0ec8a527633884", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). body: this PR's only change is the RTMP stop-drain sentence that output_loop checks the deadline before each of a pass's video and audio sends, which matches pipeline.rs; the rest is wave/m1's text. tests.rs: StalledPeer's stalled sends drop to 50 ms and it still ignores stop_by, and Design doesn't describe the fake's timing" }
+stamp = { hash = "b3:cf1b850095d4797b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#385: Body edits: the Stop drain row now says the stop drops what is queued when it leaves the output thread behind; the RTMP stop-drain paragraph replaces 'what it drops after that is not in the final stats.tick' with the stop counting the queued packets itself before the latch, under a lock so nothing counts twice, leaving out only later-queued packets and the blocked tag; Locking adds the abandon -> video -> audio subscription order with the ledger latch under it. pipeline.rs matches (Queues, Running::drop, output_loop locks only around recv, no logging under the locks); tests.rs adds packets_left_behind_a_send_past_the_grace_count_in_the_final_tick." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -1065,7 +1065,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:551f904f38d8f63a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1. pipeline.rs: the RTMP stop-drain paragraph says output_loop checks the deadline before each of a pass's video and audio sends, matching its two checks; tests.rs: StalledPeer's stalled sends drop to 50 ms and it still ignores stop_by, and Design doesn't describe the fake's timing; the rest is wave/m1's text, unchanged by this PR" }
+stamp = { hash = "b3:9a271148d1559da7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#385: Body edits: the Stop drain row now says the stop drops what is queued when it leaves the output thread behind; the RTMP stop-drain paragraph replaces 'what it drops after that is not in the final stats.tick' with the stop counting the queued packets itself before the latch, under a lock so nothing counts twice, leaving out only later-queued packets and the blocked tag; Locking adds the abandon -> video -> audio subscription order with the ledger latch under it. pipeline.rs matches (Queues, Running::drop, output_loop locks only around recv, no logging under the locks); tests.rs adds packets_left_behind_a_send_past_the_grace_count_in_the_final_tick." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1089,7 +1089,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:45aa02b6469b1a8a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). body: this PR's only change is the RTMP stop-drain sentence that output_loop checks the deadline before each of a pass's video and audio sends, which matches pipeline.rs; the rest is wave/m1's text. tests.rs: StalledPeer's stalled sends drop to 50 ms and it still ignores stop_by, and Design doesn't describe the fake's timing" }
+stamp = { hash = "b3:7da83bb4c3b67312", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#385: Body edits: the Stop drain row now says the stop drops what is queued when it leaves the output thread behind; the RTMP stop-drain paragraph replaces 'what it drops after that is not in the final stats.tick' with the stop counting the queued packets itself before the latch, under a lock so nothing counts twice, leaving out only later-queued packets and the blocked tag; Locking adds the abandon -> video -> audio subscription order with the ledger latch under it. pipeline.rs matches (Queues, Running::drop, output_loop locks only around recv, no logging under the locks); tests.rs adds packets_left_behind_a_send_past_the_grace_count_in_the_final_tick." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's browser paragraph says a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser and the new tests/audio.rs case; the wave's B7 opacity/blend/filter text is in other paragraphs; holds" }
@@ -1116,7 +1116,7 @@ stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:f16b463f8715a669", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:1cd76a51b94dcdee", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
+stamp = { hash = "b3:b70ea0c2fbc1139a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#385: pipeline.rs now shares the output thread's two encoder subscriptions (Queues, each behind a mutex taken only to receive) with Running, which on a join timeout drops and counts what is still queued before latching, under an abandon lock. Body: the tests list now names the final tick's count of what a blocked send leaves queued; tests.rs adds packets_left_behind_a_send_past_the_grace_count_in_the_final_tick (StuckPeer). Drop-counts bullet (output thread drops, stop-drain abandons) still holds." }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1173,7 +1173,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:551f904f38d8f63a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1: the Tests bullet's stalled-stop test (a peer that stops reading while a stop's deadline runs out) still describes tests.rs with StalledPeer's 50 ms send; nothing here names the pipeline's per-send deadline check" }
+stamp = { hash = "b3:9a271148d1559da7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#385: pipeline.rs now shares the output thread's two encoder subscriptions (Queues, each behind a mutex taken only to receive) with Running, which on a join timeout drops and counts what is still queued before latching, under an abandon lock. Body: the tests list now names the final tick's count of what a blocked send leaves queued; tests.rs adds packets_left_behind_a_send_past_the_grace_count_in_the_final_tick (StuckPeer). Drop-counts bullet (output thread drops, stop-drain abandons) still holds." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1197,7 +1197,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:45aa02b6469b1a8a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). tests.rs: the Tests bullet's stalled-stop test (a peer that stops reading while a stop's deadline runs out) still describes StalledPeer with its 50 ms stalled sends; the rest of tests.rs is wave/m1's" }
+stamp = { hash = "b3:7da83bb4c3b67312", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#385: pipeline.rs now shares the output thread's two encoder subscriptions (Queues, each behind a mutex taken only to receive) with Running, which on a join timeout drops and counts what is still queued before latching, under an abandon lock. Body: the tests list now names the final tick's count of what a blocked send leaves queued; tests.rs adds packets_left_behind_a_send_past_the_grace_count_in_the_final_tick (StuckPeer). Drop-counts bullet (output thread drops, stop-drain abandons) still holds." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
@@ -1242,7 +1242,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:551f904f38d8f63a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1: the output pipeline's threads, program stage and output thread muxing still match pipeline.rs; the added mid-pass deadline check is a stop-drain detail covered in Design, not here" }
+stamp = { hash = "b3:9a271148d1559da7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#385: pipeline.rs change (stop counts the packets still queued for an output thread it stopped waiting for, through shared, mutex-wrapped subscriptions) re-read against Runtime: output threads, the cut/last-output drain, jstream-stats' final tick and the thread list all still hold; the stop-drain detail lives in Design, updated there. New test: packets_left_behind_a_send_past_the_grace_count_in_the_final_tick." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1260,7 +1260,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:a984c6e7ba2e3698", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:da0ec8a527633884", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). dep core#design: this PR only adds the stop-drain sentence (a deadline check before each send), and the daemon's Design names no output stop timing, so nothing it relies on changed" }
+stamp = { hash = "b3:cf1b850095d4797b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#385: core Design's changes (stop-drain row, the stop counting packets queued behind a blocked send before the latch, the output subscription lock order) re-read against the daemon's Design: it cites core Design only for sessions per connection, backends, placeholder outputs, the audit file and the collection file, none about stop drain or drop counts, so it holds." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
