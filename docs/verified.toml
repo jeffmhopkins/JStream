@@ -336,7 +336,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:87b013a1f87832b8", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:1f1ba8f06f71b9c2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the protocol README change (bus EntityKind compat sentence); the bus/send edits (0.19), history and errors summary still hold" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:b8a36f91bf151722", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -996,7 +996,7 @@ stamp = { hash = "b3:2ddeabb43c8c70e7", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:aa77a6a9de95d91b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:70897ed4e9adc9c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the protocol Design change (bus EntityKind compat sentence only); the engine/session/calls text names no EntityKind values and still holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:a5223735ebcb291e", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -1572,7 +1572,7 @@ stamp = { hash = "b3:6c1b99c4b8c63792" }
 stamp = { hash = "b3:428d2b2c0cc1fe89", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:aa77a6a9de95d91b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:70897ed4e9adc9c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the protocol Design change (bus EntityKind compat sentence); the Bus model and error text here still matches audio.rs and holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2100,7 +2100,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:aa77a6a9de95d91b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:70897ed4e9adc9c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the compat paragraph's new 0.19 bus sentence against EntityKind::Bus (jstream-protocol error.rs) and its only producers: create_bus/existing_bus/delete_bus/check_send in jstream-graph src/audio.rs (bus.* and send.set/send.remove edits); and Engine::history in jstream-core engine.rs, where an older client's undo of source.delete restoring a send into a since-deleted bus maps to undo_conflict" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
