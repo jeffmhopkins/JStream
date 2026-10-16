@@ -21,8 +21,12 @@
 //! gap and evict nothing. `meters.tick` comes about ten times a second while the mixer
 //! runs and each one is a full reading, so it is kept the same way, as `meters`.
 //!
+//! `youtube.*` events are dropped on arrival: YouTube is for people, through the UI, so
+//! agents see neither its sign-in state nor its stream health (ADR-0058 §3).
+//!
 //! Docs: crates/jstream-mcp/README.md#design, docs/adr/0036-mcp-events-polling-tool.md
 
+use crate::tools::PEOPLE_ONLY;
 use jstream_control::EventStream;
 use jstream_protocol::Event;
 use serde::Serialize;
@@ -102,8 +106,12 @@ impl Buffer {
 
     /// Appends `event`, dropping the oldest one if the buffer is full. A `stats.tick` or
     /// a `meters.tick` replaces the kept one of its type instead and takes no sequence
-    /// number.
+    /// number. A people-only event (a `youtube.*` one) is not kept: agents don't see it
+    /// (ADR-0058 §3).
     pub(crate) fn push(&mut self, event: Event) {
+        if is_people_only(&event) {
+            return;
+        }
         match event {
             Event::StatsTick { .. } => {
                 self.stats = Some(event);
@@ -179,6 +187,15 @@ impl Shared {
     }
 }
 
+/// Whether `event` belongs to a [`PEOPLE_ONLY`] noun, so agents never see it.
+fn is_people_only(event: &Event) -> bool {
+    event.name().is_some_and(|name| {
+        PEOPLE_ONLY
+            .iter()
+            .any(|noun| name.split_once('.').is_some_and(|(n, _)| n == *noun))
+    })
+}
+
 fn lock(mutex: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -252,7 +269,7 @@ fn pump(shared: &Mutex<Shared>) {
 #[cfg(test)]
 mod tests {
     use super::{Buffer, CursorAhead, Numbered};
-    use jstream_protocol::{ClientId, Event, Rev};
+    use jstream_protocol::{ClientId, Event, Rev, YoutubeAuth};
 
     fn changed(rev: u64) -> Event {
         Event::StateChanged {
@@ -314,5 +331,20 @@ mod tests {
                 newest: 1
             })
         );
+    }
+
+    /// YouTube is for people, through the UI (ADR-0058 §3): its events never reach the
+    /// feed, and take no sequence number.
+    #[test]
+    fn youtube_events_are_not_kept() {
+        let mut buffer = Buffer::new(10);
+        buffer.push(changed(1));
+        buffer.push(Event::YoutubeStatusChanged {
+            auth: YoutubeAuth::SignedIn,
+        });
+        buffer.push(changed(2));
+        let page = buffer.read(0, 10).expect("a valid cursor");
+        assert_eq!(seqs(&page.events), [1, 2]);
+        assert_eq!(page.events[1].event, changed(2));
     }
 }

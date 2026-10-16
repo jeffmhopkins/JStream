@@ -15,6 +15,7 @@ use crate::id::{ClientId, RequestId, Rev};
 use crate::output::SecretString;
 use crate::query::{Query, QueryResult};
 use crate::version::ProtocolVersion;
+use crate::youtube::BroadcastInfo;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -133,7 +134,8 @@ pub enum CallResult {
         rev: Rev,
     },
     /// The action was accepted. Its progress is reported by events. An action whose
-    /// answer carries data (`pairing.start`) has it in `result`; the others omit it.
+    /// answer carries data (`pairing.start`, `youtube.sign_in` and the YouTube broadcast
+    /// actions) has it in `result`; the others omit it.
     Action {
         /// What the action answered, tagged by the action's name, for the actions that
         /// answer something. Absent for every other action, and from a server older
@@ -161,7 +163,8 @@ pub enum CallResult {
 }
 
 impl CallResult {
-    /// An action's answer with no data: what every action but `pairing.start` answers.
+    /// An action's answer with no data: what every action answers but `pairing.start`,
+    /// `youtube.sign_in` and the YouTube broadcast actions.
     pub fn action() -> Self {
         CallResult::Action { result: None }
     }
@@ -182,6 +185,33 @@ pub enum ActionResult {
         code: SecretString,
         /// How long the code stays open, in seconds (120).
         expires_in_secs: u32,
+    },
+    /// The answer to `youtube.sign_in`.
+    #[serde(rename = "youtube.sign_in")]
+    YoutubeSignIn {
+        /// Google's consent page. The client opens it in a browser; once the user
+        /// agrees, Google redirects to the engine, which finishes the sign-in and emits
+        /// `youtube.status_changed`.
+        url: String,
+    },
+    /// The answer to `youtube.create_broadcast`: the new broadcast.
+    #[serde(rename = "youtube.create_broadcast")]
+    YoutubeCreateBroadcast {
+        /// The broadcast, as YouTube created it.
+        broadcast: BroadcastInfo,
+    },
+    /// The answer to `youtube.bind_broadcast`: the broadcast with its new stream.
+    #[serde(rename = "youtube.bind_broadcast")]
+    YoutubeBindBroadcast {
+        /// The broadcast after the bind.
+        broadcast: BroadcastInfo,
+    },
+    /// The answer to `youtube.transition_broadcast`.
+    #[serde(rename = "youtube.transition_broadcast")]
+    YoutubeTransitionBroadcast {
+        /// The broadcast after the transition. Its lifecycle may still be moving
+        /// (`test_starting`, `live_starting`).
+        broadcast: BroadcastInfo,
     },
     /// An action result this version of the protocol doesn't know. Never sent; produced
     /// only when parsing an answer from a newer server.

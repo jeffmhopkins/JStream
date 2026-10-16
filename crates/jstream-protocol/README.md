@@ -26,7 +26,8 @@ first cut defines its own wire types for them.
 Contents (a deliberately small first cut; [Design](#design) describes the whole model):
 - **Envelope** (`envelope.rs`): `ClientMessage` (`hello`, `request`) and `ServerMessage`
   (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`,
-  and `ActionResult`, the data an action may answer with (`pairing.start`'s code).
+  and `ActionResult`, the data an action may answer with (`pairing.start`'s code,
+  `youtube.sign_in`'s consent URL, a YouTube broadcast).
   `ClientMessage::parse` maps every parse failure to `malformed`.
 - **History** (`history.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
   `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
@@ -45,7 +46,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch`, `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
-  `pairing.start`, `device.revoke`);
+  `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
+  `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
@@ -53,7 +55,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `FilterInfo` and `FilterChains`, the chains `SourceInfo` reports, and
   `MAX_CHAIN_FILTERS` (8).
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
-  (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
+  (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
@@ -72,7 +74,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo` and
   `DeviceInfo` shapes the reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
-  mix as a PNG.
+  mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and `youtube.list_streams`
+  read the YouTube account.
+- **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
+  `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
+  Live API with an `other` value for anything newer.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
   [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)): `KindDescriptor`,
   `ParamDescriptor` and `ParamType`, the shapes that describe a source or filter kind's
@@ -82,7 +88,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No kind is defined here.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
-  `events.dropped`, `stats.tick` and `meters.tick`.
+  `events.dropped`, `stats.tick`, `meters.tick`, `youtube.status_changed` and
+  `youtube.health_changed`.
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), and the binary
@@ -105,11 +112,14 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.22 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.23 because of
+  YouTube ([YouTube](#design): the `youtube.*` commands and events, the `youtube`
+  RTMP target, and the YouTube actions' `ActionResult`s,
+  [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)); 0.22 added
   opacity, blend and filter chains (`item.set_opacity`, `item.set_blend`, the
   `filter.*` edits, `SourceInfo.filters` and the `filter` entity kind,
   [ADR-0023](../../docs/adr/0023-placements-references-and-clones.md),
-  [ADR-0026](../../docs/adr/0026-source-filter-chains.md)); 0.21 added pairing
+  [ADR-0026](../../docs/adr/0026-source-filter-chains.md)), 0.21 pairing
   (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
   `unsupported` error and the `device` entity kind,
   [ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), 0.20
@@ -226,7 +236,8 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
   storing a stream key, OAuth, switching the program scene). Never undoable or
   batchable. The response says the action was accepted, and carries an
   `ActionResult` only for an action that answers with data (`pairing.start`'s code,
-  0.21; every other action omits `result`); progress arrives as events
+  0.21; `youtube.sign_in`'s consent URL and the broadcast a YouTube broadcast action
+  made or changed, 0.23; every other action omits `result`); progress arrives as events
   (`output.state_changed`).
 
 The classification rule: **if the command's whole effect is a change to the collection
@@ -445,7 +456,10 @@ can't offer that size. It has no target either, so `output.set_target` refuses i
 and it encodes nothing, so its encoder profile is stored but unused. A 0.9 to 0.17
 client reads it as `Unknown`. The
 stream key is not collection state: it is a secret held in the OS credential store,
-so it is set with the `output.set_key` action and removed with `output.clear_key`.
+so it is set with the `output.set_key` action and removed with `output.clear_key`. A
+`youtube` target (0.23) names a broadcast instead of a URL: its ingest and key come
+from YouTube on each `output.start` ([YouTube](#design)), so it needs no
+`output.set_key`. Its ID must be ASCII letters, digits, `-` and `_`, at most 128 bytes.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
 error, query or log carries it, and `output.status` reports only `key_set`. A key
 outlives `output.delete`, so undoing the delete gives back a working output; a client
@@ -712,6 +726,46 @@ After `welcome`, the server pushes every event to every client.
   `momentary`, `short_term` and `integrated` LUFS, each absent until there is enough
   audio above the absolute gate. Each tick is a full reading, so a client that misses
   one loses nothing; nothing numbers them.
+- `youtube.status_changed {auth}` and `youtube.health_changed {output_id, broadcast_id,
+  stream_id, status, health, issues}` (0.23) are described under [YouTube](#design).
+
+### YouTube
+
+JStream signs in to one Google account, once, with the full `youtube` scope
+([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md), keeping ADR-0041 §4), and every
+YouTube command is an action or a query (0.23). They are for the UI: the MCP server
+offers none of them, refuses a `youtube` output target and drops YouTube events, since
+YouTube is for people, not agents (ADR-0058 §3):
+
+- `youtube.sign_in` returns `{"type":"youtube.sign_in","url":…}`, Google's consent
+  page. Once the user agrees, Google redirects the browser to a listener the engine
+  opened on `127.0.0.1`, and the engine finishes the sign-in itself. No token ever
+  travels in the protocol ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): the refresh
+  token goes to the OS credential store. Sent again while a sign-in waits, it returns
+  the same URL.
+- `youtube.sign_out` revokes the token and forgets it.
+- `youtube.status` reports `auth`: `unavailable` (the engine has no Google OAuth client, as
+  in a build whose built-in client is still empty, so YouTube's API features are off
+  and clients hide them),
+  `signed_out`, `signing_in` or `signed_in`. `youtube.status_changed {auth}` reports
+  each change, including Google refusing the account's token.
+- `youtube.list_broadcasts {status?, broadcast_type?, page_token?}` and
+  `youtube.list_streams {page_token?}` read pages of up to 50. Both default to
+  everything, the persistent "Stream now" broadcast included. A stream's key is never
+  reported.
+- `youtube.create_broadcast`, `youtube.bind_broadcast` and
+  `youtube.transition_broadcast` return the broadcast as YouTube left it.
+  `bind_broadcast` without a `stream_id` creates a reusable stream first.
+- An output with the `youtube {broadcast_id}` target publishes to the `rtmps://`
+  ingest of its broadcast's bound stream. While it runs, the engine polls the stream's
+  health and sends `youtube.health_changed` when it changes.
+- A Live API failure is `action_failed`, queries included, and a used-up quota says so
+  in its reason (ADR-0041 §5, kept by ADR-0058).
+
+Values mirrored from YouTube (`life_cycle`, `privacy`, `status`, `health`, `severity`)
+have an `other` value, so a value YouTube adds later still parses. Text from YouTube is
+untrusted and shown as plain text. Chat, the featured message and audience stats come
+later.
 
 ### Errors
 
