@@ -82,7 +82,7 @@ pub fn engine(
     Ok(engine)
 }
 
-/// YouTube (ADR-0041) with JStream's built-in OAuth client (ADR-0058), or the developer's
+/// YouTube with JStream's built-in OAuth client (ADR-0058), or the developer's
 /// `client` when one is given, keeping the account's refresh token in Windows
 /// Credential Manager. While the built-in client is empty, as it is until the maintainer
 /// registers one, and on other platforms, `youtube.status` answers `unavailable`. Never

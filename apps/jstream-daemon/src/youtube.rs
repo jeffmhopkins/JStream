@@ -1,6 +1,6 @@
 //! YouTube setup: a developer's Google OAuth client that overrides JStream's built-in
 //! one (ADR-0058), read at runtime and never committed (R-SEC-001), and handing it to
-//! the engine with `Engine::with_youtube` (ADR-0041).
+//! the engine with `Engine::with_youtube`.
 //!
 //! The client comes from `--youtube-client <file>`, the JSON Google Cloud gives for a
 //! "Desktop app" OAuth client, else from the `JSTREAM_YOUTUBE_CLIENT_ID` and

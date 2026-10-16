@@ -162,8 +162,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   engine's state is lost.
 - **YouTube (Windows).** Streaming to YouTube needs no sign-in: use **Going live**
   below with YouTube Studio's RTMPS URL and stream key. Signing in, for the
-  `youtube.*` calls ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)),
-  uses JStream's own OAuth client ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)). This build's built-in client is still
+  `youtube.*` calls, uses JStream's own OAuth client
+  ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)). This build's built-in client is still
   empty, so `youtube.status` answers `unavailable` and the startup log says so. With a
   client (the built-in one, or a developer's below), `youtube.status` answers
   `signed_out` and `youtube.sign_in` returns Google's consent URL; once approved, the
@@ -309,7 +309,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `WindowsCredentials` as the token store, before the engine goes live; core keeps the
   token under its fixed account ID. Off Windows there is no OAuth token store, so a
   developer's client is dropped with a warning. Neither an empty built-in client nor a
-  transport that can't be built stops the daemon: YouTube is optional (ADR-0041).
+  transport that can't be built stops the daemon: YouTube is optional (ADR-0058).
   `youtube::set_up` is the developer's-client call over any transport and store, which
   is how the test runs it on `jstream-youtube`'s fake.
 - **Collection file and audit log** (`serve.rs`, `main.rs`). The daemon only passes
