@@ -483,7 +483,7 @@ stamp = { hash = "b3:19aef49cc6131a9d", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7baf4e16b6cfdff1", by = "agent:claude", note = "Whole #376 change to DOCS#verification and #notes re-read: per-input ledger stamps, the guarantee that a merge never leaves a section falsely fresh and a conflict usually leaves it stale, verify writing only changed inputs (removal-only and unchanged verifies record no note), and the last note on each entry covering the PR. docs-duty's verify, generate, migrate, merge-main and never-edit-the-ledger duties still hold" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:d59b282d9610896d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after DOCS#verification changed only its ADR link (ADR-0018 -> ADR-0056, Dependabot pin bumps ignored in workflow hashes); duty steps (docs check/verify, no hand hashes, generate, merge-main) unchanged and still accurate." }
+stamp = { hash = "b3:38134e5e9052d4c2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge of main into #419: main only repointed DOCS#verification's ADR-0018 link to ADR-0056; with #419's whole change (merge-main resolves stamp and generator-owned @generated conflicts, open-merge caveat) the docs-duty merge-main line still holds" }
 
 ["CLAUDE#pr-loop"."body"]
 stamp = { hash = "b3:f50bf78c7a2c63c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: item 6 now cites ADR-0056, which restates ADR-0018's action-pin pre-approval unchanged (decision item 3); Dependabot auto-merge and CI handling still hold; rest of the loop untouched." }
@@ -2940,7 +2940,7 @@ stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }
 
 ["RUNBOOK-WAVES#current"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:d59b282d9610896d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after DOCS#verification changed only its ADR link (ADR-0018 -> ADR-0056); merge-main --from wave and stamp-conflict behaviour unchanged, section still holds." }
+stamp = { hash = "b3:38134e5e9052d4c2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge of main into #419: DOCS#verification gained only the ADR-0056 repoint from main; with #419's whole change (generator-owned @generated blocks resolved and rewritten once every conflict is resolved) the --from sentence still holds" }
 
 ["RUNBOOK-WAVES#landing"."body"]
 stamp = { hash = "b3:6ae91e98d6488857", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
