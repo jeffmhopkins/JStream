@@ -695,7 +695,8 @@ drops the collection lock before it opens devices or joins anything. When no oth
 output is running it opens the program stage and waits,
 up to 10 s, for the render thread to open the compositor (hardware first, the software
 adapter as the fallback); that bound only
-keeps a stuck adapter from blocking the call, and the GPU tests raise it because
+keeps a stuck adapter from blocking the call. The platform's GPU context and the
+capture open on the calling thread before that wait, outside the bound. The GPU tests raise it because
 lavapipe can open slower than that on a loaded CI runner. When others are running it shares
 theirs. It then gets the encoder session for its key (opening one if no running
 output has it), opens its sink, subscribes to the session and starts its output

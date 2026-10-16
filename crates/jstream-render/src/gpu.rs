@@ -66,14 +66,22 @@ impl Gpu {
         if cfg!(windows)
             && !options.software
             && let Ok(adapter) = request(&instance(wgpu::Backends::DX12), false)
-            && let Ok(gpu) = Self::from_adapter(adapter)
         {
-            return Ok(gpu);
+            match Self::from_adapter(adapter) {
+                Ok(gpu) => return Ok(gpu),
+                Err(error) => tracing::warn!(
+                    %error,
+                    "the D3D12 adapter's device did not open; trying the other backends"
+                ),
+            }
         }
         let instance = instance(wgpu::Backends::all());
         let adapter = pick_adapter(&instance, options.software)?;
+        // Without a GPU the hardware pick already returned the software adapter, and
+        // asking for it again would only fail the same way.
+        let software = adapter.get_info().device_type == wgpu::DeviceType::Cpu;
         let opened = Self::from_adapter(adapter);
-        if options.software {
+        if options.software || software {
             return opened;
         }
         // A hardware adapter can be returned and still refuse its device (limits below

@@ -1316,10 +1316,12 @@ fn stream_info(size: FrameSize, origin: MediaTime, profile: &EncoderProfile) -> 
 }
 
 struct RenderJob {
-    /// The platform's GPU context, which the compositor opens on. Declared before the
-    /// capture, so it drops after it, and kept until the loop ends.
-    context: Option<GpuContext>,
     capture: Box<dyn CaptureStream>,
+    /// The platform's GPU context, which the compositor opens on, kept until the loop
+    /// ends. It outlives the capture either way: a job dropped whole drops its fields in
+    /// declaration order, and `render_loop` binds it before the capture, so its locals
+    /// drop the capture first.
+    context: Option<GpuContext>,
     reader: RenderReader,
     /// Takes the input of a session that has finished, so the render thread never drops
     /// the last reference to it (R-RT-003).
