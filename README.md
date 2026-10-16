@@ -41,6 +41,10 @@ engine and MCP come before the GUI ([ADR-0010](docs/adr/0010-headless-first-mile
 Generated from [`docs/progress.toml`](docs/progress.toml) by `cargo xtask docs generate`
 and drift-checked by `docs check`, so it changes in the same PR as the work.
 
+JStream is done when every item below is merged and has passed its Windows run.
+[ROADMAP › Endgame](ROADMAP.md#endgame) defines that and gives the order the rest lands
+in, and **What's left** lists each unfinished item with the steps it still needs.
+
 <!-- @generated begin progress -->
 | Milestone | Progress | Merged | In review | Planned |
 |---|---|---|---|---|
@@ -53,6 +57,36 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 33% | 3 | 1 | 5 |
 
 97 of 112 items are merged; 5 of those still wait on a run on Windows hardware.
+
+<details open>
+<summary><b>What's left</b>: 20 items, by next step: 🔨 build 12, 🌊 its wave lands 1, 🧪 Windows run 5, 👤 maintainer 2</summary>
+
+The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
+
+| ID | Item | Milestone | Needs, in order | Note | PRs |
+|---|---|---|---|---|---|
+| A4 | Go-live runbook and smoke | M1a | 🧪 Windows run | smoke script run | #234 |
+| A6b | Daemon YouTube wiring | M1a | 🔨 build, then 👤 maintainer | draft #312; sign-in needs the OAuth client (ADR-0058) |  |
+| C5 | Audio sources | M1b | 🧪 Windows run | audio hardware tests | #238 |
+| C3 | Display and window capture sources | M1b | 🔨 build | draft #365 |  |
+| C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341 | #283, #289, #298 |
+| I2 | Live values | M1b | 🔨 build |  | #244 |
+| G2 | vcam media source DLL | M1c | 🧪 Windows run | pacing rerun | #174, #195, #200, #229 |
+| U4p | Live preview on canvas | M2 | 🔨 build | draft #302 |  |
+| T1 | Studio mode and transitions | M2 | 🔨 build |  | #260 |
+| T1u | Studio-mode UI | M2 | 🔨 build | draft #304, on T1 |  |
+| E2 | Video mixes | M2 | 🔨 build |  | #259 |
+| D8p | Audio chain protocol fields | M2 | 🔨 build | draft #303 |  |
+| C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
+| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build | drafts #319 and #323 |  |
+| X1 | Full 3D transforms and WGSL effect packs | M3 | 🔨 build | effect packs #368; video filters #311, #313, #318 | #359 |
+| Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | draft #363; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
+| CL1 | CLAP plugin host | M3 | 🌊 its wave lands, then 🔨 build, then 🧪 Windows run | parts 2 and 3 land with wave/m3 (#477); CLAP filters to run; live-audio run (#342) | #272 |
+| WA1 | WASM automation plugins | M3 | 🔨 build |  |  |
+| MAC1 | macOS platform crate | M3 | 👤 maintainer, then 🔨 build | parked: the maintainer decides whether it stays in M3 |  |
+| LNX1 | Linux codec path and platform crate | M3 | 👤 maintainer, then 🔨 build | needs a supported-platforms ADR (maintainer tier) |  |
+
+</details>
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -95,7 +129,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | Y2 | OAuth token store | ✅ merged | #169 |
 | YA | ADR-0041 one sign-in | ✅ merged | #214 |
 | Y3 | YouTube in the engine | ✅ merged | #223 |
-| A6b | Daemon YouTube wiring | ⏳ planned |  |
+| A6b | Daemon YouTube wiring | ⏳ planned: draft #312; sign-in needs the OAuth client (ADR-0058) |  |
 
 </details>
 
@@ -123,7 +157,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | C1b | Sources render live | ✅ merged | #222 |
 | C2 | Text source | ✅ merged | #221 |
 | C5 | Audio sources | 🧪 merged, Windows run pending: audio hardware tests | #238 |
-| C3 | Display and window capture sources | ⏳ planned |  |
+| C3 | Display and window capture sources | ⏳ planned: draft #365 |  |
 | C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341 | #283, #289, #298 |
 | D1 | Live mixer inputs | ✅ merged | #149, #199 |
 | D3 | Loudness meters | ✅ merged | #152 |
@@ -187,20 +221,20 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U3b | Outputs and go-live panel | ✅ merged | #254 |
 | U3c | Mixer panel | ✅ merged | #308 |
 | U4 | Canvas editing | ✅ merged | #255 |
-| U4p | Live preview on canvas | ⏳ planned |  |
+| U4p | Live preview on canvas | ⏳ planned: draft #302 |  |
 | U1 | Preview stream | ✅ merged | #251 |
 | U5 | Tauri desktop app | ✅ merged | #258 |
 | Q3 | UI end-to-end tests | ✅ merged | #309 |
 | Q4 | Performance benchmarks | ✅ merged | #361 |
 | Q5 | Threat model | ✅ merged | #358 |
 | T1 | Studio mode and transitions | 🔍 in review | #260 |
-| T1u | Studio-mode UI | ⏳ planned |  |
+| T1u | Studio-mode UI | ⏳ planned: draft #304, on T1 |  |
 | E2 | Video mixes | 🔍 in review | #259 |
 | D8 | Master and output audio chains | ✅ merged | #249 |
-| D8p | Audio chain protocol fields | ⏳ planned |  |
+| D8p | Audio chain protocol fields | ⏳ planned: draft #303 |  |
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
 | W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
-| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned |  |
+| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned: drafts #319 and #323 |  |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
 
 </details>
@@ -212,13 +246,13 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ✅ merged | #325 |
-| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned | #359 |
+| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368; video filters #311, #313, #318 | #359 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
-| Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review | #363, #375 |
-| CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
+| Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review: draft #363; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
+| CL1 | CLAP plugin host | ⏳ planned: parts 2 and 3 land with wave/m3 (#477); CLAP filters to run; live-audio run (#342) | #272 |
 | WA1 | WASM automation plugins | ⏳ planned |  |
-| MAC1 | macOS platform crate | ⏳ planned |  |
-| LNX1 | Linux codec path and platform crate | ⏳ planned |  |
+| MAC1 | macOS platform crate | ⏳ planned: parked: the maintainer decides whether it stays in M3 |  |
+| LNX1 | Linux codec path and platform crate | ⏳ planned: needs a supported-platforms ADR (maintainer tier) |  |
 
 </details>
 <!-- @generated end progress -->

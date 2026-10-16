@@ -566,13 +566,17 @@ It also generates one block from data rather than from docs:
   `docs/progress.toml`. That file lists the milestones and each roadmap item's
   milestone, title, `status` (`done`, `hardware` for merged work still waiting on a run
   on Windows hardware, named by a `note`, `review`, or `planned`) and the PRs that
-  deliver it, and `docs check` fails when it doesn't parse or breaks those rules. A PR
-  that delivers or advances an item updates its entry, so the README changes with the
-  work. `cargo xtask docs progress` compares the file with the merged history (the
+  deliver it. An item not yet `done` lists in `needs` the steps it still needs, in order
+  (`build`, `wave`, `hardware` or `maintainer`; required on `planned` and `review`
+  items), and the block's **What's left** table shows each such item with them, linking
+  the order they land in ([ROADMAP › Endgame](../ROADMAP.md#endgame)). `docs check`
+  fails when the file doesn't parse or breaks those rules. A PR that delivers or advances
+  an item updates its entry, so the README changes with the work. `cargo xtask docs progress` compares the file with the merged history (the
   `(#N)` of each squash commit, the `(#N)` of each `* …` line in a wave's landing squash,
   which lists the PRs the wave carried, and item IDs that PR titles name in parentheses)
-  and prints, as Markdown, the entries it contradicts; the weekly `sweep` reports them. It
-  never fails a PR, because a PR's own merge commit doesn't exist yet.
+  and prints, as Markdown, the entries it contradicts and the `done` items still listing
+  `needs`; the weekly `sweep` reports them. It never fails a PR, because a PR's own merge
+  commit doesn't exist yet.
 
 <a id="governance"></a>
 ## Governance: protecting the checks themselves
