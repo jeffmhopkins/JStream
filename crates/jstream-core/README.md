@@ -1009,6 +1009,14 @@ dropped and counted in `output_packets`. Disk writes run on the output thread an
 may block; the encoder subscriber queues absorb that and drop when full, without
 holding up a stream on the same session.
 
+**Video codecs.** The encoder profile's video codec picks the encoder and the FLV
+track (`video_codec` in `runtime/pipeline.rs`, `runtime/sink.rs`). H.264 goes in legacy
+FLV tags with the decoder configuration the start gives the muxer. HEVC and AV1 go in
+enhanced RTMP tags, named by FourCC, with the decoder configuration taken from the
+first keyframe, which their encoders send in-band. The protocol's `VideoCodec` names
+only H.264 so far, so a profile can't select HEVC or AV1 yet. MP4 recording takes H.264
+only: another codec fails the start with `recording … is not supported yet`.
+
 **Virtual camera.** `with_backends` takes the backends' `VcamSink` out and keeps it for
 the engine's life. When the collection's output is `VirtualCam`, the start takes that
 sink and joins the program stage like any output (opening it when no other output
