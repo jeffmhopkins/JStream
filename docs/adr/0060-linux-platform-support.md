@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0059"
+id = "ADR-0060"
 title = "Linux platform support: portal and PipeWire capture, VA-API encode"
 kind = "adr"
 status = "proposed"
 tier = "maintainer"
 -->
 
-# ADR-0059: Linux platform support: portal and PipeWire capture, VA-API encode
+# ADR-0060: Linux platform support: portal and PipeWire capture, VA-API encode
 
 <!-- @generated begin adr-status -->
 > **Status:** proposed
@@ -190,4 +190,4 @@ answer becomes its own ADR, because either "yes" changes ADR-0031 and R-DEP-002.
 - **Edits that follow acceptance** (none are made while this ADR is proposed): ROADMAP's
   M3 Linux line points here; ARCHITECTURE's crate-map row for `jstream-platform-linux`
   names this ADR instead of "codec policy per future ADR"; the README's platform table
-  marks Linux "M3, per ADR-0059".
+  marks Linux "M3, per ADR-0060".
