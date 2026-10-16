@@ -603,7 +603,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   sent), which a device trades at `POST /api/v1/pair` for a device token of its own;
   `device.list` and the action `device.revoke` manage the paired devices. They concern
   whom a listener admits, so `jstream-server` answers them, and a session with no server
-  in front answers `unsupported`
+  in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,
@@ -699,8 +699,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the browser, where the token travels as a subprotocol because a page can't set
   `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)). `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
-  default, with the token (the control token, or a paired device's on loopback until TLS)
-  required and `Origin`/`Host` validated
+  default, with the token (the control token, or a paired device's on loopback or a TLS
+  listener) required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
   for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
@@ -710,7 +710,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   path, behind the same checks too, when the host names a UI directory. A browser
   presents the token as the password of HTTP `Basic` credentials, which it then sends
   on the UI's WebSocket upgrade as well; a browser client can instead offer it as the
-  subprotocol `jstream.token.<token>`.
+  subprotocol `jstream.token.<token>`. On a TLS listener a browser can instead pair on
+  the token-free page `GET /pair` and hold its device token, never the control token, as
+  the `__Host-jstream_device` cookie
+  ([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)).
 - **Slow clients:** each connection gets a bounded event buffer, and the server keeps
   draining the engine's events while a client is slow to read. When the buffer
   overflows, the server drops the queued events and sends one `events.dropped {count}`

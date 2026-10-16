@@ -43,6 +43,9 @@ struct Harness {
     /// then hangs.
     silent: Arc<AtomicBool>,
     stop: Option<oneshot::Sender<()>>,
+    /// Whether the server was configured as reached over TLS, so its own origin is
+    /// `https://`.
+    tls: bool,
     /// The serving task: done once `serve_with_shutdown` has returned.
     serving: Option<tokio::task::JoinHandle<Result<(), crate::ServerError>>>,
 }
@@ -144,6 +147,7 @@ fn serve_on(
         Err(error) => panic!("token: {error}"),
     };
     configure(&mut config);
+    let tls = config.tls;
     let server = match runtime.block_on(Server::bind(config, connector)) {
         Ok(server) => server,
         Err(error) => panic!("bind: {error}"),
@@ -152,7 +156,8 @@ fn serve_on(
         server.local_addr().ip().is_loopback(),
         "binds to localhost by default"
     );
-    let url = server.ws_url();
+    // The test server speaks plain HTTP even with `tls` on, whose `wss://` it names.
+    let url = server.ws_url().replacen("wss://", "ws://", 1);
     let authority = server.local_addr().to_string();
     let (stop, stopped) = oneshot::channel::<()>();
     let serving = runtime.spawn(server.serve_with_shutdown(async move {
@@ -168,6 +173,7 @@ fn serve_on(
         taken,
         silent,
         stop: Some(stop),
+        tls,
         serving: Some(serving),
     }
 }
@@ -231,7 +237,11 @@ impl Harness {
     }
 
     fn connect(&self) -> Result<WsControl, ControlError> {
-        self.run(WsControl::connect(WsConfig::new(self.url.clone(), TOKEN)))
+        let mut config = WsConfig::new(self.url.clone(), TOKEN);
+        if self.tls {
+            config.origin = Some(format!("https://{}", self.authority));
+        }
+        self.run(WsControl::connect(config))
     }
 
     /// A connected client that has completed the handshake.
@@ -2570,4 +2580,308 @@ fn pairing_codes_and_device_tokens_are_never_logged() {
             "{secret} logged: {logged}"
         );
     }
+}
+
+// The browser pairing page and the device cookie (ADR-0047).
+
+/// A server with the UI and `ServerConfig::tls` on, as if it were reached over TLS. The
+/// test still speaks plain HTTP to it.
+fn tls_ui(dist: std::path::PathBuf) -> impl FnOnce(&mut ServerConfig) {
+    |config| {
+        config.ui_dir = Some(dist);
+        config.tls = true;
+    }
+}
+
+impl Harness {
+    /// The server's own origin on a TLS listener.
+    fn tls_origin(&self) -> String {
+        format!("https://{}", self.authority)
+    }
+
+    /// Opens a raw WebSocket as a browser holding `cookie` would: its own `https`
+    /// `Origin`, the `Cookie` line, `Sec-Fetch-Site` when given, and no `Authorization`.
+    fn cookie_upgrade(&self, cookie: &str, site: Option<&str>) -> Result<RawSocket, StatusCode> {
+        let mut request = match self.url.as_str().into_client_request() {
+            Ok(request) => request,
+            Err(error) => panic!("request: {error}"),
+        };
+        let origin = self.tls_origin();
+        let headers = request.headers_mut();
+        for (name, value) in [
+            ("origin", Some(origin.as_str())),
+            ("cookie", Some(cookie)),
+            ("sec-fetch-site", site),
+        ] {
+            if let Some(value) = value {
+                match HeaderValue::from_str(value) {
+                    Ok(value) => headers.insert(name, value),
+                    Err(error) => panic!("header: {error}"),
+                };
+            }
+        }
+        match self.run(tokio_tungstenite::connect_async(request)) {
+            Ok((socket, _)) => Ok(socket),
+            Err(tungstenite::Error::Http(response)) => Err(response.status()),
+            Err(error) => panic!("unexpected connection error: {error}"),
+        }
+    }
+}
+
+/// ADR-0047: without TLS there is no pairing page, the UI's `401` links to nothing, and
+/// a browser exchange is refused without using up an attempt.
+#[test]
+fn without_tls_there_is_no_pairing_page_or_cookie() {
+    let bundle = Bundle::new("no-tls");
+    let dist = bundle.dist();
+    let harness = start_with(&MockEngine::new(), |config| config.ui_dir = Some(dist));
+    let bearer = format!("Bearer {TOKEN}");
+    for headers in [vec![], vec![("Authorization", bearer.as_str())]] {
+        let page = harness.request("GET", crate::PAIR_PAGE_PATH, &headers);
+        assert_eq!(page.status, 404, "{headers:?}");
+        assert!(!page.body.contains("<form"), "{}", page.body);
+    }
+    let refused = harness.request("GET", "/", &[]);
+    assert_eq!(refused.status, 401);
+    assert!(!refused.body.contains("/pair"), "{}", refused.body);
+
+    let (host, _) = harness.session();
+    let code = harness.start_pairing(&host);
+    let browser = serde_json::json!({"code": code, "name": "Browser", "browser": true});
+    let reply = harness.post_pair(&[], &browser.to_string());
+    assert_eq!(reply.status, 400, "{}", reply.body);
+    assert_eq!(reply.header("set-cookie"), None);
+    let not_bool = serde_json::json!({"code": code, "name": "Browser", "browser": "yes"});
+    assert_eq!(harness.post_pair(&[], &not_bool.to_string()).status, 400);
+    // The code is still open: a native exchange (with `browser: false`) pairs.
+    let native = serde_json::json!({"code": code, "name": "Native", "browser": false});
+    let reply = harness.post_pair(&[], &native.to_string());
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    assert!(reply.json()["token"].as_str().is_some());
+    assert_eq!(reply.header("set-cookie"), None);
+}
+
+/// ADR-0047: on a TLS listener `GET /pair` is a fixed page served without a token,
+/// after the `Host` and `Origin` checks, under the UI's nonce policy; the UI's `401`
+/// links to it, and the UI's fallback never serves the path.
+#[test]
+fn on_tls_the_pairing_page_is_served_without_a_token() {
+    let bundle = Bundle::new("tls-page");
+    let harness = start_with(&MockEngine::new(), tls_ui(bundle.dist()));
+    let page = harness.request("GET", crate::PAIR_PAGE_PATH, &[]);
+    assert_eq!(page.status, 200, "{}", page.body);
+    assert_eq!(
+        page.header("content-type"),
+        Some("text/html; charset=utf-8")
+    );
+    assert_eq!(page.header("x-content-type-options"), Some("nosniff"));
+    assert_eq!(page.header("referrer-policy"), Some("no-referrer"));
+    assert_eq!(page.header("set-cookie"), None);
+    let Some(policy) = page.header("content-security-policy") else {
+        panic!("no CSP");
+    };
+    let Some(nonce) = policy
+        .split("'nonce-")
+        .nth(1)
+        .and_then(|rest| rest.split('\'').next())
+    else {
+        panic!("no nonce in {policy}");
+    };
+    assert_eq!(nonce.len(), 32);
+    assert_eq!(
+        page.body
+            .matches(&format!("<script nonce=\"{nonce}\">"))
+            .count(),
+        1,
+        "{}",
+        page.body
+    );
+    assert!(!page.body.contains("{{__TRUNK NONCE__}}"));
+    assert!(
+        policy.contains(&format!("connect-src 'self' wss://{};", harness.authority)),
+        "{policy}"
+    );
+    assert!(!page.body.contains("init()"), "not the UI bundle");
+    let head = harness.request("HEAD", crate::PAIR_PAGE_PATH, &[]);
+    assert_eq!(head.status, 200);
+    let post = harness.request("POST", crate::PAIR_PAGE_PATH, &[]);
+    assert_eq!(
+        (post.status, post.header("allow")),
+        (405, Some("GET, HEAD"))
+    );
+
+    // Still behind the `Host` and `Origin` checks.
+    let foreign = harness.request(
+        "GET",
+        crate::PAIR_PAGE_PATH,
+        &[("Origin", "https://evil.example")],
+    );
+    assert_eq!(foreign.status, 403);
+    let plain_origin = format!("http://{}", harness.authority);
+    let plain = harness.request("GET", crate::PAIR_PAGE_PATH, &[("Origin", &plain_origin)]);
+    assert_eq!(plain.status, 403, "a TLS listener's own origin is https");
+    let rebound = harness.request(
+        "GET",
+        crate::PAIR_PAGE_PATH,
+        &[("Host", "evil.example:443")],
+    );
+    assert_eq!(rebound.status, 403);
+
+    // A UI path without a credential: the `Basic` challenge and a link to the page.
+    let refused = harness.request("GET", "/", &[]);
+    assert_eq!(refused.status, 401);
+    assert_eq!(
+        refused.header("www-authenticate"),
+        Some("Basic realm=\"JStream\", charset=\"UTF-8\"")
+    );
+    assert!(
+        refused.body.contains("<a href=\"/pair\">"),
+        "{}",
+        refused.body
+    );
+    assert_eq!(
+        refused.header("content-type"),
+        Some("text/html; charset=utf-8")
+    );
+    // Paths below `/pair` are reserved too: the UI never serves its index for them.
+    let basic = basic();
+    let below = harness.request("GET", "/pair/x", &[("Authorization", &basic)]);
+    assert_eq!(below.status, 404, "{}", below.body);
+    let ui = harness.request("GET", "/scenes", &[("Authorization", &basic)]);
+    assert_eq!(ui.status, 200, "the fallback still serves the UI's routes");
+    assert_eq!(harness.sessions.load(Ordering::SeqCst), 0);
+}
+
+/// The value of the `__Host-jstream_device` cookie a `Set-Cookie` line sets, after
+/// checking it has every attribute ADR-0047 names.
+fn set_device_cookie(set_cookie: Option<&str>) -> String {
+    let Some(line) = set_cookie else {
+        panic!("no Set-Cookie");
+    };
+    let mut parts = line.split("; ");
+    let Some(token) = parts
+        .next()
+        .and_then(|pair| pair.strip_prefix("__Host-jstream_device="))
+    else {
+        panic!("not the device cookie: {line}");
+    };
+    let attributes: Vec<&str> = parts.collect();
+    assert_eq!(
+        attributes,
+        [
+            "Secure",
+            "HttpOnly",
+            "SameSite=Strict",
+            "Path=/",
+            "Max-Age=2592000"
+        ],
+        "{line}"
+    );
+    token.to_owned()
+}
+
+/// ADR-0047 end to end: a browser exchange answers the device ID only and sets the
+/// token as the cookie; the cookie then admits the browser to the UI and its WebSocket,
+/// as that device, only on same-origin or typed requests, only once per request, never
+/// for the control token, and not after a revoke. Nothing logs the cookie.
+#[test]
+fn a_browser_pairs_into_a_cookie_that_admits_it_until_revoked() {
+    let bundle = Bundle::new("tls-cookie");
+    let dist = bundle.dist();
+    let capture = crate::gate::tests::Capture::default();
+    let mut token = String::new();
+    tracing::subscriber::with_default(capture.clone(), || {
+        let harness = start_on_this_thread(&MockEngine::new(), tls_ui(dist));
+        let (host, _) = harness.session();
+        let code = harness.start_pairing(&host);
+        let body = serde_json::json!({"code": code, "name": "Browser", "browser": true});
+        let origin = harness.tls_origin();
+        let reply = harness.post_pair(&[("Origin", &origin)], &body.to_string());
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        assert_eq!(reply.header("cache-control"), Some("no-store"));
+        token = set_device_cookie(reply.header("set-cookie"));
+        assert_eq!(token.len(), 64);
+        let answer = reply.json();
+        let Some(device_id) = answer["device_id"].as_str().map(str::to_owned) else {
+            panic!("no device ID in {answer}");
+        };
+        assert_eq!(answer.as_object().map(|o| o.len()), Some(1), "{answer}");
+        assert!(
+            !reply.body.contains(&token),
+            "the page never sees the token"
+        );
+
+        let cookie = format!("__Host-jstream_device={token}");
+        let get = |headers: &[(&str, &str)]| harness.request("GET", "/", headers).status;
+        assert_eq!(get(&[("Cookie", &cookie), ("Sec-Fetch-Site", "none")]), 200);
+        assert_eq!(
+            get(&[
+                ("Cookie", &cookie),
+                ("Sec-Fetch-Site", "same-origin"),
+                ("Origin", &origin)
+            ]),
+            200
+        );
+        // A page on another port or a sibling subdomain (same-site), another site, or a
+        // browser that sends no `Sec-Fetch-Site` falls back to the challenge.
+        for site in [Some("same-site"), Some("cross-site"), None] {
+            let mut headers = vec![("Cookie", cookie.as_str())];
+            if let Some(site) = site {
+                headers.push(("Sec-Fetch-Site", site));
+            }
+            assert_eq!(get(&headers), 401, "{site:?}");
+        }
+        // Twice, on one line or two.
+        let twice = format!("{cookie}; {cookie}");
+        assert_eq!(get(&[("Cookie", &twice), ("Sec-Fetch-Site", "none")]), 401);
+        assert_eq!(
+            get(&[
+                ("Cookie", &cookie),
+                ("Cookie", &cookie),
+                ("Sec-Fetch-Site", "none")
+            ]),
+            401
+        );
+        // The control token is never a cookie.
+        let control = format!("__Host-jstream_device={TOKEN}");
+        assert_eq!(
+            get(&[("Cookie", &control), ("Sec-Fetch-Site", "none")]),
+            401
+        );
+
+        // The UI's WebSocket, as the device.
+        assert!(harness.cookie_upgrade(&cookie, Some("same-origin")).is_ok());
+        assert_eq!(
+            harness.cookie_upgrade(&cookie, Some("same-site")).err(),
+            Some(StatusCode::UNAUTHORIZED)
+        );
+        assert_eq!(
+            harness.cookie_upgrade(&control, Some("same-origin")).err(),
+            Some(StatusCode::UNAUTHORIZED)
+        );
+        let devices = harness.device_list(&host);
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].device_id.as_str(), device_id);
+
+        // Revoked, the cookie is worthless.
+        ok(harness.run(host.call(Call::Action {
+            action: Action::DeviceRevoke {
+                device_id: DeviceId::new(device_id.as_str()),
+            },
+        })));
+        assert_eq!(get(&[("Cookie", &cookie), ("Sec-Fetch-Site", "none")]), 401);
+        assert_eq!(
+            harness.cookie_upgrade(&cookie, Some("same-origin")).err(),
+            Some(StatusCode::UNAUTHORIZED)
+        );
+    });
+    let logged = capture.text();
+    assert!(logged.contains("device paired"), "{logged}");
+    assert!(
+        logged.contains("device cookie without a same-origin Sec-Fetch-Site")
+            && logged.contains("device cookie repeated"),
+        "{logged}"
+    );
+    assert!(!token.is_empty() && !logged.contains(&token), "{logged}");
+    assert!(!logged.contains(TOKEN), "{logged}");
 }
