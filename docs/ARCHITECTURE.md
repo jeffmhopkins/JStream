@@ -822,8 +822,7 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
-(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
-composite is still read back to the CPU for the encoder. Step 5's encoder side is built:
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). Step 5's encoder side is built:
 on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
 on D3D11 into a texture of their own, fence-synchronized both ways, and
 `jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
@@ -831,9 +830,13 @@ on D3D11 into a texture of their own, fence-synchronized both ways, and
 Step 4's NV12 pass is built too: it reads the sRGB output and writes the Y and CbCr
 planes, either plane views of a native NV12 texture or an `R8Unorm` and an `Rg8Unorm`
 texture where planar render targets are missing, in BT.709 limited or full range with
-left-sited chroma. Nothing writes the encode targets yet. Still outside this crate: the
-render thread (in `jstream-core`) and its step that runs the NV12 pass into the encode
-targets, P010, 3D, effect packs, and the output path below.
+left-sited chroma. The render thread (in `jstream-core`) runs it: a video session
+opened on the context gets each composite converted into the next of a ring of the
+platform's encode targets, which it is pushed as a GPU frame, in its own submit that
+stages the target's fence and hands it back in `PRESENT`. Sessions on the CPU path and
+the virtual cameras still get the composite read back, and a tick with none of them
+skips the readback. Still outside this crate: P010, 3D, effect packs, and the output
+path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
 texture blend: during it, the program mix is a synthetic item list whose transforms and

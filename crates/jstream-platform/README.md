@@ -189,7 +189,8 @@ that device when the engine has one, sampling capture frames there, and opens it
 (software adapter first) when it does not. It has the NV12 pass that can render into an
 encode target's plane views (`Nv12Converter`).
 Windows' H.264 encoder takes encode targets on the context it reached through
-`Codecs::on_context`; the engine does not write or push them yet.
+`Codecs::on_context`, and the engine's render thread converts each composite into the
+next of a ring of them and pushes it to such a session.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call

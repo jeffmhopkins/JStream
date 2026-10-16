@@ -2,8 +2,13 @@
 //! whatever adapter the compositor tests use (lavapipe, WARP).
 
 use std::io::Write;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use jstream_media::{ColorInfo, ColorRange, ColorSpace, FrameSize};
+use jstream_media::{
+    ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrameInfo,
+};
+use jstream_platform::{FrameSync, GpuFrame, PlatformError};
 
 use super::reference::rgba8_to_nv12;
 use super::{Nv12Converter, Nv12Target};
@@ -280,6 +285,55 @@ fn bad_sizes_formats_and_spaces_are_refused() {
         Nv12Target::nv12_texture(planes.y()),
         Err(RenderError::UnsupportedFormat { .. })
     ));
+}
+
+/// The encode tick's step: the frame's sync is staged once, the planes hold the
+/// conversion, and the frame's texture is handed back in the same submit. A plane
+/// texture stands in for the platform's NV12 encode target, which lavapipe cannot draw.
+#[test]
+fn submit_stages_the_frame_and_converts_into_it() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let c = &opened.compositor;
+    let (w, h) = (10, 4);
+    let rgba = pattern(w, h);
+    let texture = source(c.device(), c.queue(), w, h, &rgba);
+    let converter = Nv12Converter::new(c.device());
+    let planes = converter.planes(size(w, h)).expect("planes");
+    let pass = converter
+        .bind(&texture, &planes.target(), FULL)
+        .expect("bind");
+    let stages = Arc::new(AtomicUsize::new(0));
+    let info = VideoFrameInfo {
+        size: size(w, h),
+        format: PixelFormat::Nv12,
+        color: FULL,
+        pts: MediaTime::zero(Timebase::MICROS),
+    };
+    let frame = GpuFrame::new(
+        planes.y().clone(),
+        info,
+        Arc::new(Stages(Arc::clone(&stages))),
+    );
+    converter.submit(c.queue(), &pass, &frame).expect("submit");
+    assert_eq!(stages.load(Ordering::SeqCst), 1);
+    assert_within_one(
+        &planes.read(c.device(), c.queue()).expect("read"),
+        &rgba8_to_nv12(&rgba, w as usize, h as usize, ColorRange::Full),
+        w as usize,
+    );
+}
+
+/// Counts its stages.
+#[derive(Debug)]
+struct Stages(Arc<AtomicUsize>);
+
+impl FrameSync for Stages {
+    fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
 }
 
 /// The native path: an `NV12` texture's plane views as render targets, when the

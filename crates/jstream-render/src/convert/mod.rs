@@ -200,6 +200,41 @@ impl Nv12Converter {
             uv: target.uv.clone(),
         })
     }
+
+    /// Converts into a platform frame in a submit of its own, on `queue`: `pass`, bound
+    /// to `frame`'s texture, then the texture handed back to the platform
+    /// (`TextureUses::PRESENT`, as the compositor does with the source frames it
+    /// samples), with `frame`'s sync staged around the submit. This is the encode
+    /// tick's step: the platform's encoder reads the frame once its fence is signalled.
+    /// Submit it after the composite that wrote the source.
+    ///
+    /// # Errors
+    /// [`RenderError::Sync`] when staging the frame fails. Nothing is submitted then,
+    /// though the platform may already have armed the queue's next submit.
+    pub fn submit(
+        &self,
+        queue: &wgpu::Queue,
+        pass: &Nv12Pass,
+        frame: &jstream_platform::GpuFrame,
+    ) -> Result<(), RenderError> {
+        frame.stage(queue).map_err(RenderError::Sync)?;
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render nv12"),
+            });
+        pass.encode(&mut encoder);
+        encoder.transition_resources(
+            std::iter::empty(),
+            std::iter::once(wgpu::TextureTransition {
+                texture: frame.texture(),
+                selector: None,
+                state: wgpu::TextureUses::PRESENT,
+            }),
+        );
+        queue.submit([encoder.finish()]);
+        Ok(())
+    }
 }
 
 impl std::fmt::Debug for Nv12Converter {

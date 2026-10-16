@@ -170,8 +170,10 @@ state machine. Contents:
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), which capture path an output takes and each
-  fallback, and an output compositing GPU capture frames, on a software device that
-  stands in for the platform's (`src/tests/gpu_capture.rs`), the same output on WGC and
+  fallback, an output compositing GPU capture frames, and an output whose encoder
+  takes GPU frames getting NV12 encode targets with no readback, on a software device
+  that stands in for the platform's (`src/tests/gpu_capture.rs`; the last skips without
+  `TEXTURE_FORMAT_NV12`), the same output on WGC and
   the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, behind
   `hw-tests` and ignored), the
   pipeline against the platform fakes
@@ -257,8 +259,8 @@ state machine. Contents:
   by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
-Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
-the platform's Windows devices. See
+Not here yet: live values, the audio and outputs snapshots, and the platform's Windows
+devices. See
 [Design › Not yet](#design).
 
 Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
@@ -1076,8 +1078,10 @@ emits `stopping` and `stopped` as from `active`.
 
 The render thread reads the platform capture mailbox, composites the program mix of
 the render snapshot (see *Snapshots*) at 30 frames per second, repeats the last
-capture when the mailbox is empty, and reads the composite back as RGBA8 because this
-cut has no GPU encode target. It draws at the canvas size the collection has when the
+capture when the mailbox is empty, and hands the composite to each encoder session in
+the kind it takes: converted to NV12 in one of the platform's encode targets for a
+session on the GPU path, read back as RGBA8 for the others (see [Runtime](#runtime)).
+It draws at the canvas size the collection has when the
 program stage opens, rounded down to even sizes for NV12 (`output_size`), so every
 output encodes at the canvas, not the display (#433); a canvas change while outputs
 run takes effect when the stage next opens. The capture keeps the display's size and
@@ -1123,8 +1127,10 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   or a mixer poll error is fatal: the encoder would get no more audio.
 
 The render thread reuses its capture, composite and readback buffers, and its GPU
-textures through the cache. Each tick allocates one frame-sized buffer, the frame the
-encoder session takes ownership of (`VideoInput::push` cannot hand buffers back), the
+textures through the cache. Each tick allocates one frame-sized buffer per session on
+the CPU path, the frame the session takes ownership of (`VideoInput::push` cannot hand
+buffers back); a session on the GPU path gets a handle to an encode target, and the NV12
+pass binds each target once. Each tick also allocates the
 item list `compose` fills once per tick, the frame-fence callback, the premultiplied
 copy of a CPU capture that changed, and on the GPU path an import (a bind group) the
 first time each of the platform's capture textures is shown. A virtual camera's tap
@@ -1336,10 +1342,10 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 - Activity gains that fade with a transition (T1: only cuts exist, so every weight
   is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
-  live-value handover, and a GPU encode target. `output.start` is a cut of
+  live-value handover. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one
-  captured display, a CPU readback into the encoder, and the platform fakes in the
-  test. Other sources show frames the host injects with `set_source_frame`.
+  captured display, an encode target or a CPU readback into the encoder, and the
+  platform fakes in the test. Other sources show frames the host injects with `set_source_frame`.
 
 <a id="runtime"></a>
 ## Runtime
@@ -1357,8 +1363,21 @@ control thread. The render thread calls the platform capture mailbox and, on eac
 Design) at the canvas size: the program scene and the scenes it nests, with every
 `display` source that has no stored frame showing the captured display. With no scene
 it draws the capture scaled to fill the frame. It repeats the last capture when the mailbox
-is empty, and reads the frame back. This cut encodes that CPU readback, and the
-readback is counted (`OutputStats::readbacks`).
+is empty.
+
+**Encode path** (ARCH › GPU pipeline, steps 4 to 6). A video session opens on the
+platform's context when there is one (`VideoSession::open_on`): it takes GPU frames when
+the codecs can encode the context's encode targets (`Codecs::on_context`), and CPU
+frames otherwise, which is logged. The render thread learns which with the session's
+input. For a session on the GPU path it allocates a ring of `encode_target`s once,
+enough that a target is written again only after the frames queued from it are read,
+and converts each composite into the next one (`Nv12Converter`, BT.709 in the target's
+range) in a submit of its own that stages the target's fence. It pushes that target,
+stamped with the tick's time, to every such session. Sessions on the CPU path and
+virtual cameras get the composite read back as RGBA8; a tick with none of them skips
+the readback, and each readback is counted (`OutputStats::readbacks`). The ring drops
+before the compositor and the context. A target the platform refuses is fatal: the
+session could not be fed.
 
 **Capture path** (ARCH › GPU pipeline, step 6). Opening the program stage asks the
 platform's `GpuInterop` for its device. With one, the render thread's compositor opens on that
@@ -1412,8 +1431,7 @@ publish or recording write failure, an encoder stream that ends before stop, a r
 or mixer panic) is a channel message to a watcher the control thread started; the
 watcher emits `failed` and stops the pipeline. A program-stage failure reaches every
 running output. Frame hand-off is the encoder session queues. The audio and outputs
-snapshots and a GPU encode target are still rows of the ARCH thread table, not this
-cut. The mixer also has its own collector, which frees input rings, their counters and
+snapshots are still rows of the ARCH thread table, not this cut. The mixer also has its own collector, which frees input rings, their counters and
 their own blocks, removed buses' state, and removed filter chains and filters. The program stage's
 `jstream-audio-sources` thread opens and closes the audio sources' inputs as the
 collection changes (see *Audio sources* in Design); it takes no engine lock and is
