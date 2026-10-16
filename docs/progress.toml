@@ -644,7 +644,7 @@ id = "U2b"
 milestone = "M2"
 title = "Device pairing"
 status = "done"
-prs = [265]
+prs = [265, 288]
 
 [[item]]
 id = "U3a"

@@ -1,6 +1,7 @@
 //! The server's configuration: where it listens, the control token, which `Host` and
 //! `Origin` values it accepts beyond its own, the connection limits, the MCP transport,
-//! the web UI's directory, and the file that keeps the paired devices.
+//! the web UI's directory, the file that keeps the paired devices, and whether the
+//! listener is reached over TLS.
 
 use crate::error::ServerError;
 use std::fmt;
@@ -126,6 +127,22 @@ pub struct ServerConfig {
     /// and rewritten user-only on every change. [`ServerConfig::new`] leaves it unset:
     /// devices then live in memory and are gone when the server stops.
     pub device_file: Option<PathBuf>,
+    /// Whether clients reach this listener over TLS (ADR-0047). Only then is the browser
+    /// pairing page served at [`PAIR_PAGE_PATH`](crate::PAIR_PAGE_PATH), may a browser
+    /// pair into the `__Host-jstream_device` cookie and present it, is pairing offered
+    /// beyond loopback, and is the server's own `Origin` `https://`. The server has no
+    /// TLS listener of its own yet, so [`ServerConfig::new`] leaves it off and only tests
+    /// turn it on. Turning it on for a listener reached over plain HTTP would send
+    /// device tokens in the clear.
+    pub tls: bool,
+    /// Whether the server pairs devices at all (ADR-0044, ADR-0047). Off, it answers no
+    /// `pairing.start`, `device.list` or `device.revoke` itself: they reach the session,
+    /// which answers `unsupported`, so a host's UI hides its pairing panel. No code is
+    /// then drawn, and the gate accepts no device token or cookie, even one already in
+    /// `device_file`.
+    /// [`ServerConfig::new`] leaves it on; a host whose engine serves only itself, like
+    /// the desktop app's webview, turns it off.
+    pub pairing: bool,
 }
 
 impl ServerConfig {
@@ -145,6 +162,8 @@ impl ServerConfig {
             mcp_idle_timeout: MCP_IDLE_TIMEOUT,
             ui_dir: None,
             device_file: None,
+            tls: false,
+            pairing: true,
         }
     }
 

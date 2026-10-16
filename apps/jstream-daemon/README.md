@@ -322,7 +322,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
   option to listen on other addresses until remote browsers need it (with TLS,
   [ROADMAP › M2](../../ROADMAP.md#m2)). Pairing is served already, and its device tokens
-  are accepted on loopback only until then.
+  are accepted on loopback only until then. `ServerConfig::tls` stays off, so the browser
+  pairing page and the device cookie
+  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)) wait on
+  TLS too: `/pair` is 404.
 - **The device file** (`token.rs`, `main.rs`). The daemon names
   `ServerConfig::device_file` as the token file's path plus `.devices`, so the devices
   live and move with the token they stand beside, and deleting the two together resets

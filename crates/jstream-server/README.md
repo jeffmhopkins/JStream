@@ -34,19 +34,23 @@ Contents (a first cut; [Design](#design) explains the choices):
   types and a Content Security Policy.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
   origins, connection limits, the MCP switch and its limits, the UI directory, the
-  device file) and `Token`, the control token.
+  device file, the `tls` flag, the `pairing` switch) and `Token`, the control token.
 - **Devices** (`devices.rs`): the paired devices, the open pairing code, and the device
   file that keeps the devices' token digests
   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
 - **Pairing** (`pair.rs`): `POST /api/v1/pair` (`PAIR_PATH`), which trades the open code
-  for a device token.
+  for a device token, or for the device cookie in a browser.
+- **Pairing page** (`pair_page.rs`, `pair.html`): `GET /pair` (`PAIR_PAGE_PATH`), the
+  token-free page a browser pairs on, on a TLS listener only
+  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)).
 - **Admitted session** (`admitted.rs`): the `Control` wrapper every connection and MCP
   session gets, which answers `pairing.start`, `device.list` and `device.revoke` itself
+  unless `ServerConfig::pairing` is off
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)).
 - **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
   an accepted upgrade request in time.
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every request passes
-  ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
+  ([R-SEC-002](../../docs/RULES.md#R-SEC-002)), the device cookie among them.
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
   session and back, with the bounded outbox that keeps a slow client from holding up
   its events.
@@ -55,7 +59,9 @@ Contents (a first cut; [Design](#design) explains the choices):
   when the client reads slowly.
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
-Not here yet: TLS ([Open questions](#design)).
+Not here yet: a TLS listener ([Open questions](#design)). `ServerConfig::tls` says
+whether clients reach the listener over TLS, and only tests turn it on until there is
+one.
 
 Why a crate and not a module of `jstream-control` or `jstream-mcp`: it owns the HTTP
 stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
@@ -81,9 +87,9 @@ served
 
 | Check | Accepted | Refused with |
 |---|---|---|
-| `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra; without a port only on port 80 (below) | 403 |
-| `Origin` | absent, or `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
-| `Authorization` | `Bearer <token>`, or `Basic` credentials whose password is the token (any user name); without `Authorization`, the offered subprotocol `jstream.token.<token>` (below). The token is the control token or, on a loopback bind, a paired device's (see *Pairing*). Matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` (`Basic` on the UI's paths) |
+| `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra; without a port only on the scheme's default port (below) | 403 |
+| `Origin` | absent, or `http://` (`https://` with `ServerConfig::tls`) plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
+| `Authorization` | `Bearer <token>`, or `Basic` credentials whose password is the token (any user name); without `Authorization`, the offered subprotocol `jstream.token.<token>` (below); with neither, on a TLS listener, the device cookie (see *The pairing page and the device cookie*). The token is the control token or, on a loopback bind or a TLS listener, a paired device's (see *Pairing*). Matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` (`Basic` on the UI's paths) |
 
 `Host` must appear exactly once, `Authorization` at most once (exactly once unless the
 subprotocol carries the token) and `Origin` at most once, and
@@ -95,10 +101,11 @@ A request without `Origin` is a native client (the CLI, `websocat`, a script) an
 on to the token check, which is the gate (open question 4). The token is never logged (see *Logging*), and `Token`'s `Debug` form hides it.
 
 **`Host` without a port.** A `Host` (or `Origin`) without a port names the scheme's
-default port, 80 for `http` and `ws`, and browsers leave `:80` out. So when the server
-listens on port 80, `localhost` is the same as `localhost:80` and is accepted (and
-`http://localhost` is its own origin). On any other port, the default and ephemeral
-ones included, a `Host` without a port names a different port and is refused.
+default port, 80 for `http` and `ws` (443 for `https` and `wss`, with
+`ServerConfig::tls`), and browsers leave it out. So when the server listens on port 80,
+`localhost` is the same as `localhost:80` and is accepted (and `http://localhost` is its
+own origin). On any other port, the default and ephemeral ones included, a `Host`
+without a port names a different port and is refused.
 
 **`Basic` credentials.** A browser can't put a bearer token on a page load or a
 WebSocket upgrade, but it sends the HTTP `Basic` credentials it was given for an
@@ -160,7 +167,8 @@ against a misbehaving client on the network.
 
 With `ServerConfig::ui_dir` set (`ServerConfig::new` leaves it unset; `Server::bind`
 refuses a path that isn't a directory with `ServerError::UiDir`), every path the API
-doesn't use (anything but `/api/v1/ws`, `/mcp` and other paths under `/api` or `/mcp`)
+doesn't use (anything but `/api/v1/ws`, `/mcp`, `/pair` and other paths under `/api`,
+`/mcp` or `/pair`)
 serves a file from that directory: the UI's built bundle, `trunk build`'s `dist`
 (`Server::ui_url` gives the address). Each request passes the gate above first,
 so the bundle is served only to holders of the token
@@ -168,7 +176,10 @@ so the bundle is served only to holders of the token
 included, requires it). A refused token is answered with `WWW-Authenticate: Basic
 realm="JStream"`, so the browser asks for a user name and password: the user pastes the
 token from the token file as the password. The browser then sends it with the bundle's
-requests and the UI's WebSocket upgrade, and the UI never handles the token. A request
+requests and the UI's WebSocket upgrade, and the UI never handles the token. On a TLS
+listener the `401`'s body is instead a short HTML page (under a policy that loads and
+runs nothing) that links to the pairing page beside the challenge; without TLS it is
+plain text with no link. A request
 that passes disarms the header-read deadline, as on `/mcp`, so the bundle loads over a
 kept-alive connection.
 
@@ -177,7 +188,7 @@ kept-alive connection.
 | `GET` or `HEAD` of a file in the directory | 200, the file (at most 64 MiB) |
 | A directory (`/` included) | its `index.html` |
 | A missing path whose last segment has no `.` (the UI's own routes) | the root's `index.html` |
-| Any other missing path, or one under `/api` or `/mcp` | 404 |
+| Any other missing path, or one under `/api`, `/mcp` or `/pair` | 404 |
 | A path with an empty, `.` or `..` segment, or one that holds `\`, `:` or NUL (percent-escapes decoded first) | 404 |
 | A file that resolves outside the directory (a symbolic link) | never served: 404, or the root's `index.html` for a name without a `.` |
 | Any other method | 405 with `Allow: GET, HEAD` |
@@ -201,7 +212,8 @@ base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 ```
 
 Scripts, styles and connections come only from the server itself (`ws://<Host>`, the
-request's accepted `Host`, because older browsers don't match `ws:` with `'self'`), the
+request's accepted `Host`, `wss://<Host>` on a TLS listener, because older browsers
+don't match `ws:` with `'self'`), the
 WebAssembly module may be compiled, and the page can't be framed, post forms or load
 plugins. trunk's loader is an inline module script, so an HTML file's nonce
 placeholder (`{{__TRUNK NONCE__}}`, which trunk writes with `create_nonce = true`) is
@@ -219,25 +231,34 @@ its own from a short code instead of the control token.
   and a new `pairing.start` replaces it. It lives 2 minutes, works once, and is void
   after 5 wrong attempts (logged at `warn`, without the code). Entry ignores case,
   dashes and spaces, and reads `O` as `0` and `I`/`L` as `1`. `pairing.start` is refused
-  (`action_failed`) unless the server is bound to loopback: there is no TLS yet, so a
-  device token is accepted only over loopback ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
+  (`action_failed`) unless the server is bound to loopback or `ServerConfig::tls` is on:
+  a device token is accepted only over loopback or TLS
+  ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
+- **Pairing off.** With `ServerConfig::pairing` off (on in `ServerConfig::new`), the
+  server answers none of the three calls: they reach the session, which answers
+  `unsupported`, so a host's UI hides its pairing panel. No code is ever drawn,
+  `GET /pair` is 404, and the gate accepts no device token or cookie, not even one
+  already in the device file, since nothing could list or revoke it. `jstream-desktop`
+  turns it off.
 - **The exchange.** `POST /api/v1/pair` (`PAIR_PATH`) with
-  `{"code": "...", "name": "..."}` is the one request answered without a token; it still
-  passes the `Host` and `Origin` checks. The name is trimmed, 1 to 64 characters, with
-  no control characters.
+  `{"code": "...", "name": "..."}`, and `"browser": true` from the pairing page, is
+  answered without a token; it still passes the `Host` and `Origin` checks. The name is
+  trimmed, 1 to 64 characters, with no control characters.
 
 | Request | Answer |
 |---|---|
 | A method other than `POST` | 405 with `Allow: POST` |
 | No code open | 401 |
 | A body that isn't `Content-Type: application/json` | 415 |
-| A body over 4 KiB, one that isn't `{"code", "name"}`, or a name that isn't allowed | 400 (no attempt used up) |
+| A body over 4 KiB, one that isn't `{"code", "name"}`, a name that isn't allowed, a `browser` that isn't a boolean, or `"browser": true` without TLS | 400 (no attempt used up) |
 | A wrong code | 403 (its message says when that attempt voided the code) |
 | The open code | 200, `Cache-Control: no-store`, `{"device_id": "dev_…", "token": "<64 hex digits>"}` |
+| The open code, `"browser": true`, on a TLS listener | 200, `Cache-Control: no-store`, `{"device_id": "dev_…"}` and `Set-Cookie: __Host-jstream_device=<token>; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000` |
 | The device file can't be written | 500, and nothing is paired |
 
 - **Device tokens.** A device token is 32 bytes from `getrandom` as 64 hex digits,
-  presented exactly like the control token. The server keeps only its BLAKE3 digest,
+  presented exactly like the control token (or, in a browser, as the device cookie, see
+  below). The server keeps only its BLAKE3 digest,
   compared in constant time as above. A device's session says `hello` as
   `device:<name>`, so the engine's audit log names it, and it may do anything the
   control token may (ADR-0006). One unused for 30 days lapses; use is recorded at most
@@ -258,6 +279,43 @@ its own from a short code instead of the control token.
 
 These three calls are answered by the server, not the engine
 ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)): see *Sessions*.
+
+### The pairing page and the device cookie
+
+[ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md) lets a
+browser pair by itself and stay signed in. All of it exists only with
+`ServerConfig::tls` and `ServerConfig::pairing` on; otherwise `GET /pair` is 404 and the UI's `401` links nowhere.
+
+- **The page.** `GET /pair` (`PAIR_PAGE_PATH`; `HEAD` too, any other method 405) is
+  answered without a token, after the `Host` and `Origin` checks. It is a fixed page
+  built into the crate (`pair.html`), not part of the UI bundle: a code field, a
+  device-name field and one inline script, under the UI's policy with a fresh nonce for
+  its `<script>` and `<style>`, and the UI's other headers. It holds no engine data and
+  no secret, and changes nothing. The route is always registered, so the UI's fallback
+  never serves `/pair`, and the fallback refuses paths below it.
+- **The browser exchange.** The script posts the code and name with `"browser": true`
+  (see the exchange's table above). The token goes only into the `HttpOnly` cookie, so
+  no script, the page's own included, ever reads it. Then the page opens `/`.
+- **The cookie at the gate.** A fourth way to present a device token, never the
+  control token. The gate reads only `__Host-jstream_device` (not a plain
+  `jstream_device` another service on the host could plant), only on a TLS listener,
+  and only when the request carries neither `Authorization` nor an offered
+  `jstream.token.…` subprotocol (a wrong one of those is not rescued by the cookie).
+  The cookie on more than one `Cookie` pair, on one line or several, is refused. A
+  request the cookie admits must also carry `Sec-Fetch-Site: same-origin` or `none`,
+  besides the `Host` check and the `Origin` check when `Origin` is present: a page on
+  another port of the host or a sibling subdomain is same-site, so the browser sends it
+  the cookie, but is refused even on a `GET` without `Origin`. A browser that sends no
+  `Sec-Fetch-Site` falls back to the `Basic` prompt. Each refusal is a 401 like a wrong
+  token.
+- **Renewal.** A use the cookie admits that renews the device's 30-day lapse (recorded
+  at most hourly, see *Pairing*) re-sets the cookie with a fresh `Max-Age` on that
+  answer, a UI file or the WebSocket upgrade, at most once a day. When it was last set is
+  kept in memory only; after a restart it is taken to be the device's last use. Revoking the
+  device, or its lapse, makes the cookie worthless; the server never clears it.
+- **Secrets.** Like every header the cookie is never logged
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)); the test
+  `tests::a_browser_pairs_into_a_cookie_that_admits_it_until_revoked` checks this.
 
 ### Sessions
 
@@ -412,11 +470,13 @@ alone.
   address, and ending one `mcp session ended` with the reason (`idle`, `deleted by the
   client`, `replaced by a new initialize`, `initialize failed`). The session ID is never logged, nor any message.
 - **Pairing.** A refused pairing request is logged as `connection refused` too (`pairing
-  attempted while no pairing code is open`, `wrong pairing code`). A started pairing,
+  attempted while no pairing code is open`, `wrong pairing code`), and so is a refused
+  device cookie (`device cookie repeated`, `device cookie without a same-origin
+  Sec-Fetch-Site`). A started pairing,
   a paired device (ID and name), a revoked or lapsed device (ID), and a connection a
   device's token admitted (`device_id`) are logged at `info`; a voided code and a device
-  file that can't be updated at `warn`. No code or device token is ever logged (see
-  *Pairing*).
+  file that can't be updated at `warn`. No code, device token or cookie is ever logged
+  (see *Pairing*).
 - A UI file that can't be read is logged at `warn` with the error (500 to the
   client); the path is not logged.
 - A request that isn't a WebSocket upgrade is logged at `debug`, and so is a connection
@@ -439,18 +499,18 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
 1. **TLS.** Plain `ws://` on loopback is the first cut. Remote browsers need `wss://`
    with rustls and the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)): a TLS
    feature and its wiring. `ring` is already on the lint-deps native-code allowlist, for
-   `jstream-outputs`' RTMPS, so that needs no further governance change.
+   `jstream-outputs`' RTMPS, so that needs no further governance change. What depends on
+   TLS (pairing beyond loopback, the pairing page, the device cookie) is built behind
+   `ServerConfig::tls`, which the listener will set.
 2. **Browser token.** Settled and built (see *`Basic` credentials* and *The token as
    a subprotocol*): a page load presents the token as `Basic` credentials, and the
    UI's upgrade either carries the same credentials (checked in Chromium) or offers
    `jstream.token.<token>` ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
    Pairing a device with a short code instead of pasting the token is settled and built
-   (see *Pairing*, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)). How a
-   browser reaches a pairing form and keeps its device token is decided and not built
-   yet: a token-free `GET /pair` page on a TLS listener, linked from the `401`, and the
-   `__Host-jstream_device` cookie
-   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). It waits
-   on TLS (open question 1).
+   (see *Pairing*, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)), and so is
+   how a browser that gets a 401 reaches a pairing form and then presents its device
+   token on page loads (see *The pairing page and the device cookie*,
+   [ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)).
 3. **UI assets.** Settled and built (see *The web UI*). Open: caching with `ETag`s
    instead of `no-cache`, and compressed variants, if the bundle grows enough to
    matter. MCP over streamable HTTP is settled and built (see *MCP over streamable

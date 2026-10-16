@@ -196,3 +196,20 @@ input {
 .badge.live { background: #d92d20; color: #fff; }
 .badge.failed { background: var(--problem); color: var(--panel); }
 .new-output { display: grid; gap: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--line); }
+
+/* The pairing panel (pairing.rs). */
+.pairing { display: grid; gap: 0.6rem; margin-top: 1rem; justify-items: start; }
+.pairing button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pairing .problem { margin: 0; }
+.pairing-open { display: grid; gap: 0.25rem; }
+.pairing-code {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 1.6rem;
+  letter-spacing: 0.15em;
+}
+.pairing-help { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.device-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; width: 100%; }
+.device { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.device-name { font-weight: 600; }
+.device-dates { flex: 1; color: var(--muted); font-size: 0.8rem; }

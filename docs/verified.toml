@@ -297,7 +297,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:5b72cc0da0e85c79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
+stamp = { hash = "b3:904b5314a5bd4471", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -420,25 +420,25 @@ stamp = { hash = "b3:1485046c80293f0f", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:5af36d33e764350b", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:7f7d94eae0af4bdc", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:b40149170c54dd7d", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:3c14853c445bd4f4", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:632bb2cf7d3c6cb2", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:ac3b48c1e839ddbd", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:a86c4597e7e99d59", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:1acf6822677de4e7", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -446,8 +446,14 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 ["ARCH#protocol"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
+["ARCH#protocol"."file:crates/jstream-server/src/pair.html"]
+stamp = { hash = "b3:31924fc017e3dee1", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
+
 ["ARCH#protocol"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:e3e01039aa2838d5", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
+
+["ARCH#protocol"."file:crates/jstream-server/src/pair_page.rs"]
+stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/preview.rs"]
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
@@ -456,10 +462,10 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:991aaa6de3af3ecf", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:98577fac192b3f87", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
-stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
 
 ["ARCH#repo-layout"."body"]
 stamp = { hash = "b3:a667852c45363c39", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: xtask line lists dist (the portable zip) in place of release, matching xtask/src/main.rs's new dist dispatch and usage entry" }
@@ -942,7 +948,7 @@ stamp = { hash = "b3:180f43478e1f562c", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:5b72cc0da0e85c79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: stale via ARCH#protocol, whose YouTube bullet adds commands, events and the youtube target (ADR-0058) that Control carries as any others; this PR leaves mock.rs as the wave has it; holds" }
+stamp = { hash = "b3:904b5314a5bd4471", by = "agent:claude", note = "Cascade from ARCH#protocol: this PR's note that a server which pairs nothing (the desktop's) leaves the credential calls to the session holds, since the mock answers them unsupported; wave/m1's 0.22 filter and 0.23 YouTube bullets add calls the mock handles separately; holds" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1023,7 +1029,7 @@ stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:2034791df530f807", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:5b72cc0da0e85c79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
+stamp = { hash = "b3:904b5314a5bd4471", by = "agent:claude", note = "Cascade from ARCH#protocol (a pairing-off server passes the credential calls to the session): the engine's served_by_the_server arms answer unsupported, which is what such a session returns; wave/m1's 0.22 filter and 0.23 YouTube bullets are engine calls unrelated to pairing; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1290,13 +1296,13 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:82cdad9de7819d94", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data-directory bullet and Dependencies entry (jstream-platform paths, merged with the wave's jstream-browser entry) hold; #298's browser bullet now says CEF runs only in the sandboxed helper (exe, DLL and CEF runtime beside jstream-daemon.exe; missing files fail the page, not the daemon; the daemon doesn't link CEF), matching cef_browser wiring and ADR-0048; #458 changes no daemon text; holds" }
+stamp = { hash = "b3:a8128069b20bb155", by = "agent:claude", note = "ADR-0047: the daemon leaves ServerConfig::tls off and pairing on, so its server answers the credential calls, /pair is 404 and device tokens work on loopback only, as Design's pairing text says; matches serve.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #291's CEF browser sources and the jstream-platform data directory are beside this text and change nothing about pairing; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:f5afb6bd0ee186e9", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data-directory bullet and Dependencies entry (jstream-platform paths, merged with the wave's jstream-browser entry) hold; #298's browser bullet now says CEF runs only in the sandboxed helper (exe, DLL and CEF runtime beside jstream-daemon.exe; missing files fail the page, not the daemon; the daemon doesn't link CEF), matching cef_browser wiring and ADR-0048; #458 changes no daemon text; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
+stamp = { hash = "b3:712b0bc27a27658a", by = "agent:claude", note = "ADR-0047: the daemon leaves ServerConfig::tls off and pairing on, so its server answers the credential calls, /pair is 404 and device tokens work on loopback only, as Design's pairing text says; matches serve.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #291's CEF browser sources and the jstream-platform data directory are beside this text and change nothing about pairing; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -1380,7 +1386,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:69eee667f84adbfe", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the wave's vcam, delay-load and media_foundation.rs text is unchanged by this PR; the browser-sources bullet still matches host.rs/browser.rs (backend on the media clock, device from WindowsGpu::open_device, CEF only in the sandboxed helper started on the first page)" }
+stamp = { hash = "b3:42693e57e0ab79dd", by = "agent:claude", note = "ADR-0047: Design says the desktop turns pairing off, so its server answers no credential call (they reach the session as unsupported), the UI's pairing panel stays hidden, and there is no /pair page or device cookie; matches host.rs:57 and the server's pairing switch. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's vcam text and #291's browser wiring sit beside it without touching the server config; holds" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1410,7 +1416,7 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the browser bullet no longer says a cef build links libcef.dll at load time; with ADR-0048 CEF runs only in the helper, which starts on the first page, so a missing helper or CEF files fail that source, as browser.rs's doc now says; the device and clock text holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:585937dddc3fdee0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
+stamp = { hash = "b3:d7e9d4d94414655d", by = "agent:claude", note = "ADR-0047: Design says the desktop turns pairing off, so its server answers no credential call (they reach the session as unsupported), the UI's pairing panel stays hidden, and there is no /pair page or device cookie; matches host.rs:57 and the server's pairing switch. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's vcam text and #291's browser wiring sit beside it without touching the server config; holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's paths-based data folder and #298's browser bullet (CEF only in the sandboxed helper, a missing helper fails the source, not the app) match lib.rs and browser.rs; Design names no data module; holds" }
@@ -1449,7 +1455,7 @@ stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the apps/* row still says the desktop links sources and jstream-browser with cef; browser.rs now drives the sandboxed helper (its doc names ADR-0048 and says the app doesn't link CEF), and the Browser sources bullet still describes it; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:585937dddc3fdee0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
+stamp = { hash = "b3:d7e9d4d94414655d", by = "agent:claude", note = "ADR-0047: host.rs sets config.pairing = false because the engine serves only the webview; Purpose (window over the in-process engine's loopback API) is unchanged by it. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's virtual camera global and #291's CEF wiring in host.rs leave that line in place (host.rs:57); holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1 removes data.rs (lib.rs keeps the wave's cef-gated browser module, drops data); the contents list and tests (delay-load test kept, data-folder test gone) match; #298's not-yet line keeps browser sources off by default; holds" }
@@ -2418,13 +2424,13 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU-frames-through-the-cache test text matches the_cache_imports_gpu_frames_without_keeping_their_holds in tests.rs; holds" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
+stamp = { hash = "b3:712b0bc27a27658a", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:5b72cc0da0e85c79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: stale via ARCH#protocol, whose YouTube bullet adds commands and events the session relays unchanged; this PR leaves session.rs as the wave has it; holds" }
+stamp = { hash = "b3:904b5314a5bd4471", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2436,22 +2442,22 @@ stamp = { hash = "b3:fbe7c61707faa7bd" }
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:b40149170c54dd7d", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
+stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:3c14853c445bd4f4", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:632bb2cf7d3c6cb2", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:ac3b48c1e839ddbd", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:a86c4597e7e99d59", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
+stamp = { hash = "b3:1acf6822677de4e7", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -2459,8 +2465,14 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
+["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair.html"]
+stamp = { hash = "b3:31924fc017e3dee1", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
+
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:e3e01039aa2838d5", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
+
+["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair_page.rs"]
+stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/preview.rs"]
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
@@ -2469,34 +2481,34 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:991aaa6de3af3ecf", by = "agent:claude", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047; matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs. 'passes everything else through' now includes Control::binary, which admitted.rs forwards so #251's preview frames reach clients (preview_frames_go_out_as_binary_messages); holds" }
+stamp = { hash = "b3:98577fac192b3f87", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
-stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
 
 ["CRATE-jstream-server#purpose"."body"]
-stamp = { hash = "b3:e828e552d8f6c1e1", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
+stamp = { hash = "b3:f67fa77227f07948", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-server"]
 stamp = { hash = "b3:91b837e64ac2fb2b" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:b40149170c54dd7d", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
+stamp = { hash = "b3:5ee855226a39815e", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:3c14853c445bd4f4", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:632bb2cf7d3c6cb2", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:b0711a327f8cfb1f", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:ac3b48c1e839ddbd", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:a86c4597e7e99d59", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
+stamp = { hash = "b3:1acf6822677de4e7", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
@@ -2504,8 +2516,14 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
+["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair.html"]
+stamp = { hash = "b3:31924fc017e3dee1", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
+
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:e3e01039aa2838d5", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
+
+["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair_page.rs"]
+stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/preview.rs"]
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
@@ -2514,10 +2532,10 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:e7a231df3da3bd19", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:991aaa6de3af3ecf", by = "agent:claude", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file beside #251's preview.rs; lib.rs declares both modules, and the harness in tests.rs keeps the current-thread runtime the pairing log tests use; holds" }
+stamp = { hash = "b3:98577fac192b3f87", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
-stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-sources#purpose"."body"]
 stamp = { hash = "b3:52c1677098ea9ffe", by = "agent:youtube-sign-in", note = "Re-read: the youtube_chat preset text (README and youtube_chat.rs module doc, from #375) cited 'ADR-0051, proposed'; ADR-0051 is now superseded and its §1 chat preset is kept by ADR-0058, so both now say 'ADR-0051 §1, kept by ADR-0058'; the preset needs no sign-in and stays a source agents can use; holds" }
@@ -2649,7 +2667,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:0a224451e8995c1a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#265 pairing): the wave's pairing status in Connecting beside G3d's virtual camera text in Outputs; holds" }
+stamp = { hash = "b3:c095b6c0fa6eca81", by = "agent:claude", note = "ADR-0047: the Connecting bullet (the field may be empty after pairing on the server's /pair page, whose cookie rides the upgrade) and the Pairing panel entries (code countdown, device list, revoke, hidden when the server answers unsupported) match pairing.rs, app.rs and style.css. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's virtual camera card text and its .vcam-status rules in style.css are separate from the pairing panel; holds" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -2658,7 +2676,7 @@ stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:8c1bea968ba0a189" }
+stamp = { hash = "b3:ac8b90a9fd3c61db", by = "agent:claude", note = "ADR-0047: the Connecting bullet (the field may be empty after pairing on the server's /pair page, whose cookie rides the upgrade) and the Pairing panel entries (code countdown, device list, revoke, hidden when the server answers unsupported) match pairing.rs, app.rs and style.css. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's virtual camera card text and its .vcam-status rules in style.css are separate from the pairing panel; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
 stamp = { hash = "b3:49945f646dfa549c" }
@@ -2676,10 +2694,13 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:374727eaba299426" }
+stamp = { hash = "b3:f66174de55073990", by = "agent:claude", note = "ADR-0047: the Connecting bullet (the field may be empty after pairing on the server's /pair page, whose cookie rides the upgrade) and the Pairing panel entries (code countdown, device list, revoke, hidden when the server answers unsupported) match pairing.rs, app.rs and style.css. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's virtual camera card text and its .vcam-status rules in style.css are separate from the pairing panel; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/pairing.rs"]
+stamp = { hash = "b3:61d5c9e46ca8096c", by = "agent:claude", note = "ADR-0047: the Connecting bullet (the field may be empty after pairing on the server's /pair page, whose cookie rides the upgrade) and the Pairing panel entries (code countdown, device list, revoke, hidden when the server answers unsupported) match pairing.rs, app.rs and style.css. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's virtual camera card text and its .vcam-status rules in style.css are separate from the pairing panel; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mod.rs"]
 stamp = { hash = "b3:ef3e4d543c670393" }
@@ -2691,16 +2712,16 @@ stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:db8f68d00c8d8c1c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
+stamp = { hash = "b3:2dafde3205f1616e", by = "agent:claude", note = "ADR-0047: the Connecting bullet (the field may be empty after pairing on the server's /pair page, whose cookie rides the upgrade) and the Pairing panel entries (code countdown, device list, revoke, hidden when the server answers unsupported) match pairing.rs, app.rs and style.css. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's virtual camera card text and its .vcam-status rules in style.css are separate from the pairing panel; holds" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:258fbbb344a370ec", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): host.rs desktop() and desktop_vcam(); outputs.rs covers streams, recordings and the virtual camera" }
+stamp = { hash = "b3:8e0d74b1a7ad05ba", by = "agent:claude", note = "ADR-0047: pairing.rs adds the Pairing panel (start a code, list and revoke devices), wired in app.rs and lib.rs; Purpose's Contents bullet for it sits after #316's reworded outputs bullet (streams, recordings and the virtual camera), as resolved in the merge; holds" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:8c1bea968ba0a189" }
+stamp = { hash = "b3:ac8b90a9fd3c61db", by = "agent:claude", note = "ADR-0047: pairing.rs adds the Pairing panel (start a code, list and revoke devices), wired in app.rs and lib.rs; Purpose's Contents bullet for it sits after #316's reworded outputs bullet (streams, recordings and the virtual camera), as resolved in the merge; holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
 stamp = { hash = "b3:49945f646dfa549c" }
@@ -2718,10 +2739,13 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): host.rs desktop() and desktop_vcam(); outputs.rs covers streams, recordings and the virtual camera" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:374727eaba299426" }
+stamp = { hash = "b3:f66174de55073990", by = "agent:claude", note = "ADR-0047: pairing.rs adds the Pairing panel (start a code, list and revoke devices), wired in app.rs and lib.rs; Purpose's Contents bullet for it sits after #316's reworded outputs bullet (streams, recordings and the virtual camera), as resolved in the merge; holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/pairing.rs"]
+stamp = { hash = "b3:61d5c9e46ca8096c", by = "agent:claude", note = "ADR-0047: pairing.rs adds the Pairing panel (start a code, list and revoke devices), wired in app.rs and lib.rs; Purpose's Contents bullet for it sits after #316's reworded outputs bullet (streams, recordings and the virtual camera), as resolved in the merge; holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mod.rs"]
 stamp = { hash = "b3:ef3e4d543c670393" }
@@ -3144,7 +3168,7 @@ stamp = { hash = "b3:7c0a5283f684f83d", by = "agent:youtube-sign-in", note = "Re
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:5b72cc0da0e85c79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: stale via ARCH#protocol's YouTube bullet; 0.23 only adds commands, events, a target variant and ActionResult variants, which the minor-bump rule allows; holds" }
+stamp = { hash = "b3:904b5314a5bd4471", by = "agent:claude", note = "Cascade from ARCH#protocol: this PR adds no protocol change (the page and the cookie are HTTP, not wire messages), so R-API-001 is untouched by it; wave/m1's 0.22 and 0.23 bumps are additive minors from their own PRs; holds" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:efd084f9966f6d2d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: R-DEP-007 now cites ADR-0056, which keeps the SHA-pinning rule (item 1) and Dependabot keeping pins current (item 2); other R-DEP rules untouched." }
@@ -3198,7 +3222,7 @@ stamp = { hash = "b3:bcbdad685ad8815a", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against CLI Usage with the wave's Y3 change (no YouTube-bound output in the CLI, 0.23) and main's #450 (new capture items fit the canvas), and daemon Usage with P1's data directory; the steps stream to a generic RTMP URL with the control token, add no items, and their token and log paths are the data directory's; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from CLI Usage (pair/device; #440's set-key BOM and non-ASCII refusal) and server Design (pairing; Admitted's binary forward): no step pairs a device, every command uses the control token, and a key typed or piped per the steps passes #440's check; holds" }
+stamp = { hash = "b3:712b0bc27a27658a", by = "agent:claude", note = "Cascade from server Design's pairing page and cookie: the runbook runs on loopback without TLS and pairs no browser, so its steps don't change; nothing in wave/m1's server Design changed since #265; holds" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }
