@@ -764,7 +764,12 @@ sampled with no CPU copy, the frame's fence hold is staged on each submit that r
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
 (step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
-composite is still read back to the CPU for the encoder. Still outside this crate: the render
+composite is still read back to the CPU for the encoder. Step 5's encoder side is built:
+on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
+on D3D11 into a texture of their own, fence-synchronized both ways, and
+`jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
+([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
+Nothing writes the encode targets yet. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
 the output path below.
 

@@ -2720,6 +2720,7 @@ dependencies = [
  "criterion",
  "jstream-platform",
  "thiserror 2.0.21",
+ "wgpu",
 ]
 
 [[package]]
