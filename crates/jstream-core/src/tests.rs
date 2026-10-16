@@ -466,6 +466,42 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
         matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.kind.kind"),
         "{error:?}"
     );
+    // Nothing runs a CLAP filter yet, and a collection holding one wouldn't load before
+    // the next scan, so `filter.add` refuses the kind.
+    let error = batch(
+        &control,
+        Batch {
+            edits: vec![
+                Edit::SourceCreate {
+                    source_id: SourceId::new("mic"),
+                    name: "mic".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "tone".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::FilterAdd {
+                    owner: jstream_protocol::FilterOwner::Source {
+                        source_id: SourceId::new("mic"),
+                    },
+                    chain: jstream_protocol::FilterChain::Audio,
+                    filter_id: jstream_protocol::FilterId::new("plugin"),
+                    kind: "clap/org.example.gain".into(),
+                    settings: Default::default(),
+                    enabled: None,
+                    index: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        },
+    )
+    .expect_err("a CLAP filter can't be added yet");
+    assert!(
+        matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.1.kind"),
+        "{error:?}"
+    );
 }
 
 /// The engine describes its built-in kinds, and validates and completes settings against

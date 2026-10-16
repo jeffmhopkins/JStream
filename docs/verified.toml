@@ -627,7 +627,7 @@ stamp = { hash = "b3:3d8ccf2a75f92aed", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:308082ece28cb86f" }
 
 ["CRATE-jstream-audio#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it; re-read: nothing here contradicts it (the host sleeps between passes, the mixer reads block n-d). audio's not-yet list now says the host and supervisor exist and running a CLAP filter from the graph does not." }
+stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Inputs: handle.rs has main's InputStats::resets doc (a discontinuity more than 20 ms off the fitted clock line, #449) beside wave/m3's add_plugin_filter doc; ARCH#threading's CLAP paragraph now says the host and supervisor exist and running a CLAP filter from the graph does not. The purpose's account of input stats and plugin filters holds, and the not-yet list now says the same about CLAP filters." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/error.rs"]
 stamp = { hash = "b3:d8e9ac73d567425f" }
@@ -651,7 +651,7 @@ stamp = { hash = "b3:a1c0f0586e004c59" }
 stamp = { hash = "b3:418e944950d88c36" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/handle.rs"]
-stamp = { hash = "b3:146dce3f0e502506", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it; re-read: nothing here contradicts it (the host sleeps between passes, the mixer reads block n-d). audio's not-yet list now says the host and supervisor exist and running a CLAP filter from the graph does not." }
+stamp = { hash = "b3:146dce3f0e502506", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Inputs: handle.rs has main's InputStats::resets doc (a discontinuity more than 20 ms off the fitted clock line, #449) beside wave/m3's add_plugin_filter doc; ARCH#threading's CLAP paragraph now says the host and supervisor exist and running a CLAP filter from the graph does not. The purpose's account of input stats and plugin filters holds, and the not-yet list now says the same about CLAP filters." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/lib.rs"]
 stamp = { hash = "b3:4008e0f5daf6f486", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: MAX_BUSES now pub and re-exported; noted it in the bus API bullet and that core ties it to the protocol's; rest re-read, holds" }
@@ -732,7 +732,7 @@ stamp = { hash = "b3:e5a6edbd7802a068" }
 stamp = { hash = "b3:4c4707b7e310f3be", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's Mixer paragraph (input's own block allocated in Command::Add, freed via Retired::Block, QUEUE_CAP 7 per input), no-alloc and Cost text beside main's #449 Drift fit (first stamp after a discontinuity restarts the segment) and the off-line discontinuity in the no-alloc list; checked against mixer.rs, cmd.rs, retire.rs, input.rs. Holds, no edit. Not run here: cargo test." }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it; re-read: nothing here contradicts it (the host sleeps between passes, the mixer reads block n-d). audio's not-yet list now says the host and supervisor exist and running a CLAP filter from the graph does not." }
+stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it: the host and supervisor are built, running a CLAP filter from the graph is not, and the host sleeps a quarter block between passes. Re-read: nothing here contradicts it." }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/RULES.md#R-RT-001"]
 stamp = { hash = "b3:3221ab22f6747616" }
@@ -864,7 +864,7 @@ stamp = { hash = "b3:dc6d71acf3e43565", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:263452a0c0ba87a1", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the helper DLL beside the renamed bootstrap exe and CEF runtime, started by jstream-browser's CEF backend, still matches ADR-0048, the browser crate's purpose and the crate map's apps row" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only the crate map's apps row changed under it (the plugin host now built); this crate's own text still holds." }
+stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only the crate map's apps row changed under it: the plugin host is now described as built (plugin-clap, plugin-proto, the Windows platform crate). This crate's own text still holds." }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/adr/0048-sandboxed-browser-helper.md"]
 stamp = { hash = "b3:7d20d7a1c4f8bf54", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the helper DLL beside the renamed bootstrap exe and CEF runtime, started by jstream-browser's CEF backend, still matches ADR-0048, the browser crate's purpose and the crate map's apps row" }
@@ -912,7 +912,7 @@ stamp = { hash = "b3:f392adb5e22e5634", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:d796b16e2013c42c", by = "agent:claude", note = "Running bullet now says an edit batch may read state.get first to fit capture items; args.rs gains a usage note, run.rs fit_captures/state, run/tests.rs three fit tests; the rest of the contents list holds." }
 
 ["CRATE-jstream-cli#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only the crate map's apps row changed under it (the plugin host now built); this crate's own text still holds." }
+stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only the crate map's apps row changed under it: the plugin host is now described as built (plugin-clap, plugin-proto, the Windows platform crate). This crate's own text still holds." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:2980eba909dcd34e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: Running now says an edit batch may read state.get first to fit new capture items (main's #450), beside the wave's pairing and Y3 text (an action with a result prints as JSON); run.rs's merged imports and fit_captures match; holds" }
@@ -1026,7 +1026,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:2fc5f6bd3ad453d6", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Kinds now covers main's audio filter kinds, then wave/m3's CLAP section, whose not-yet says a clap/ filter is kept in the collection but filters.rs skips non-built-in kinds; dependencies list plugin-proto, youtube and serde_json for both uses, dev-dependencies both sides' lists." }
+stamp = { hash = "b3:2fc5f6bd3ad453d6", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Dependencies keep plugin-proto, youtube and one serde_json with both reasons; dev-dependencies both sides' lists; Kinds covers main's audio filter kinds, then the CLAP section. engine.rs keeps main's preview hub, YouTube and browser beside scan_clap_plugins, and Engine::batch now refuses filter.add of a clap/ kind with invalid_argument on edits.N.kind before the graph applies it (#475 B1)." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
@@ -1044,7 +1044,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
-stamp = { hash = "b3:1c9c44ff7f8c42da", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Kinds now covers main's audio filter kinds, then wave/m3's CLAP section, whose not-yet says a clap/ filter is kept in the collection but filters.rs skips non-built-in kinds; dependencies list plugin-proto, youtube and serde_json for both uses, dev-dependencies both sides' lists." }
+stamp = { hash = "b3:1c9c44ff7f8c42da", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Dependencies keep plugin-proto, youtube and one serde_json with both reasons; dev-dependencies both sides' lists; Kinds covers main's audio filter kinds, then the CLAP section. engine.rs keeps main's preview hub, YouTube and browser beside scan_clap_plugins, and Engine::batch now refuses filter.add of a clap/ kind with invalid_argument on edits.N.kind before the graph applies it (#475 B1)." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -1065,7 +1065,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:d066aebfbd4f13e5", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Kinds now covers main's audio filter kinds, then wave/m3's CLAP section, whose not-yet says a clap/ filter is kept in the collection but filters.rs skips non-built-in kinds; dependencies list plugin-proto, youtube and serde_json for both uses, dev-dependencies both sides' lists." }
+stamp = { hash = "b3:94c7a10a3e7a3c33", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Dependencies keep plugin-proto, youtube and one serde_json with both reasons; dev-dependencies both sides' lists; Kinds covers main's audio filter kinds, then the CLAP section. engine.rs keeps main's preview hub, YouTube and browser beside scan_clap_plugins, and Engine::batch now refuses filter.add of a clap/ kind with invalid_argument on edits.N.kind before the graph applies it (#475 B1)." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1080,7 +1080,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:d42333c6e2afe010", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:0506e5ad3d7c0779", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Kinds now covers main's audio filter kinds, then wave/m3's CLAP section, whose not-yet says a clap/ filter is kept in the collection but filters.rs skips non-built-in kinds; dependencies list plugin-proto, youtube and serde_json for both uses, dev-dependencies both sides' lists." }
+stamp = { hash = "b3:0506e5ad3d7c0779", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Dependencies keep plugin-proto, youtube and one serde_json with both reasons; dev-dependencies both sides' lists; Kinds covers main's audio filter kinds, then the CLAP section. engine.rs keeps main's preview hub, YouTube and browser beside scan_clap_plugins, and Engine::batch now refuses filter.add of a clap/ kind with invalid_argument on edits.N.kind before the graph applies it (#475 B1)." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:b7854ccd83c4a362", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
@@ -1089,13 +1089,13 @@ stamp = { hash = "b3:b7854ccd83c4a362", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/plugins/kinds.rs"]
-stamp = { hash = "b3:a97b278098700971", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Kinds now covers main's audio filter kinds, then wave/m3's CLAP section, whose not-yet says a clap/ filter is kept in the collection but filters.rs skips non-built-in kinds; dependencies list plugin-proto, youtube and serde_json for both uses, dev-dependencies both sides' lists." }
+stamp = { hash = "b3:fd0982cde43bbf22", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Dependencies keep plugin-proto, youtube and one serde_json with both reasons; dev-dependencies both sides' lists; Kinds covers main's audio filter kinds, then the CLAP section. engine.rs keeps main's preview hub, YouTube and browser beside scan_clap_plugins, and Engine::batch now refuses filter.add of a clap/ kind with invalid_argument on edits.N.kind before the graph applies it (#475 B1)." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/plugins/mod.rs"]
-stamp = { hash = "b3:2ca9e733fb2b7ccf", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Kinds now covers main's audio filter kinds, then wave/m3's CLAP section, whose not-yet says a clap/ filter is kept in the collection but filters.rs skips non-built-in kinds; dependencies list plugin-proto, youtube and serde_json for both uses, dev-dependencies both sides' lists." }
+stamp = { hash = "b3:2ca9e733fb2b7ccf", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Dependencies keep plugin-proto, youtube and one serde_json with both reasons; dev-dependencies both sides' lists; Kinds covers main's audio filter kinds, then the CLAP section. engine.rs keeps main's preview hub, YouTube and browser beside scan_clap_plugins, and Engine::batch now refuses filter.add of a clap/ kind with invalid_argument on edits.N.kind before the graph applies it (#475 B1)." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/plugins/supervisor.rs"]
-stamp = { hash = "b3:58eafa4460718214", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Kinds now covers main's audio filter kinds, then wave/m3's CLAP section, whose not-yet says a clap/ filter is kept in the collection but filters.rs skips non-built-in kinds; dependencies list plugin-proto, youtube and serde_json for both uses, dev-dependencies both sides' lists." }
+stamp = { hash = "b3:58eafa4460718214", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Dependencies keep plugin-proto, youtube and one serde_json with both reasons; dev-dependencies both sides' lists; Kinds covers main's audio filter kinds, then the CLAP section. engine.rs keeps main's preview hub, YouTube and browser beside scan_clap_plugins, and Engine::batch now refuses filter.add of a clap/ kind with invalid_argument on edits.N.kind before the graph applies it (#475 B1)." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/preview/jpeg.rs"]
 stamp = { hash = "b3:7416a336d0373eaf", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
@@ -1131,7 +1131,7 @@ stamp = { hash = "b3:b3f8a6543cd7d21a", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:088116772a0bb69c", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Kinds now covers main's audio filter kinds, then wave/m3's CLAP section, whose not-yet says a clap/ filter is kept in the collection but filters.rs skips non-built-in kinds; dependencies list plugin-proto, youtube and serde_json for both uses, dev-dependencies both sides' lists." }
+stamp = { hash = "b3:e9a4f0c505d080ed", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Dependencies keep plugin-proto, youtube and one serde_json with both reasons; dev-dependencies both sides' lists; Kinds covers main's audio filter kinds, then the CLAP section. engine.rs keeps main's preview hub, YouTube and browser beside scan_clap_plugins, and Engine::batch now refuses filter.add of a clap/ kind with invalid_argument on edits.N.kind before the graph applies it (#475 B1)." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:e0d246a939cb51a2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "Whole PR to src/tests/audio.rs: the wave/m2 merge (#466) kept #459's Audio routing source-scopes bullet (retain_sources, fed from Mixer::input_block while unmuted/on/open, else a preallocated zero block) and Live sources (audio_source else audio), beside main's browser/with_browser and its browser-page tests in src/tests/audio.rs (jstream-browser's fake feature, as Dependencies say), filters in Audio sources (a media file's input runs its source's chain too), opacity in Snapshots, Source::sound vs Source::audio. This push: the media test's verbatim-prefix fix and its new gain-filter check need no design text; Dependencies unchanged (jstream-platform fake, jstream-browser fake). Ran: that test, passing." }
@@ -1164,7 +1164,7 @@ stamp = { hash = "b3:603a3c5ae7785ba3", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:97c448bb25c6d46c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:6567c67ce5212ab8", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins; engine.rs has all three." }
+stamp = { hash = "b3:e12e3fac2295d914", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins (engine.rs has all three); lib.rs has main's preview and wave/m3's plugins modules. The CLAP not-yet bullet says the engine refuses filter.add of a clap/ kind (#475 B1: Engine::batch calls plugins::kinds::refuse_filters, tested in scanned_clap_plugins_are_audio_filter_kinds), because nothing runs it and a saved one wouldn't load before the next scan." }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d7e4bb2db0e1df6d", by = "agent:claude", note = "Adds the CLAP plugins bullet: scan_clap_plugins (clap/<id> audio-filter kinds, parameter mapping, first file wins, ClapScan, lock held only to add kinds) per kinds.rs and engine.rs, and HostSupervisor per supervisor.rs (heartbeat counts only once ready, start_timeout bounds loading, backoff, disable, degraded/recovered); not-yet: graph filters, editor, rescanning; the crate-map row agrees; tests.rs adds the kind tests" }
@@ -1188,7 +1188,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:d066aebfbd4f13e5", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins; engine.rs has all three." }
+stamp = { hash = "b3:94c7a10a3e7a3c33", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins (engine.rs has all three); lib.rs has main's preview and wave/m3's plugins modules. The CLAP not-yet bullet says the engine refuses filter.add of a clap/ kind (#475 B1: Engine::batch calls plugins::kinds::refuse_filters, tested in scanned_clap_plugins_are_audio_filter_kinds), because nothing runs it and a saved one wouldn't load before the next scan." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1203,7 +1203,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:d42333c6e2afe010", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:0506e5ad3d7c0779", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins; engine.rs has all three." }
+stamp = { hash = "b3:0506e5ad3d7c0779", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins (engine.rs has all three); lib.rs has main's preview and wave/m3's plugins modules. The CLAP not-yet bullet says the engine refuses filter.add of a clap/ kind (#475 B1: Engine::batch calls plugins::kinds::refuse_filters, tested in scanned_clap_plugins_are_audio_filter_kinds), because nothing runs it and a saved one wouldn't load before the next scan." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:b7854ccd83c4a362", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the contents carry main's with_youtube/with_browser, YouTube, audio filters, preview and GPU capture beside wave/m2's media playback (with_backends' media files, sound fed while shown), waveform/spectrum scopes and the bus scopes (#362); audio_sources.rs now holds both main's Recorded::Own page inputs and wave/m2's Want::Live media inputs, each Key::Source input running its filter chain (Wants: targets, live, chains), so I rewrote the Audio sources bullet to list the three kinds of input and say each runs the filters and is routed; added main's browser tests in src/tests/audio.rs to the tests list; the rest matches engine.rs, live.rs, pipeline.rs and the tests" }
@@ -1212,13 +1212,13 @@ stamp = { hash = "b3:b7854ccd83c4a362", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/plugins/kinds.rs"]
-stamp = { hash = "b3:a97b278098700971", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins; engine.rs has all three." }
+stamp = { hash = "b3:fd0982cde43bbf22", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins (engine.rs has all three); lib.rs has main's preview and wave/m3's plugins modules. The CLAP not-yet bullet says the engine refuses filter.add of a clap/ kind (#475 B1: Engine::batch calls plugins::kinds::refuse_filters, tested in scanned_clap_plugins_are_audio_filter_kinds), because nothing runs it and a saved one wouldn't load before the next scan." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/plugins/mod.rs"]
-stamp = { hash = "b3:2ca9e733fb2b7ccf", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins; engine.rs has all three." }
+stamp = { hash = "b3:2ca9e733fb2b7ccf", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins (engine.rs has all three); lib.rs has main's preview and wave/m3's plugins modules. The CLAP not-yet bullet says the engine refuses filter.add of a clap/ kind (#475 B1: Engine::batch calls plugins::kinds::refuse_filters, tested in scanned_clap_plugins_are_audio_filter_kinds), because nothing runs it and a saved one wouldn't load before the next scan." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/plugins/supervisor.rs"]
-stamp = { hash = "b3:58eafa4460718214", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins; engine.rs has all three." }
+stamp = { hash = "b3:58eafa4460718214", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins (engine.rs has all three); lib.rs has main's preview and wave/m3's plugins modules. The CLAP not-yet bullet says the engine refuses filter.add of a clap/ kind (#475 B1: Engine::batch calls plugins::kinds::refuse_filters, tested in scanned_clap_plugins_are_audio_filter_kinds), because nothing runs it and a saved one wouldn't load before the next scan." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/preview/jpeg.rs"]
 stamp = { hash = "b3:7416a336d0373eaf", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
@@ -1254,7 +1254,7 @@ stamp = { hash = "b3:b3f8a6543cd7d21a", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:088116772a0bb69c", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins; engine.rs has all three." }
+stamp = { hash = "b3:e9a4f0c505d080ed", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The builder list has main's with_youtube and with_browser and wave/m3's scan_clap_plugins (engine.rs has all three); lib.rs has main's preview and wave/m3's plugins modules. The CLAP not-yet bullet says the engine refuses filter.add of a clap/ kind (#475 B1: Engine::batch calls plugins::kinds::refuse_filters, tested in scanned_clap_plugins_are_audio_filter_kinds), because nothing runs it and a saved one wouldn't load before the next scan." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:e0d246a939cb51a2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = '''Whole PR to the body and src/tests/audio.rs: the wave/m2 merge (#466) kept #459's facts (source scopes via TapFeed::Input/Silence and drawn_sources, pipeline.rs pushing input_block or silence; tests a_source_a_source_draws_feeds_its_scope_after_its_fader in tests/audio.rs, a_drawn_source_gets_a_scope_fed_from_its_mixer_input in tests/audio_routing.rs, a_source_drawing_a_source_round_trips in tests/collection.rs) beside main's browser/youtube_chat with_browser and its two browser-page tests in tests/audio.rs, audio filters (filters.rs), item opacity (opacity_blends_items_and_nested_scenes_in_linear_light) and Source::sound for media vs Source::audio for pages; fixed a blank line splitting the Tests bullet. This push: the media-file sound test drops Windows' verbatim \\?\ prefix from its absolute setting, and now adds a -60 dB gain filter on the clip and checks its metered peak falls under 0.001 then recovers once removed; the Tests bullet now says so. Ran: that test 3 times, passing.''' }
@@ -1296,7 +1296,7 @@ stamp = { hash = "b3:abbe7b25a9e379ed", by = "agent:claude@session_01Hc59N2dDiDB
 stamp = { hash = "b3:9c68820553b1457d", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's mixer-thread text (each drawn bus's and source's block into its scope, replaced lists of bus and source scopes to the collector; matches pipeline.rs mixer_loop with TapFeed::Bus/Input/Silence and render.rs Garbage::Scopes) beside main's capture path (GpuInterop, Capture::on_context, gpu_captures), canvas-sized output and the #385 stop count. Edited: the mixer's own collector also frees each removed input's own block (retire.rs Retired::Block). Not run here: cargo test." }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it; re-read: nothing here contradicts it (the host sleeps between passes, the mixer reads block n-d). audio's not-yet list now says the host and supervisor exist and running a CLAP filter from the graph does not." }
+stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it: the host and supervisor are built, running a CLAP filter from the graph is not, and the host sleeps a quarter block between passes. Re-read: nothing here contradicts it." }
 
 ["CRATE-jstream-core#runtime"."dep:docs/RULES.md#R-RT-006"]
 stamp = { hash = "b3:f2c3ac9292e67cf2" }
@@ -1320,10 +1320,10 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:3c14a52983ba7565", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. serve.rs merged cleanly with both main's browser and YouTube wiring and the jstream-clap-scan thread; the design text describes both." }
+stamp = { hash = "b3:3c14a52983ba7565", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. serve.rs merged with main's browser wiring (with_browser) and wave/m3's jstream-clap-scan thread; it has no YouTube wiring, as the README says. core's design text it depends on combines both sides, plus the batch refusing clap/ filters, which the daemon text doesn't need." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:2fc5f6bd3ad453d6", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. serve.rs merged cleanly with both main's browser and YouTube wiring and the jstream-clap-scan thread; the design text describes both." }
+stamp = { hash = "b3:2fc5f6bd3ad453d6", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. serve.rs merged with main's browser wiring (with_browser) and wave/m3's jstream-clap-scan thread; it has no YouTube wiring, as the README says. core's design text it depends on combines both sides, plus the batch refusing clap/ filters, which the daemon text doesn't need." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
@@ -1353,7 +1353,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:2c839def6c695053", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. serve.rs merged cleanly with both main's browser and YouTube wiring and the jstream-clap-scan thread; the design text describes both." }
+stamp = { hash = "b3:2c839def6c695053", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. serve.rs merged with main's browser wiring (with_browser) and wave/m3's jstream-clap-scan thread; it has no YouTube wiring, as the README says. core's design text it depends on combines both sides, plus the batch refusing clap/ filters, which the daemon text doesn't need." }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
@@ -1467,7 +1467,7 @@ stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:2115a85b23caf8dc", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1 removes data.rs (lib.rs keeps the wave's cef-gated browser module, drops data); the contents list and tests (delay-load test kept, data-folder test gone) match; #298's not-yet line keeps browser sources off by default; holds" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only the crate map's apps row changed under it (the plugin host now built); this crate's own text still holds." }
+stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only the crate map's apps row changed under it: the plugin host is now described as built (plugin-clap, plugin-proto, the Windows platform crate). This crate's own text still holds." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after 741cfc28: a rustfmt-only line wrap of the engine call in app.rs; nothing the section says changed; holds" }
@@ -1605,7 +1605,7 @@ stamp = { hash = "b3:984f333744172f87" }
 stamp = { hash = "b3:978a7c1452dc77b3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: stale only through ARCH data-model, whose merged text adds main's browser kinds and filter chains and wave/m2's media, waveform and spectrum kinds and bus references; the encoder-sharing rule this section cites (no video chain, same mix and profile, one session) is unchanged, and no encode code changed; holds" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it; re-read: nothing here contradicts it (the host sleeps between passes, the mixer reads block n-d). audio's not-yet list now says the host and supervisor exist and running a CLAP filter from the graph does not." }
+stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it: the host and supervisor are built, running a CLAP filter from the graph is not, and the host sleeps a quarter block between passes. Re-read: nothing here contradicts it." }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/audio.rs"]
 stamp = { hash = "b3:79b9830d47ed6557" }
@@ -1857,7 +1857,7 @@ stamp = { hash = "b3:5826946faa72f5b2", by = "agent:youtube-sign-in", note = "Re
 stamp = { hash = "b3:13fabd34e2ef41ff", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose still holds against the reworded crate-map row: it says the Output trait comes later and lists jstream-media and jstream-mux as its JStream dependencies, matching the row" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it; re-read: nothing here contradicts it (the host sleeps between passes, the mixer reads block n-d). audio's not-yet list now says the host and supervisor exist and running a CLAP filter from the graph does not." }
+stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it: the host and supervisor are built, running a CLAP filter from the graph is not, and the host sleeps a quarter block between passes. Re-read: nothing here contradicts it." }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
@@ -2214,10 +2214,10 @@ stamp = { hash = "b3:e3159c7676b1dacb", by = "agent:claude", note = "New app REA
 stamp = { hash = "b3:25a515b8ac8875db", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it; re-read: nothing here contradicts it (the host sleeps between passes, the mixer reads block n-d). audio's not-yet list now says the host and supervisor exist and running a CLAP filter from the graph does not." }
+stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Inputs: the crate map's apps row now has main's text (jstream-desktop linking sources and jstream-browser, jstream-daemon always linking jstream-browser, the browser-helper clause) beside the plugin host described as built with plugin-clap, plugin-proto and the Windows platform crate; ARCH#threading's CLAP paragraph says the host exists and sleeps a quarter block between passes. The host README's purpose matches both." }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it; re-read: nothing here contradicts it (the host sleeps between passes, the mixer reads block n-d). audio's not-yet list now says the host and supervisor exist and running a CLAP filter from the graph does not." }
+stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Inputs: the crate map's apps row now has main's text (jstream-desktop linking sources and jstream-browser, jstream-daemon always linking jstream-browser, the browser-helper clause) beside the plugin host described as built with plugin-clap, plugin-proto and the Windows platform crate; ARCH#threading's CLAP paragraph says the host exists and sleeps a quarter block between passes. The host README's purpose matches both." }
 
 ["CRATE-jstream-plugin-host#purpose"."dep:docs/RULES.md#R-RT-001"]
 stamp = { hash = "b3:3221ab22f6747616", by = "agent:claude", note = "New app README: re-read against main.rs (scan/run usage, exit codes), session.rs (start, restore, activate, control loop; restarts beat the heartbeat from another thread for up to RESTART_GRACE), rt.rs (pass steps, quarter-block sleep, no-alloc test) and the tests list; not-yet names graph filters, the editor, the media-clock timer and the hardware run; consistent with ARCH#threading, R-RT-001, ADR-0035 and the proto and plugin-clap READMEs" }
@@ -3363,7 +3363,7 @@ stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 stamp = { hash = "b3:c60cba487fc0a5e5", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
 
 ["RULES#real-time"."dep:docs/ARCHITECTURE.md#threading"]
-stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it; re-read: nothing here contradicts it (the host sleeps between passes, the mixer reads block n-d). audio's not-yet list now says the host and supervisor exist and running a CLAP filter from the graph does not." }
+stamp = { hash = "b3:2b0abbcd8750637a", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Only ARCH#threading's CLAP paragraph changed under it: the host and supervisor are built, running a CLAP filter from the graph is not, and the host sleeps a quarter block between passes. Re-read: nothing here contradicts it." }
 
 ["RUNBOOK-GO-LIVE#before"."body"]
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }

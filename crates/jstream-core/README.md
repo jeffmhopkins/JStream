@@ -97,10 +97,13 @@ state machine. Contents:
     the latest (`saved_state`, `StateSaved`) and restarts with it. A run of
     `degraded_after` consecutive late blocks in the mixer is `Degraded`, and its end
     `Recovered`. `stop` asks the host to stop and kills it after `STOP_GRACE`.
-  - **Not yet:** running a CLAP filter. A source's `clap/` filter is kept in the
-    collection, but the mixer's filter chain skips every kind that isn't a built-in
-    audio filter, so nothing hosts it, keeps its saved state, runs a supervisor or
-    reports its events; the plugin's editor; rescanning.
+  - **Not yet:** running a CLAP filter. The engine refuses a `filter.add` of a `clap/`
+    kind (`invalid_argument` on its `kind`), since nothing would run it: the mixer's
+    filter chain skips every kind that isn't a built-in audio filter. A collection
+    holding one also wouldn't load at the next start, because the file is read before
+    the scan describes the kind. So nothing hosts a CLAP filter, keeps its saved state,
+    runs a supervisor or reports its events. Also not yet: the plugin's editor, and
+    rescanning.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program

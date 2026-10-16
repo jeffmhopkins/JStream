@@ -1967,7 +1967,8 @@ impl State {
     ///
     /// A batch whose idempotency key this client already used is not applied again: it
     /// gets the result of the first call with that key, and emits nothing. That check
-    /// comes first, so a retry succeeds even after `rev` moved on.
+    /// comes first, so a retry succeeds even after `rev` moved on. A `filter.add` of a
+    /// scanned CLAP kind is refused next, since nothing runs CLAP filters yet.
     fn batch(
         &mut self,
         client_id: &ClientId,
@@ -1982,6 +1983,7 @@ impl State {
         if let Some(result) = keyed.as_ref().and_then(|keyed| self.applied.get(keyed)) {
             return Ok(result.clone());
         }
+        clap_kinds::refuse_filters(&batch.edits)?;
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
             &batch.edits,
