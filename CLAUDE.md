@@ -43,7 +43,9 @@ depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
 - To bring `main` into your branch, run `cargo xtask docs merge-main`. It resolves
   conflicts between stamps or inside `@generated` blocks, and leaves every other conflict
   to you. Then re-read and
-  verify each section it lists as stale. A PR into a wave branch merges its wave instead:
+  verify each section it lists as stale, each with its own note: keep what the earlier
+  note it prints said about your change and add what the merge changed
+  ([DOCS › notes](docs/DOCS.md#notes)). A PR into a wave branch merges its wave instead:
   `cargo xtask docs merge-main --from wave/<name>`. Which branch a PR targets, and how waves
   land, is in [docs/runbooks/waves.md](docs/runbooks/waves.md).
 
