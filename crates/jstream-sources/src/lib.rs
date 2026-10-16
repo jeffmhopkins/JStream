@@ -17,7 +17,6 @@
 //! name. The other built-in kinds are described only. `jstream-core` drives sources
 //! from its `jstream-sources` thread through [`Registry::create`], [`Source::frame`],
 //! [`Source::next_change`], [`Source::show`] and [`Source::painter`].
-
 //!
 //! [`MediaDecoders`]: jstream_platform::MediaDecoders
 //!

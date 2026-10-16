@@ -239,8 +239,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   20 kHz (or half the sample rate). The `scale` spreads frequencies `log` from
   20 Hz (each octave as wide, the default) or `linear` from 0 Hz, and a bar narrower
   than a bin shows its nearest bin. Bars at least three pixels wide have a
-  one-pixel gap. Neither draws a single source yet: that needs a per-input tap in the
-  mixer.
+  one-pixel gap.
 - `browser` ([ADR-0021](../../docs/adr/0021-browser-source.md)): a web page (`url`,
   `http://` or `https://`) or the `file` asset (`.html` or `.htm`, which wins when set),
   opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through

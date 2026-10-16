@@ -211,7 +211,6 @@ state machine. Contents:
   or rebuilt on a real mixer, and new settings a full command queue refuses kept off
   the record and tried again), item opacity in linear light through a nested scene
   (`snapshot.rs`), the output edits and the
-
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
@@ -324,7 +323,8 @@ settings), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
-`arc-swap` (the published render snapshot and the mixer thread's list of bus scopes)
+`arc-swap` (the published render snapshot and the mixer thread's list of bus and
+source scopes)
 and `tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
@@ -569,7 +569,6 @@ open through it (`browser` and its `youtube_chat` preset,
 doesn't draw yet, so it shows as transparent. `LiveSources::audio` lists every
 running source's own audio (`Source::audio`, heard whether or not it is shown) for
 *Audio sources*.
-
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source, and each running source's own
@@ -972,7 +971,8 @@ waits for a start). The call checks the output is idle,
 takes the publish target, records an in-flight generation, emits `starting`, and
 drops the collection lock before it opens devices or joins anything. When no other
 output is running it opens the program stage and waits,
-up to 10 s, for the render thread to open the software compositor; that bound only
+up to 10 s, for the render thread to open its compositor (on the platform's GPU
+context, or on the software adapter without one; see [Runtime](#runtime)); that bound only
 keeps a stuck adapter from blocking the call, and the GPU tests raise it because
 lavapipe can open slower than that on a loaded CI runner. When others are running it shares
 theirs. It then gets the encoder session for its key (opening one if no running
@@ -1412,8 +1412,8 @@ or mixer panic) is a channel message to a watcher the control thread started; th
 watcher emits `failed` and stops the pipeline. A program-stage failure reaches every
 running output. Frame hand-off is the encoder session queues. The audio and outputs
 snapshots and a GPU encode target are still rows of the ARCH thread table, not this
-cut. The mixer also has its own collector, which frees input rings and their counters,
-removed buses' state, and removed filter chains and filters. The program stage's
+cut. The mixer also has its own collector, which frees input rings, their counters and
+their own blocks, removed buses' state, and removed filter chains and filters. The program stage's
 `jstream-audio-sources` thread opens and closes the audio sources' inputs as the
 collection changes (see *Audio sources* in Design); it takes no engine lock and is
 joined, and every input closed, after the mixer thread stops. A media file's input is
