@@ -662,7 +662,9 @@ After `welcome`, the server pushes every event to every client.
 
 JStream signs in to one Google account, once, with the full `youtube` scope
 ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) §4), and every
-YouTube command is an action or a query, so agents reach them over MCP too (0.20):
+YouTube command is an action or a query (0.20). They are for the UI: the MCP server
+offers none of them, refuses a `youtube` output target and drops YouTube events, since
+YouTube is for people, not agents (ADR-0058 §3):
 
 - `youtube.sign_in` returns `{"type":"youtube.sign_in","url":…}`, Google's consent
   page. Once the user agrees, Google redirects the browser to a listener the engine

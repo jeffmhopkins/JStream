@@ -688,8 +688,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
   (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
-  schema is generated from the protocol. The protocol's `youtube.*` ops get no tool and
-  its `youtube.*` events stay out of the `events` feed: YouTube is for people, through
+  schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
+  output edit with a `youtube` target is refused, and `youtube.*` events stay out of
+  the `events` feed: YouTube is for people, through
   the UI (ADR-0058 §3, proposed in #435).
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped

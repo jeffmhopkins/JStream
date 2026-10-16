@@ -30,7 +30,7 @@ Contents (a first cut; [Design](#design) explains the choices):
   its PNG appears.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
   less the people-only `youtube.*` ops (`PEOPLE_ONLY`), and the decoding of tool
-  arguments into protocol calls.
+  arguments into protocol calls, which refuses an output edit with a `youtube` target.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
   a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`;
   `youtube.*` events are dropped.
@@ -59,8 +59,10 @@ takes it as its `op` argument. A command added to the protocol becomes an op wit
 change here, and a new noun becomes a new tool. The generated list is in the snapshot
 below; its shape is the following. The protocol's `youtube.*` ops get no tool, and a
 call naming one is an unknown op, so none reaches the engine: YouTube is for people,
-through the UI (ADR-0058 §3). The `events` feed drops `youtube.*` events for the same
-reason. `describe_api` still returns the whole schema, YouTube included.
+through the UI (ADR-0058 §3). For the same reason an `output.create` or
+`output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
+`batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
+target stays open to agents), and the `events` feed drops `youtube.*` events. `describe_api` still returns the whole schema, YouTube included.
 
 | Tool | Takes | Becomes |
 |---|---|---|
