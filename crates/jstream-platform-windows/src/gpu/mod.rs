@@ -11,20 +11,25 @@
 //!   value that last released it to the GPU (`released`) and the value the GPU's last use
 //!   signals (`written`, or `released` for a capture slot).
 //! - Each capture stream has its own fence, which D3D11 signals after each copy into a
-//!   slot (`capture`). The encoders and virtual camera, once they take GPU frames, will
-//!   signal their releases on fences of their own in the same way.
+//!   slot (`capture`).
+//! - The context's release fence is signalled only by D3D11's immediate context, after
+//!   each read of an encode target there (`encode`): a target remembers the value that
+//!   last released it (`released`), which the GPU's next write waits for. One lock
+//!   orders taking a value and signalling it, so the values increase in signal order.
 //!
-//! Capture reaches the context through `WgcCapture::on_gpu`; the trait shapes stay as
-//! they are (the crate README's open questions). Not yet: the encoders' D3D11 side.
+//! Capture reaches the context through `WgcCapture::on_gpu`, and the encoders through
+//! `MfCodecs`' `Codecs::on_context`.
 
 mod capture;
 mod d3d;
+mod encode;
 
+use std::any::Any;
 use std::fmt;
 use std::future::Future;
 use std::pin::pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 
 use jstream_platform::media::{ColorInfo, FrameSize, MediaTime, PixelFormat, VideoFrameInfo};
@@ -41,6 +46,7 @@ use windows::core::Interface;
 pub(crate) use self::capture::{CaptureGpu, CaptureRing};
 pub(crate) use self::d3d::adapter_drives_monitor;
 use self::d3d::{D3D11, SharedFence, SharedTexture};
+pub(crate) use self::encode::EncodeGpu;
 use crate::com::OsResult;
 
 /// GPU interop through DX12 (wgpu) and D3D11 (capture and Media Foundation).
@@ -64,6 +70,10 @@ impl WindowsGpu {
 /// frames, driver lifetime).
 pub(crate) struct Shared {
     fence: SharedFence,
+    /// Signalled by D3D11 after it reads an encode target (module docs, fence values).
+    release: SharedFence,
+    /// The last value `release` was signalled with. Held while signalling the next.
+    last_release: Mutex<u64>,
     d3d11: D3D11,
     d3d12: ID3D12Device,
     /// The last fence value handed out.
@@ -247,8 +257,11 @@ impl GpuInterop for WindowsGpu {
             })?;
         let d3d11 = d3d::create_d3d11(&dxgi)?;
         let fence = SharedFence::new(&d3d11.device, &d3d12)?;
+        let release = SharedFence::new(&d3d11.device, &d3d12)?;
         let shared = Arc::new(Shared {
             fence,
+            release,
+            last_release: Mutex::new(0),
             d3d11,
             d3d12,
             last_value: AtomicU64::new(0),
@@ -304,7 +317,7 @@ impl GpuInterop for WindowsGpu {
             pts: MediaTime::zero(crate::clock::timebase()),
         };
         let sync = Arc::new(SlotSync {
-            _texture: texture,
+            texture,
             shared: Arc::clone(shared),
             released: AtomicU64::new(0),
             written: AtomicU64::new(0),
@@ -313,19 +326,18 @@ impl GpuInterop for WindowsGpu {
     }
 }
 
-/// The fence bookkeeping for one shared texture. The GPU side ([`FrameSync::stage`])
-/// waits for `released` and signals a new `written`. The D3D11 side (the encoders and
-/// virtual camera, when they take GPU frames) will wait for `written` and signal a new
-/// `released` on a fence of its own, which `stage` then waits on (module docs, fence
-/// values).
+/// The fence bookkeeping for one encode target. The GPU side ([`FrameSync::stage`])
+/// waits on the release fence for `released` and signals a new `written` on the
+/// context's fence. The D3D11 side (the encoders, `EncodeGpu::copy`) waits for
+/// `written` and signals a new `released` (module docs, fence values).
 pub(crate) struct SlotSync {
     // The texture's raw objects drop before `shared`, which holds the wgpu device clone.
     // Held so the D3D11 side can read the texture, and so the share stays open.
-    _texture: SharedTexture,
+    texture: SharedTexture,
     shared: Arc<Shared>,
-    /// The fence value after which the GPU may write the texture again.
+    /// The release fence's value after which the GPU may write the texture again.
     released: AtomicU64,
-    /// The fence value the GPU's last staged use signals.
+    /// The context fence's value the GPU's last staged use signals.
     written: AtomicU64,
 }
 
@@ -361,10 +373,15 @@ impl FrameSync for SlotSync {
         }
         let wait = self.released.load(Ordering::Acquire);
         let signal = self.shared.next_value();
-        hal_queue.add_wait_fence(self.shared.fence.d3d12.clone(), wait);
+        hal_queue.add_wait_fence(self.shared.release.d3d12.clone(), wait);
         hal_queue.add_signal_fence(self.shared.fence.d3d12.clone(), signal);
         self.written.store(signal, Ordering::Release);
         Ok(())
+    }
+
+    /// The encoders recognise encode targets by this (`EncodeGpu::copy`).
+    fn platform(&self) -> Option<&dyn Any> {
+        Some(self)
     }
 }
 

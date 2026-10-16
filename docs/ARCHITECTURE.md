@@ -28,7 +28,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
    │ jstream-ui (Leptos→WASM)   jstream-mcp (MCP tools)   jstream-cli   3rd party │
    └───────────────┬──────────────────────────────────────────────────────────────┘
                    │  Control trait: in-process (InProcessControl), or WebSocket + token
-                   │  (JSON messages, including video.snapshot's PNG; binary frames later: preview, meters)
+                   │  (JSON messages, including video.snapshot's PNG; binary frames: preview)
                    ▼
 ┌───────────────────────────── jstream-core :: Engine ─────────────────────────────┐
 │ command bus → state (rev N) → events      per-client undo · audit log · persist │
@@ -53,8 +53,9 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 
 | Host (`apps/`) | What it is |
 |---|---|
-| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
+| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until CEF's sandbox and file limits land, opens browser sources' pages in CEF. |
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-browser-helper` | Not a host: CEF's subprocess exe for browser sources, which hosts that turn on browser sources ship next to their own exe ([ADR-0046](adr/0046-browser-crate-and-helper.md), [its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -139,7 +140,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0041](adr/0041-youtube-interaction-scope-v3.md)). No media code. | no |
-| 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
+| 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
@@ -147,14 +148,15 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
 | 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling. No GPU device | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
+| 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md)): the `BrowserBackend` seam, pages' audio hand-off and custom CSS, and the CEF off-screen backend (Windows, feature `cef`), which copies shared-texture paints onto the engine's device | **yes** |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
-| 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording. Uses `encode`, `mux` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
+| 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, CEF's subprocess exe ([ADR-0046](adr/0046-browser-crate-and-helper.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -425,6 +427,7 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
+| Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot and `rev` under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
@@ -591,6 +594,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
+- **Pairing** (protocol 0.21, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
+  action `pairing.start` answers a one-time code (an action result, the one place it is
+  sent), which a device trades at `POST /api/v1/pair` for a device token of its own;
+  `device.list` and the action `device.revoke` manage the paired devices. They concern
+  whom a listener admits, so `jstream-server` answers them, and a session with no server
+  in front answers `unsupported`
+  ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
@@ -645,8 +655,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `scene.delete` or `source.delete` refused because something still refers to its
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
   [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
-- **Binary streams** (WebSocket binary frames): preview video and meters. Not designed
-  yet, except the meter frame's fields
+- **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
+  `preview.subscribe` opens a stream of the program mix for the calling session,
+  scaled down, at most `fps` pictures a second and only when the mix changes, in H.264
+  when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the
+  session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
+  keyframe, size, presentation time, `rev`) and the picture, and every hop that queues
+  frames drops up to the next keyframe when full, so a slow client still decodes what
+  it gets. The layout is in
+  [jstream-protocol › Design](../crates/jstream-protocol/README.md#design). Meters
+  travel in the JSON `meters.tick` event for now (protocol 0.19); a binary meter frame
+  would be another kind of the same frame. The meter fields
   ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
   (4× oversampled, BS.1770); per bus, also momentary, short-term and integrated loudness
   (LUFS). Loudness is computed only for the master bus and for subscribed buses and
@@ -660,7 +679,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the browser, where the token travels as a subprotocol because a page can't set
   `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)). `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
-  default, with the token required and `Origin`/`Host` validated
+  default, with the token (the control token, or a paired device's on loopback until TLS)
+  required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
   for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
@@ -687,7 +707,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
+  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -698,12 +718,15 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   about ten a second while the mixer runs, is kept the same way, as `meters`.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 209 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 219 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
+- **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
+  tool's `preview.subscribe` fails with `action_failed`; an agent looks with
+  `video.snapshot`.
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an
@@ -770,7 +793,19 @@ a layer the caller keeps, so a frame allocates no texture for it. The caller wal
 nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see
-[Threads › State to RT threads](#threading)). Still outside this crate: the render
+[Threads › State to RT threads](#threading)). On the GPU path the engine's render
+thread composites on the platform's `GpuContext`, and capture moves onto it through
+`Capture::on_context`: each captured texture is imported once into the cache and
+sampled with no CPU copy, the frame's fence hold is staged on each submit that reads it
+and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
+Without a context, or a capture that can deliver on it, the engine keeps CPU frames
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The
+composite is still read back to the CPU for the encoder. Step 5's encoder side is built:
+on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
+on D3D11 into a texture of their own, fence-synchronized both ways, and
+`jstream-encode`'s `VideoSession::open_on` picks them or falls back to a CPU encoder
+([jstream-platform-windows](../crates/jstream-platform-windows/README.md#purpose)).
+Nothing writes the encode targets yet. Still outside this crate: the render
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
 the output path below.
 
@@ -819,7 +854,10 @@ depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native
 -->
 
 A browser source is a CEF off-screen browser
-([ADR-0021](adr/0021-browser-source.md)), not built yet. Each `OnAcceleratedPaint`
+([ADR-0021](adr/0021-browser-source.md)), built in `jstream-browser`
+([ADR-0046](adr/0046-browser-crate-and-helper.md),
+[its README](../crates/jstream-browser/README.md)). The desktop app wires it in behind
+its off-by-default `cef` feature; the daemon and the program mix don't use it yet. Each `OnAcceleratedPaint`
 hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
 and no fence. CEF takes the texture back into its pool when the callback returns. So the
 callback opens the handle on the wgpu D3D12 device, imports it through hal as in the GPU

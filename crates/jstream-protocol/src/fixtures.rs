@@ -15,6 +15,7 @@ use crate::{
     SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
     Vec2, Welcome, json_schema,
 };
+use crate::{ActionResult, DeviceId, DeviceInfo};
 use crate::{
     AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
     EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,
@@ -24,7 +25,7 @@ use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
-use crate::{HistoryCall, HistoryDirection, HistoryOp};
+use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -464,8 +465,20 @@ pub(crate) fn actions() -> Vec<Action> {
             output_id: OutputId::new("out_yt"),
         },
         Action::AudioResetLoudness {},
+        Action::PreviewSubscribe {
+            channel: 1,
+            max_width: Some(960),
+            max_height: None,
+            fps: Some(30),
+            codecs: vec![PreviewCodec::H264, PreviewCodec::Jpeg],
+        },
+        Action::PreviewUnsubscribe { channel: 1 },
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
+        },
+        Action::PairingStart,
+        Action::DeviceRevoke {
+            device_id: DeviceId::new("dev_1"),
         },
     ]
 }
@@ -500,6 +513,7 @@ pub(crate) fn queries() -> Vec<Query> {
                 source_id: SourceId::new("src_cam"),
             },
         },
+        Query::DeviceList,
     ]
 }
 
@@ -867,6 +881,14 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             ],
         },
+        QueryResult::DeviceList {
+            devices: vec![DeviceInfo {
+                device_id: DeviceId::new("dev_1"),
+                name: "Tablet".into(),
+                paired_at: 1_790_000_000,
+                last_used_at: 1_790_003_600,
+            }],
+        },
     ]
 }
 
@@ -1011,6 +1033,9 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         ProtocolError::ActionFailed {
             reason: "connection refused".into(),
         },
+        ProtocolError::Unsupported {
+            call: "pairing.start".into(),
+        },
         ProtocolError::Internal {
             reason: "render thread stopped".into(),
         },
@@ -1023,6 +1048,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Encoder,
         EntityKind::Filter,
         EntityKind::Bus,
+        EntityKind::Device,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -1099,7 +1125,16 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r10"),
-            result: CallResult::Action {},
+            result: CallResult::action(),
+        }),
+        ServerMessage::Response(Response {
+            id: RequestId::new("r15"),
+            result: CallResult::Action {
+                result: Some(ActionResult::PairingStart {
+                    code: SecretString::new("7K3M-9QXA"),
+                    expires_in_secs: 120,
+                }),
+            },
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r30"),

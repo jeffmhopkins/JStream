@@ -216,8 +216,9 @@ prs = [173]
 id = "E3b"
 milestone = "M1a"
 title = "Render takes GPU frames"
-status = "review"
+status = "hardware"
 prs = [219]
+note = "windows_gpu hardware test (#334)"
 
 [[item]]
 id = "Y1"
@@ -676,7 +677,7 @@ status = "planned"
 id = "U1"
 milestone = "M2"
 title = "Preview stream"
-status = "review"
+status = "done"
 prs = [251]
 
 [[item]]
@@ -780,7 +781,8 @@ prs = [163]
 id = "E3c"
 milestone = "M3"
 title = "Encode from GPU frames"
-status = "planned"
+status = "review"
+prs = [325]
 
 [[item]]
 id = "X1"

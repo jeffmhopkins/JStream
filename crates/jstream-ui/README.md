@@ -60,7 +60,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   served the page behind HTTP Basic with the token as the password: the browser's
   cached Basic credentials then carry the token on the upgrade, and no token
   subprotocol is sent. A remote browser will pair with a one-time code instead
-  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)); that isn't built yet. In the desktop app the form is skipped: the
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): the server side is built
+  (`pairing.start` and `POST /api/v1/pair`,
+  [jstream-server › Design](../jstream-server/README.md#design)), the UI's pairing form
+  isn't ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md) decides
+  it). In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). That connection carries the
   token in the subprotocol, which `jstream-server` accepts

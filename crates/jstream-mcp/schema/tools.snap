@@ -2242,6 +2242,61 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "describe_api"
     },
     {
+      "description": "Runs one `device` operation: set `op.type` to one of `device.revoke` (action), `device.list` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "DeviceId": {
+            "description": "A paired device: one browser or other client admitted with its own device token\n(ADR-0044). Assigned by the server when the device pairs.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `device` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Revokes a paired device: its token stops working at once, and its open\nconnections are closed. Fails with `not_found` for a device that isn't paired\n(or whose token lapsed after 30 days unused). Answered by the server, like\n`pairing.start`.",
+                "properties": {
+                  "device_id": {
+                    "$ref": "#/$defs/DeviceId",
+                    "description": "The device to revoke, as `device.list` reports it."
+                  },
+                  "type": {
+                    "const": "device.revoke",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "device_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it\npaired and was last used, never its token. Answered by the server that admits\nclients, not the engine: a `Control` with no server in front fails with\n`unsupported`.",
+                "properties": {
+                  "type": {
+                    "const": "device.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "device"
+    },
+    {
       "description": "Runs one `encoder` operation: set `op.type` to one of `encoder.create` (edit), `encoder.update` (edit), `encoder.delete` (edit), `encoder.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
@@ -3733,7 +3788,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SecretString": {
-            "description": "A secret string, such as a stream key, sent by a client to the engine.\n\nOn the wire it is a plain JSON string. In Rust it never prints: its `Debug` is\n`\"***\"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).\nA value that is not a string fails to parse with a message that doesn't repeat it.\nThe engine never sends one back (R-SEC-001).",
+            "description": "A secret string, such as a stream key sent by a client to the engine, or the\npairing code a server answers `pairing.start` with.\n\nOn the wire it is a plain JSON string. In Rust it never prints: its `Debug` is\n`\"***\"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).\nA value that is not a string fails to parse with a message that doesn't repeat it.\nThe engine never sends one back, and a pairing code travels only in that one answer\n(R-SEC-001).",
             "type": "string"
           }
         },
@@ -3895,7 +3950,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace or control characters, and\n`action_failed` when the engine has no credential store or the store refuses.",
+                "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace, control or non-ASCII characters, and\n`action_failed` when the engine has no credential store or the store refuses.",
                 "properties": {
                   "key": {
                     "$ref": "#/$defs/SecretString",
@@ -3975,6 +4030,146 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "output"
+    },
+    {
+      "description": "Runs one `pairing` operation: set `op.type` to one of `pairing.start` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `pairing` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
+                "properties": {
+                  "type": {
+                    "const": "pairing.start",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "pairing"
+    },
+    {
+      "description": "Runs one `preview` operation: set `op.type` to one of `preview.subscribe` (action), `preview.unsubscribe` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "PreviewCodec": {
+            "description": "How a preview stream's pictures are encoded.",
+            "oneOf": [
+              {
+                "const": "h264",
+                "description": "H.264 access units in Annex B form (start codes, parameter sets in band), for\nWebCodecs' `VideoDecoder` with no `description`. A frame is a keyframe exactly\nwhen its header says so.",
+                "type": "string"
+              },
+              {
+                "const": "jpeg",
+                "description": "One baseline JPEG per frame, every one a keyframe. The fallback when the engine\nhas no H.264 encoder or the client can't decode H.264.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `preview` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Opens a preview stream of the program mix for this session: low-resolution\npictures sent as binary frames on `channel`, only to this session (ADR-0045).\nThe picture is the canvas scaled down to fit `max_width` × `max_height`, with\neven sides; it follows the canvas when that changes. A picture is sent when what\nthe program mix draws changes, at most `fps` times a second, and at least once\nevery 2 s (a keyframe), so a client that lost frames recovers. The engine picks\nthe first of `codecs` it can encode, and every frame names its codec. The stream\nshows the mix before any master stage. It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nfifth open stream; and with `action_failed` when the session cannot receive\nbinary frames (an MCP session) or none of `codecs` can be encoded here.",
+                "properties": {
+                  "channel": {
+                    "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "codecs": {
+                    "description": "The codecs the client can decode, most preferred first. Empty or omitted\nmeans `[\"h264\", \"jpeg\"]`.",
+                    "items": {
+                      "$ref": "#/$defs/PreviewCodec"
+                    },
+                    "type": "array"
+                  },
+                  "fps": {
+                    "description": "Pictures per second, at most. Default 15.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "max_height": {
+                    "description": "The tallest the picture may be, in pixels. Default 360.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "max_width": {
+                    "description": "The widest the picture may be, in pixels. Default 640.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "preview.subscribe",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "channel"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Closes one of this session's preview streams. No end frame follows; frames\nalready sent may still arrive. Succeeds for a channel that is not open.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel the stream was opened on.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "preview.unsubscribe",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "channel"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "preview"
     },
     {
       "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.switch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",

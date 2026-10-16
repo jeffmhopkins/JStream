@@ -6,8 +6,12 @@
 mod audio;
 mod audio_routing;
 mod collection;
+mod gpu_capture;
 mod history;
+mod preview;
 mod sources;
+#[cfg(all(windows, feature = "hw-tests"))]
+mod windows_gpu;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
@@ -529,7 +533,7 @@ fn events_reach_every_subscriber_in_order() {
     let by_agent = block_on(agent.call(Call::Batch(Batch::single(create("a"))))).expect("batch");
     let by_user = block_on(user.call(Call::Batch(Batch::single(create("b"))))).expect("batch");
     let started = block_on(agent.call(output_call("yt", true))).expect("start");
-    assert_eq!(started.result, CallResult::Action {});
+    assert_eq!(started.result, CallResult::action());
 
     let changed = |state| Event::OutputStateChanged {
         output_id: OutputId::new("yt"),
@@ -615,7 +619,7 @@ fn scene_switch_changes_program_without_an_edit() {
     assert_eq!(program(&agent), Some(SceneId::new("a")));
 
     let switch = block_on(agent.call(switch_call("b"))).expect("switch");
-    assert_eq!(switch.result, CallResult::Action {});
+    assert_eq!(switch.result, CallResult::action());
     assert_eq!(engine.rev(), Rev(1), "a switch is not an edit");
     assert_eq!(drain(&mut events), vec![switched("b", &agent, switch.id)]);
     assert_eq!(program(&user), Some(SceneId::new("b")));
@@ -2249,9 +2253,9 @@ mod cpu_pipeline {
         let seen: Arc<Mutex<Vec<Option<SceneId>>>> = Arc::default();
         let draw: OpenDraw = {
             let seen = Arc::clone(&seen);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, capture, out| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -2701,9 +2705,9 @@ mod cpu_pipeline {
         let armed = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let armed = Arc::clone(&armed);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
                     inner(shot, size, rgba, out)
@@ -3706,9 +3710,9 @@ mod cpu_pipeline {
         let working = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let working = Arc::clone(&working);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 if working.load(Ordering::Acquire) {
-                    cpu_draw()()
+                    cpu_draw()(context)
                 } else {
                     Err("no adapter".to_owned())
                 }
@@ -3863,9 +3867,9 @@ mod cpu_pipeline {
         let armed = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let armed = Arc::clone(&armed);
-            Arc::new(move || {
+            Arc::new(move |context| {
                 let armed = Arc::clone(&armed);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
                     inner(shot, size, rgba, out)
@@ -4031,7 +4035,7 @@ mod cpu_pipeline {
     /// A draw that fills the program frame with one RGBA colour, so the test can tell
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
-        Arc::new(move || {
+        Arc::new(move |_| {
             let draw: DrawFn = Box::new(move |_, size: FrameSize, _, out: &mut Vec<u8>| {
                 out.clear();
                 for _ in 0..size.width() as usize * size.height() as usize {
@@ -4482,6 +4486,9 @@ fn stream_key_actions_report_without_naming_the_key() {
             "live\nSECRET",
             "must not contain whitespace or control characters",
         ),
+        // #441: a leading byte-order mark, and any other non-ASCII character.
+        ("\u{FEFF}live_SECRET", "must contain only ASCII characters"),
+        ("live_S\u{e9}CRET", "must contain only ASCII characters"),
     ] {
         let error = block_on(control.call(set_key("out_yt", key))).expect_err("bad key");
         assert_eq!(

@@ -7,7 +7,7 @@ use crate::event::OutputState;
 use crate::filter::FilterChains;
 use crate::finite::Finite32;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
-use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{DeviceId, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::output::OutputInfo;
 use crate::settings::Settings;
@@ -95,6 +95,12 @@ pub enum Query {
         /// What to delete.
         target: DeleteTarget,
     },
+    /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
+    /// paired and was last used, never its token. Answered by the server that admits
+    /// clients, not the engine: a `Control` with no server in front fails with
+    /// `unsupported`.
+    #[serde(rename = "device.list")]
+    DeviceList,
 }
 
 /// What a `delete.plan` deletes: a scene or a source.
@@ -131,6 +137,7 @@ impl Query {
             Query::EncoderList => "encoder.list",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
+            Query::DeviceList => "device.list",
         }
     }
 }
@@ -295,6 +302,13 @@ pub enum QueryResult {
         /// delete of the target itself.
         edits: Vec<Edit>,
     },
+    /// The result of `device.list`. Devices are not collection state, so it carries no
+    /// `rev`.
+    #[serde(rename = "device.list")]
+    DeviceList {
+        /// The paired devices, ordered by ID.
+        devices: Vec<DeviceInfo>,
+    },
 }
 
 impl QueryResult {
@@ -314,8 +328,24 @@ impl QueryResult {
             QueryResult::EncoderList { .. } => "encoder.list",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::DeviceList { .. } => "device.list",
         }
     }
+}
+
+/// One paired device, as `device.list` reports it. Its token is never reported.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DeviceInfo {
+    /// The device's ID, which `device.revoke` takes.
+    pub device_id: DeviceId,
+    /// The name it gave when it paired. The audit log names its sessions
+    /// `device:<name>`.
+    pub name: String,
+    /// When it paired, in seconds since the Unix epoch (UTC).
+    pub paired_at: u64,
+    /// When its token was last presented, in seconds since the Unix epoch (UTC), to the
+    /// hour. A token unused for 30 days lapses and the device is dropped.
+    pub last_used_at: u64,
 }
 
 /// One scene in a `scene.list` result.
