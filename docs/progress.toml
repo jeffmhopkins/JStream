@@ -818,9 +818,9 @@ prs = [363, 375]
 id = "CL1"
 milestone = "M3"
 title = "CLAP plugin host"
-status = "planned"
-prs = [272]
-note = "part 1 merged"
+status = "review"
+prs = [272, 281, 407]
+note = "parts 1 and 2 merged; part 3 (host app, launcher, supervisor, CLAP kinds) in review"
 
 [[item]]
 id = "WA1"
