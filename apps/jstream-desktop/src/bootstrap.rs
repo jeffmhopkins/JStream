@@ -1,7 +1,7 @@
 //! The script the webview runs before the UI's own, which hands the UI the in-process
-//! engine's URL and control token.
+//! engine's URL and control token, and what the app knows about its virtual camera.
 //!
-//! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token }` that can't be
+//! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token, vcam }` that can't be
 //! reassigned, and only on a page from the app's own origin: the webview also refuses
 //! to navigate anywhere else (see `shell.rs`), so no other page ever sees the token.
 //! `jstream-ui`'s host hook (`host.rs`) reads it and connects without the connect form.
@@ -15,18 +15,20 @@ use std::fmt::Write as _;
 /// The global the UI looks for. `jstream-ui`'s `host::DESKTOP_GLOBAL` names it too.
 pub const GLOBAL: &str = "__JSTREAM_DESKTOP__";
 
-/// The script, for a page from `origin`, connecting to `url` with `token`.
-pub fn script(origin: &str, url: &str, token: &str) -> String {
+/// The script, for a page from `origin`, connecting to `url` with `token`. `vcam` is
+/// the virtual camera's status ([`crate::host::VcamStatus::as_str`]).
+pub fn script(origin: &str, url: &str, token: &str, vcam: &str) -> String {
     format!(
         "if (window.location.origin === {origin}) {{\
          Object.defineProperty(window, {global}, {{\
-         value: Object.freeze({{ url: {url}, token: {token} }}),\
+         value: Object.freeze({{ url: {url}, token: {token}, vcam: {vcam} }}),\
          writable: false, configurable: false, enumerable: false }});\
          }}",
         origin = js_string(origin),
         global = js_string(GLOBAL),
         url = js_string(url),
         token = js_string(token),
+        vcam = js_string(vcam),
     )
 }
 
@@ -63,11 +65,12 @@ mod tests {
             "http://jstream.localhost",
             "ws://127.0.0.1:4455/api/v1/ws",
             "0a1b",
+            "registered",
         );
         assert!(script.starts_with("if (window.location.origin === \"http://jstream.localhost\")"));
         assert!(script.contains("\"__JSTREAM_DESKTOP__\""));
         assert!(script.contains(
-            "Object.freeze({ url: \"ws://127.0.0.1:4455/api/v1/ws\", token: \"0a1b\" })"
+            "Object.freeze({ url: \"ws://127.0.0.1:4455/api/v1/ws\", token: \"0a1b\", vcam: \"registered\" })"
         ));
         assert!(script.contains("writable: false, configurable: false"));
     }

@@ -13,6 +13,7 @@ mod encoder;
 mod envelope;
 mod error;
 mod event;
+mod filter;
 mod finite;
 mod geometry;
 mod history;
@@ -32,7 +33,8 @@ pub use audio::{
     SourceMeter, gain_db_problem,
 };
 pub use command::{
-    Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole, SourceKind, Vec2,
+    Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole,
+    SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileInfo, EncoderSessionInfo,
@@ -44,6 +46,7 @@ pub use envelope::{
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{DropCounts, Event, OutputState};
+pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
 pub use geometry::{
     Canvas, CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad,
@@ -51,8 +54,8 @@ pub use geometry::{
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{
-    BusId, ClientId, DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev,
-    SceneId, SourceId,
+    BusId, ClientId, DeviceId, EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId,
+    RequestId, Rev, SceneId, SourceId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
