@@ -784,6 +784,81 @@ fn stream_keys_golden() {
     );
 }
 
+/// #438: a key piped from Windows PowerShell 5.1, or saved by Notepad as "UTF-8 with
+/// BOM", starts with U+FEFF. It is dropped with the surrounding whitespace, and a key
+/// that still has a control or non-ASCII character is refused before connecting,
+/// without being repeated. The asserts never print a stored key.
+#[test]
+fn stream_key_byte_order_mark_and_unusable_keys() {
+    let engine = MockEngine::new();
+    let yt = OutputId::new("yt");
+    let create = ["--mock", "edit", "output.create", "yt", "rtmp://host/live2"];
+    assert_eq!(run_on(&engine, &create), ok("applied: rev 1 (req_1)\n"));
+    let stored = |expected: &str| {
+        engine
+            .stream_key(&yt)
+            .is_some_and(|key| key.expose() == expected)
+    };
+    let set_key = ["--mock", "output", "set-key", "yt"];
+
+    assert_eq!(
+        run_on_with_input(&engine, &set_key, "\u{FEFF}bom-key-1\r\n"),
+        ok("output.set_key accepted for yt (req_1)\n")
+    );
+    assert!(
+        stored("bom-key-1"),
+        "stdin: the stored key is not the bare key"
+    );
+    assert_eq!(
+        run_on_with_input(&engine, &set_key, "\u{FEFF} \tbom-key-2 \n"),
+        ok("output.set_key accepted for yt (req_1)\n")
+    );
+    assert!(
+        stored("bom-key-2"),
+        "stdin: the stored key is not the bare key"
+    );
+
+    let dir = std::env::temp_dir().join(format!("jstream-cli-bom-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let file = dir.join("key");
+    let path = file.to_str().expect("a UTF-8 temp path").to_owned();
+    let from_file = ["--mock", "output", "set-key", "yt", "--key-file", &path];
+    std::fs::write(&file, "\u{FEFF}bom-key-3\r\n").expect("written");
+    assert_eq!(
+        run_on(&engine, &from_file),
+        ok("output.set_key accepted for yt (req_1)\n")
+    );
+    assert!(
+        stored("bom-key-3"),
+        "key file: the stored key is not the bare key"
+    );
+
+    for bad in ["sec\u{7}ret", "sec\tret", "s\u{e9}cret", "sec\u{FEFF}ret"] {
+        std::fs::write(&file, bad).expect("written");
+        assert_eq!(
+            run_on(&engine, &from_file),
+            failed(
+                2,
+                &format!(
+                    "error: the key file `{path}` holds a stream key with a control or \
+                     non-ASCII character, which no streaming service accepts (the key is \
+                     not shown)\n"
+                )
+            )
+        );
+        assert_eq!(
+            run_on_with_input(&engine, &set_key, bad),
+            failed(
+                2,
+                "error: stdin holds a stream key with a control or non-ASCII character, \
+                 which no streaming service accepts (the key is not shown)\n"
+            )
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(stored("bom-key-3"), "a refused key replaced the stored one");
+}
+
 #[test]
 fn program_scene_golden() {
     let engine = populated();

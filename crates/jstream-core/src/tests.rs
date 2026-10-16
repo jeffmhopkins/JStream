@@ -8,6 +8,7 @@ mod audio_routing;
 mod collection;
 mod gpu_capture;
 mod history;
+mod preview;
 mod sources;
 #[cfg(all(windows, feature = "hw-tests"))]
 mod windows_gpu;
@@ -4481,6 +4482,9 @@ fn stream_key_actions_report_without_naming_the_key() {
             "live\nSECRET",
             "must not contain whitespace or control characters",
         ),
+        // #441: a leading byte-order mark, and any other non-ASCII character.
+        ("\u{FEFF}live_SECRET", "must contain only ASCII characters"),
+        ("live_S\u{e9}CRET", "must contain only ASCII characters"),
     ] {
         let error = block_on(control.call(set_key("out_yt", key))).expect_err("bad key");
         assert_eq!(

@@ -17,6 +17,7 @@ use crate::id::{
     BusId, DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId,
 };
 use crate::output::{OutputKind, RtmpTarget, SecretString};
+use crate::preview::PreviewCodec;
 use crate::settings::Settings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -538,7 +539,7 @@ pub enum Action {
     /// edit: the key is not collection state, so it is never undone. A running output
     /// uses the new key from its next `output.start`. Fails with `not_found` for an
     /// output not in the collection, `invalid_argument` (field `key`) for an empty key,
-    /// one over 1024 bytes or one with whitespace or control characters, and
+    /// one over 1024 bytes or one with whitespace, control or non-ASCII characters, and
     /// `action_failed` when the engine has no credential store or the store refuses.
     #[serde(rename = "output.set_key")]
     OutputSetKey {
@@ -561,6 +562,48 @@ pub enum Action {
     /// the mixer isn't running.
     #[serde(rename = "audio.reset_loudness")]
     AudioResetLoudness {},
+    /// Opens a preview stream of the program mix for this session: low-resolution
+    /// pictures sent as binary frames on `channel`, only to this session (ADR-0045).
+    /// The picture is the canvas scaled down to fit `max_width` × `max_height`, with
+    /// even sides; it follows the canvas when that changes. A picture is sent when what
+    /// the program mix draws changes, at most `fps` times a second, and at least once
+    /// every 2 s (a keyframe), so a client that lost frames recovers. The engine picks
+    /// the first of `codecs` it can encode, and every frame names its codec. The stream
+    /// shows the mix before any master stage. It lasts until `preview.unsubscribe`, the
+    /// session's end, or an end frame (the engine could not go on; the frame says why).
+    ///
+    /// Fails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,
+    /// default 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a
+    /// codec named twice, a `channel` this session already has open (`channel`), or a
+    /// fifth open stream; and with `action_failed` when the session cannot receive
+    /// binary frames (an MCP session) or none of `codecs` can be encoded here.
+    #[serde(rename = "preview.subscribe")]
+    PreviewSubscribe {
+        /// The number this stream's binary frames carry, chosen by the client. Not an
+        /// ID: it only tells this session's streams apart, and can be reused once the
+        /// stream has ended.
+        channel: u32,
+        /// The widest the picture may be, in pixels. Default 640.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_width: Option<u32>,
+        /// The tallest the picture may be, in pixels. Default 360.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_height: Option<u32>,
+        /// Pictures per second, at most. Default 15.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fps: Option<u32>,
+        /// The codecs the client can decode, most preferred first. Empty or omitted
+        /// means `["h264", "jpeg"]`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        codecs: Vec<PreviewCodec>,
+    },
+    /// Closes one of this session's preview streams. No end frame follows; frames
+    /// already sent may still arrive. Succeeds for a channel that is not open.
+    #[serde(rename = "preview.unsubscribe")]
+    PreviewUnsubscribe {
+        /// The channel the stream was opened on.
+        channel: u32,
+    },
     /// Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every
     /// output that shows program) shows it from the next frame. The program scene is
     /// runtime state, not collection state (ADR-0030): the switch changes no `rev`, is
@@ -604,6 +647,8 @@ impl Action {
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
             Action::AudioResetLoudness {} => "audio.reset_loudness",
+            Action::PreviewSubscribe { .. } => "preview.subscribe",
+            Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
             Action::SceneSwitch { .. } => "scene.switch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",

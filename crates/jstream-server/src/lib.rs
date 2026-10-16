@@ -31,6 +31,7 @@ mod listener;
 mod mcp;
 mod pair;
 mod pair_page;
+mod preview;
 mod session;
 #[cfg(test)]
 mod tests;

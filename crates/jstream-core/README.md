@@ -75,6 +75,12 @@ state machine. Contents:
 - **Studio** (`studio.rs`): which scene is on program, runtime state under the
   collection lock that `scene.switch` sets and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
+- **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
+  mix as small pictures sent to the session that asked as binary frames
+  (`Control::binary`), in H.264 on a software `jstream-encode` session when the
+  platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
+  encoder of its own), drawn on the engine's `jstream-preview` thread with its own
+  compositor (see *Preview streams* in [Design](#design)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox, composites
   the program mix from the render snapshot the control side publishes
@@ -162,6 +168,11 @@ state machine. Contents:
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
   rotation (`audit.rs`), and of undo and redo (`undo_and_redo_are_audited`), the
+  preview streams (`src/tests/preview.rs`: no subscription without a binary channel,
+  JPEG without an encoder following the mix's changes and the canvas size, H.264 from
+  the platform fakes starting at a keyframe and JPEG beside it for a client that asks,
+  the subscription checks and limit, unsubscribe and the session's end, and a reader
+  that stops reading holding a bounded queue and resuming in order), the
   collection file (`src/tests/collection.rs`: created when missing, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
   outputs, refused files left
@@ -550,6 +561,40 @@ call's future waits for the snapshot thread, so an async host's worker thread is
 free while the GPU renders, reads back and the PNG is encoded. This query is
 control-plane work, not the render thread.
 
+### Preview streams
+
+`preview.subscribe` ([jstream-protocol › Design](../jstream-protocol/README.md#design))
+sends the program mix, as `video.snapshot` draws it, to the session that asked. The
+session first opens its binary channel with `Control::binary` (the server does this
+after `hello`; MCP never does, so its subscriptions fail with `action_failed`), a queue
+of 8 frames that reopening ends. A session holds at most 4 streams, by the channel
+number the client chose, and they end with `preview.unsubscribe` or the session.
+
+The codec is picked when the client subscribes: the first of its `codecs` the engine
+can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends) and
+JPEG always. One `jstream-preview` thread per engine, started by the first stream and
+gone once none is left, serves them all. It owns a compositor (`Compositor::open`
+headless, or the CPU stand-in under `with_cpu_compositor`) and keeps each stream's
+encoder and pacing to itself, so the stream its session holds is only flags. On each
+pass it loads the published render snapshot and `rev` (a brief collection lock, never
+held while drawing), and for each stream that is due draws the shot at the stream's
+size, reads it back and encodes it. A stream is due at most `fps` times a second, and
+only when the snapshot changed, a keyframe was asked for, or 2 s passed since its last
+keyframe; one whose queue is full isn't drawn. H.264 runs on a `jstream-encode`
+`VideoSession` that avoids hardware (so a preview never takes an output's hardware
+session), VBR, with a keyframe every 2 s, reopened when the picture size changes; its
+packets go out with the `rev` of the picture they encode. If it can't be opened the
+stream falls back to JPEG when the client accepts JPEG, and ends with an end frame
+otherwise, as it does when more than 30 draws in a row fail, or after a panic on the thread. When a
+frame finds the queue full, the stream's frames are dropped up to the next keyframe,
+which the hub then forces (`KeyframeGate`).
+
+The display capture belongs to the program stage, so a preview draws a `display`
+source as nothing, as `video.snapshot` does. A `scene.switch` republishes the render
+snapshot, so the preview shows the new program scene on its next picture, with the same
+`rev` (the switch changes none). Not yet: mixes other than program, and the
+post-master stage, which come with the video mixes and the master chain.
+
 ### Events
 
 Each `events()` call opens an independent subscription with an unbounded queue, so no
@@ -674,9 +719,9 @@ publish opener runs, as `jstream-daemon` does on Windows
 **Stream keys.** `with_key_store` injects the OS credential store
 (`jstream_platform::StreamKeyStore`). `output.set_key` checks that the output is in the
 collection (`not_found`), then the key's shape (`invalid_argument`, field `key`: empty,
-over 1024 bytes, or with whitespace or control characters), then stores it under the
-output ID with no engine lock held. `output.clear_key` removes it and succeeds when
-there is none, even for an output no longer in the collection. With no store, or when
+over 1024 bytes, or with whitespace, control or non-ASCII characters), then stores it
+under the output ID with no engine lock held. `output.clear_key` removes it and succeeds
+when there is none, even for an output no longer in the collection. With no store, or when
 the store refuses, both fail with `action_failed`. The key is write-only
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): every reason is fixed text, nothing logs
 the call's arguments, and no response, event or query carries it. The crate-root test
@@ -934,7 +979,9 @@ audio routing under the collection lock, which is why it is never dropped while 
 lock is held, as its final `stats.tick` already requires. The master's meters are
 atomics the mixer thread writes and the sampler reads, with no lock. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
-collection lock is released. The render snapshot is published under the collection
+collection lock is released. The preview thread takes its own state lock, and the
+collection lock alone and only to load the render snapshot and `rev`, never while
+drawing or encoding; a session's preview streams and binary channel are leaf locks. The render snapshot is published under the collection
 lock (which makes the control side its one writer) and loaded by the render thread
 with no lock at all. `video.snapshot` reads it under the collection lock and the
 snapshot thread only receives it. A stream's poll takes only its queue's lock. No lock
