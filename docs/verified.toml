@@ -330,7 +330,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:1018b8dca6675f6c", by = "agent:t1-studio", note = "Studio mode and Transitions bullets say protocol 0.28, matching version.rs; scene.switch runs the resolved preset" }
+stamp = { hash = "b3:a1e9c6a8c50e2b17", by = "agent:t1-studio", note = "No category or fallback claim here; protocol README and kind.rs change is a parse fallback only, schema snapshots unchanged" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:2d4656f1b203564a", by = "agent:t1-studio", note = "Studio mode and Transitions bullets say protocol 0.28, matching version.rs; scene.switch runs the resolved preset" }
@@ -372,7 +372,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:7be4e8e14105c30b", by = "agent:t1-studio", note = "Studio mode and Transitions bullets say protocol 0.28, matching version.rs; scene.switch runs the resolved preset" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:1dd91d1c58222096", by = "agent:t1-studio", note = "Studio mode and Transitions bullets say protocol 0.28, matching version.rs; scene.switch runs the resolved preset" }
+stamp = { hash = "b3:60f20acf08e8b7a3", by = "agent:t1-studio", note = "No category or fallback claim here; protocol README and kind.rs change is a parse fallback only, schema snapshots unchanged" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:97404469dab1fbb7", by = "agent:t1-studio", note = "Studio mode and Transitions bullets say protocol 0.28, matching version.rs; scene.switch runs the resolved preset" }
@@ -969,7 +969,7 @@ stamp = { hash = "b3:f5839e2d9a1ebe8d", by = "agent:t1-studio", note = "After wa
 stamp = { hash = "b3:15a22f9ba2bf0c29", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:842c603bffe8b72e", by = "agent:t1-studio", note = "After wave/m1 merge: browser source build/audio text (Recorded::Own, with_browser) is independent of T1's switch, preview and transition text; both read consistently" }
+stamp = { hash = "b3:7656642d65740da3", by = "agent:t1-studio", note = "Stale only via protocol#design's KindCategory fallback note; core's kind text unaffected" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:e98f71c74a30bb2f", by = "agent:t1-studio", note = "After wave/m1 merge: browser source build/audio text (Recorded::Own, with_browser) is independent of T1's switch, preview and transition text; both read consistently" }
@@ -1509,7 +1509,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:3c55d6ad970afe87", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:842c603bffe8b72e", by = "agent:t1-studio", note = "Body unchanged by the wave/m1 merge; protocol#design dependency now names 0.28 for T1's additions" }
+stamp = { hash = "b3:7656642d65740da3", by = "agent:t1-studio", note = "Stale only via protocol#design; graph refuses non-Source categories, which also covers Unknown" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2031,7 +2031,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:842c603bffe8b72e", by = "agent:t1-studio", note = "T1's additions named as 0.28, matching version.rs and examples.snap; KindCategory compatibility note and open question 8 checked against kind.rs" }
+stamp = { hash = "b3:7656642d65740da3", by = "agent:t1-studio", note = "Compatibility and open question 8 now say KindCategory parses unknown values as Unknown from 0.28; pre-0.28 clients still can't parse transition, stated" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2088,7 +2088,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:7be4e8e14105c30b", by = "agent:t1-studio", note = "T1's additions named as 0.28, matching version.rs and examples.snap; KindCategory compatibility note and open question 8 checked against kind.rs" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:1dd91d1c58222096", by = "agent:t1-studio", note = "T1's additions named as 0.28, matching version.rs and examples.snap; KindCategory compatibility note and open question 8 checked against kind.rs" }
+stamp = { hash = "b3:60f20acf08e8b7a3", by = "agent:t1-studio", note = "Compatibility and open question 8 now say KindCategory parses unknown values as Unknown from 0.28; pre-0.28 clients still can't parse transition, stated" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:97404469dab1fbb7", by = "agent:t1-studio", note = "T1's additions named as 0.28, matching version.rs and examples.snap; KindCategory compatibility note and open question 8 checked against kind.rs" }
@@ -2154,7 +2154,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:7be4e8e14105c30b", by = "agent:t1-studio", note = "PROTOCOL_VERSION now 0.28 in version.rs (queue slot 9), matching the text; contents lists match command.rs, query.rs, transition.rs, event.rs" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:1dd91d1c58222096", by = "agent:t1-studio", note = "PROTOCOL_VERSION now 0.28 in version.rs (queue slot 9), matching the text; contents lists match command.rs, query.rs, transition.rs, event.rs" }
+stamp = { hash = "b3:60f20acf08e8b7a3", by = "agent:t1-studio", note = "kind.rs gains KindCategory::Unknown (serde other, schema-skipped); the Kinds bullet names no category list, still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:97404469dab1fbb7", by = "agent:t1-studio", note = "PROTOCOL_VERSION now 0.28 in version.rs (queue slot 9), matching the text; contents lists match command.rs, query.rs, transition.rs, event.rs" }
