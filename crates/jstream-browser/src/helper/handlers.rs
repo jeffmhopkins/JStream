@@ -6,9 +6,8 @@ use std::os::raw::c_int;
 use std::sync::Arc;
 
 use cef::*;
-use jstream_platform::PlatformError;
 
-use super::{PageShared, gpu};
+use super::PageShared;
 
 /// The handle every one of a page's callback objects carries.
 #[derive(Clone)]
@@ -147,9 +146,7 @@ wrap_render_handler! {
             let Some(info) = info else {
                 return;
             };
-            let page = &self.page.0;
-            let pts = page.clock.now();
-            gpu::paint(page, info.shared_texture_handle, pts);
+            self.page.0.paint(info.shared_texture_handle);
         }
     }
 }
@@ -194,10 +191,8 @@ wrap_audio_handler! {
             _pts: i64,
         ) {
             // `pts` looks like milliseconds since boot, not CEF's documented Unix time
-            // (ARCH › Browser source); until that is checked, packets are stamped when
-            // they arrive.
+            // (ARCH › Browser source); the engine stamps packets as they arrive instead.
             let page = &self.page.0;
-            let arrived = page.clock.now();
             let channels = page.channels.load(std::sync::atomic::Ordering::Acquire).min(2);
             let Ok(frames) = usize::try_from(frames) else {
                 return;
@@ -218,7 +213,7 @@ wrap_audio_handler! {
                 // for the duration of this callback, which the slice doesn't outlive.
                 *plane = unsafe { std::slice::from_raw_parts(samples, frames) };
             }
-            page.audio.push_planar(&planes[..channels], frames, Some(arrived));
+            page.audio(&planes[..channels], frames);
         }
 
         fn on_audio_stream_error(
@@ -232,12 +227,7 @@ wrap_audio_handler! {
             if page.is_closing() {
                 return;
             }
-            let reason = message.map(|m| m.to_string()).unwrap_or_default();
-            tracing::warn!(%reason, "a browser page's audio stream failed");
-            page.audio.fail(&PlatformError::DeviceLost {
-                what: "the browser page's audio".into(),
-                reason,
-            });
+            page.audio_failed(message.map(|m| m.to_string()).unwrap_or_default());
         }
     }
 }
@@ -343,15 +333,10 @@ wrap_resource_request_handler! {
             let page = &self.page.0;
             match page.policy.check(&url) {
                 crate::Verdict::Allow => ReturnValue::CONTINUE,
-                crate::Verdict::Deny(reason) => {
-                    // The URL may be a local path, which logs must never name: only the
-                    // reason, which names none, and the count.
-                    let denied = page.policy.denied();
-                    if page.denial_logged.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                        tracing::debug!(reason, denied, "a browser page's request was refused");
-                    } else {
-                        tracing::warn!(reason, denied, "a browser page's request was refused");
-                    }
+                crate::Verdict::Deny(_) => {
+                    // The URL may be a local path, which the engine's logs must never
+                    // name: it gets the count.
+                    page.denied();
                     ReturnValue::CANCEL
                 }
             }

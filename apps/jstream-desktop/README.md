@@ -79,10 +79,13 @@ Closing the window stops the engine.
 | `--no-vcam` | Run without the virtual camera: a `virtual_cam` output can't start. |
 
 **Browser sources** need the `cef` feature (`cargo run -p jstream-desktop --features
-cef`), whose build downloads and builds CEF, and `jstream-browser-helper.exe` and the CEF
-runtime beside `jstream.exe` (a `cef` build doesn't start without `libcef.dll`). It is
-off by default until CEF's sandbox and file-access
-limits land ([the browser crate's open items](../../crates/jstream-browser/README.md#open-items)).
+cef`) and the sandboxed browser helper beside `jstream.exe`: CEF's bootstrap exe renamed
+`jstream-browser-helper.exe`, `jstream-browser-helper.dll` and CEF's runtime files
+([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md),
+[the helper's README](../jstream-browser-helper/README.md#purpose)). The app itself
+doesn't build or link CEF, so it starts without them; a `browser` source fails to open
+until they are there. It is off by default until the CEF runtime and the helper are
+packaged ([the browser crate's open items](../../crates/jstream-browser/README.md#open-items)).
 Without it, a `browser` source draws nothing. CEF's cache is the data folder's `cef`
 folder, and its log `logs\cef.log`.
 
@@ -185,10 +188,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-
   clock the mixer runs on. Its pages paint onto a device of the media adapter the app
   opens for them (`WindowsGpu::open_device`), since the engine doesn't hand out its own
   device yet. The backend is added after the OS backends, so sources open on the media
-  clock. A `cef` build links `libcef.dll` at load time, so without it beside
-  `jstream.exe` the exe doesn't start at all: Windows refuses it before the app can show
-  a page. CEF itself starts on the first page, so a missing helper or missing resource
-  files fail that source, not the app. With no device, pages play audio but show no
-  frames.
+  clock. CEF runs only in the sandboxed browser helper, which the backend starts on the
+  first page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)); the app
+  doesn't link CEF, so a missing helper or missing CEF files fail that source, not the
+  app. With no device, pages play audio but show no frames.
 - **Logs and the token.** The token reaches only the bootstrap script. It is never
   logged, written to disk, or put in a URL (R-SEC-001).

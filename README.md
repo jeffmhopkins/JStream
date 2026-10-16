@@ -46,7 +46,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `█████████░` 94% | 17 | 0 | 1 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 91% | 32 | 1 | 2 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 91% | 32 | 2 | 1 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `██████░░░░` 57% | 13 | 4 | 6 |
@@ -124,7 +124,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | C2 | Text source | ✅ merged | #221 |
 | C5 | Audio sources | 🧪 merged, Windows run pending: audio hardware tests | #238 |
 | C3 | Display and window capture sources | ⏳ planned |  |
-| C8 | Browser source (CEF) | ⏳ planned |  |
+| C8 | Browser source (CEF) | 🔍 in review | #283, #289, #298 |
 | D1 | Live mixer inputs | ✅ merged | #149, #199 |
 | D3 | Loudness meters | ✅ merged | #152 |
 | D7a | Filter kernels | ✅ merged | #159 |

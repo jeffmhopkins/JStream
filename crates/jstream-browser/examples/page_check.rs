@@ -1,10 +1,16 @@
-//! The browser source's hardware check (Windows, feature `cef`): opens a page through
-//! the CEF backend on the engine's own GPU device and media clock, as the daemon will,
-//! and reports what arrives.
+//! The browser source's hardware check (Windows, features `cef` and `helper`): opens a
+//! page through the CEF backend on the engine's own GPU device and media clock, as the
+//! daemon does, and reports what arrives. The page runs in the sandboxed browser helper.
 //!
 //! ```text
-//! cargo run --release -p jstream-browser --features cef --example page_check -- [--seconds 20] [--size 1920x1080] [--fps 60] [--url https://…]
+//! cargo build --release -p jstream-browser-helper --features cef
+//! cargo run --release -p jstream-browser --features cef,helper --example page_check -- [--seconds 20] [--size 1920x1080] [--fps 60] [--url https://…]
 //! ```
+//!
+//! The first command builds the helper's DLL and puts CEF's runtime files in
+//! `target\release`. The check then lays the helper out there as it ships: CEF's
+//! `bootstrap.exe` copied as `jstream-browser-helper.exe`, and the DLL copied as
+//! `jstream-browser-helper.dll`.
 //!
 //! The built-in test page is transparent, moves a box on every frame, and plays 440 Hz
 //! on the left and 660 Hz on the right at -12 dBFS. Halfway through, the check gives the
@@ -12,7 +18,7 @@
 //! property and moves its right channel to 880 Hz, which shows the CSS reached it. The
 //! page also loads one image beside it and one from the folder above, which its request
 //! policy refuses, so the check reports one refused request. Then the page is closed and
-//! the backend dropped, which shuts CEF down.
+//! the backend dropped, which shuts the helper down.
 
 #[cfg(windows)]
 fn main() -> std::process::ExitCode {
@@ -205,6 +211,34 @@ setInterval(() => {
         }
     }
 
+    /// Puts the helper together in the build's folder (`target\release`, above this
+    /// example's own): the bootstrap exe from the CEF distribution the build used, and
+    /// the helper's DLL under the bootstrap's name. Returns the helper exe.
+    fn lay_out_helper() -> Result<std::path::PathBuf, String> {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let mut dir = exe.parent().ok_or("the check has no folder")?;
+        if dir.ends_with("examples") {
+            dir = dir.parent().ok_or("the examples folder has no parent")?;
+        }
+        let dll = dir.join("jstream_browser_helper.dll");
+        if !dll.is_file() {
+            return Err(format!(
+                "{} is missing: build it first with `cargo build --release -p \
+                 jstream-browser-helper --features cef`",
+                dll.display()
+            ));
+        }
+        let bootstrap = cef::sys::get_cef_dir()
+            .ok_or("the CEF distribution wasn't found")?
+            .join("bootstrap.exe");
+        let helper = dir.join("jstream-browser-helper.exe");
+        std::fs::copy(&bootstrap, &helper)
+            .map_err(|e| format!("copying {}: {e}", bootstrap.display()))?;
+        std::fs::copy(&dll, dir.join("jstream-browser-helper.dll"))
+            .map_err(|e| format!("copying {}: {e}", dll.display()))?;
+        Ok(helper)
+    }
+
     pub(super) fn main() -> ExitCode {
         let args = match parse() {
             Ok(a) => a,
@@ -234,6 +268,7 @@ setInterval(() => {
         ));
         let state = std::env::temp_dir().join("jstream-page-check");
         let mut config = CefConfig::beside_exe(&state).map_err(|e| e.to_string())?;
+        config.helper = lay_out_helper()?;
         config.log_file = Some(state.join("cef.log"));
         line(format_args!(
             "helper: {}, CEF log: {}",
@@ -267,7 +302,7 @@ setInterval(() => {
         let started = Instant::now();
         let mut page = backend.open(&spec).map_err(|e| e.to_string())?;
         line(format_args!(
-            "CEF started and the page was asked for in {:.0} ms",
+            "the helper and CEF started and the page opened in {:.0} ms",
             started.elapsed().as_secs_f64() * 1e3
         ));
 
@@ -350,7 +385,7 @@ setInterval(() => {
         drop(page);
         drop(backend);
         line(format_args!(
-            "page closed and CEF shut down in {:.0} ms",
+            "page closed and the helper exited in {:.0} ms",
             closing.elapsed().as_secs_f64() * 1e3
         ));
         if seen.frames == 0 {

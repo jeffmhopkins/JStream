@@ -3,7 +3,7 @@
 # blank line per entry let parallel PRs that re-verify different inputs usually merge.
 
 ["ARCH#browser-source"."body"]
-stamp = { hash = "b3:9ab86379e5804d87", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Now says the desktop app and the daemon wire it in behind their cef features; the program mix still doesn't use it" }
+stamp = { hash = "b3:a9974d858b3dc647", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the desktop app and the daemon both wire the backend behind cef (#290, #291), and CEF runs only in the sandboxed helper the engine drives over two pipes, as cef/ and helper/ do" }
 
 ["ARCH#browser-source"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:70bf626d4367afd8", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#359 X1): main's new layer-3 jstream-effects row sits beside P1's jstream-platform row ('and paths (the data folder, ADR-0020)', matching its Cargo.toml summary) and main's jstream-anim row; lint-deps passes" }
+stamp = { hash = "b3:9791b6115c98c0f2", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the apps row combines the wave's daemon clause (always links jstream-browser, CEF's backend with cef) with this PR's helper clause (the sandboxed helper's DLL, ADR-0048, unsafe for its one export)" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -21,7 +21,7 @@ stamp = { hash = "b3:a84629b45a0a2be7" }
 stamp = { hash = "b3:b35ca6baf4367119" }
 
 ["ARCH#crate-map"."file:apps/jstream-browser-helper/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:cf6060ce34ff18c9", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the layer-3 jstream-browser row (BrowserBackend seam, page audio and CSS, CEF backend behind feature cef, unsafe yes) and names jstream-browser-helper under apps/*; CEF moves off the jstream-platform-windows row; all match each crate's jstream metadata, lint-deps passes; main's jstream-anim row sits beside them" }
+stamp = { hash = "b3:963d560e94ad3155", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the jstream-browser row cites ADR-0048 and describes the engine side over pipes and the helper side behind feature helper; the apps/* row describes jstream-browser-helper as the sandboxed helper DLL loaded by CEF's bootstrap exe, unsafe for its export; both match each crate's jstream metadata, lint-deps passes" }
 
 ["ARCH#crate-map"."file:apps/jstream-cli/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:dbacb2dd7907964d" }
@@ -39,7 +39,7 @@ stamp = { hash = "b3:324421806c43a0e9" }
 stamp = { hash = "b3:9ffc9ae352b160a3" }
 
 ["ARCH#crate-map"."file:crates/jstream-browser/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:6282f3e532fac12a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: adds the layer-3 jstream-browser row (BrowserBackend seam, page audio and CSS, CEF backend behind feature cef, unsafe yes) and names jstream-browser-helper under apps/*; CEF moves off the jstream-platform-windows row; all match each crate's jstream metadata, lint-deps passes; main's jstream-anim row sits beside them" }
+stamp = { hash = "b3:f90b6677800af8e4", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the jstream-browser row cites ADR-0048 and describes the engine side over pipes and the helper side behind feature helper; the apps/* row describes jstream-browser-helper as the sandboxed helper DLL loaded by CEF's bootstrap exe, unsafe for its export; both match each crate's jstream metadata, lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-control/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e5fef95eb12cb895" }
@@ -252,7 +252,7 @@ stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
 
 ["ARCH#packaging"."body"]
-stamp = { hash = "b3:f1cd89b16dfff9f6", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after ADR-0054 (#395): the dist job moved from ci.yml to after-review.yml with its own dist-ui release UI job; the Building-the-zip bullet now says so (runs on main and on a PR once review passes, named by --revision after the commit tested); rest still matches dist.rs and .cargo/config.toml" }
+stamp = { hash = "b3:0199743d1f86cfe2", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the zip ships the sandboxed helper (CEF's bootstrap.exe renamed jstream-browser-helper.exe and jstream-browser-helper.dll, same certificate if signed), per ADR-0048, instead of a subprocess exe" }
 
 ["ARCH#packaging"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
@@ -468,7 +468,7 @@ stamp = { hash = "b3:a667852c45363c39", by = "agent:claude@session_012JH6K3TesVL
 stamp = { hash = "b3:67e9c88a4f6bc64f", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#400 waves): main.rs's merge-main usage gains --from; P1's dist dispatch and usage entry stay; xtask line lists docs, lint-deps, governance, dist (the portable zip), gen-schema, golden; holds" }
 
 ["ARCH#shape"."body"]
-stamp = { hash = "b3:b89c3dbd7146bb44", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (pairing): the daemon row keeps this PR's browser sources under cef clause; matches the daemon README" }
+stamp = { hash = "b3:595a044273549e60", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: kept the wave's daemon row (opens browser sources with its cef feature) and this PR's desktop and helper rows (feature off until the runtime is packaged; the helper is the renamed bootstrap exe plus DLL driven over pipes, ADR-0048)" }
 
 ["ARCH#shape"."dep:docs/adr/0001-library-first-engine.md"]
 stamp = { hash = "b3:7a1c016d1f87fdaf" }
@@ -477,10 +477,7 @@ stamp = { hash = "b3:7a1c016d1f87fdaf" }
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["ARCH#shape"."file:apps/jstream-browser-helper/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:cf6060ce34ff18c9", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: hosts table gains the jstream-browser-helper row (not a host; the exe CEF starts its subprocesses as, shipped beside the host's exe), matching its Cargo.toml metadata (layer 6, no unsafe) and main.rs; main's rows unchanged" }
-
-["ARCH#shape"."file:apps/jstream-browser-helper/src/main.rs"]
-stamp = { hash = "b3:81f5ba35d6efa0cd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: hosts table gains the jstream-browser-helper row (not a host; the exe CEF starts its subprocesses as, shipped beside the host's exe), matching its Cargo.toml metadata (layer 6, no unsafe) and main.rs; main's rows unchanged" }
+stamp = { hash = "b3:963d560e94ad3155", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the jstream-browser-helper row now says the sandboxed helper (CEF's bootstrap exe renamed plus this crate's DLL) that a host's CEF backend starts and drives over pipes, citing ADR-0048; matches the helper's Cargo.toml and src/lib.rs" }
 
 ["ARCH#shape"."file:apps/jstream-cli/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:dbacb2dd7907964d" }
@@ -783,7 +780,7 @@ stamp = { hash = "b3:c470e006d8095daa" }
 stamp = { hash = "b3:3e63f714aef88590" }
 
 ["CRATE-jstream-browser#open-items"."body"]
-stamp = { hash = "b3:146deaabe75adbe6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (C8b2 file limits, Y4 preset): this PR's Hosts item (desktop and daemon each create a backend on a device they open) still matches serve.rs and #290's wiring; wave's other items unchanged" }
+stamp = { hash = "b3:198f285698a6a137", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: kept this PR's packaging (helper and runtime) and measurements items, dropped the wave's sandbox item (ADR-0048 resolves it), and took the wave's Hosts item, since #291 now wires the daemon too" }
 
 ["CRATE-jstream-browser#open-items"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
@@ -791,38 +788,53 @@ stamp = { hash = "b3:64d21faa19974bc3" }
 ["CRATE-jstream-browser#open-items"."dep:docs/adr/0046-browser-crate-and-helper.md"]
 stamp = { hash = "b3:1300403d18de6566" }
 
+["CRATE-jstream-browser#open-items"."dep:docs/adr/0048-sandboxed-browser-helper.md"]
+stamp = { hash = "b3:7d20d7a1c4f8bf54", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the sandbox item is gone (ADR-0048 runs CEF sandboxed in the helper), so only the first item, packaging (now naming the renamed bootstrap exe and its DLL), blocks shipping cef; a new Measurements item says S4 hasn't been re-run in the helper (second copy, pipe round trip); audio timestamps now say the helper could send CEF's pts; matches ADR-0048 and the code" }
+
 ["CRATE-jstream-browser#purpose"."body"]
-stamp = { hash = "b3:596754035fe308a2", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (C8b2 #289): the hardware check now also reports refused requests; this PR's 'once the engine hands out its device' clause kept, matching the Hosts item" }
+stamp = { hash = "b3:263452a0c0ba87a1", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: resolved the page_check conflict by keeping this PR's helper layout with the wave's note that it uses the engine's own device as the daemon will once the engine hands it out; the rest matches cef/, helper/, wire.rs and link.rs and ARCH browser-source" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
-stamp = { hash = "b3:9ab86379e5804d87", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH browser-source (daemon now wires it too); purpose speaks of 'the host' generically and holds" }
+stamp = { hash = "b3:a9974d858b3dc647", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: resolved the page_check conflict by keeping this PR's helper layout with the wave's note that it uses the engine's own device as the daemon will once the engine hands it out; the rest matches cef/, helper/, wire.rs and link.rs and ARCH browser-source" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-browser"]
-stamp = { hash = "b3:e7a418098a8ef546" }
+stamp = { hash = "b3:fab0c5bb163d7be3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/Cargo.toml"]
-stamp = { hash = "b3:f8343546bd9692f3" }
+stamp = { hash = "b3:e22f69f23f61993b", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/examples/page_check.rs"]
-stamp = { hash = "b3:dd6e264674ed1100", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
+stamp = { hash = "b3:994c1503b87d5be1", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/audio.rs"]
-stamp = { hash = "b3:09a503c0bd3342be" }
+stamp = { hash = "b3:a8632ce7e2ad5206", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/gpu.rs"]
-stamp = { hash = "b3:9ee2b7ba834e8404", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
-
-["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/handlers.rs"]
-stamp = { hash = "b3:260bce29e6e7c9ae", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
+stamp = { hash = "b3:44dc2d748cfbfc3e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/mod.rs"]
-stamp = { hash = "b3:efdd7afd1b1a0f83", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
+stamp = { hash = "b3:3aafe4a753dd7fd3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
+
+["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/pipe.rs"]
+stamp = { hash = "b3:25e90671051603e0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/fake.rs"]
 stamp = { hash = "b3:e4729bc158373b96", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
+["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/d3d11.rs"]
+stamp = { hash = "b3:8d16695b80153e4c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
+
+["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/handlers.rs"]
+stamp = { hash = "b3:5e098480ae7dcb4b", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
+
+["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/mod.rs"]
+stamp = { hash = "b3:9d478feeb19361e6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
+
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/lib.rs"]
-stamp = { hash = "b3:f6b24b3ac471a35a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
+stamp = { hash = "b3:6f64648cae324152", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
+
+["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/link.rs"]
+stamp = { hash = "b3:bff1c1534bc93db8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/page.rs"]
 stamp = { hash = "b3:bfae3b74fd072f83", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
@@ -830,29 +842,29 @@ stamp = { hash = "b3:bfae3b74fd072f83", by = "agent:claude@session_01E4Mb9bbGDC2
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/request.rs"]
 stamp = { hash = "b3:8ac270a94f116ebd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
+["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/wire.rs"]
+stamp = { hash = "b3:4891bf706a904c96", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
+
 ["CRATE-jstream-browser-helper#purpose"."body"]
-stamp = { hash = "b3:c38bcef596eeb573", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1: stale only via the browser README's seam paragraph; helper main.rs, build.rs and manifest unchanged, text holds" }
+stamp = { hash = "b3:dc6d71acf3e43565", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: rewritten for ADR-0048: a cdylib whose only code is the RunWinMain export, shipped beside CEF's bootstrap.exe renamed jstream-browser-helper.exe, which sets up the sandbox and hands the process to jstream_browser::run_helper; unsafe_allowed for the unmangled export; cef turns on jstream-browser's helper feature; the manifest and build.rs are gone; matches src/lib.rs and Cargo.toml" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:crates/jstream-browser/README.md#purpose"]
-stamp = { hash = "b3:596754035fe308a2", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the browser Purpose's hardware-check sentence only (C8b2's refused requests plus this PR's device clause); the helper's purpose holds" }
+stamp = { hash = "b3:263452a0c0ba87a1", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the helper DLL beside the renamed bootstrap exe and CEF runtime, started by jstream-browser's CEF backend, still matches ADR-0048, the browser crate's purpose and the crate map's apps row" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:1bfce7186129692b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the ARCH apps/* row only (daemon also links jstream-browser); this section names hosts generically and holds" }
+stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the helper DLL beside the renamed bootstrap exe and CEF runtime, started by jstream-browser's CEF backend, still matches ADR-0048, the browser crate's purpose and the crate map's apps row" }
+
+["CRATE-jstream-browser-helper#purpose"."dep:docs/adr/0048-sandboxed-browser-helper.md"]
+stamp = { hash = "b3:7d20d7a1c4f8bf54", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the helper DLL beside the renamed bootstrap exe and CEF runtime, started by jstream-browser's CEF backend, still matches ADR-0048, the browser crate's purpose and the crate map's apps row" }
 
 ["CRATE-jstream-browser-helper#purpose"."file:apps/jstream-browser-helper/Cargo.toml"]
-stamp = { hash = "b3:57611c74ae67fa64" }
+stamp = { hash = "b3:9313794338e1911e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: rewritten for ADR-0048: a cdylib whose only code is the RunWinMain export, shipped beside CEF's bootstrap.exe renamed jstream-browser-helper.exe, which sets up the sandbox and hands the process to jstream_browser::run_helper; unsafe_allowed for the unmangled export; cef turns on jstream-browser's helper feature; the manifest and build.rs are gone; matches src/lib.rs and Cargo.toml" }
 
 ["CRATE-jstream-browser-helper#purpose"."file:apps/jstream-browser-helper/README.md"]
-stamp = { hash = "b3:23cde6bafd0afbf8" }
+stamp = { hash = "b3:82b317db97efee74", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: rewritten for ADR-0048: a cdylib whose only code is the RunWinMain export, shipped beside CEF's bootstrap.exe renamed jstream-browser-helper.exe, which sets up the sandbox and hands the process to jstream_browser::run_helper; unsafe_allowed for the unmangled export; cef turns on jstream-browser's helper feature; the manifest and build.rs are gone; matches src/lib.rs and Cargo.toml" }
 
-["CRATE-jstream-browser-helper#purpose"."file:apps/jstream-browser-helper/build.rs"]
-stamp = { hash = "b3:223b5fdc9f8bf045" }
-
-["CRATE-jstream-browser-helper#purpose"."file:apps/jstream-browser-helper/jstream-browser-helper.exe.manifest"]
-stamp = { hash = "b3:a262f8d48839bd34" }
-
-["CRATE-jstream-browser-helper#purpose"."file:apps/jstream-browser-helper/src/main.rs"]
-stamp = { hash = "b3:81f5ba35d6efa0cd" }
+["CRATE-jstream-browser-helper#purpose"."file:apps/jstream-browser-helper/src/lib.rs"]
+stamp = { hash = "b3:4f0b3f117068e82b", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: rewritten for ADR-0048: a cdylib whose only code is the RunWinMain export, shipped beside CEF's bootstrap.exe renamed jstream-browser-helper.exe, which sets up the sandbox and hands the process to jstream_browser::run_helper; unsafe_allowed for the unmangled export; cef turns on jstream-browser's helper feature; the manifest and build.rs are gone; matches src/lib.rs and Cargo.toml" }
 
 ["CRATE-jstream-cli#design"."body"]
 stamp = { hash = "b3:cd070fd8dbcfb8ca", by = "agent:claude", note = "New bullet on fitting capture items matches run.rs fit_captures (CAPTURE_KINDS, one lazy state.get, unknown source and zero canvas left to the engine) and the tests in run/tests.rs; other bullets unaffected by args.rs's help-text line." }
@@ -888,7 +900,7 @@ stamp = { hash = "b3:f392adb5e22e5634", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:d796b16e2013c42c", by = "agent:claude", note = "Running bullet now says an edit batch may read state.get first to fit capture items; args.rs gains a usage note, run.rs fit_captures/state, run/tests.rs three fit tests; the rest of the contents list holds." }
 
 ["CRATE-jstream-cli#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:1bfce7186129692b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the ARCH apps/* row only (daemon's jstream-browser link); the CLI's purpose doesn't touch it and holds" }
+stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the crate map's apps row changed only for the daemon's and the helper's browser wiring; the CLI's links (control and mcp only) and contents are unchanged" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:2980eba909dcd34e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: Running now says an edit batch may read state.get first to fit new capture items (main's #450), beside the wave's pairing and Y3 text (an action with a result prints as JSON); run.rs's merged imports and fit_captures match; holds" }
@@ -1002,7 +1014,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:416feb24dc3cf2c4", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the render thread paragraph now joins #434 (draws at the canvas from output_size, the capture keeps its own size and is scaled) with E3b (device chosen at open; a GpuFrame is sampled in place and held until a CPU capture is drawn instead); CPU captures, NV12 included, convert only on ticks whose shot shows the capture; compose uses shows_capture with CaptureImage; matches pipeline.rs and snapshot.rs; holds" }
+stamp = { hash = "b3:00c1d96c79f24c4b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3's Design additions (YouTube actions with no engine lock, the sign-in and LiveClient mutexes after the start lock) sit apart from #458's: the stop-drain paragraph (each count takes what it counts off the queue; abandon held over the latch), the drop-table Stop drain row and the abandon, video, audio lock order still match pipeline.rs, which Y3 left untouched. Tests pass after the merge." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -1074,7 +1086,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:80b68d1d901b2999", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the render thread paragraph now joins #434 (draws at the canvas from output_size, the capture keeps its own size and is scaled) with E3b (device chosen at open; a GpuFrame is sampled in place and held until a CPU capture is drawn instead); CPU captures, NV12 included, convert only on ticks whose shot shows the capture; compose uses shows_capture with CaptureImage; matches pipeline.rs and snapshot.rs; holds" }
+stamp = { hash = "b3:f1ff92f8048bf21e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Round-2 fix for B2: the RTMP stop-drain paragraph now says no packet is counted twice because each count takes what it counts off the queue (try_recv in discard), and that the abandon lock, held by the counting side and by the stop over its latch, keeps a thread count wholly in or out of the final tick. pipeline.rs's Queues::abandon field doc says the same. The drop table and the Locking order (abandon, video, audio) are unchanged and still match. tests.rs: only N1's removed assertion." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1098,7 +1110,7 @@ stamp = { hash = "b3:b3f8a6543cd7d21a", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:83b3d880a9de5b69", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the render thread paragraph now joins #434 (draws at the canvas from output_size, the capture keeps its own size and is scaled) with E3b (device chosen at open; a GpuFrame is sampled in place and held until a CPU capture is drawn instead); CPU captures, NV12 included, convert only on ticks whose shot shows the capture; compose uses shows_capture with CaptureImage; matches pipeline.rs and snapshot.rs; holds" }
+stamp = { hash = "b3:8abaa727b4a71f8a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3's Design additions (YouTube actions with no engine lock, the sign-in and LiveClient mutexes after the start lock) sit apart from #458's: the stop-drain paragraph (each count takes what it counts off the queue; abandon held over the latch), the drop-table Stop drain row and the abandon, video, audio lock order still match pipeline.rs, which Y3 left untouched. Tests pass after the merge." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's browser paragraph says a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser and the new tests/audio.rs case; the wave's B7 opacity/blend/filter text is in other paragraphs; holds" }
@@ -1131,7 +1143,7 @@ stamp = { hash = "b3:1cb3f432ff4f8d5d", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:97c448bb25c6d46c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:3047be79a671413b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the tests list now names both the wave's GPU-capture render test and main's #433 tests (output size follows the canvas, captures converted to RGBA8 at their own size and only on ticks that show them); engine.rs passes the canvas to parts_from, gpu_capture.rs's test passes one too; holds" }
+stamp = { hash = "b3:217f59dd4251efa7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3 added the YouTube bullets, tests and youtube.rs and did not touch pipeline.rs or the Drop-counts bullet, which still says the output source counts the output thread's drops or what the stop drops for it when it leaves the thread behind (Running::drop -> Queues::abandon). The Tests list keeps #458's left-behind test beside Y3's src/tests/youtube.rs. clippy and cargo test -p jstream-core (178 passed) after the merge." }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1188,7 +1200,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:80b68d1d901b2999", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the tests list now names both the wave's GPU-capture render test and main's #433 tests (output size follows the canvas, captures converted to RGBA8 at their own size and only on ticks that show them); engine.rs passes the canvas to parts_from, gpu_capture.rs's test passes one too; holds" }
+stamp = { hash = "b3:f1ff92f8048bf21e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Round-2 fix for B1: the Drop-counts bullet now says the output source counts what the output thread drops or what the stop drops for it when it leaves that thread behind, matching Running::drop -> Queues::abandon adding to output_drops. pipeline.rs changed only in the Queues::abandon field doc (B2). tests.rs: the new test's closing tick comparison was removed (N1, it could not fail since the source is latched) and its doc says so; the Tests list still names the left-behind count correctly. clippy and the test pass." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1212,7 +1224,7 @@ stamp = { hash = "b3:b3f8a6543cd7d21a", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:83b3d880a9de5b69", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: the tests list now names both the wave's GPU-capture render test and main's #433 tests (output size follows the canvas, captures converted to RGBA8 at their own size and only on ticks that show them); engine.rs passes the canvas to parts_from, gpu_capture.rs's test passes one too; holds" }
+stamp = { hash = "b3:8abaa727b4a71f8a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3 added the YouTube bullets, tests and youtube.rs and did not touch pipeline.rs or the Drop-counts bullet, which still says the output source counts the output thread's drops or what the stop drops for it when it leaves the thread behind (Running::drop -> Queues::abandon). The Tests list keeps #458's left-behind test beside Y3's src/tests/youtube.rs. clippy and cargo test -p jstream-core (178 passed) after the merge." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
@@ -1263,7 +1275,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:80b68d1d901b2999", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 main sync: re-read against the merged pipeline.rs: the stage composites at the canvas size (#434) and the capture path text (E3b: platform context, Capture::on_context, fallbacks, drop order) holds; OpenedCapture no longer carries a size; holds" }
+stamp = { hash = "b3:f1ff92f8048bf21e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "pipeline.rs changed only in the Queues::abandon field doc (wording of what the abandon lock guarantees). The Runtime section describes threads, the drain and jstream-stats and makes no claim about stop-drain counting, so it holds." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1278,10 +1290,10 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:ec76a643a1a5e0b1", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#247): main's Startup/Listening text now names --ui-dir and the UI directory; P1's data-directory bullet (jstream-platform paths, portable marker), Dependencies entry and open question 5 are unaffected and still match logs.rs; holds" }
+stamp = { hash = "b3:d7c604129bdde866", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:4e3e5143a4067a68", by = "agent:claude", note = "Re-read after core vcam wording (B1): daemon design names no output or camera size; holds" }
+stamp = { hash = "b3:00c1d96c79f24c4b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through core#design after merging wave/m1. The daemon's Design cites core Design for sessions, backends, placeholder outputs, audit and collection; Y3's YouTube text and #458's stop-drain wording change none of those claims." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
@@ -1290,7 +1302,7 @@ stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade fro
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
-stamp = { hash = "b3:75c75e5a697ef09f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1: browser sources paragraph and deps match serve.rs and Cargo.toml; the Windows dox clippy now runs in after-review.yml" }
+stamp = { hash = "b3:31adea4c41afd5dd", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
@@ -1311,7 +1323,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:d97c9bd2c8e9366b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (pairing, #265): the device file and listening bullets sit beside this PR's browser sources bullet; bind takes the device file and UI dir; matches serve.rs, token.rs and Cargo.toml" }
+stamp = { hash = "b3:0bca1913ca49b58e", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
@@ -1320,7 +1332,7 @@ stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:0eccb529e1f8aad5", by = "agent:claude", note = "Re-read Purpose test list: e2e now sets the canvas before building the scene (outputs encode at the canvas, #433)" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:1bfce7186129692b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1: the run steps keep --ui-dir and add browser sources under cef; checked against serve.rs and main.rs" }
+stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291) and this PR's serve.rs doc edit: serve.rs still builds a live engine on Windows that with the cef feature opens browser sources; the crate map's apps row now says the daemon always links jstream-browser, which matches its Cargo.toml" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
@@ -1341,7 +1353,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:d97c9bd2c8e9366b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (pairing, #265): Contents gains Paired devices beside this PR's Serving bullet (browser sources under cef); the ARCH apps/* row (daemon always links jstream-browser) holds against Cargo.toml; checked against serve.rs, token.rs and main.rs" }
+stamp = { hash = "b3:0bca1913ca49b58e", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291) and this PR's serve.rs doc edit: serve.rs still builds a live engine on Windows that with the cef feature opens browser sources; the crate map's apps row now says the daemon always links jstream-browser, which matches its Cargo.toml" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -1368,7 +1380,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:7ddca28c57cfba05", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
+stamp = { hash = "b3:69eee667f84adbfe", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the wave's vcam, delay-load and media_foundation.rs text is unchanged by this PR; the browser-sources bullet still matches host.rs/browser.rs (backend on the media clock, device from WindowsGpu::open_device, CEF only in the sandboxed helper started on the first page)" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1395,7 +1407,7 @@ stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): vcam status values match host.rs VcamStatus strings; build.rs delay-loads mfsensorgroup.dll; WindowsVcam behind --no-vcam" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/browser.rs"]
-stamp = { hash = "b3:6d9ebaeab4249226", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the browser bullet no longer says a cef build links libcef.dll at load time; with ADR-0048 CEF runs only in the helper, which starts on the first page, so a missing helper or CEF files fail that source, as browser.rs's doc now says; the device and clock text holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
 stamp = { hash = "b3:585937dddc3fdee0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
@@ -1425,7 +1437,7 @@ stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:237641d2046203da", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs deleted and lib.rs drops its module; contents list says logs.rs in the data folder from jstream-platform's paths, Tests drop the data folder; main.rs calls paths::data_dir_for; release build of the portable folder is now cargo xtask dist (ARCH Packaging)" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:1bfce7186129692b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the ARCH apps/* row only; the row keeps the desktop's optional jstream-browser link under cef, and this section holds" }
+stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the crate map's apps row changed for the daemon and helper only; the desktop's links and its browser.rs contents line still hold" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after 741cfc28: a rustfmt-only line wrap of the engine call in app.rs; nothing the section says changed; holds" }
@@ -1434,7 +1446,7 @@ stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): contents list matches app.rs, host.rs (vcam_status), bootstrap.rs (vcam in the global) and ui.rs" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/browser.rs"]
-stamp = { hash = "b3:6d9ebaeab4249226", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the apps/* row still says the desktop links sources and jstream-browser with cef; browser.rs now drives the sandboxed helper (its doc names ADR-0048 and says the app doesn't link CEF), and the Browser sources bullet still describes it; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
 stamp = { hash = "b3:585937dddc3fdee0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
@@ -1458,10 +1470,10 @@ stamp = { hash = "b3:45624952598c1f3a" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against #327: covers now includes tests/**, and the Tests bullet names the new integration test tests/delay_load.rs (media_foundation_is_delay_loaded, Windows MSVC only), which reads the built jstream.exe's PE headers and requires each DLL in build.rs's delay-load list in the delay-import table and none in the import table; the unit-test list and the rest of the contents are unchanged" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:fa5650de95328aac", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (declared governance change); Data folder text says both hosts find it through jstream-platform paths, matching main.rs and Cargo.toml (jstream-platform now a common dependency)" }
+stamp = { hash = "b3:7de4cf8f66e3da87", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the wave's --no-vcam option and virtual-camera bullet sit beside the browser-sources paragraph, which still matches ADR-0048 (app links no CEF, needs the helper exe, DLL and CEF runtime beside it, feature off until packaged)" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
-stamp = { hash = "b3:5b31f315753e29fe", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (declared governance change); Data folder text says both hosts find it through jstream-platform paths, matching main.rs and Cargo.toml (jstream-platform now a common dependency)" }
+stamp = { hash = "b3:ac2977e8c9f522c0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the Browser sources paragraph now says the helper is CEF's bootstrap exe renamed plus jstream-browser-helper.dll and CEF's files, that the app doesn't build or link CEF so it starts without them, and that the cef feature stays off until the runtime and helper are packaged, matching Cargo.toml's comment and CefConfig::beside_exe" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after 741cfc28: a rustfmt-only line wrap of the engine call in app.rs; nothing the section says changed; holds" }
@@ -1878,13 +1890,13 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:70bf626d4367afd8", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main: stale only via ARCH#crate-map (main's jstream-effects row, P1's jstream-platform paths row); GPU frame design text untouched on both sides; holds" }
+stamp = { hash = "b3:9791b6115c98c0f2", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: its dependency on ARCH#crate-map changed only in the apps row (daemon links jstream-browser, helper DLL); jstream-platform's row and GpuInterop's wgpu types are unchanged" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
-stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via the crate map (new jstream-browser row, CEF off the platform-windows row) and R-UNSAFE-001 (adds jstream-browser); the GPU frame design is untouched, and the browser backend's shared-texture copy uses GpuFrame as described; holds" }
+stamp = { hash = "b3:c66590fe31f34aee", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via the crate map's jstream-browser and helper rows and R-UNSAFE-001, which adds jstream-browser-helper; the GPU frame design is untouched (the engine side still imports shared textures as GpuFrame); holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -1980,7 +1992,7 @@ stamp = { hash = "b3:74397f35965002f4", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:c60cba487fc0a5e5" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/RULES.md#unsafe"]
-stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via its crate-map row, which drops the CEF browser backend (now in jstream-browser), and R-UNSAFE-001 (adds jstream-browser); this README never described CEF, its text holds" }
+stamp = { hash = "b3:c66590fe31f34aee", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale only via R-UNSAFE-001, which adds jstream-browser-helper for its RunWinMain export; this README names no browser code; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/adr/0014-media-clock.md"]
 stamp = { hash = "b3:68451099d1cf8c6d" }
@@ -2790,7 +2802,7 @@ stamp = { hash = "b3:5506fd7891457520" }
 stamp = { hash = "b3:6d760c430e428d10", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:f1cd89b16dfff9f6", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH#packaging (CI dist job moved to after-review.yml); hardware-check steps build and register the DLL by hand as before; holds" }
+stamp = { hash = "b3:0199743d1f86cfe2", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale only via ARCH packaging, whose change is the browser helper's files; the vcam hardware check names none of them; holds" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."file:crates/jstream-vcam-windows/examples/vcam_smoke/main.rs"]
 stamp = { hash = "b3:741967485a750fec" }
@@ -2808,10 +2820,10 @@ stamp = { hash = "b3:b6a3f609729e0f1f" }
 stamp = { hash = "b3:ecfd9b5f74db77b1" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:f1cd89b16dfff9f6", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH#packaging, where only the CI dist job's home changed (after-review.yml, ADR-0054); DLL and registration text unchanged; holds" }
+stamp = { hash = "b3:0199743d1f86cfe2", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via R-UNSAFE-001 (adds jstream-browser-helper) and ARCH packaging (the zip ships the sandboxed helper instead of a subprocess exe); the vcam text and its own packaging line are unaffected; holds" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/RULES.md#unsafe"]
-stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale only via R-UNSAFE-001, which adds jstream-browser to the unsafe crates; the vcam text is unaffected; holds" }
+stamp = { hash = "b3:c66590fe31f34aee", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via R-UNSAFE-001 (adds jstream-browser-helper) and ARCH packaging (the zip ships the sandboxed helper instead of a subprocess exe); the vcam text and its own packaging line are unaffected; holds" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
@@ -2994,7 +3006,7 @@ stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:7de442ed32252572", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "B1/N3 on #419: merge-main bullet still accurate; resolve_generated now accepts only adr-status, adr-index and progress blocks, and mod.rs says to run docs generate when the merge stays open" }
 
 ["DOCS#dependency-lint"."body"]
-stamp = { hash = "b3:d561541a097b3449", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: the unsafe bullet names the browser crate (jstream-browser joins UNSAFE_CRATES); the native-code bullet says lint-deps sees the default-feature graph, so cef-dll-sys is covered by its allowlist entry and cargo deny --all-features; matches lint_deps.rs and the amended R-UNSAFE-001" }
+stamp = { hash = "b3:416056ff5f5233ae", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the unsafe bullet adds the browser-helper crate (UNSAFE_CRATES and R-UNSAFE-001, for its RunWinMain export); cef-dll-sys now sits behind jstream-browser's helper feature, not cef; matches lint_deps.rs" }
 
 ["DOCS#dependency-lint"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -3012,10 +3024,10 @@ stamp = { hash = "b3:5a4289040223e5dc" }
 stamp = { hash = "b3:c6836c98530b7bf5" }
 
 ["DOCS#dependency-lint"."dep:docs/RULES.md#R-UNSAFE-001"]
-stamp = { hash = "b3:be44fad4353278d8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: the unsafe bullet names the browser crate (jstream-browser joins UNSAFE_CRATES); the native-code bullet says lint-deps sees the default-feature graph, so cef-dll-sys is covered by its allowlist entry and cargo deny --all-features; matches lint_deps.rs and the amended R-UNSAFE-001" }
+stamp = { hash = "b3:8a62a8e5ce8558a7", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the unsafe bullet adds the browser-helper crate (UNSAFE_CRATES and R-UNSAFE-001, for its RunWinMain export); cef-dll-sys now sits behind jstream-browser's helper feature, not cef; matches lint_deps.rs" }
 
 ["DOCS#dependency-lint"."file:xtask/src/lint_deps.rs"]
-stamp = { hash = "b3:d7c98922d23bc7f0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: the unsafe bullet names the browser crate (jstream-browser joins UNSAFE_CRATES); the native-code bullet says lint-deps sees the default-feature graph, so cef-dll-sys is covered by its allowlist entry and cargo deny --all-features; matches lint_deps.rs and the amended R-UNSAFE-001" }
+stamp = { hash = "b3:14baa1f732677e87", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the unsafe bullet adds the browser-helper crate (UNSAFE_CRATES and R-UNSAFE-001, for its RunWinMain export); cef-dll-sys now sits behind jstream-browser's helper feature, not cef; matches lint_deps.rs" }
 
 ["DOCS#governance"."body"]
 stamp = { hash = "b3:8351920c7315d119", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }

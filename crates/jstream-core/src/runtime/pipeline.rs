@@ -29,14 +29,16 @@
 //! the publish target, so a peer that has stopped reading cannot hold `output.stop`.
 //! The stop waits for a publishing output thread only until that deadline plus
 //! [`OUTPUT_GRACE`]: a publish target that blocks in a send without honouring the
-//! deadline is left to its thread, which ends once the send returns (#138).
+//! deadline is left to its thread, which ends once the send returns (#138). The stop
+//! then drops and counts what is still queued for that thread itself, so the final
+//! `stats.tick` has it (#385).
 
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, Weak};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -609,6 +611,11 @@ pub(crate) struct Running {
     output_drops: Arc<AtomicU64>,
     /// Tags the publish target dropped while its link was down, as it last reported.
     link_drops: Arc<AtomicU64>,
+    /// The output thread's encoder subscriptions, while the thread holds them. The drop
+    /// counts what is queued there itself when it stops waiting for the thread (#385).
+    /// Weak, so a thread that ended unsubscribes at once. Empty for a camera, which has
+    /// no encoder queues.
+    queues: Weak<Queues>,
     drop_guard: Option<DropGuard>,
     /// Its failure channel's place in the program, given up once its thread is gone.
     registration: Option<Registration>,
@@ -671,13 +678,12 @@ impl Running {
 }
 
 impl Running {
-    /// Joins the output thread. A publishing one is waited for only until `by`: past
-    /// that it is blocked in a publish target that ignores the stop deadline, so it is
-    /// detached and ends on its own once that call returns. What it drops after this
-    /// is not in the run's final counts.
-    fn join_output(&mut self, by: Instant) {
+    /// Joins the output thread, and says whether it ended. A publishing one is waited
+    /// for only until `by`: past that it is blocked in a publish target that ignores
+    /// the stop deadline, so it is detached and ends on its own once that call returns.
+    fn join_output(&mut self, by: Instant) -> bool {
         let Some(handle) = self.output.take() else {
-            return;
+            return true;
         };
         let ended = self.output_done.take().is_none_or(|done| {
             !matches!(
@@ -694,6 +700,7 @@ impl Running {
             );
             drop(handle);
         }
+        ended
     }
 }
 
@@ -713,10 +720,26 @@ impl Drop for Running {
             encoders.finish();
         }
         self.cut.store(true, Ordering::Release);
-        self.join_output(deadline + OUTPUT_GRACE);
+        let ended = self.join_output(deadline + OUTPUT_GRACE);
         self.output_fail.close();
-        // After the thread stops, so the latch sees its final counters.
+        // A thread left behind has not counted what is still queued for it, and won't
+        // before the latch below. The stop drops and counts that itself, and latches
+        // while it still holds the queues, so a count the thread makes is either wholly
+        // in the latch or covers only packets queued after it (#385).
+        let queues = if ended { None } else { self.queues.upgrade() };
+        let abandoned = queues
+            .as_ref()
+            .map(|queues| queues.abandon(false, false, &self.output_drops));
+        // After the thread stops, or after the count above, so the latch sees the
+        // final counters.
         self.drop_guard.take();
+        if let Some((left, held)) = abandoned {
+            drop(held);
+            tracing::warn!(
+                packets = left,
+                "dropped the packets still queued for the output thread left behind"
+            );
+        }
         self.registration.take();
         self.program.take();
     }
@@ -1056,8 +1079,12 @@ pub(crate) fn launch(
     // Subscribe before a new session is fed, so its first packets (the first video
     // keyframe among them) are not encoded before the output thread is listening. A
     // session already running gives this output a keyframe on request.
-    let video_sub = encoders.video.subscribe();
-    let audio_sub = encoders.audio.subscribe();
+    let queues = Arc::new(Queues {
+        video: Mutex::new(encoders.video.subscribe()),
+        audio: Mutex::new(encoders.audio.subscribe()),
+        abandon: Mutex::new(()),
+    });
+    let shared_queues = Arc::downgrade(&queues);
     program.attach(&encoders);
     let (started_tx, started_rx) = mpsc::channel();
     let output_fail = FailLine::new(fail_tx);
@@ -1075,8 +1102,7 @@ pub(crate) fn launch(
             let _done = done_tx;
             output_loop(OutputJob {
                 sink,
-                video: video_sub,
-                audio: audio_sub,
+                queues,
                 stats,
                 output_drops: own,
                 link_drops: link,
@@ -1104,6 +1130,7 @@ pub(crate) fn launch(
         stats,
         output_drops,
         link_drops,
+        queues: shared_queues,
         drop_guard: None,
         registration: Some(registration),
         program: Some(program),
@@ -1167,6 +1194,7 @@ pub(crate) fn launch_vcam(
         stats: PipelineStats::new(),
         output_drops,
         link_drops: Arc::new(AtomicU64::new(0)),
+        queues: Weak::new(),
         drop_guard: None,
         registration: Some(registration),
         program: Some(program),
@@ -1978,10 +2006,41 @@ fn mixer_loop(
     }
 }
 
+/// An output thread's encoder subscriptions, shared with the stop so that, when it
+/// stops waiting for a thread blocked in a send, it can drop and count what is queued
+/// itself (#385). Each is locked only for a receive, never over a send, so a thread
+/// blocked in a send leaves them free.
+struct Queues {
+    video: Mutex<Subscription>,
+    audio: Mutex<Subscription>,
+    /// Held by whichever side drops and counts what is queued, until its count is in
+    /// `output_drops`; the stop also holds it over its latch. So a count the thread
+    /// makes is either wholly in the latch or wholly after it, and then covers only
+    /// packets queued after the stop's count. (No packet is counted twice in any case:
+    /// each count takes what it counts off the queue.)
+    abandon: Mutex<()>,
+}
+
+impl Queues {
+    /// Drops the packets still queued on both streams, adds how many to `drops`, and
+    /// returns that count with the lock still held. A stream already `done` is skipped.
+    fn abandon(
+        &self,
+        video_done: bool,
+        audio_done: bool,
+        drops: &AtomicU64,
+    ) -> (u64, MutexGuard<'_, ()>) {
+        let held = lock(&self.abandon);
+        let left = discard(&lock(&self.video), video_done)
+            .saturating_add(discard(&lock(&self.audio), audio_done));
+        drops.fetch_add(left, Ordering::Relaxed);
+        (left, held)
+    }
+}
+
 struct OutputJob {
     sink: Sink,
-    video: Subscription,
-    audio: Subscription,
+    queues: Arc<Queues>,
     stats: Arc<PipelineStats>,
     output_drops: Arc<AtomicU64>,
     link_drops: Arc<AtomicU64>,
@@ -2004,7 +2063,8 @@ struct OutputJob {
 /// the stop's deadline (`drain_by`, [`STOP_DRAIN`] after the stop began), and tells the
 /// publish target that deadline. When the deadline
 /// passes, or a send fails while stopping, it drops the packets still queued, counts
-/// them in `output_drops`, and finishes the target, which past the deadline closes
+/// them in `output_drops` (unless the stop, done waiting, has counted them already), and
+/// finishes the target, which past the deadline closes
 /// without its goodbye. A failure while stopping is logged, not reported: the output
 /// is already on its way to `stopped`. An output leaving encoder sessions that other
 /// outputs still use is `cut` instead of waiting for the streams to end: it sends what
@@ -2012,8 +2072,7 @@ struct OutputJob {
 fn output_loop(job: OutputJob) {
     let OutputJob {
         mut sink,
-        video,
-        audio,
+        queues,
         stats,
         output_drops,
         link_drops,
@@ -2065,7 +2124,9 @@ fn output_loop(job: OutputJob) {
         let leaving = cut.load(Ordering::Acquire);
         let mut got = false;
         if !video_done {
-            match video.recv_timeout(Duration::from_millis(2)) {
+            // Bound first, so the lock is not held over the send.
+            let received = lock(&queues.video).recv_timeout(Duration::from_millis(2));
+            match received {
                 Ok(Some(packet)) => {
                     got = true;
                     if let Err(err) = sink.forward(&packet, &output_drops) {
@@ -2087,7 +2148,8 @@ fn output_loop(job: OutputJob) {
             break;
         }
         if failed.is_none() && !audio_done {
-            match audio.recv_timeout(Duration::from_millis(2)) {
+            let received = lock(&queues.audio).recv_timeout(Duration::from_millis(2));
+            match received {
                 Ok(Some(packet)) => {
                     got = true;
                     if let Err(err) = sink.forward(&packet, &output_drops) {
@@ -2101,8 +2163,11 @@ fn output_loop(job: OutputJob) {
                 }
             }
         }
-        *lock(&stats.video_subscriber) = video.stats();
-        *lock(&stats.audio_subscriber) = audio.stats();
+        // One lock at a time.
+        let video_stats = lock(&queues.video).stats();
+        let audio_stats = lock(&queues.audio).stats();
+        *lock(&stats.video_subscriber) = video_stats;
+        *lock(&stats.audio_subscriber) = audio_stats;
         if failed.is_none()
             && let Err(err) = sink.poll()
         {
@@ -2125,8 +2190,8 @@ fn output_loop(job: OutputJob) {
         }
     }
     if abandoned {
-        let left = discard(&video, video_done).saturating_add(discard(&audio, audio_done));
-        output_drops.fetch_add(left, Ordering::Relaxed);
+        let (left, held) = queues.abandon(video_done, audio_done, &output_drops);
+        drop(held);
         tracing::warn!(
             packets = left,
             "stop did not drain the output in time; dropped the packets still queued"
