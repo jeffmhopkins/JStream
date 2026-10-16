@@ -876,7 +876,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:cfd742de669f8702", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design (Live sources, Snapshots, locks) against #422 fix; added that injecting media files via with_backends re-syncs and rebuilds every live source" }
+stamp = { hash = "b3:b34153aa27190371", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m2: holds with both #427's live-sources sync on with_backends (line 439) and this PR's MAX_BUSES compile-time assert (line 645)" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the jstream-control Mock change (#401): the differential script (tests.rs) does not call kind.list, so 'the engine's answers are the mock's' still holds; 'unimplemented calls answer internal, as the mock does' still true for kind.describe and delete.plan." }
@@ -1107,7 +1107,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:5e072f7a4c74a305", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: body adds MfMediaDecoders to the Windows backend list and to the delay-load DLL list (mfplat.dll, mfreadwrite.dll); serve.rs wires MfMediaDecoders::new() as Backends.media, matching it. Dep core#design gains C9's media text (begin_plan, Source::show, Backends::media, NoBackend) beside C10's painters, none of which the daemon text restates; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:cfd742de669f8702", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read daemon Design (live on Windows, collection file) against the core Design change for #422: the daemon still loads the collection then injects backends; the engine now rebuilds media sources on injection, nothing here contradicts it" }
+stamp = { hash = "b3:b34153aa27190371", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m2: only its core#design dependency moved; the daemon still loads the collection then injects backends, which the merged core section describes" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
