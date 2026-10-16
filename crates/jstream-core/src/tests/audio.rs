@@ -468,6 +468,80 @@ fn a_media_files_sound_is_mixed_while_the_program_shows_it() {
     ));
     assert_eq!(metered(&mut events), ["clip"]);
 
+    // Its input runs the source's audio filters (ADR-0026): a gain of -60 dB brings its
+    // metered peak down a thousandfold, and removing the filter brings the level back.
+    // The mixer runs as the fake device takes blocks, here silence from the microphone
+    // and desktop, so the peak is the file's.
+    let peak = |events: &mut jstream_control::EventStream| {
+        for _ in 0..10 {
+            audio.deliver(480, 0.0);
+            clock.advance(10_000);
+            engine.replan();
+            thread::sleep(Duration::from_millis(2));
+        }
+        engine.emit_meters_tick();
+        drain(events)
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::MetersTick { sources, .. } => Some(
+                    sources
+                        .into_iter()
+                        .find(|s| s.source_id.as_str() == "clip")
+                        .map_or(0.0, |s| s.peak[0].get().max(s.peak[1].get())),
+                ),
+                _ => None,
+            })
+            .unwrap_or(0.0)
+    };
+    // Each fake block holds one level, from 1/128 to 1/2.
+    let heard = |peak: f32| peak >= 1.0 / 128.0;
+    assert!(
+        eventually(|| heard(peak(&mut events))),
+        "the file is metered"
+    );
+    let owner = || jstream_protocol::FilterOwner::Source {
+        source_id: SourceId::new("clip"),
+    };
+    batch(
+        &control,
+        Batch::single(Edit::FilterAdd {
+            owner: owner(),
+            chain: jstream_protocol::FilterChain::Audio,
+            filter_id: jstream_protocol::FilterId::new("quiet"),
+            kind: "gain".into(),
+            settings: Settings([("gain_db".to_owned(), json!(-60.0))].into_iter().collect()),
+            enabled: None,
+            index: None,
+        }),
+    )
+    .expect("filter.add");
+    // Two ticks, so the first drops a peak held from before the filter. The loudest
+    // block, 1/2, comes out at 0.0005.
+    assert!(
+        eventually(|| {
+            peak(&mut events);
+            let quiet = peak(&mut events);
+            quiet > 0.0 && quiet < 0.001
+        }),
+        "the gain filter runs on the file's input"
+    );
+    batch(
+        &control,
+        Batch::single(Edit::FilterRemove {
+            owner: owner(),
+            filter_id: jstream_protocol::FilterId::new("quiet"),
+        }),
+    )
+    .expect("filter.remove");
+    assert!(
+        eventually(|| {
+            peak(&mut events);
+            heard(peak(&mut events))
+        }),
+        "the level comes back once the filter is removed"
+    );
+
     // Deleting the source removes its input.
     batch(
         &control,

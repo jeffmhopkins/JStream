@@ -199,8 +199,9 @@ state machine. Contents:
   output running, a failed stream reopened, an application found again under a new
   process ID, a settings change reopening its input, a `browser` page recorded beside
   the defaults and its presets opening once the backend arrives, a media file's sound reaching
-  its own input beside the defaults, silent while hidden, routed and metered, closed
-  while its audio is off and removed with the source, the program mix reaching the
+  its own input beside the defaults, silent while hidden, routed and metered, quieted
+  by a `gain` filter on its source and loud again once it is removed, closed while its
+  audio is off and removed with the source, the program mix reaching the
   engine's audio scope while an output runs, and a bus a `waveform` draws reaching its
   own scope while the program mix, with no send from that source, stays silent
   (`a_bus_a_source_draws_feeds_its_scope_while_an_output_runs`), and a source a
