@@ -183,7 +183,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   no form submission for the browser to offer saving. A test checks both fields.
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
-  (`session.rs`, `store.rs`, `panels/outputs.rs`) and in plain functions the panels are built on (the rows,
+  (`session.rs`, `store.rs`, `panels/outputs.rs`, `panels/mixer.rs`) and in plain functions the panels are built on (the rows,
   what "Add" sends, the form's sections, parsing and checks); only the components
   themselves need a browser.
 
