@@ -1,9 +1,10 @@
 //! The `text` kind through the public API.
 //!
 //! Every test draws with the bundled font, `assets/fonts/Roboto-Regular-subset.ttf`
-//! (Apache-2.0; the crate README's "Bundled font" says how it was made). The golden tests compare against
-//! PNGs in `tests/data/text`; run them with `JSTREAM_BLESS=1` to rewrite those after a
-//! deliberate change, and look at the new images before committing them.
+//! (Apache-2.0; the crate README's "Bundled font" says how it was made). The golden
+//! tests compare against PNGs in `tests/data/text`; run them with `JSTREAM_BLESS=1` to
+//! rewrite those after a deliberate change, and look at the new images before
+//! committing them.
 
 use jstream_media::{MediaTime, PixelFormat, Timebase, VideoFrame};
 use jstream_protocol::{AssetRoot, Reference, Settings};
@@ -329,6 +330,7 @@ fn a_font_asset_is_read_and_a_bad_one_is_an_error() {
             app: None,
         },
         limits: Limits::default(),
+        ..Context::default()
     };
     let font = |path: &str| {
         Reference::Asset {

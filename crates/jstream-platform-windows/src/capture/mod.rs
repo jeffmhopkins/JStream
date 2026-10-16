@@ -8,8 +8,9 @@
 //! questions). Targets are named as `id` describes.
 
 // Platform-independent, so they are tested on every platform.
+// Shared with the H.264 encoder, which converts the compositor's RGBA the same way.
 #[cfg(any(windows, test))]
-mod convert;
+pub(crate) mod convert;
 #[cfg(any(windows, test))]
 mod id;
 // Shared with `video_device`, whose capture streams publish to the same mailbox.
