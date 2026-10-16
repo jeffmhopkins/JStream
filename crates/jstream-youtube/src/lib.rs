@@ -8,7 +8,7 @@
 //! in tests. Tokens, codes and stream keys only ever travel as
 //! `jstream_platform::Secret`s.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-youtube/README.md#purpose, docs/adr/0041-youtube-interaction-scope-v3.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-youtube/README.md#purpose, docs/adr/0051-youtube-without-a-required-oauth-client.md
 
 #![forbid(unsafe_code)]
 

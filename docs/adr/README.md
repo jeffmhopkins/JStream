@@ -54,7 +54,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0038](0038-adr-status-banner-and-index.md) | Generated ADR status banners and index | accepted | maintainer |  |
 | [ADR-0039](0039-hash-ignores-metadata-and-row-dependencies.md) | Doc hashes ignore metadata blocks; row-level crate-map dependencies | accepted | maintainer |  |
 | [ADR-0040](0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md) | Scene structure: orphaned overrides, shared groups and deleted hotkey targets | accepted | maintainer |  |
-| [ADR-0041](0041-youtube-interaction-scope-v3.md) | YouTube interaction scope v3: one sign-in | accepted | maintainer |  |
+| [ADR-0041](0041-youtube-interaction-scope-v3.md) | YouTube interaction scope v3: one sign-in | superseded | maintainer | [ADR-0051](0051-youtube-without-a-required-oauth-client.md) |
 | [ADR-0042](0042-narrow-hot-architecture-sections.md) | Narrow the hot architecture sections: manifest views, app entry points, threading model | accepted | maintainer |  |
 | [ADR-0043](0043-narrow-maintainer-tier.md) | Decision tiers v2: the maintainer decides product-level calls only | accepted | maintainer |  |
 | [ADR-0044](0044-pairing-remote-browsers.md) | Pairing remote browsers with a one-time code | accepted | maintainer |  |
@@ -63,6 +63,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0047](0047-browser-pairing-page-and-device-cookie.md) | A browser pairs on a token-free page and keeps its device token in a cookie | accepted | maintainer |  |
 | [ADR-0049](0049-keyframe-scene-model-and-evaluation.md) | Keyframe scenes: the override model, live values and switching between keyframes | accepted | agent |  |
 | [ADR-0050](0050-3d-transforms-rendering.md) | Drawing 3D item transforms | accepted | agent |  |
+| [ADR-0051](0051-youtube-without-a-required-oauth-client.md) | YouTube v4: no required OAuth client | accepted | maintainer |  |
 | [ADR-0053](0053-per-input-verification-ledger.md) | Per-input verification stamps in one ledger file | accepted | agent |  |
 | [ADR-0054](0054-platform-ci-after-review.md) | Run the Windows, macOS and end-to-end CI jobs after review | accepted | agent |  |
 | [ADR-0055](0055-wave-branches.md) | Wave branches: PRs batch into a wave, and only the wave's PR into main runs full CI | accepted | agent |  |
