@@ -103,6 +103,6 @@ Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo de
 `cargo xtask docs generate` (rewrites `@generated` blocks, e.g. ADR status banners),
 `cargo xtask docs log <DOC[#anchor]>` (history from git), `cargo xtask docs review <DOC>`
 (doc-level TTL review), `cargo xtask docs merge-main` (merges `origin/main`, resolving
-stamp-only conflicts),
+stamp and `@generated`-block conflicts),
 `cargo xtask lint-deps` and `cargo xtask governance --base origin/main` (lists your
 governance changes).
