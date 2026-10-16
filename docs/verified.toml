@@ -327,7 +327,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:319be3918e7685d3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol README and kind.rs changes are asset-path doc wording and a comment rewrap; the control-protocol summary makes no asset-path claim and still holds" }
+stamp = { hash = "b3:21d26c102287211d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): stale via protocol README (asset-path wording); Binary streams bullet holds at 0.20" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:3cc940ee388748ab", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
@@ -963,13 +963,13 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 (b65be40, #283 browser sources) into #219: re-read. Body: wave's browser source and Recorded::Own audio text beside E3b's compose capture import, GPU-path held frame and allocation text; the browser page shown transparent is the wave's GPU frame, not E3b's capture path. Cargo.toml adds the wave's jstream-browser fake dev-dependency beside E3b's hw-tests feature and cfg(windows) platform-windows dev-dependency, which the dev-dependency paragraph names. tests.rs: E3b's mod gpu_capture, hw-tests-gated mod windows_gpu (:12-13), OpenDraw closures taking Option<&GpuContext>, and #396's HANG_BOUND; design names no test deadline; holds" }
+stamp = { hash = "b3:0ddc9a76eeb853c7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): Cargo.toml keeps zune-jpeg dev-dep beside E3b's windows dev-dep table; E3b's capture path is the program stage's, the preview passes None as capture so a display source still draws nothing as the Preview streams text says; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): stale via control/protocol design and tests.rs; Preview streams text unchanged and matches preview/mod.rs; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:461bf05e22a4b2f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol Design change only adds the empty-segment rule to the asset-path Rejections text and rewraps; core design's asset statements (collection/app resolution) are unaffected" }
+stamp = { hash = "b3:e64d4c4f8eb61304", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): Cargo.toml keeps zune-jpeg dev-dep beside E3b's windows dev-dep table; E3b's capture path is the program stage's, the preview passes None as capture so a display source still draws nothing as the Preview streams text says; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
@@ -981,7 +981,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
-stamp = { hash = "b3:0f5df67558945b9a", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 (b65be40, #283 browser sources) into #219: re-read. Body: wave's browser source and Recorded::Own audio text beside E3b's compose capture import, GPU-path held frame and allocation text; the browser page shown transparent is the wave's GPU frame, not E3b's capture path. Cargo.toml adds the wave's jstream-browser fake dev-dependency beside E3b's hw-tests feature and cfg(windows) platform-windows dev-dependency, which the dev-dependency paragraph names. tests.rs: E3b's mod gpu_capture, hw-tests-gated mod windows_gpu (:12-13), OpenDraw closures taking Option<&GpuContext>, and #396's HANG_BOUND; design names no test deadline; holds" }
+stamp = { hash = "b3:9f772e665c425c2a", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): Cargo.toml keeps zune-jpeg dev-dep beside E3b's windows dev-dep table; E3b's capture path is the program stage's, the preview passes None as capture so a display source still draws nothing as the Preview streams text says; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:5e06b48ac662790f" }
@@ -1056,7 +1056,7 @@ stamp = { hash = "b3:62d7ac855f8e3c18", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:70be1c9adab557ed", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 (b65be40, #283 browser sources) into #219: re-read. Body: wave's browser source and Recorded::Own audio text beside E3b's compose capture import, GPU-path held frame and allocation text; the browser page shown transparent is the wave's GPU frame, not E3b's capture path. Cargo.toml adds the wave's jstream-browser fake dev-dependency beside E3b's hw-tests feature and cfg(windows) platform-windows dev-dependency, which the dev-dependency paragraph names. tests.rs: E3b's mod gpu_capture, hw-tests-gated mod windows_gpu (:12-13), OpenDraw closures taking Option<&GpuContext>, and #396's HANG_BOUND; design names no test deadline; holds" }
+stamp = { hash = "b3:2a9b879f1299c571", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): Cargo.toml keeps zune-jpeg dev-dep beside E3b's windows dev-dep table; E3b's capture path is the program stage's, the preview passes None as capture so a display source still draws nothing as the Preview streams text says; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
@@ -1083,7 +1083,7 @@ stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:f16b463f8715a669", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:d60d0f3cc525c9e3", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 (b65be40, #283 browser sources) into #219: re-read. Body: wave's with_browser builder, browser page audio inputs and Tests text sit beside E3b's GPU-context Contents sentence and gpu_capture/windows_gpu Tests text. tests.rs carries E3b's mod gpu_capture (:9), the hw-tests-gated mod windows_gpu (:12-13, all(windows, feature = hw-tests)) and the cpu_pipeline OpenDraw closures and solid taking Option<&GpuContext>, plus #396's 30 s HANG_BOUND; the Tests bullet matches all of it and names no poll deadline; holds" }
+stamp = { hash = "b3:e7f03228acaa1be4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): E3b's GPU capture text merged; preview bullet holds (own headless compositor, snapshot::compose with no capture)" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1161,7 +1161,7 @@ stamp = { hash = "b3:62d7ac855f8e3c18", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:70be1c9adab557ed", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 (b65be40, #283 browser sources) into #219: re-read. Body: wave's with_browser builder, browser page audio inputs and Tests text sit beside E3b's GPU-context Contents sentence and gpu_capture/windows_gpu Tests text. tests.rs carries E3b's mod gpu_capture (:9), the hw-tests-gated mod windows_gpu (:12-13, all(windows, feature = hw-tests)) and the cpu_pipeline OpenDraw closures and solid taking Option<&GpuContext>, plus #396's 30 s HANG_BOUND; the Tests bullet matches all of it and names no poll deadline; holds" }
+stamp = { hash = "b3:2a9b879f1299c571", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): E3b's GPU capture text merged; preview bullet holds (own headless compositor, snapshot::compose with no capture)" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
@@ -1224,7 +1224,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 into #219: stale via core#design only (wave's browser sources and E3b's capture text); daemon text names neither with_browser nor the GPU path beyond handing WindowsGpu and WgcCapture to with_backends; holds" }
+stamp = { hash = "b3:0ddc9a76eeb853c7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): stale via core design; daemon text is the wave's; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:06af0b68f544ac32", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: stale via core/server design; daemon text is the wave's; holds" }
@@ -1533,7 +1533,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:461bf05e22a4b2f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol Design change only adds the empty-segment rule to the asset-path Rejections text and rewraps; graph purpose says only that asset references are not edges, which still holds" }
+stamp = { hash = "b3:e64d4c4f8eb61304", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): stale via protocol design (asset-path wording); graph text is the wave's; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2052,7 +2052,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:461bf05e22a4b2f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: Rejections bullet now lists the empty-segment rule check_asset_path already enforces for collection/app, and the DOS-device sentence is rewrapped; checked against check_asset_path" }
+stamp = { hash = "b3:e64d4c4f8eb61304", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): #412/#414 shader asset-path wording merged; Binary streams section unchanged; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
