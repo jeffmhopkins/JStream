@@ -182,7 +182,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U0 | Leptos UI skeleton | ✅ merged | #250 |
 | U2a | ADR-0044 pairing | ✅ merged | #248 |
 | U2 | Serve the UI | ✅ merged | #246, #247 |
-| U2b | Device pairing | ✅ merged | #265 |
+| U2b | Device pairing | ✅ merged | #265, #288 |
 | U3a | Scenes, sources, properties | 🔍 in review | #256 |
 | U3b | Outputs and go-live panel | ✅ merged | #254 |
 | U3c | Mixer panel | ⏳ planned |  |
