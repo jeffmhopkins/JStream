@@ -12,6 +12,7 @@ mod preview;
 mod sources;
 #[cfg(all(windows, feature = "hw-tests"))]
 mod windows_gpu;
+mod youtube;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};

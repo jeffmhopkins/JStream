@@ -15,12 +15,15 @@ use crate::{
     SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
     Vec2, Welcome, json_schema,
 };
-use crate::{ActionResult, DeviceId, DeviceInfo};
 use crate::{
-    AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
-    EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,
+    ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
+    BroadcastListStatus, BroadcastPrivacy, BroadcastTransition, BroadcastType, EncoderProfile,
+    EncoderProfileId, EncoderProfileInfo, EncoderSessionInfo, HardwarePreference, HealthIssue,
+    IssueSeverity, RateControl, StreamHealth, StreamInfo, StreamStatus, VideoCodec, VideoEncoding,
+    YoutubeAuth,
 };
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
+use crate::{DeviceId, DeviceInfo};
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
@@ -225,6 +228,14 @@ pub(crate) fn edits() -> Vec<Edit> {
             kind: OutputKind::Record {
                 path: "/home/me/Videos/show.mp4".into(),
                 container: RecordContainer::Mp4,
+            },
+        },
+        Edit::OutputCreate {
+            output_id: OutputId::new("out_live"),
+            kind: OutputKind::Rtmp {
+                target: RtmpTarget::YouTube {
+                    broadcast_id: "dQw4w9WgXcQ".into(),
+                },
             },
         },
         Edit::OutputCreate {
@@ -464,6 +475,35 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::OutputClearKey {
             output_id: OutputId::new("out_yt"),
         },
+        Action::YoutubeSignIn,
+        Action::YoutubeSignOut,
+        Action::YoutubeCreateBroadcast {
+            title: "Friday stream".into(),
+            description: "Building JStream live.".into(),
+            scheduled_start_time: "2026-10-16T19:00:00Z".into(),
+            privacy: BroadcastPrivacy::Unlisted,
+            made_for_kids: false,
+        },
+        Action::YoutubeBindBroadcast {
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            stream_id: Some("UCfixturechannelfixturestream1".into()),
+        },
+        Action::YoutubeBindBroadcast {
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            stream_id: None,
+        },
+        Action::YoutubeTransitionBroadcast {
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            to: BroadcastTransition::Testing,
+        },
+        Action::YoutubeTransitionBroadcast {
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            to: BroadcastTransition::Live,
+        },
+        Action::YoutubeTransitionBroadcast {
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            to: BroadcastTransition::Complete,
+        },
         Action::AudioResetLoudness {},
         Action::PreviewSubscribe {
             channel: 1,
@@ -502,6 +542,30 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::OutputList,
         Query::StudioGet,
         Query::EncoderList,
+        Query::YoutubeStatus,
+        Query::YoutubeListBroadcasts {
+            status: BroadcastListStatus::All,
+            broadcast_type: BroadcastType::All,
+            page_token: None,
+        },
+        Query::YoutubeListBroadcasts {
+            status: BroadcastListStatus::Upcoming,
+            broadcast_type: BroadcastType::Event,
+            page_token: Some("CAEQAA".into()),
+        },
+        Query::YoutubeListBroadcasts {
+            status: BroadcastListStatus::Active,
+            broadcast_type: BroadcastType::Persistent,
+            page_token: None,
+        },
+        Query::YoutubeListBroadcasts {
+            status: BroadcastListStatus::Completed,
+            broadcast_type: BroadcastType::All,
+            page_token: None,
+        },
+        Query::YoutubeListStreams {
+            page_token: Some("CAEQAA".into()),
+        },
         Query::BusList,
         Query::DeletePlan {
             target: DeleteTarget::Scene {
@@ -515,6 +579,44 @@ pub(crate) fn queries() -> Vec<Query> {
         },
         Query::DeviceList,
     ]
+}
+
+/// A broadcast in every lifecycle state and privacy, the first with every field.
+fn broadcasts() -> Vec<BroadcastInfo> {
+    let lifecycles = [
+        BroadcastLifeCycle::Created,
+        BroadcastLifeCycle::Ready,
+        BroadcastLifeCycle::TestStarting,
+        BroadcastLifeCycle::Testing,
+        BroadcastLifeCycle::LiveStarting,
+        BroadcastLifeCycle::Live,
+        BroadcastLifeCycle::Complete,
+        BroadcastLifeCycle::Revoked,
+        BroadcastLifeCycle::Other,
+    ];
+    let privacies = [
+        BroadcastPrivacy::Unlisted,
+        BroadcastPrivacy::Private,
+        BroadcastPrivacy::Public,
+        BroadcastPrivacy::Other,
+    ];
+    lifecycles
+        .into_iter()
+        .enumerate()
+        .map(|(i, life_cycle)| BroadcastInfo {
+            broadcast_id: format!("bc{i}"),
+            title: "Friday stream".into(),
+            description: if i == 0 {
+                "Building JStream live.".into()
+            } else {
+                String::new()
+            },
+            scheduled_start_time: (i == 0).then(|| "2026-10-16T19:00:00Z".into()),
+            life_cycle,
+            privacy: privacies[i % privacies.len()],
+            bound_stream_id: (i == 0).then(|| "UCfixturechannelfixturestream1".into()),
+        })
+        .collect()
 }
 
 fn color_settings() -> Settings {
@@ -858,6 +960,33 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             rev: Rev(12),
             encoders: encoder_infos(),
         },
+        QueryResult::YoutubeStatus {
+            auth: YoutubeAuth::SignedIn,
+        },
+        QueryResult::YoutubeListBroadcasts {
+            broadcasts: broadcasts(),
+            next_page_token: Some("CAEQAA".into()),
+        },
+        QueryResult::YoutubeListStreams {
+            streams: [
+                (StreamStatus::Active, StreamHealth::Good),
+                (StreamStatus::Created, StreamHealth::Ok),
+                (StreamStatus::Error, StreamHealth::Bad),
+                (StreamStatus::Inactive, StreamHealth::NoData),
+                (StreamStatus::Ready, StreamHealth::Other),
+                (StreamStatus::Other, StreamHealth::NoData),
+            ]
+            .into_iter()
+            .enumerate()
+            .map(|(i, (status, health))| StreamInfo {
+                stream_id: format!("st{i}"),
+                title: "Default stream key".into(),
+                status,
+                health,
+            })
+            .collect(),
+            next_page_token: None,
+        },
         QueryResult::BusList {
             rev: Rev(12),
             buses: bus_infos(),
@@ -953,6 +1082,36 @@ pub(crate) fn events() -> Vec<Event> {
             encode_blocks: 6,
             output_packets: 7,
         },
+    });
+    for auth in [
+        YoutubeAuth::Unavailable,
+        YoutubeAuth::SignedOut,
+        YoutubeAuth::SigningIn,
+        YoutubeAuth::SignedIn,
+        YoutubeAuth::Other,
+    ] {
+        events.push(Event::YoutubeStatusChanged { auth });
+    }
+    events.push(Event::YoutubeHealthChanged {
+        output_id: OutputId::new("out_live"),
+        broadcast_id: "dQw4w9WgXcQ".into(),
+        stream_id: "UCfixturechannelfixturestream1".into(),
+        status: StreamStatus::Active,
+        health: StreamHealth::Bad,
+        issues: [
+            IssueSeverity::Error,
+            IssueSeverity::Warning,
+            IssueSeverity::Info,
+            IssueSeverity::Other,
+        ]
+        .into_iter()
+        .map(|severity| HealthIssue {
+            issue: "gopSizeLong".into(),
+            severity,
+            reason: "Check video settings".into(),
+            description: "Please use a keyframe frequency of four seconds or less.".into(),
+        })
+        .collect(),
     });
     events.push(Event::MetersTick {
         sources: vec![SourceMeter {
@@ -1150,6 +1309,26 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
             error: ProtocolError::HandshakeRequired.into(),
         }),
     ];
+    let broadcast = broadcasts().swap_remove(0);
+    for result in [
+        ActionResult::YoutubeSignIn {
+            url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=1234-fixture.apps.googleusercontent.com&redirect_uri=http%3A%2F%2F127.0.0.1%3A53682&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&state=fixture-state".into(),
+        },
+        ActionResult::YoutubeCreateBroadcast {
+            broadcast: broadcast.clone(),
+        },
+        ActionResult::YoutubeBindBroadcast {
+            broadcast: broadcast.clone(),
+        },
+        ActionResult::YoutubeTransitionBroadcast { broadcast },
+    ] {
+        msgs.push(ServerMessage::Response(Response {
+            id: RequestId::new("r11"),
+            result: CallResult::Action {
+                result: Some(result),
+            },
+        }));
+    }
     for result in query_results() {
         msgs.push(ServerMessage::Response(Response {
             id: RequestId::new("r20"),

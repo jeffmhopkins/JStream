@@ -194,7 +194,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ├── master         Master { video_filters[], audio_filters[] }   applies to everything leaving JStream
 ├── privacy        Privacy { look: Blur { strength } | Slate { color | image }, muted_sources: [source_id] }
 └── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, video_filters[], audio_filters[] }
-                   kind: Rtmp { target: Generic { url } | YouTube { broadcast_binding } } | Record { path, container } | VirtualCam
+                   kind: Rtmp { target: Generic { url } | YouTube { broadcast_id } } | Record { path, container } | VirtualCam
 ```
 
 - `Program` and `Preview` are mixes driven by the studio state: `program_scene` and
@@ -645,8 +645,21 @@ The wire format, versioning, error codes and compatibility policy are designed i
   while the mixer runs) every source's and bus's levels and the master's loudness,
   which `audio.reset_loudness` restarts; the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).
-- **YouTube** (planned for M3, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md);
-  the UI's only, never offered over MCP):
+- **YouTube** ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md); the UI's
+  only, never offered over MCP): since protocol 0.23
+  the actions `youtube.sign_in` (returns Google's consent URL; the loopback redirect
+  finishes the sign-in in the engine, and no token ever crosses the protocol),
+  `youtube.sign_out`, `youtube.create_broadcast`, `youtube.bind_broadcast` and
+  `youtube.transition_broadcast`; the queries `youtube.status`, `youtube.list_broadcasts`
+  and `youtube.list_streams` (never a stream key); the events `youtube.status_changed`
+  and `youtube.health_changed` (a running YouTube output's stream health); and the RTMP
+  target `youtube { broadcast_id }`, which `output.start` resolves to the bound stream's
+  `rtmps://` ingest and key through the Live API. All of these need a Google OAuth
+  client: the one built into JStream (ADR-0058 §1, empty until the maintainer fills it
+  in) or a developer's override; without one
+  `youtube.status` reports `unavailable`, the rest fail with `action_failed`, and
+  clients hide them. Streaming to YouTube with a stream key needs none of this. Planned
+  for M3:
   the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
   the channel and goes to the audit log, and `youtube.chat.feature { message_id }`, which
   sets or clears the featured message (runtime state, reported by an event) that the chat
@@ -708,9 +721,11 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; the `youtube.*`
-  commands are the UI's only and get no tool, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)), plus `batch` and later `script`. Each takes an `op` argument whose
-  schema is generated from the protocol.
+  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
+  output edit with a `youtube` target is refused, and `youtube.*` events stay out of
+  the `events` feed: YouTube is for people, through
+  the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -720,7 +735,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 219 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 220 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

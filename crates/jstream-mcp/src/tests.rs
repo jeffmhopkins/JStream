@@ -485,6 +485,40 @@ fn tool_list_snapshot() {
     });
 }
 
+/// YouTube is for people, through the UI (ADR-0058 §3): no `youtube` tool is listed,
+/// and a `youtube.*` op is unknown to every tool, so it never reaches the engine.
+#[test]
+fn no_youtube_tool_and_no_youtube_op() {
+    let f = fixture();
+    f.initialize();
+    let names: Vec<String> = f.legacy(1, "tools/list", json!({}))["tools"]
+        .as_array()
+        .expect("tools")
+        .iter()
+        .filter_map(|t| t["name"].as_str().map(str::to_owned))
+        .collect();
+    assert!(!names.iter().any(|n| n == "youtube"));
+    let call = f
+        .send(
+            &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params":
+            {"name": "youtube", "arguments": {"op": {"type": "youtube.status"}}}}),
+        )
+        .expect("answered");
+    assert_eq!(
+        rpc_error(&call),
+        (-32602, "Unknown tool: youtube".to_owned())
+    );
+    let misrouted = f.call_tool("output", json!({"op": {"type": "youtube.status"}}));
+    let error = tool_error(&misrouted);
+    assert_eq!(error["code"], "malformed");
+    assert!(
+        error["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("unknown op `youtube.status`")),
+        "{error}"
+    );
+}
+
 #[test]
 fn engine_errors_are_tool_errors_with_their_code() {
     let f = fixture();
