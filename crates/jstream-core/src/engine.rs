@@ -291,8 +291,11 @@ impl Engine {
         // files play through the platform's decoders.
         {
             let mut state = lock(&self.shared.state);
+            let state = &mut *state;
             state.live.set_clock(Arc::clone(&backends.clock));
-            state.live.set_media(Arc::clone(&backends.media));
+            state
+                .live
+                .set_media(Arc::clone(&backends.media), state.graph.state());
         }
         let host = self.host();
         let vcam = backends.vcam.take();
@@ -1204,7 +1207,9 @@ impl Engine {
     /// Plays `media` sources through `media`, for tests that give no full backends.
     #[cfg(test)]
     pub(crate) fn set_source_media(&self, media: Arc<dyn jstream_platform::MediaDecoders>) {
-        lock(&self.shared.state).live.set_media(media);
+        let mut state = lock(&self.shared.state);
+        let state = &mut *state;
+        state.live.set_media(media, state.graph.state());
     }
 
     /// Re-plans the program mix now, as the live sources' thread does when a frame is

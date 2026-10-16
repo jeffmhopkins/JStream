@@ -534,3 +534,65 @@ fn a_media_file_first_shown_long_after_it_was_built_plays_from_the_start() {
     assert!(plays(&engine, 1));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// #422: a `media` source loaded from a collection file, before the host injects the
+/// platform's media files, fails for want of them; injecting them builds it again, so
+/// it plays without waiting for an edit.
+#[test]
+fn a_media_file_loaded_before_the_media_backend_plays_once_it_is_injected() {
+    let dir = temp_dir("media-loaded");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(true)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(false)),
+    ]);
+    {
+        // The run that creates the source and saves it to the collection file.
+        let engine = Engine::new()
+            .with_collection_file(dir.join("scenes.json"))
+            .expect("collection file");
+        let control = connected(&engine);
+        batch(
+            &control,
+            edits(vec![
+                create("a"),
+                source("video", "media", video),
+                add("a", "i1", "video"),
+            ]),
+        )
+        .expect("created");
+    }
+
+    // The next run loads it before the media files are injected, as a host does.
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    assert_eq!(shown(&engine, "video"), None, "no media files yet");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
+    assert!(
+        plays(&engine, 0),
+        "it plays once the media files are injected"
+    );
+    clock.advance(150);
+    assert!(plays(&engine, 1), "and advances on the clock");
+    let _ = fs::remove_dir_all(dir);
+}
