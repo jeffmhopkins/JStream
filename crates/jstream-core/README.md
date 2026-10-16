@@ -816,7 +816,8 @@ newest capture from the mailbox and, on the CPU path, converts it to RGBA8 (RGBA
 copied, BGRA swizzled, NV12, which Windows' CPU capture delivers, converted with its
 frame's matrix and range) on a tick whose shot shows the capture, so a program
 without a `display` source converts nothing. Each tick first calls
-`RenderReader::adopt`, which compares one pointer with the published snapshot and, when a new one arrived, adopts
+`RenderReader::adopt`, which compares one pointer with the published snapshot and,
+when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
 the snapshot it held to the program stage's `jstream-collector` thread. The GPU images the
 cache frees go there too, and so does the input of an encoder session that has

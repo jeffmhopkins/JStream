@@ -882,7 +882,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:4e3e5143a4067a68", by = "agent:claude", note = "B1: vcam paragraph now names both fit cases (canvas changed after stage open, or odd edge rounded down by output_size)" }
+stamp = { hash = "b3:1b91b390aff057e2", by = "agent:claude", note = "Merge of main (#434) and #437: render thread paragraph keeps this PR's GPU-context path with #437's hardware-first fallback and WARP figure and #434's canvas sizing; output.start waits for the compositor hardware first. pipeline.rs, snapshot.rs, tests.rs match; Encoder profiles paragraph names only EncoderProfile::DEFAULT (prefer); holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
@@ -945,7 +945,7 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:a165614228aedf88", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:ca2da06078bbad13", by = "agent:claude", note = "Merge of main (#434) and #437: render thread paragraph keeps this PR's GPU-context path with #437's hardware-first fallback and WARP figure and #434's canvas sizing; output.start waits for the compositor hardware first. pipeline.rs, snapshot.rs, tests.rs match; Encoder profiles paragraph names only EncoderProfile::DEFAULT (prefer); holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -963,13 +963,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:211c895e1ad53b28", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:ad5acf4fcafc2a83", by = "agent:claude", note = "Merge of main (#434) and #437: render thread paragraph keeps this PR's GPU-context path with #437's hardware-first fallback and WARP figure and #434's canvas sizing; output.start waits for the compositor hardware first. pipeline.rs, snapshot.rs, tests.rs match; Encoder profiles paragraph names only EncoderProfile::DEFAULT (prefer); holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:552e5c6151ade75e", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:42f64e51c8abe01c", by = "agent:claude", note = "Merge of main (#434) and #437: render thread paragraph keeps this PR's GPU-context path with #437's hardware-first fallback and WARP figure and #434's canvas sizing; output.start waits for the compositor hardware first. pipeline.rs, snapshot.rs, tests.rs match; Encoder profiles paragraph names only EncoderProfile::DEFAULT (prefer); holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -987,7 +987,7 @@ stamp = { hash = "b3:c9688aabcb558c82" }
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:e694bb9fbdaed47b", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:c7eb74cbdd816051", by = "agent:claude", note = "Merge of main (#434) and #437: test list names #434's canvas/lazy-conversion tests, the GPU capture composited on the context, and tests on whatever adapter opens. pipeline.rs: output_size, open_capture/start_capture, gpu_draw on_context or hardware(), Frames.gpu_source, video_config with the Avoid assertion; snapshot.rs: CapturePixels, compose import, hardware(); tests.rs: OpenDraw closures, reworded comments; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1035,7 +1035,7 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:a165614228aedf88", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:ca2da06078bbad13", by = "agent:claude", note = "Merge of main (#434) and #437: test list names #434's canvas/lazy-conversion tests, the GPU capture composited on the context, and tests on whatever adapter opens. pipeline.rs: output_size, open_capture/start_capture, gpu_draw on_context or hardware(), Frames.gpu_source, video_config with the Avoid assertion; snapshot.rs: CapturePixels, compose import, hardware(); tests.rs: OpenDraw closures, reworded comments; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1053,13 +1053,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:211c895e1ad53b28", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:ad5acf4fcafc2a83", by = "agent:claude", note = "Merge of main (#434) and #437: test list names #434's canvas/lazy-conversion tests, the GPU capture composited on the context, and tests on whatever adapter opens. pipeline.rs: output_size, open_capture/start_capture, gpu_draw on_context or hardware(), Frames.gpu_source, video_config with the Avoid assertion; snapshot.rs: CapturePixels, compose import, hardware(); tests.rs: OpenDraw closures, reworded comments; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:552e5c6151ade75e", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:42f64e51c8abe01c", by = "agent:claude", note = "Merge of main (#434) and #437: test list names #434's canvas/lazy-conversion tests, the GPU capture composited on the context, and tests on whatever adapter opens. pipeline.rs: output_size, open_capture/start_capture, gpu_draw on_context or hardware(), Frames.gpu_source, video_config with the Avoid assertion; snapshot.rs: CapturePixels, compose import, hardware(); tests.rs: OpenDraw closures, reworded comments; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -1083,7 +1083,7 @@ stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:993e780364d6f4d3" }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:934e43398b16a688", by = "agent:claude", note = "Re-read Runtime: render thread composites at the canvas size and scales the capture (#433)" }
+stamp = { hash = "b3:bf6e5a6da063ad9c", by = "agent:claude", note = "Merge of main (#434) and #437: body says the stage opens the platform GPU context and starts capture and compositor on it; pipeline.rs open_capture/start_capture/RenderJob.context/gpu_draw match; holds" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
@@ -1095,7 +1095,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:a165614228aedf88", by = "agent:claude", note = "Re-read Runtime: render thread composites at the canvas size and scales the capture (#433)" }
+stamp = { hash = "b3:ca2da06078bbad13", by = "agent:claude", note = "Merge of main (#434) and #437: body says the stage opens the platform GPU context and starts capture and compositor on it; pipeline.rs open_capture/start_capture/RenderJob.context/gpu_draw match; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1113,7 +1113,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:ec76a643a1a5e0b1", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#247): main's Startup/Listening text now names --ui-dir and the UI directory; P1's data-directory bullet (jstream-platform paths, portable marker), Dependencies entry and open question 5 are unaffected and still match logs.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:4e3e5143a4067a68", by = "agent:claude", note = "Re-read after core vcam wording (B1): daemon design names no output or camera size; holds" }
+stamp = { hash = "b3:1b91b390aff057e2", by = "agent:claude", note = "Merge of main (#434) and #437: dep core#design now describes the GPU-context capture path on top of #434's canvas sizing and #437's hardware-first fallback; daemon Live on Windows opens no device at creation and lists the same backends; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
