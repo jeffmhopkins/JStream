@@ -427,9 +427,10 @@ fn reference(value: &Value, want: &str) -> Result<Option<Reference>, String> {
 /// regard to ASCII case) is `CON`, `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`,
 /// `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`. So `nul`, `NUL `, `nul.`,
 /// `Con.png` and `CON .png` are devices, and `CONSOLE.png`, `nul1.png` and `COM10.png`
-/// are not. Only the last component matters: Win32 opens a device named there in any
-/// folder (`C:\x\CON`), while a device name earlier in the path fails to open, and on
-/// other systems it is an ordinary folder name.
+/// are not. Only the last component matters, under any root: Win32 opens a device named
+/// there in any folder (`C:\x\CON`, or `CON.png` joined to a root folder), while a
+/// device name earlier in the path fails to open, and on other systems it is an
+/// ordinary folder name.
 fn is_dos_device_name(name: &str) -> bool {
     let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
     let upper = stem.to_ascii_uppercase();
@@ -446,16 +447,17 @@ fn is_dos_device_name(name: &str) -> bool {
 /// The path rules of an asset reference under `root`.
 ///
 /// Under `collection` and `app` the path is relative: `/` separators, and no empty or
-/// `..` segment, drive letter, leading `/` or backslash. Under `absolute` it must be
+/// `..` segment, drive letter, leading `/`, backslash or `:`. Under `absolute` it must be
 /// absolute (`/…`, `\…`, `C:/…` or `C:\…`) and still has no `..` segment. It must not
 /// start with two separators, which on Windows name a UNC share (`\\host\share\…`) or a
 /// device (`\\.\…`, `\\?\…`): opening one would send the engine's credentials to that
 /// host. Nor may it contain `:` other than a drive letter's, or `?` or `*`, which
 /// Win32 never allows in a file name and which name an NT object path (`\??\UNC\…`,
-/// `\??\GLOBALROOT\Device\…`). Nor may its last component name a DOS device, which
-/// Win32 opens in place of a file in any folder: a stem (the name before its first `.`,
-/// without trailing spaces, in any ASCII case) of `CON`, `PRN`, `AUX`, `NUL`,
-/// `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`.
+/// `\??\GLOBALROOT\Device\…`). Under every root, the last component must not name a
+/// DOS device, which Win32 opens in place of a file in any folder: a stem (the name
+/// before its first `.`, without trailing spaces, in any ASCII case) of `CON`, `PRN`,
+/// `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or
+/// `CONOUT$`.
 pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
     if path.is_empty() {
         return Err("the asset path must not be empty".into());
@@ -497,6 +499,9 @@ pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
                 Err("a relative asset path must not contain `:`".into())
             } else if segments().any(str::is_empty) {
                 Err("a relative asset path must not have an empty segment".into())
+            } else if segments().next_back().is_some_and(is_dos_device_name) {
+                // Joined to the root folder, `CON.png` still opens the device on Windows.
+                Err("a relative asset path must not end in a DOS device name".into())
             } else {
                 Ok(())
             }
@@ -659,6 +664,49 @@ mod tests {
         }
         assert!(file.check(&asset("absolute", "img/a.png")).is_err());
         assert!(super::check_asset_path(AssetRoot::App, "x/y.png").is_ok());
+    }
+
+    /// Issue #403: under `collection` and `app`, a relative path whose last component
+    /// names a DOS device is refused; a device name earlier in the path is not.
+    #[test]
+    fn relative_asset_paths_refuse_a_dos_device_name_last() {
+        for root in [AssetRoot::Collection, AssetRoot::App] {
+            let check = |path: &str| super::check_asset_path(root, path);
+            for good in [
+                "CONSOLE.png",
+                "media/nul1.png",
+                "COM10.png",
+                "LPT.png",
+                "COM\u{b9}0.png",
+                "icon.png",
+                "a.con",
+                "con/a.png",
+                "media/AUX/x/a.png",
+            ] {
+                assert!(check(good).is_ok(), "{root:?} {good}");
+            }
+            for bad in [
+                "CON",
+                "CON.png",
+                "media/nul",
+                "x/Con.png",
+                "aux.tar.gz",
+                "prn.",
+                "NUL ",
+                "CON .png",
+                "com1.png",
+                "img/COM9",
+                "com0.png",
+                "LPT1.png",
+                "lpt9",
+                "COM\u{b9}.png",
+                "LPT\u{b3}",
+                "CONIN$",
+                "a/conout$.png",
+            ] {
+                assert!(check(bad).is_err(), "{root:?} {bad}");
+            }
+        }
     }
 
     /// Issues #345 and #384: UNC, device, stream and DOS device paths are refused under

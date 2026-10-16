@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 4
-summary = "`Output` trait; RTMP(S) client with reconnect, recording. Uses `encode`, `mux` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime."
+summary = "RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime."
 unsafe_allowed = false
 
 [lints]
