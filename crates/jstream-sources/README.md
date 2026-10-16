@@ -167,10 +167,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   The decode thread reads the file's audio in step with its video: audio while it is
   behind the video and less than a second is queued, video while its queue has room,
   so neither stream gets far ahead in the file. While no `MediaAudio` stream is open it
-  keeps only the latest second, so a stream opened later starts with what is due. An
-  open stream's thread wakes every 10 ms and hands on, in packets of 10 ms at most,
-  each block the timeline reaches within the next 100 ms, stamped with the clock time
-  the timeline reaches it; the device position counts the frames handed on. Audio more
+  keeps only the latest second, so a stream opened later starts with what is due. It
+  queues the audio in blocks of 10 ms at most, cut from what the decoder hands over,
+  which can be far longer. An open stream's thread wakes every 10 ms and hands on, as
+  one packet each, the blocks the timeline reaches within the next 100 ms, stamped with
+  the clock time the timeline reaches them, so it never runs further ahead than a mixer
+  input's ring holds; the device position counts the frames handed on. Audio more
   than 20 ms behind the timeline is dropped, and a jump (a restart, a seek, the source
   shown again) flags the next packet as a discontinuity, so the mixer re-anchors
   there. Silence in the file itself, up to a second with nothing dropped (a looping
@@ -297,4 +299,8 @@ handed to a recording handler: nothing until heard, stamps 100 ms ahead of the
 timeline with continuous positions, a restart as a discontinuity, silence at another
 speed, an audio-only file looping without a seam and seeking after a long gap, and
 audio that outlasts the video playing on without a seek, then looping to the first
-frame.
+frame, silence in the file before the next play stepped over as a gap rather than a
+discontinuity, and a decoder's long blocks still handed on only 100 ms ahead,
+continuous across the block seam. `player.rs`'s own tests loop a stream that starts late
+in the file one frame period apart, and cut a block at a rate where 10 ms isn't a whole
+number of frames, keeping every frame and the pieces contiguous.

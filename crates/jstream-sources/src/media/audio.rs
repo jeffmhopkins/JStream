@@ -37,7 +37,7 @@ const LATE_US: i64 = 20_000;
 /// seek rather than decoded through, in microseconds.
 const CATCH_UP_US: i64 = 1_000_000;
 /// The longest packet handed on, in microseconds: one device period.
-const PACKET_US: i64 = 10_000;
+pub(super) const PACKET_US: i64 = 10_000;
 /// Two packets whose stamps are further apart than their length by more than this are
 /// not continuous, in microseconds.
 const JUMP_US: i64 = 1_000;

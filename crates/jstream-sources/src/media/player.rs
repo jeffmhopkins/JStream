@@ -29,6 +29,9 @@ use jstream_platform::{MediaDecoder, PlatformError};
 const DEFAULT_PERIOD_US: i64 = 33_333;
 /// How much audio to decode ahead at most while a feeder takes it, in microseconds.
 const AUDIO_AHEAD_US: i64 = 1_000_000;
+/// The longest block of audio queued, in microseconds: one packet the feeder hands on
+/// ([`PACKET_US`](super::audio::PACKET_US)).
+const PIECE_US: i64 = super::audio::PACKET_US;
 
 /// A decoded frame and where it sits on the timeline.
 pub(super) struct Decoded {
@@ -49,6 +52,35 @@ impl Sound {
     /// Where it ends on the timeline.
     pub(super) fn end(&self) -> i64 {
         self.at + self.length
+    }
+
+    /// The block cut into pieces of at most [`PIECE_US`] in `format`, each placed where
+    /// its first frame falls. A decoder may hand over a long block at once, and the
+    /// feeder hands on a whole block once its start is due: a block longer than a
+    /// mixer input's ring then overwrote its own start there before it was heard, so
+    /// most of each block was silence (#446, an MP3 file on Windows).
+    fn pieces(self, format: AudioFormat) -> Vec<Sound> {
+        let rate = i64::from(format.sample_rate()).max(1);
+        let channels = format.channels().max(1);
+        let per = usize::try_from(rate * PIECE_US / 1_000_000)
+            .unwrap_or(1)
+            .max(1);
+        let Self { at, samples, .. } = self;
+        samples
+            .chunks(per * channels)
+            .enumerate()
+            .map(|(index, chunk)| {
+                // From the block's start, as the feeder stamps packets, so the pieces
+                // stay continuous however many there are.
+                let offset = i64::try_from(index * per).unwrap_or(i64::MAX);
+                let frames = i64::try_from(chunk.len() / channels).unwrap_or(0);
+                Sound {
+                    at: at.saturating_add(offset.saturating_mul(1_000_000) / rate),
+                    samples: chunk.to_vec(),
+                    length: frames * 1_000_000 / rate,
+                }
+            })
+            .collect()
     }
 }
 
@@ -537,7 +569,7 @@ impl Decode {
         };
         let mut state = lock(&shared.0);
         if state.generation == self.generation && state.seek.is_none() {
-            state.audio.push_back(sound);
+            state.audio.extend(sound.pieces(format));
             while !state.audio_open && state.audio_queued() > AUDIO_AHEAD_US {
                 state.audio.pop_front();
             }
@@ -861,6 +893,41 @@ mod tests {
             at[..6],
             [120_000, 160_000, 200_000, 240_000, 280_000, 320_000],
             "the second play's first frame comes one period after the first's last"
+        );
+    }
+
+    #[test]
+    fn pieces_at_a_rate_without_whole_10_ms_keep_every_frame_and_stay_contiguous() {
+        // 10 ms at 22 050 Hz is 220.5 frames: pieces of 220, the last one shorter.
+        let format = AudioFormat::new(
+            22_050,
+            jstream_media::ChannelLayout::Stereo,
+            jstream_media::SampleFormat::F32Interleaved,
+        )
+        .expect("a format");
+        let frames = 22_050_usize;
+        let samples: Vec<f32> = (0..frames * 2).map(|index| index as f32).collect();
+        let block = Sound {
+            at: 5_000_000,
+            samples: samples.clone(),
+            length: 1_000_000,
+        };
+        let pieces = block.pieces(format);
+        assert_eq!(pieces.len(), frames.div_ceil(220), "pieces of 220 frames");
+        let joined: Vec<f32> = pieces.iter().flat_map(|p| p.samples.clone()).collect();
+        assert_eq!(joined, samples, "every frame kept, in order");
+        assert_eq!(pieces.first().map(|p| p.at), Some(5_000_000));
+        for pair in pieces.windows(2) {
+            let gap = pair[1].at - pair[0].end();
+            assert!(
+                (0..=1).contains(&gap),
+                "each piece starts where the last ended, within rounding: {gap} µs"
+            );
+        }
+        let last = pieces.last().map(Sound::end).expect("a last piece");
+        assert!(
+            (5_999_999..=6_000_000).contains(&last),
+            "the pieces end where the block did: {last}"
         );
     }
 }
