@@ -774,7 +774,7 @@ stamp = { hash = "b3:64d21faa19974bc3" }
 stamp = { hash = "b3:1300403d18de6566" }
 
 ["CRATE-jstream-browser#purpose"."body"]
-stamp = { hash = "b3:f0842f984b59a6e9", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "N7: the hardware check runs on the engine's device as the daemon will once the engine hands out its device (the daemon opens its own for now); rest holds" }
+stamp = { hash = "b3:63e58ee0575ee99c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merged #291's branch (N7 hardware-check sentence) into #442: body keeps #442's Ctrl-C bullet (CefConfig::on_console_stop, our handler registered after cef::initialize on the jstream-cef thread, other console events go on to Chromium's) beside #291's hardware-check paragraph; they describe separate things and neither contradicts; holds" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
 stamp = { hash = "b3:9ab86379e5804d87", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH browser-source (daemon now wires it too); purpose speaks of 'the host' generically and holds" }
@@ -813,7 +813,7 @@ stamp = { hash = "b3:e057d1998087d7f3" }
 stamp = { hash = "b3:c38bcef596eeb573", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1: stale only via the browser README's seam paragraph; helper main.rs, build.rs and manifest unchanged, text holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:crates/jstream-browser/README.md#purpose"]
-stamp = { hash = "b3:f0842f984b59a6e9", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the browser Purpose's hardware-check sentence only; the helper's purpose doesn't depend on it and holds" }
+stamp = { hash = "b3:63e58ee0575ee99c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale only via jstream-browser#purpose (merge of #291's hardware-check sentence with #442's Ctrl-C bullet); the helper's Purpose doesn't describe the host's console handling or the hardware check; holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:1bfce7186129692b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the ARCH apps/* row only (daemon also links jstream-browser); this section names hosts generically and holds" }
@@ -1233,7 +1233,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:da512084cc099d9b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (pairing, #265): the device file and listening bullets sit beside this PR's browser sources bullet; bind takes the device file and UI dir; matches serve.rs, token.rs and Cargo.toml" }
+stamp = { hash = "b3:9270b9fdcb090be2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merged #291's branch (with wave/m1's pairing, #265) into #442: body's Signals bullet still says that with CEF running the daemon sets CefConfig::on_console_stop to console_stop, which wakes the signal future through a Notify; #291's pairing text (device file, pairing) is unchanged by #442. serve.rs: #442's console_stop/console_stopped and the Windows shutdown_signal waiting on them sit beside #291's pairing wiring; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:20f2449e3033bc78", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
@@ -1266,7 +1266,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:d97c9bd2c8e9366b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (pairing, #265): the device file and listening bullets sit beside this PR's browser sources bullet; bind takes the device file and UI dir; matches serve.rs, token.rs and Cargo.toml" }
+stamp = { hash = "b3:23fe409cd19ae656", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merged #291's branch (with wave/m1's pairing, #265) into #442: body's Signals bullet still says that with CEF running the daemon sets CefConfig::on_console_stop to console_stop, which wakes the signal future through a Notify; #291's pairing text (device file, pairing) is unchanged by #442. serve.rs: #442's console_stop/console_stopped and the Windows shutdown_signal waiting on them sit beside #291's pairing wiring; holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
@@ -1296,7 +1296,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:d97c9bd2c8e9366b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (pairing, #265): Contents gains Paired devices beside this PR's Serving bullet (browser sources under cef); the ARCH apps/* row (daemon always links jstream-browser) holds against Cargo.toml; checked against serve.rs, token.rs and main.rs" }
+stamp = { hash = "b3:23fe409cd19ae656", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merged #291's branch into #442: serve.rs gains #291/#265's pairing wiring beside #442's console_stop; Purpose's Stopping bullet (Ctrl-C or Ctrl-Break on Windows stops, closes connections, exits 0) holds with CEF running thanks to #442; holds" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
