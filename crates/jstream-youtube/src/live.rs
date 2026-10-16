@@ -109,13 +109,38 @@ impl LiveClient {
         filter: &BroadcastFilter,
         page: &PageRequest,
     ) -> Result<Page<Broadcast>, YoutubeError> {
+        self.list_broadcasts_of_type(filter, None, page)
+    }
+
+    /// [`list_broadcasts`](Self::list_broadcasts) with a `broadcastType` filter. The API
+    /// leaves persistent ("Stream now") broadcasts out unless asked for `all` or
+    /// `persistent`. `None` sends no filter, which the API takes as `event`.
+    ///
+    /// # Errors
+    /// [`YoutubeError::InvalidArgument`] for a type with an ID list (the API takes it
+    /// only with `mine` or `broadcastStatus`); as
+    /// [`list_broadcasts`](Self::list_broadcasts).
+    pub fn list_broadcasts_of_type(
+        &mut self,
+        filter: &BroadcastFilter,
+        broadcast_type: Option<BroadcastType>,
+        page: &PageRequest,
+    ) -> Result<Page<Broadcast>, YoutubeError> {
         let mut query = vec![("part", BROADCAST_PARTS.to_owned())];
         match filter {
             BroadcastFilter::Mine => query.push(("mine", "true".into())),
             BroadcastFilter::Status(status) => {
                 query.push(("broadcastStatus", status.as_str().into()));
             }
+            BroadcastFilter::Ids(_) if broadcast_type.is_some() => {
+                return Err(YoutubeError::InvalidArgument {
+                    reason: "a broadcast type can't be combined with an ID list",
+                });
+            }
             BroadcastFilter::Ids(ids) => query.push(("id", join_ids(ids)?)),
+        }
+        if let Some(broadcast_type) = broadcast_type {
+            query.push(("broadcastType", broadcast_type.as_str().into()));
         }
         page.push_to(&mut query)?;
         self.call(
@@ -477,6 +502,27 @@ impl BroadcastStatusFilter {
             Self::All => "all",
             Self::Completed => "completed",
             Self::Upcoming => "upcoming",
+        }
+    }
+}
+
+/// The `broadcastType` filter: scheduled events, persistent broadcasts, or both.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BroadcastType {
+    /// Both kinds.
+    All,
+    /// Scheduled events, the API's default.
+    Event,
+    /// The channel's persistent ("Stream now") broadcast.
+    Persistent,
+}
+
+impl BroadcastType {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Event => "event",
+            Self::Persistent => "persistent",
         }
     }
 }

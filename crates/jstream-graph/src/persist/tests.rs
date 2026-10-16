@@ -267,6 +267,7 @@ fn a_file_from_before_audio_keeps_the_master_sends() {
     assert_eq!(
         sends,
         [
+            ("desk".to_owned(), BusId::master(), 0.0),
             ("mic".to_owned(), BusId::master(), 0.0),
             ("mic_copy".to_owned(), BusId::master(), 0.0),
         ]
@@ -503,6 +504,29 @@ fn placements_and_the_canvas_are_checked() {
         "{:?}",
         load(&canvas)
     );
+}
+
+/// An item's opacity and blend load through `item.add`'s checks, and its reserved
+/// `effects` loads only empty (ADR-0023 §1).
+#[test]
+fn opacity_blend_and_reserved_effects_are_checked() {
+    let empty = edit_file(|v| v["scenes"][0]["items"][0]["effects"] = json!([]));
+    assert_eq!(load(&empty).map(|g| g.rev()), Ok(Rev(2)));
+    let effect = edit_file(|v| v["scenes"][0]["items"][0]["effects"] = json!([{"kind": "blur"}]));
+    assert_eq!(
+        load(&effect),
+        Err(LoadError::Parse(
+            "item `i4`: `effects` is reserved and must be empty".into()
+        ))
+    );
+    for (field, value) in [("opacity", json!(1.5)), ("blend", json!("multiply"))] {
+        let file = edit_file(|v| v["scenes"][0]["items"][0][field] = value.clone());
+        assert!(
+            matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "item `i4`"),
+            "{field}: {:?}",
+            load(&file)
+        );
+    }
 }
 
 /// R-SEC-001: a malformed file's error never quotes a value from it, so it is safe to

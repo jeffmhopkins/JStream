@@ -6,8 +6,13 @@
 mod audio;
 mod audio_routing;
 mod collection;
+mod gpu_capture;
 mod history;
+mod preview;
 mod sources;
+#[cfg(all(windows, feature = "hw-tests"))]
+mod windows_gpu;
+mod youtube;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
@@ -97,6 +102,8 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
         source_id: SourceId::new(source),
         transform: None,
         geometry: None,
+        opacity: None,
+        blend: None,
     }
 }
 
@@ -527,7 +534,7 @@ fn events_reach_every_subscriber_in_order() {
     let by_agent = block_on(agent.call(Call::Batch(Batch::single(create("a"))))).expect("batch");
     let by_user = block_on(user.call(Call::Batch(Batch::single(create("b"))))).expect("batch");
     let started = block_on(agent.call(output_call("yt", true))).expect("start");
-    assert_eq!(started.result, CallResult::Action {});
+    assert_eq!(started.result, CallResult::action());
 
     let changed = |state| Event::OutputStateChanged {
         output_id: OutputId::new("yt"),
@@ -613,7 +620,7 @@ fn scene_switch_changes_program_without_an_edit() {
     assert_eq!(program(&agent), Some(SceneId::new("a")));
 
     let switch = block_on(agent.call(switch_call("b"))).expect("switch");
-    assert_eq!(switch.result, CallResult::Action {});
+    assert_eq!(switch.result, CallResult::action());
     assert_eq!(engine.rev(), Rev(1), "a switch is not an edit");
     assert_eq!(drain(&mut events), vec![switched("b", &agent, switch.id)]);
     assert_eq!(program(&user), Some(SceneId::new("b")));
@@ -1997,6 +2004,8 @@ fn video_snapshot_draws_a_geometry_on_the_collection_canvas() {
                     source_id: SourceId::new("webcam"),
                     transform: None,
                     geometry: Some(geometry),
+                    opacity: None,
+                    blend: None,
                 },
             ],
             expected_rev: None,
@@ -2245,9 +2254,9 @@ mod cpu_pipeline {
         let seen: Arc<Mutex<Vec<Option<SceneId>>>> = Arc::default();
         let draw: OpenDraw = {
             let seen = Arc::clone(&seen);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, capture, out| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -2697,9 +2706,9 @@ mod cpu_pipeline {
         let armed = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let armed = Arc::clone(&armed);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
                     inner(shot, size, rgba, out)
@@ -3353,8 +3362,12 @@ mod cpu_pipeline {
     // --- Item: a stalled publish target cannot hold `output.stop` past the drain bound.
 
     /// A publish target whose peer has stopped reading: once `stalled`, every send
-    /// blocks for 200 ms, and it ignores [`LivePublish::stop_by`] as a destination that
-    /// cannot cut a write short would. Records the deadline it was given.
+    /// blocks for 50 ms, and it ignores [`LivePublish::stop_by`] as a destination that
+    /// cannot cut a write short would. Records the deadline it was given. A send is
+    /// short next to `OUTPUT_GRACE`, so the output thread, which may still be in one
+    /// when the deadline passes, ends inside the grace even on a slow runner and the
+    /// stop sees what it abandoned; a send that outlasts the grace is
+    /// `a_send_that_ignores_the_stop_deadline_cannot_hold_output_stop`'s case.
     struct StalledPeer {
         stalled: Arc<AtomicBool>,
         sent: Arc<AtomicU64>,
@@ -3364,7 +3377,7 @@ mod cpu_pipeline {
     impl LivePublish for StalledPeer {
         fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
             if self.stalled.load(Ordering::Acquire) {
-                thread::sleep(Duration::from_millis(200));
+                thread::sleep(Duration::from_millis(50));
             }
             self.sent.fetch_add(1, Ordering::AcqRel);
             Ok(())
@@ -3384,7 +3397,7 @@ mod cpu_pipeline {
     }
 
     /// The peer stalls while well over a hundred packets queue up behind it. Draining
-    /// them all at 200 ms a tag would hold `output.stop` for half a minute; the stop
+    /// them all at 50 ms a tag would hold `output.stop` for several seconds; the stop
     /// gives up after `STOP_DRAIN`, drops the rest, counts it in the final
     /// `stats.tick`'s `output_packets`, and passes its deadline to the target.
     #[test]
@@ -3526,6 +3539,115 @@ mod cpu_pipeline {
             "the send returned before the stop did, so nothing was left behind"
         );
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
+    }
+
+    /// A publish target whose send, once `stalled`, blocks until `release` fires (or
+    /// 30 s pass), ignoring [`LivePublish::stop_by`] like [`BlockedPeer`]. It says when a
+    /// send has blocked (`blocked`) and when the output thread has finished it
+    /// (`finished`), so the test waits on those instead of on the clock.
+    struct StuckPeer {
+        stalled: Arc<AtomicBool>,
+        sent: Arc<AtomicU64>,
+        blocked: Arc<AtomicBool>,
+        release: mpsc::Receiver<()>,
+        finished: mpsc::Sender<()>,
+    }
+
+    impl LivePublish for StuckPeer {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.stalled.load(Ordering::Acquire) {
+                self.blocked.store(true, Ordering::Release);
+                let _ = self.release.recv_timeout(Duration::from_secs(30));
+            }
+            self.sent.fetch_add(1, Ordering::AcqRel);
+            Ok(())
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            let _ = self.finished.send(());
+            Ok(())
+        }
+    }
+
+    /// #385: a send that outlasts `OUTPUT_GRACE` leaves the output thread behind with
+    /// packets still queued. The stop counts them itself, so the final `stats.tick`'s
+    /// `output_packets` has them; before, the thread counted them only once the send
+    /// returned, after the latch, and the final tick said 0. The released thread must
+    /// still end.
+    #[test]
+    fn packets_left_behind_a_send_past_the_grace_count_in_the_final_tick() {
+        let fakes = fakes();
+        let stalled = Arc::new(AtomicBool::new(false));
+        let sent = Arc::new(AtomicU64::new(0));
+        let blocked = Arc::new(AtomicBool::new(false));
+        let (release, release_rx) = mpsc::channel();
+        let (finished_tx, finished) = mpsc::channel();
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(StuckPeer {
+                stalled: Arc::clone(&stalled),
+                sent: Arc::clone(&sent),
+                blocked: Arc::clone(&blocked),
+                release: release_rx,
+                finished: finished_tx,
+            }),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || sent.load(Ordering::Acquire)
+                >= 5),
+            "nothing was published"
+        );
+
+        stalled.store(true, Ordering::Release);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || blocked
+                .load(Ordering::Acquire)),
+            "no send blocked"
+        );
+        // Encoded behind the blocked send; the stop's encoder finish flushes them into
+        // the output's queues before it waits for the thread.
+        for _ in 0..10 {
+            pump(&fakes.clock, &fakes.audio);
+        }
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        let left_behind = finished.try_recv().is_err();
+        let final_tick = last_stats_tick(&mut events);
+        // Lets the left-behind output thread end, and waits until it has.
+        let _ = release.send(());
+        let ended = finished.recv_timeout(HANG_BOUND).is_ok();
+
+        assert!(
+            left_behind,
+            "the output thread finished before the stop returned, so nothing was left behind"
+        );
+        assert!(
+            final_tick.output_packets > 0,
+            "the packets left behind the stuck send were not counted: {final_tick:?}"
+        );
+        assert!(ended, "the left-behind output thread did not end");
+        assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
+    }
+
+    /// The drops of the last `stats.tick` in `events`.
+    fn last_stats_tick(events: &mut EventStream) -> jstream_protocol::DropCounts {
+        drain(events)
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::StatsTick { drops, .. } => Some(drops),
+                _ => None,
+            })
+            .next_back()
+            .expect("no stats.tick")
     }
 
     // --- Item: a recording output writes fragmented MP4 to the path it names.
@@ -3702,9 +3824,9 @@ mod cpu_pipeline {
         let working = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let working = Arc::clone(&working);
-            Arc::new(move || {
+            Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 if working.load(Ordering::Acquire) {
-                    cpu_draw()()
+                    cpu_draw()(context)
                 } else {
                     Err("no adapter".to_owned())
                 }
@@ -3859,9 +3981,9 @@ mod cpu_pipeline {
         let armed = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let armed = Arc::clone(&armed);
-            Arc::new(move || {
+            Arc::new(move |context| {
                 let armed = Arc::clone(&armed);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(context)?;
                 let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
                     inner(shot, size, rgba, out)
@@ -4027,7 +4149,7 @@ mod cpu_pipeline {
     /// A draw that fills the program frame with one RGBA colour, so the test can tell
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
-        Arc::new(move || {
+        Arc::new(move |_| {
             let draw: DrawFn = Box::new(move |_, size: FrameSize, _, out: &mut Vec<u8>| {
                 out.clear();
                 for _ in 0..size.width() as usize * size.height() as usize {
@@ -4107,12 +4229,16 @@ mod cpu_pipeline {
         );
 
         for run in 1..=2u64 {
+            // `readbacks` counts this start's ticks only, and the previous run may have
+            // published any number of frames past its five, so this run waits for five
+            // frames of its own (#415).
+            let before = log.lock().expect("vcam log").pixels.len();
             start_output(&control, &mut events, "cam");
             assert!(
                 pump_until(&fakes.clock, &fakes.audio, || {
-                    log.lock().expect("vcam log").pixels.len() >= 5 * run as usize
+                    log.lock().expect("vcam log").pixels.len() >= before + 5
                 }),
-                "the camera got no frames"
+                "start {run}: the camera got no frames"
             );
             let stats = engine.output_stats().expect("running");
             assert_eq!(
@@ -4120,7 +4246,13 @@ mod cpu_pipeline {
                 "the virtual camera encodes nothing"
             );
             assert_eq!(stats.audio.received, 0, "the virtual camera has no audio");
-            assert!(stats.readbacks >= 5);
+            // Each frame published was read back first, on this start's render thread.
+            assert!(
+                stats.readbacks >= 5,
+                "start {run}: {} readbacks for {} frames published",
+                stats.readbacks,
+                log.lock().expect("vcam log").pixels.len() - before
+            );
 
             block_on(control.call(output_call("cam", false))).expect("output.stop");
             assert_eq!(
@@ -4478,6 +4610,9 @@ fn stream_key_actions_report_without_naming_the_key() {
             "live\nSECRET",
             "must not contain whitespace or control characters",
         ),
+        // #441: a leading byte-order mark, and any other non-ASCII character.
+        ("\u{FEFF}live_SECRET", "must contain only ASCII characters"),
+        ("live_S\u{e9}CRET", "must contain only ASCII characters"),
     ] {
         let error = block_on(control.call(set_key("out_yt", key))).expect_err("bad key");
         assert_eq!(

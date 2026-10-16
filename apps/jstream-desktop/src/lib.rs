@@ -9,6 +9,8 @@
 
 pub mod app;
 pub mod bootstrap;
+#[cfg(all(windows, feature = "cef"))]
+pub mod browser;
 pub mod host;
 pub mod logs;
 #[cfg(windows)]

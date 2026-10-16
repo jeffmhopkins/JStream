@@ -20,6 +20,15 @@ workspace = true
 name = "jstream"
 path = "src/main.rs"
 
+[features]
+# Browser sources (ADR-0021, ADR-0046): the engine opens `browser` sources' pages in CEF.
+# Off by default, as in `jstream-browser`, until the CEF runtime and the helper are packaged
+# (its README's open items); the portable folder then also needs the helper exe and the
+# CEF runtime beside `jstream.exe`. Windows only: elsewhere it builds nothing.
+cef = ["dep:jstream-browser", "jstream-browser/cef"]
+# Compile-checks the CEF wiring without building CEF, for CI's clippy.
+dox = ["cef", "jstream-browser/dox"]
+
 [dependencies]
 anyhow.workspace = true
 # The control token and the UI's CSP nonces, from the OS.
@@ -41,8 +50,12 @@ jstream-control = { workspace = true, features = ["ws"] }
 # The window (WebView2) and the live engine on Windows: the platform backends, stream
 # keys in Credential Manager, and the output kinds the publish opener reads.
 [target.'cfg(windows)'.dependencies]
+# The CEF backend for browser sources, with the `cef` feature only.
+jstream-browser = { workspace = true, optional = true }
 jstream-platform-windows.workspace = true
 jstream-protocol.workspace = true
+# Names the browser backend the engine takes (`BrowserBackend`, from `jstream-browser`).
+jstream-sources.workspace = true
 tauri.workspace = true
 
 # Generates the Tauri context from `tauri.conf.json` and embeds the icon and manifest.
