@@ -669,6 +669,56 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
     }
 }
 
+/// A YouTube-bound output (ADR-0058) is an RTMP target naming a broadcast: it is
+/// created, retargeted to and from a generic URL, and its broadcast ID is checked.
+#[test]
+fn a_youtube_target_is_stored_retargeted_and_checked() {
+    let youtube = |id: &str| RtmpTarget::YouTube {
+        broadcast_id: id.into(),
+    };
+    let mut graph = Graph::new();
+    apply_ok(
+        &mut graph,
+        vec![Edit::OutputCreate {
+            output_id: OutputId::new("live"),
+            kind: OutputKind::Rtmp {
+                target: youtube("dQw4w9WgXcQ"),
+            },
+        }],
+    );
+    let retarget = apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: target("rtmp://host/live"),
+        }],
+    );
+    assert_eq!(
+        retarget.inverse.edits,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: youtube("dQw4w9WgXcQ"),
+        }]
+    );
+    for id in ["", "a b", "id?x=1", "id/../x", &"x".repeat(129)] {
+        let (field, reason) = invalid_reason(apply_err(
+            &mut graph,
+            vec![Edit::OutputSetTarget {
+                output_id: OutputId::new("live"),
+                target: youtube(id),
+            }],
+        ));
+        assert_eq!(field, "edits.0.target.broadcast_id", "{id:?}: {reason}");
+    }
+    apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("live"),
+            target: youtube(&"A-z_9".repeat(25)),
+        }],
+    );
+}
+
 #[test]
 fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
     let mut graph = Graph::new();

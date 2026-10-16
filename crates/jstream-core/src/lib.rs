@@ -40,6 +40,7 @@ mod snapshot;
 mod studio;
 #[cfg(test)]
 mod tests;
+mod youtube;
 
 pub use audit::{
     AUDIT_FILE, AUDIT_FILE_OLD, AuditEntry, AuditFile, AuditMemory, AuditSink,
@@ -58,6 +59,7 @@ pub use runtime::{
 };
 pub use session::InProcessControl;
 pub use snapshot::SourceFrameError;
+pub use youtube::{HEALTH_INTERVAL, SIGN_IN_TIMEOUT, TOKEN_ACCOUNT, YoutubeSetup};
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 

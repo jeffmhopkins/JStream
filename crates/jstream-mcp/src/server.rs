@@ -105,6 +105,9 @@ pub struct Server {
 impl Server {
     /// A server over `control`, a session that has not sent `hello` yet (or has: a
     /// second `hello` returns the same identity).
+    ///
+    /// It has no `youtube` tool and never forwards a `youtube.*` request or event:
+    /// YouTube is for people, through the UI (ADR-0058 §3).
     pub fn new(control: Arc<dyn Control>) -> Self {
         Server {
             control,
