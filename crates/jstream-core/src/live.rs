@@ -193,12 +193,19 @@ impl LiveSources {
     }
 
     /// The platform's media files, which `media` sources play through. Sources built
-    /// before have none, so they are built again.
-    pub(crate) fn set_media(&mut self, media: Arc<dyn MediaDecoders>) {
+    /// before have none, so they are built again now, from `state`, the collection's:
+    /// one loaded before the host injected backends would otherwise wait for its next
+    /// edit (#422).
+    pub(crate) fn set_media(
+        &mut self,
+        media: Arc<dyn MediaDecoders>,
+        state: &jstream_graph::State,
+    ) {
         self.ctx.media = Some(media);
         for entry in self.entries.values_mut() {
             entry.settings = Settings::new();
         }
+        self.sync(state);
     }
 
     /// The folder behind `collection` asset references: the collection file's.
