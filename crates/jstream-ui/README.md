@@ -161,7 +161,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   first, with renaming and (except the master) deleting; the master's adds its
   momentary, short-term and integrated loudness, its true peak, and a button that
   resets the integrated loudness (`audio.reset_loudness`). New buses take the first
-  free `bus-N` ID; the button is off at the 16-bus limit.
+  free `bus-N` ID; the button is off at the protocol's bus limit (`MAX_BUSES`, 16).
   - **Faders** run from −100 to +24 dB on a console taper: unity at three quarters
     of the travel, the quiet end compressed, and snapping to 0 dB within a quarter of
     a dB. While the pointer holds a fader the strip shows the value under it; letting

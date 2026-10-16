@@ -5,13 +5,10 @@
 
 use super::{Collection, already_exists, check_id, check_name, invalid, not_found};
 use jstream_protocol::{
-    AudioFollow, BusId, BusInfo, Edit, EntityKind, Finite32, ProtocolError, SendInfo, SourceAudio,
-    SourceId, SourceKind, gain_db_problem,
+    AudioFollow, BusId, BusInfo, Edit, EntityKind, Finite32, MAX_BUSES, ProtocolError, SendInfo,
+    SourceAudio, SourceId, SourceKind, gain_db_problem,
 };
 use std::collections::BTreeMap;
-
-/// The most buses a collection holds, the master included, as in `jstream-graph`.
-const MAX_BUSES: usize = 16;
 
 /// One bus: its name, fader and mute.
 #[derive(Clone)]
@@ -280,7 +277,7 @@ impl Collection {
             return Err(invalid(
                 at,
                 "bus_id",
-                "a collection holds at most 16 buses, the master included",
+                format!("a collection holds at most {MAX_BUSES} buses, the master included"),
             ));
         }
         self.buses.insert(id.clone(), Bus::new(name.to_owned()));

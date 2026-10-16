@@ -98,7 +98,8 @@ impl Graph {
 pub const MAX_CANVAS_EDGE: u32 = 8192;
 
 /// The most buses a collection holds, the master included: what the mixer holds.
-pub const MAX_BUSES: usize = 16;
+/// The protocol's [`jstream_protocol::MAX_BUSES`].
+pub const MAX_BUSES: usize = jstream_protocol::MAX_BUSES;
 
 /// The collection state without its revision: what undo restores exactly.
 #[derive(Clone, Debug, PartialEq)]

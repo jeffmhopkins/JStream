@@ -12,8 +12,8 @@ use crate::app::SessionContext;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
     Action, AudioFollow, Batch, BusId, BusInfo, BusMeter, Call, CallResult, Edit, Event, Finite32,
-    Loudness, MAX_GAIN_DB, MIN_GAIN_DB, Query, QueryResult, Rev, SendInfo, SourceAudio, SourceId,
-    SourceKind, SourceMeter, gain_db_problem,
+    Loudness, MAX_BUSES, MAX_GAIN_DB, MIN_GAIN_DB, Query, QueryResult, Rev, SendInfo, SourceAudio,
+    SourceId, SourceKind, SourceMeter, gain_db_problem,
 };
 use jstream_control::{Control, ControlError};
 use leptos::prelude::*;
@@ -21,9 +21,6 @@ use leptos::task::spawn_local;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::time::Duration;
-
-/// The most buses a collection holds, the master included (ADR-0028).
-pub const MAX_BUSES: usize = 16;
 
 /// One audio source as the mixer shows it.
 #[derive(Clone, Debug, PartialEq)]
@@ -1075,7 +1072,13 @@ fn NewBusForm(panel: Panel) -> impl IntoView {
             <button
                 type="submit"
                 disabled=full
-                title=move || if full() { "A collection holds at most 16 buses" } else { "" }
+                title=move || {
+                    if full() {
+                        format!("A collection holds at most {MAX_BUSES} buses")
+                    } else {
+                        String::new()
+                    }
+                }
             >
                 "Add bus"
             </button>

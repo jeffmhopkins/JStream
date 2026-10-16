@@ -639,7 +639,9 @@ applied batch, undo and redo, and on attach and collection load, `AudioRouting::
 brings the mixer in line with the collection under the collection lock:
 - each bus other than the master gets a mixer bus (`MixerControl::add_bus`), and a
   mixer bus whose collection bus is gone is removed; a bus the mixer refuses to add or
-  remove is retried on the next sync (a refused add is logged);
+  remove is retried on the next sync (a refused add is logged). The mixer has a slot
+  for every bus a collection can hold: `audio.rs` asserts at compile time that
+  `jstream_audio::MAX_BUSES` equals `jstream_protocol::MAX_BUSES`;
 - every bus's fader and mute, the master's on `Mixer::bus`;
 - for each source with a mixer input, its fader and a send into each mixer bus as the
   collection's sends say, removing the others. A `muted` source keeps its sends at

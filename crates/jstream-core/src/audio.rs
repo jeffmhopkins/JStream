@@ -27,6 +27,10 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
+// The mixer has a bus slot for every bus a collection may hold, and no more: the
+// engine's limit and the protocol's are one number (#372).
+const _: () = assert!(jstream_audio::MAX_BUSES == jstream_protocol::MAX_BUSES);
+
 /// The program mixer's controls, while it runs.
 #[derive(Default)]
 pub(crate) struct AudioRouting {

@@ -27,8 +27,8 @@ mod settings;
 mod version;
 
 pub use audio::{
-    AudioFollow, BusInfo, BusMeter, Loudness, MAX_GAIN_DB, MIN_GAIN_DB, SendInfo, SourceAudio,
-    SourceMeter, gain_db_problem,
+    AudioFollow, BusInfo, BusMeter, Loudness, MAX_BUSES, MAX_GAIN_DB, MIN_GAIN_DB, SendInfo,
+    SourceAudio, SourceMeter, gain_db_problem,
 };
 pub use command::{
     Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole, SourceKind, Vec2,

@@ -132,7 +132,7 @@ stamp = { hash = "b3:b5397b5d6407b040" }
 stamp = { hash = "b3:d63ee0e9a7bb859a" }
 
 ["ARCH#data-model"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:112f148ae88f982d" }
+stamp = { hash = "b3:d9029dcff96ab00a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; master plus up to 15 others still holds, graph const now aliases the protocol's" }
 
 ["ARCH#gpu-pipeline"."body"]
 stamp = { hash = "b3:6412cfa1dc90c301", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
@@ -213,7 +213,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:8c0c258dab2abccb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:0bc178fa258b5061" }
+stamp = { hash = "b3:a1cffce44b08cd28", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; tools.snap changed only in bus.create's description text, holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -306,7 +306,7 @@ stamp = { hash = "b3:4f5eb7fab55f6c55" }
 stamp = { hash = "b3:506d7d83f33ef2bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: the section describes kind.list/kind.describe on the wire and says nothing about the mock's answers; the mock now listing no kinds changes no protocol fact." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
-stamp = { hash = "b3:9a3b07169c7cbb0e" }
+stamp = { hash = "b3:b7822be8282d16e2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
@@ -321,19 +321,19 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:69a83bcc7bc7abfe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:e0766c33a8e95e79", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e099f7b8aaaaa173" }
+stamp = { hash = "b3:35bcec3fef20824d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
-stamp = { hash = "b3:7421b6aaa2a1c085" }
+stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:da4b9ef5e429cca2" }
+stamp = { hash = "b3:053c2d2ceab0bcee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -366,13 +366,13 @@ stamp = { hash = "b3:353359feae2606b3" }
 stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:9199a0226a0eda2b" }
+stamp = { hash = "b3:7c230fe311147750", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:489f2e86af7bf320" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:68a1255a9a5f2f73" }
+stamp = { hash = "b3:d6aa367b923f0078", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
 stamp = { hash = "b3:13f2fa2d982a7e24" }
@@ -564,7 +564,7 @@ stamp = { hash = "b3:7b6e5ed3dd8380e8" }
 stamp = { hash = "b3:35328ace37395ff8" }
 
 ["CRATE-jstream-audio#purpose"."body"]
-stamp = { hash = "b3:c14e3114d974adb4", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240 squashed) into D6: main's text plus D6's set_activity_gain bullet and activity-gain line; holds against handle.rs and rt/mixer.rs" }
+stamp = { hash = "b3:1711cb55fb80b215", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: MAX_BUSES now pub and re-exported; noted it in the bus API bullet and that core ties it to the protocol's; rest re-read, holds" }
 
 ["CRATE-jstream-audio#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-audio"]
 stamp = { hash = "b3:308082ece28cb86f" }
@@ -597,7 +597,7 @@ stamp = { hash = "b3:418e944950d88c36" }
 stamp = { hash = "b3:a7c82544adbbbe92" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/lib.rs"]
-stamp = { hash = "b3:f37d5c5d3c4b273c" }
+stamp = { hash = "b3:4008e0f5daf6f486", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: MAX_BUSES now pub and re-exported; noted it in the bus API bullet and that core ties it to the protocol's; rest re-read, holds" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/meter/kweight.rs"]
 stamp = { hash = "b3:5245705e37deb44d" }
@@ -612,7 +612,7 @@ stamp = { hash = "b3:7b6e5ed3dd8380e8" }
 stamp = { hash = "b3:35328ace37395ff8" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/bus.rs"]
-stamp = { hash = "b3:83f115922f29efa0" }
+stamp = { hash = "b3:d23609c35396ae52", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: MAX_BUSES now pub and re-exported; noted it in the bus API bullet and that core ties it to the protocol's; rest re-read, holds" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/chain.rs"]
 stamp = { hash = "b3:0471f6f1d1625d24" }
@@ -639,7 +639,7 @@ stamp = { hash = "b3:7b96e0548bba48b1" }
 stamp = { hash = "b3:ffc3e5d893199674" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/mixer.rs"]
-stamp = { hash = "b3:f4c6231c788aae0b" }
+stamp = { hash = "b3:3cba1b3ffdd98125", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: MAX_BUSES now pub and re-exported; noted it in the bus API bullet and that core ties it to the protocol's; rest re-read, holds" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/mod.rs"]
 stamp = { hash = "b3:69ca57b1048cdd53" }
@@ -684,7 +684,7 @@ stamp = { hash = "b3:3221ab22f6747616" }
 stamp = { hash = "b3:50f35d12590ef2be" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/bus.rs"]
-stamp = { hash = "b3:83f115922f29efa0" }
+stamp = { hash = "b3:d23609c35396ae52", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; 16 bus slots unchanged, only the const's visibility and a doc link changed" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/chain.rs"]
 stamp = { hash = "b3:0471f6f1d1625d24" }
@@ -711,7 +711,7 @@ stamp = { hash = "b3:7b96e0548bba48b1" }
 stamp = { hash = "b3:ffc3e5d893199674" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/mixer.rs"]
-stamp = { hash = "b3:f4c6231c788aae0b" }
+stamp = { hash = "b3:3cba1b3ffdd98125", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; 16 bus slots unchanged, only the const's visibility and a doc link changed" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/mod.rs"]
 stamp = { hash = "b3:69ca57b1048cdd53" }
@@ -834,7 +834,7 @@ stamp = { hash = "b3:4f5eb7fab55f6c55" }
 stamp = { hash = "b3:506d7d83f33ef2bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Mock subsection against #401: edited the kind.list sentence (kind.list answers with no kinds; kind.describe and delete.plan still answer internal), checked by mock test kind_list_lists_no_kinds; the rest of the trait, async, WebSocket and open questions is unaffected." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
-stamp = { hash = "b3:9a3b07169c7cbb0e" }
+stamp = { hash = "b3:b7822be8282d16e2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; mock's 16-bus limit check unchanged, now the protocol's MAX_BUSES" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
@@ -864,7 +864,7 @@ stamp = { hash = "b3:4f5eb7fab55f6c55" }
 stamp = { hash = "b3:506d7d83f33ef2bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: mock.rs now answers kind.list with an empty list; the Mock bullet (in-memory implementation for testing clients) still holds, no API change." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
-stamp = { hash = "b3:9a3b07169c7cbb0e" }
+stamp = { hash = "b3:b7822be8282d16e2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; mock now imports MAX_BUSES from the protocol, contents unchanged" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
@@ -876,13 +876,13 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:3eca76c77bff6c68", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b after C9/C10 landed: body's Live sources text adds Source::audio kept beside the source, end_plan (audible exactly when the plan reached it, so hidden or off-program is silent), take_audio handing build number and time zero to AudioSources::sync_live, beside C10's AudioScope text; the Audio sources paragraph says each live source with sound opens a muted Routed input with its fader, sends (master send at creation) and activity gain, fed only while the program's own plan reaches it (#322 B2), not opened while its audio is off; the program stage text mixes media sound and still pushes blocks into C10's scope. audio_sources.rs (sync_live, Wants, open_live, changed, packets), engine.rs (end_plan and sync_live in publish_render, audio_packets), live.rs (LiveAudio, end_plan, take_audio, audio_changed), runtime/pipeline.rs (clock to the stage), tests/audio.rs (the media-sound test) and tests/sources.rs (FakeClip.audio: None) match it; holds" }
+stamp = { hash = "b3:ccef5fb5b3fe3a55", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: added the MAX_BUSES compile-time assert to Audio routing; rest re-read, holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the jstream-control Mock change (#401): the differential script (tests.rs) does not call kind.list, so 'the engine's answers are the mock's' still holds; 'unimplemented calls answer internal, as the mock does' still true for kind.describe and delete.plan." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
+stamp = { hash = "b3:ec2bc63eec3cae5c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: added the MAX_BUSES compile-time assert to Audio routing; rest re-read, holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d638c6ca8019b15d" }
@@ -900,7 +900,7 @@ stamp = { hash = "b3:82b99f798fcea13a" }
 stamp = { hash = "b3:5e06b48ac662790f" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio.rs"]
-stamp = { hash = "b3:9ae9770430e0f01d" }
+stamp = { hash = "b3:6680424ad2d7c1d2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: added the MAX_BUSES compile-time assert to Audio routing; rest re-read, holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio_sources.rs"]
 stamp = { hash = "b3:82865b433d5487da", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b after C9/C10 landed: body's Live sources text adds Source::audio kept beside the source, end_plan (audible exactly when the plan reached it, so hidden or off-program is silent), take_audio handing build number and time zero to AudioSources::sync_live, beside C10's AudioScope text; the Audio sources paragraph says each live source with sound opens a muted Routed input with its fader, sends (master send at creation) and activity gain, fed only while the program's own plan reaches it (#322 B2), not opened while its audio is off; the program stage text mixes media sound and still pushes blocks into C10's scope. audio_sources.rs (sync_live, Wants, open_live, changed, packets), engine.rs (end_plan and sync_live in publish_render, audio_packets), live.rs (LiveAudio, end_plan, take_audio, audio_changed), runtime/pipeline.rs (clock to the stage), tests/audio.rs (the media-sound test) and tests/sources.rs (FakeClip.audio: None) match it; holds" }
@@ -990,7 +990,7 @@ stamp = { hash = "b3:d63649ff29b26532" }
 stamp = { hash = "b3:5e06b48ac662790f" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio.rs"]
-stamp = { hash = "b3:9ae9770430e0f01d" }
+stamp = { hash = "b3:6680424ad2d7c1d2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; only a compile-time assert added in audio.rs, contents hold" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio_sources.rs"]
 stamp = { hash = "b3:82865b433d5487da", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b, re-verified from wave/m2's stamps after C9 (077b375) and C10 landed: body's Audio sources bullet adds one input per live source with sound of its own (a media file) whose audio is on, routed the same way and fed while the program shows it, and the tests bullet adds the media-sound test beside C10's scope test. audio_sources.rs: sync_live, the test-only packets count, Wants (targets plus live minus sources whose audio is off), wanted_inputs/recorded_inputs, open_live opening a muted Routed input fed by MediaAudio::open, changed() keeping status by Wants::names. engine.rs: test-only audio_packets; publish_render calls live.end_plan() and passes take_audio() to audio.sync_live. live.rs: LiveAudio, Running.audio and ticket, audio_changed set on sync/install/clock swap, end_plan (set_audible when the plan reached the source), take_audio; C10's painters kept in install and sync. runtime/pipeline.rs: the program stage gets the media clock for the feeders. tests/audio.rs: engine_with, show_clip, run_for and a_media_files_sound_is_mixed_while_the_program_shows_it (mixed beside the defaults, silent while hidden, metered, closed while audio is off, removed on delete), beside C10's scope test. tests/sources.rs: FakeClip.audio becomes None; holds" }
@@ -1107,7 +1107,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:5e072f7a4c74a305", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: body adds MfMediaDecoders to the Windows backend list and to the delay-load DLL list (mfplat.dll, mfreadwrite.dll); serve.rs wires MfMediaDecoders::new() as Backends.media, matching it. Dep core#design gains C9's media text (begin_plan, Source::show, Backends::media, NoBackend) beside C10's painters, none of which the daemon text restates; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:3eca76c77bff6c68", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9b: stale only through dep core#design, which gains media sound (end_plan, take_audio, sync_live, routed muted input). The daemon text doesn't restate the engine's audio sources; holds" }
+stamp = { hash = "b3:ccef5fb5b3fe3a55", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; core's design gained one sentence on the MAX_BUSES assert, nothing the daemon relies on changed" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
@@ -1407,10 +1407,10 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:21668f51b28f0233" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:d9660dacf87e3d45", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: graph's MAX_BUSES is now the protocol's; said so in the Bus bullet; rest re-read" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:ec2bc63eec3cae5c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: graph's MAX_BUSES is now the protocol's; said so in the Bus bullet; rest re-read" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1422,7 +1422,7 @@ stamp = { hash = "b3:e56cc35cd8c998eb", by = "agent:claude@session_01Hc59N2dDiDB
 stamp = { hash = "b3:c7daf39cfbbae267" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/audio.rs"]
-stamp = { hash = "b3:3a5dcf3b621fc077" }
+stamp = { hash = "b3:9ad74ccd253c4638", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: graph's MAX_BUSES is now the protocol's; said so in the Bus bullet; rest re-read" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/deps.rs"]
 stamp = { hash = "b3:b1dc233b2dfda255" }
@@ -1434,7 +1434,7 @@ stamp = { hash = "b3:42485db0e5133b45" }
 stamp = { hash = "b3:f5330420377ac0bd" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:112f148ae88f982d" }
+stamp = { hash = "b3:d9029dcff96ab00a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: graph's MAX_BUSES is now the protocol's; said so in the Bus bullet; rest re-read" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/fixtures/v1.json"]
 stamp = { hash = "b3:a6d28eab770c4e2f" }
@@ -1941,7 +1941,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:ec2bc63eec3cae5c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -1962,13 +1962,13 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:e08032e34676ac01" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e099f7b8aaaaa173" }
+stamp = { hash = "b3:35bcec3fef20824d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
-stamp = { hash = "b3:7421b6aaa2a1c085" }
+stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:da4b9ef5e429cca2" }
+stamp = { hash = "b3:053c2d2ceab0bcee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2001,13 +2001,13 @@ stamp = { hash = "b3:353359feae2606b3" }
 stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:9199a0226a0eda2b" }
+stamp = { hash = "b3:7c230fe311147750", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:489f2e86af7bf320" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:68a1255a9a5f2f73" }
+stamp = { hash = "b3:d6aa367b923f0078", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/query.rs"]
 stamp = { hash = "b3:13f2fa2d982a7e24" }
@@ -2022,16 +2022,16 @@ stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c594f42e1b065295" }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:75e84529f81bc5f7", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; version line 0.19 audio, 0.18 virtual_cam, 0.17 role; holds" }
+stamp = { hash = "b3:aa8c93640ba59120", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/audio.rs"]
-stamp = { hash = "b3:7421b6aaa2a1c085" }
+stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:da4b9ef5e429cca2" }
+stamp = { hash = "b3:053c2d2ceab0bcee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2064,13 +2064,13 @@ stamp = { hash = "b3:353359feae2606b3" }
 stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:9199a0226a0eda2b" }
+stamp = { hash = "b3:7c230fe311147750", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/output.rs"]
 stamp = { hash = "b3:489f2e86af7bf320" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:68a1255a9a5f2f73" }
+stamp = { hash = "b3:d6aa367b923f0078", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
 stamp = { hash = "b3:13f2fa2d982a7e24" }
@@ -2424,7 +2424,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:9e452bd61511986b", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
+stamp = { hash = "b3:601bb40f0c50d5b9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: Mixer bullet now names the protocol's MAX_BUSES for the Add bus limit; rest re-read" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401 and the jstream-control Mock change: Scenes and sources now says the mock lists no kinds and a failed kind.list offers none but shows its error like any failed call (problem bar, per Routing); rest unchanged." }
@@ -2460,7 +2460,7 @@ stamp = { hash = "b3:b0fabe46ab68dffb" }
 stamp = { hash = "b3:a465bc7057b65d15", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mixer.rs"]
-stamp = { hash = "b3:a107eaa05e9d2e99", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
+stamp = { hash = "b3:f1055b0baf7ed4b6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: Mixer bullet now names the protocol's MAX_BUSES for the Add bus limit; rest re-read" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mod.rs"]
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
@@ -2520,7 +2520,7 @@ stamp = { hash = "b3:b0fabe46ab68dffb" }
 stamp = { hash = "b3:a465bc7057b65d15", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mixer.rs"]
-stamp = { hash = "b3:a107eaa05e9d2e99", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }
+stamp = { hash = "b3:f1055b0baf7ed4b6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; mixer uses the protocol's MAX_BUSES, contents unchanged" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mod.rs"]
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }

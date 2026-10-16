@@ -287,9 +287,9 @@ impl Mixer {
     /// another thread, use [`MixerControl::add_bus`].
     ///
     /// # Errors
-    /// [`AudioError::TooManyBuses`] past 16 buses (the master included), and
-    /// [`AudioError::CommandQueueFull`] when the mixer has not yet applied a full queue
-    /// of changes.
+    /// [`AudioError::TooManyBuses`] past [`MAX_BUSES`](crate::MAX_BUSES) buses (the
+    /// master included), and [`AudioError::CommandQueueFull`] when the mixer has not yet
+    /// applied a full queue of changes.
     pub fn add_bus(&mut self) -> Result<BusControl, AudioError> {
         let bus = self.control().add_bus()?;
         self.apply_commands();
