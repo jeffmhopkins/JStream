@@ -7,11 +7,30 @@ use jstream_platform::PluginHosts;
 use jstream_plugin_proto::control::{
     PARAM_BYPASS, PARAM_HIDDEN, PARAM_READ_ONLY, PARAM_STEPPED, ParamDesc, PluginDesc,
 };
-use jstream_protocol::{KindCategory, KindDescriptor, ParamDescriptor, ParamType};
+use jstream_protocol::{
+    Edit, KindCategory, KindDescriptor, ParamDescriptor, ParamType, ProtocolError,
+};
 use serde_json::json;
 
 /// The prefix of every CLAP kind's ID.
 pub const CLAP_KIND_PREFIX: &str = "clap/";
+
+/// Refuses a `filter.add` of a CLAP kind, as `invalid_argument` on its `kind`. Nothing
+/// runs a CLAP filter yet, and a collection holding one wouldn't load at the next start:
+/// the file is read before the scan that describes the kind has run.
+pub(crate) fn refuse_filters(edits: &[Edit]) -> Result<(), ProtocolError> {
+    for (at, edit) in edits.iter().enumerate() {
+        if let Edit::FilterAdd { kind, .. } = edit
+            && kind.starts_with(CLAP_KIND_PREFIX)
+        {
+            return Err(ProtocolError::invalid_argument(
+                format!("edits.{at}.kind"),
+                format!("kind `{kind}` is a CLAP plugin, and CLAP filters can't be added yet"),
+            ));
+        }
+    }
+    Ok(())
+}
 
 /// How deep a scan looks below each search directory, as CLAP's search is recursive.
 const MAX_SCAN_DEPTH: usize = 8;

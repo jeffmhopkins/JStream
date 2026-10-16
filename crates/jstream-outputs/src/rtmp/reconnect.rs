@@ -235,7 +235,8 @@ enum Link<S> {
 #[derive(Default)]
 struct Headers {
     metadata: Option<Vec<u8>>,
-    avc: Option<Vec<u8>>,
+    /// The AVC sequence header, or the enhanced RTMP `SequenceStart` (HEVC, AV1).
+    video: Option<Vec<u8>>,
     aac: Option<Vec<u8>>,
 }
 
@@ -246,11 +247,47 @@ enum Packet {
     Other,
 }
 
-/// An AVC VIDEODATA body: a sequence header (`AVCPacketType` 0), a keyframe, or other.
+/// The `IsExHeader` bit of a VIDEODATA body's first byte: an enhanced RTMP tag.
+const EX_HEADER: u8 = 0x80;
+/// FLV `CodecID` of AVC (H.264).
+const CODEC_AVC: u8 = 7;
+/// The `FrameType` of a keyframe.
+const FRAME_KEY: u8 = 1;
+/// Legacy `AVCPacketType`s (`jstream_mux::flv::AvcPacketType`). End of sequence (2) is
+/// neither.
+const AVC_SEQUENCE_HEADER: u8 = 0;
+const AVC_NALU: u8 = 1;
+/// Enhanced RTMP `VideoPacketType`s (`jstream_mux::flv::ExVideoPacketType`).
+const EX_SEQUENCE_START: u8 = 0;
+const EX_CODED_FRAMES: u8 = 1;
+const EX_CODED_FRAMES_X: u8 = 3;
+
+/// A VIDEODATA body: a sequence header, a keyframe, or other.
+///
+/// Legacy tags (AVC): the high nibble is the frame type, the low one the codec. An
+/// `AVCPacketType` of 0 is the sequence header, and a keyframe is a NALU (1) with frame
+/// type 1; an end of sequence (2) is other, even though it is marked as a keyframe.
+/// Enhanced RTMP tags (HEVC, AV1) set `IsExHeader`, then carry a 3-bit frame type and a
+/// 4-bit `VideoPacketType`: `SequenceStart` is the header, and a keyframe is
+/// `CodedFrames` or `CodedFramesX` with frame type 1. Every other packet type (`SequenceEnd`, `Metadata`,
+/// `MPEG2TSSequenceStart`, `Multitrack`, `ModEx`) and command frames are other: they
+/// are neither kept for re-sending nor a point to resume at.
 fn classify_video(body: &[u8]) -> Packet {
     match body {
-        [first, 0, ..] if first & 0x0F == 7 => Packet::Header,
-        [first, ..] if first >> 4 == 1 => Packet::Keyframe,
+        [first, ..] if first & EX_HEADER != 0 => {
+            let frame_type = (first >> 4) & 0x07;
+            match first & 0x0F {
+                EX_SEQUENCE_START => Packet::Header,
+                EX_CODED_FRAMES | EX_CODED_FRAMES_X if frame_type == FRAME_KEY => Packet::Keyframe,
+                _ => Packet::Other,
+            }
+        }
+        [first, packet_type, ..] if first & 0x0F == CODEC_AVC => match *packet_type {
+            AVC_SEQUENCE_HEADER => Packet::Header,
+            AVC_NALU if first >> 4 == FRAME_KEY => Packet::Keyframe,
+            _ => Packet::Other,
+        },
+        [first, ..] if first >> 4 == FRAME_KEY => Packet::Keyframe,
         _ => Packet::Other,
     }
 }
@@ -319,8 +356,8 @@ impl Backoff {
 /// attempts run on a background thread (one at a time), and every call checks whether
 /// one has finished or is due. While the link is down, media is dropped and counted in
 /// [`stats`](Self::stats); sequence headers and `onMetaData` are remembered. After a
-/// reconnect the publisher sends `onMetaData` and the AVC sequence header just before
-/// the first video keyframe (dropping video and audio until then; an audio-only stream
+/// reconnect the publisher sends `onMetaData` and the video sequence header (AVC, or an
+/// enhanced RTMP `SequenceStart` for HEVC and AV1) just before the first video keyframe (dropping video and audio until then; an audio-only stream
 /// resumes at once) and the AAC sequence header just before the first audio packet,
 /// each at that packet's timestamp. Timestamps continue from the old session.
 ///
@@ -428,8 +465,9 @@ impl<S: Read + Write + Send + 'static> ReconnectingPublisher<S> {
         self.after_send(result, None)
     }
 
-    /// Sends a VIDEODATA tag body as [`RtmpPublisher::send_video`] does. AVC sequence
-    /// headers are kept to re-send after a reconnect.
+    /// Sends a VIDEODATA tag body as [`RtmpPublisher::send_video`] does. Sequence
+    /// headers (AVC, or an enhanced RTMP `SequenceStart` for HEVC and AV1) are kept to
+    /// re-send after a reconnect.
     ///
     /// # Errors
     /// [`RtmpError::ReconnectGaveUp`] once the publisher has given up, and the caller
@@ -437,7 +475,7 @@ impl<S: Read + Write + Send + 'static> ReconnectingPublisher<S> {
     pub fn send_video(&mut self, timestamp_ms: u32, tag_body: &[u8]) -> Result<(), RtmpError> {
         let kind = classify_video(tag_body);
         if kind == Packet::Header {
-            self.headers.avc = Some(tag_body.to_vec());
+            self.headers.video = Some(tag_body.to_vec());
         } else {
             self.seen_video = true;
         }
@@ -742,9 +780,9 @@ impl<S: Read + Write + Send + 'static> ReconnectingPublisher<S> {
             publisher: Box::new(publisher),
             resync: Resync {
                 metadata: self.headers.metadata.is_some(),
-                // A cached AVC header with no frame yet still needs the resync, or the
-                // first keyframe would go out without it (#127 review B1).
-                video: self.seen_video || self.headers.avc.is_some(),
+                // A cached video header with no frame yet still needs the resync, or
+                // the first keyframe would go out without it (#127 review B1).
+                video: self.seen_video || self.headers.video.is_some(),
                 audio_header: self.headers.aac.is_some(),
             },
             reconnected: Some((now, outage)),
@@ -759,7 +797,7 @@ enum MediaKind {
 }
 
 /// Before the first keyframe after a reconnect: `onMetaData` if `metadata`, then the
-/// AVC sequence header, both at the keyframe's timestamp.
+/// video sequence header, both at the keyframe's timestamp.
 fn resume_video<S: Read + Write>(
     publisher: &mut RtmpPublisher<S>,
     headers: &Headers,
@@ -769,8 +807,8 @@ fn resume_video<S: Read + Write>(
     if metadata && let Some(body) = &headers.metadata {
         publisher.send_metadata(body)?;
     }
-    if let Some(avc) = &headers.avc {
-        publisher.send_video(timestamp_ms, avc)?;
+    if let Some(header) = &headers.video {
+        publisher.send_video(timestamp_ms, header)?;
     }
     Ok(())
 }

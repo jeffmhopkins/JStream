@@ -8,6 +8,7 @@
 //! bitstreams.
 
 use std::collections::{BTreeMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -22,14 +23,15 @@ use crate::{
     AudioPacketFlags, AudioProcess, AudioRenderBuffer, AudioStream, Backends, Capture,
     CaptureDecoder, CaptureEncoding, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
     CodecInfo, CodecRole, Codecs, CompressedFrame, DeviceId, GpuContext, GpuFrame, GpuInterop,
-    HardwarePreference, MediaClock, OAuthTokenStore, PlatformError, Secret, StreamKeyStore,
-    VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat, VideoDeviceInfo,
-    VideoDevices, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    HardwarePreference, MediaAudioInfo, MediaClock, MediaDecoder, MediaDecoderConfig,
+    MediaDecoders, MediaInfo, MediaVideoInfo, OAuthTokenStore, PlatformError, Secret,
+    StreamKeyStore, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat,
+    VideoDeviceInfo, VideoDevices, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 
 /// A full set of fake backends on `clock`: a 320x180 display, a stereo 48 kHz
-/// microphone and speakers, the fake codecs, no GPU interop ([`FakeGpuInterop`]) and a
-/// fake virtual camera.
+/// microphone and speakers, the fake codecs, no GPU interop ([`FakeGpuInterop`]), media
+/// files with no clips ([`FakeMediaDecoders`]) and a fake virtual camera.
 ///
 /// # Errors
 /// None in practice; the `Result` carries the media-type constructors' errors.
@@ -46,6 +48,7 @@ pub fn backends(clock: &FakeClock) -> Result<Backends, PlatformError> {
         )?),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: Some(Box::new(FakeVcamSink::new())),
     })
 }
@@ -1036,6 +1039,226 @@ impl VideoDecoder for FakeVideoDecoder {
         self.finished = true;
         self.release(None);
         self.poll(out)
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// Media files
+
+/// A synthetic clip that [`FakeMediaDecoders`] plays for a registered path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FakeClip {
+    /// The size of every frame.
+    pub size: FrameSize,
+    /// One frame every `frame_period`, the first at zero.
+    pub frame_period: Timebase,
+    /// How many frames the clip has. Zero is a file with no video stream.
+    pub frames: u32,
+    /// Every how many frames a key frame comes: a seek lands on the key frame at or
+    /// before its time, as a real decoder's does. At least 1.
+    pub key_every: u32,
+    /// The file's audio stream, if it has one.
+    pub audio: Option<FakeAudio>,
+}
+
+/// The audio stream of a [`FakeClip`]: `blocks` blocks of `block_frames` frames each,
+/// the first at zero, every sample of block `index` at [`level`](Self::level)`(index)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FakeAudio {
+    /// The decoded format.
+    pub format: AudioFormat,
+    /// Frames in each block. At least 1.
+    pub block_frames: u32,
+    /// How many blocks the stream has.
+    pub blocks: u32,
+}
+
+impl FakeAudio {
+    /// The sample every sample of block `index` holds, so a test can tell blocks apart.
+    pub fn level(index: u32) -> f32 {
+        (index % 64 + 1) as f32 / 128.0
+    }
+
+    /// How long the stream plays.
+    pub fn length(&self) -> MediaTime {
+        MediaTime::new(
+            i64::from(self.blocks) * i64::from(self.block_frames.max(1)),
+            self.format.timebase(),
+        )
+    }
+}
+
+impl FakeClip {
+    /// The RGBA8 pixel every pixel of frame `index` holds, so a test can tell frames
+    /// apart: the index's low byte in red.
+    pub fn pixel(index: u32) -> [u8; 4] {
+        [index.to_le_bytes()[0], 0x40, 0x80, 0xff]
+    }
+}
+
+/// What a [`FakeMediaDecoders`] has done, for tests.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FakeMediaStats {
+    /// Files opened.
+    pub opened: u64,
+    /// Seeks, on every open file.
+    pub seeks: u64,
+    /// Frames decoded, on every open file.
+    pub frames: u64,
+    /// Audio blocks decoded, on every open file.
+    pub audio_blocks: u64,
+}
+
+/// Media files from synthetic clips. A path registered with [`add`](Self::add) opens as
+/// its clip, whatever is on disk (nothing is read, R-TEST-004); any other path is
+/// `Unsupported`, as a file the OS can't play is. Clones share their clips and stats.
+#[derive(Clone, Debug, Default)]
+pub struct FakeMediaDecoders {
+    clips: Arc<Mutex<BTreeMap<PathBuf, FakeClip>>>,
+    stats: Arc<Mutex<FakeMediaStats>>,
+}
+
+impl FakeMediaDecoders {
+    /// A backend with no clips.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Makes `path` open as `clip`.
+    pub fn add(&self, path: impl Into<PathBuf>, clip: FakeClip) {
+        lock(&self.clips).insert(path.into(), clip);
+    }
+
+    /// What every file opened from this backend has done so far.
+    pub fn stats(&self) -> FakeMediaStats {
+        *lock(&self.stats)
+    }
+}
+
+impl MediaDecoders for FakeMediaDecoders {
+    fn open(
+        &self,
+        path: &Path,
+        config: &MediaDecoderConfig,
+    ) -> Result<Box<dyn MediaDecoder>, PlatformError> {
+        if config.video_format != PixelFormat::Rgba8 {
+            return Err(PlatformError::Unsupported {
+                what: format!("decoding media files to {:?}", config.video_format),
+            });
+        }
+        let clip =
+            lock(&self.clips)
+                .get(path)
+                .copied()
+                .ok_or_else(|| PlatformError::Unsupported {
+                    what: "not a media file the fake knows".into(),
+                })?;
+        let micros = |t: MediaTime| {
+            t.rescale(Timebase::MICROS, Rounding::Up)
+                .map_or(0, MediaTime::ticks)
+        };
+        let video = MediaTime::new(i64::from(clip.frames), clip.frame_period);
+        let audio = clip.audio.filter(|_| config.audio);
+        let duration = micros(video).max(clip.audio.map_or(0, |a| micros(a.length())));
+        let info = MediaInfo {
+            video: (clip.frames > 0).then_some(MediaVideoInfo {
+                size: clip.size,
+                frame_period: Some(clip.frame_period),
+            }),
+            audio: audio.map(|a| MediaAudioInfo { format: a.format }),
+            duration: Some(MediaTime::new(duration, Timebase::MICROS)),
+        };
+        lock(&self.stats).opened += 1;
+        Ok(Box::new(FakeMediaDecoder {
+            clip,
+            audio,
+            info,
+            next: 0,
+            next_block: 0,
+            stats: Arc::clone(&self.stats),
+        }))
+    }
+}
+
+struct FakeMediaDecoder {
+    clip: FakeClip,
+    /// The audio stream, when it was asked for.
+    audio: Option<FakeAudio>,
+    info: MediaInfo,
+    /// The index of the next frame to decode.
+    next: u32,
+    /// The index of the next audio block to decode.
+    next_block: u32,
+    stats: Arc<Mutex<FakeMediaStats>>,
+}
+
+impl MediaDecoder for FakeMediaDecoder {
+    fn info(&self) -> &MediaInfo {
+        &self.info
+    }
+
+    fn next_video(&mut self) -> Result<Option<VideoFrame>, PlatformError> {
+        if self.next >= self.clip.frames {
+            return Ok(None);
+        }
+        let index = self.next;
+        let mut frame = VideoFrame::zeroed(VideoFrameInfo {
+            size: self.clip.size,
+            format: PixelFormat::Rgba8,
+            color: ColorInfo::default(),
+            pts: MediaTime::new(i64::from(index), self.clip.frame_period),
+        })?;
+        let pixel = FakeClip::pixel(index);
+        for y in 0..self.clip.size.height() {
+            if let Some(row) = frame.row_mut(0, y) {
+                for px in row.chunks_exact_mut(4) {
+                    px.copy_from_slice(&pixel);
+                }
+            }
+        }
+        self.next += 1;
+        lock(&self.stats).frames += 1;
+        Ok(Some(frame))
+    }
+
+    fn next_audio(&mut self) -> Result<Option<AudioBuffer>, PlatformError> {
+        let Some(audio) = self.audio.filter(|a| self.next_block < a.blocks) else {
+            return Ok(None);
+        };
+        let index = self.next_block;
+        let frames = audio.block_frames.max(1);
+        let pts = MediaTime::new(
+            i64::from(index) * i64::from(frames),
+            audio.format.timebase(),
+        );
+        let samples = vec![FakeAudio::level(index); frames as usize * audio.format.channels()];
+        self.next_block += 1;
+        lock(&self.stats).audio_blocks += 1;
+        Ok(Some(AudioBuffer::new(audio.format, pts, samples)?))
+    }
+
+    fn seek(&mut self, to: MediaTime) -> Result<(), PlatformError> {
+        let index = to
+            .rescale(self.clip.frame_period, Rounding::Down)
+            .map_or(0, |t| t.ticks().clamp(0, i64::from(self.clip.frames)));
+        let index = u32::try_from(index).unwrap_or(self.clip.frames);
+        let key_every = self.clip.key_every.max(1);
+        self.next = if index >= self.clip.frames {
+            self.clip.frames
+        } else {
+            index / key_every * key_every
+        };
+        if let Some(audio) = self.audio {
+            // The block that holds `to`.
+            let frames = i64::from(audio.block_frames.max(1));
+            let block = to
+                .rescale(audio.format.timebase(), Rounding::Down)
+                .map_or(0, |t| t.ticks().div_euclid(frames))
+                .clamp(0, i64::from(audio.blocks));
+            self.next_block = u32::try_from(block).unwrap_or(audio.blocks);
+        }
+        lock(&self.stats).seeks += 1;
+        Ok(())
     }
 }
 

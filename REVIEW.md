@@ -96,7 +96,7 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
    - New crates or modules that no section covers, missing `Docs:` back-references, and
      unregistered external URLs.
 5. **Governance.** A Dependabot PR that only changes pinned `uses:` references is
-   pre-approved by [ADR-0018](docs/adr/0018-ci-supply-chain-policy.md). Confirm the diff is
+   pre-approved by [ADR-0056](docs/adr/0056-ci-supply-chain-policy-v2.md). Confirm the diff is
    limited to that, and for a major bump read the action's changelog against how we use it.
    Otherwise, if the PR loosens any check (lint/deny config, `#[allow]`, narrowed
    `covers` or `applies_to`, retired rules, CI edits, this file), it needs the
