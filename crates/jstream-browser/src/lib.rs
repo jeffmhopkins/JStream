@@ -1,7 +1,7 @@
 //! Browser sources' engine (ADR-0021, docs/adr/0021-browser-source.md; ADR-0046,
-//! docs/adr/0046-browser-crate-and-helper.md): web pages rendered off
-//! screen by CEF, each page's frames as textures on the engine's GPU device and its audio
-//! as a stream the engine records like a device's.
+//! docs/adr/0046-browser-crate-and-helper.md): web pages rendered off screen by CEF,
+//! each page's frames as textures on a GPU device the host hands it and its audio as a
+//! stream the engine records like a device's.
 //!
 //! The seam is [`BrowserBackend`], which `jstream-sources` holds injected like every
 //! other backend: [`open`](BrowserBackend::open) a [`PageSpec`] and get a
@@ -19,6 +19,7 @@ mod cef;
 #[cfg(any(test, feature = "fake"))]
 pub mod fake;
 mod page;
+mod request;
 
 use std::sync::Arc;
 
@@ -26,6 +27,7 @@ pub use audio::{MAX_CHUNK_FRAMES, PageAudio, PageAudioStream};
 #[cfg(all(windows, feature = "cef"))]
 pub use cef::{CefBackend, CefConfig, run_subprocess};
 pub use page::{DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, PageLocation, PageSpec, css_script};
+pub use request::{RequestPolicy, Verdict};
 
 use jstream_platform::{GpuContext, GpuFrame};
 
@@ -45,8 +47,9 @@ pub trait BrowserBackend: Send + Sync {
     /// page.
     fn open(&self, spec: &PageSpec) -> Result<Box<dyn BrowserPage>, BrowserError>;
 
-    /// The GPU device pages deliver their frames on: the engine's own, on the media
-    /// adapter, so the compositor samples them where they are (ADR-0004). With `None`
+    /// The GPU device pages deliver their frames on: one on the media adapter, so the
+    /// compositor can sample them where they are (ADR-0004). The host opens it for now,
+    /// until the engine hands out its own. With `None`
     /// (the default) pages keep painting but their frames are dropped. Pages open before
     /// the call follow it from their next paint.
     fn use_device(&self, gpu: Option<&GpuContext>);
@@ -71,6 +74,11 @@ pub trait BrowserPage: Send {
     /// The page's audio, which the engine records into a mixer input with
     /// [`PageAudio::open`]. It is silent until the page plays something.
     fn audio(&self) -> &Arc<PageAudio>;
+
+    /// How many of the page's requests were refused under its [`RequestPolicy`]: a
+    /// file page reaching outside its folder, a web page reaching for a local file, or
+    /// a scheme no page may load.
+    fn denied_requests(&self) -> u64;
 }
 
 /// Why a page could not be opened.

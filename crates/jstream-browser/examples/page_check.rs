@@ -9,8 +9,10 @@
 //! The built-in test page is transparent, moves a box on every frame, and plays 440 Hz
 //! on the left and 660 Hz on the right at -12 dBFS. Halfway through, the check gives the
 //! page new custom CSS that sets `--jstream-tone: 880` on `:root`; the page reads that
-//! property and moves its right channel to 880 Hz, which shows the CSS reached it. Then
-//! the page is closed and the backend dropped, which shuts CEF down.
+//! property and moves its right channel to 880 Hz, which shows the CSS reached it. The
+//! page also loads one image beside it and one from the folder above, which its request
+//! policy refuses, so the check reports one refused request. Then the page is closed and
+//! the backend dropped, which shuts CEF down.
 
 #[cfg(windows)]
 fn main() -> std::process::ExitCode {
@@ -41,6 +43,7 @@ mod windows_check {
     const TEST_PAGE: &str = r#"<!doctype html>
 <html><head><meta charset="utf-8"><title>JStream page check</title></head>
 <body>
+<img src="inside.svg"><img src="../outside.svg">
 <div id="box" style="position:absolute;width:120px;height:120px;background:rgba(255,0,0,0.5)"></div>
 <script>
 const box = document.getElementById('box');
@@ -70,6 +73,9 @@ setInterval(() => {
 </script>
 </body></html>
 "#;
+
+    /// A small image for the page to load.
+    const SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>"#;
 
     struct Args {
         seconds: f64,
@@ -220,7 +226,7 @@ setInterval(() => {
         let clock = Arc::new(QpcClock::new().map_err(|e| e.to_string())?);
         let gpu = WindowsGpu::new()
             .open_device()
-            .map_err(|e| format!("opening the engine's GPU device: {e}"))?;
+            .map_err(|e| format!("opening the GPU device: {e}"))?;
         line(format_args!(
             "engine device: {} ({:?})",
             gpu.adapter().get_info().name,
@@ -240,9 +246,14 @@ setInterval(() => {
         let location = match &args.url {
             Some(url) => PageLocation::web(url).map_err(|e| e.to_string())?,
             None => {
-                let path = state.join("page-check.html");
-                std::fs::create_dir_all(&state).map_err(|e| e.to_string())?;
+                // The page sits in a folder of its own, so `../outside.svg` is outside it.
+                let folder = state.join("page");
+                let path = folder.join("page-check.html");
+                std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
                 std::fs::write(&path, TEST_PAGE).map_err(|e| e.to_string())?;
+                for image in [folder.join("inside.svg"), state.join("outside.svg")] {
+                    std::fs::write(image, SVG).map_err(|e| e.to_string())?;
+                }
                 PageLocation::File(path)
             }
         };
@@ -329,6 +340,10 @@ setInterval(() => {
         line(format_args!(
             "audio packets dropped while attaching: {}",
             page.audio().dropped()
+        ));
+        line(format_args!(
+            "requests refused: {} (the built-in page expects 1: ../outside.svg)",
+            page.denied_requests()
         ));
 
         let closing = Instant::now();

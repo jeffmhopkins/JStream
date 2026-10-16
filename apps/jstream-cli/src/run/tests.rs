@@ -115,6 +115,8 @@ fn populated() -> MockEngine {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
             Edit::ItemAdd {
                 scene_id: SceneId::new("main"),
@@ -122,6 +124,8 @@ fn populated() -> MockEngine {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
         ],
         expected_rev: None,
@@ -289,10 +293,10 @@ fn item_list_golden() {
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"item.list","rev":2,"#,
             r#""scene_id":"main","items":[{"item_id":"cam_1","source_id":"cam","placement":"legacy","#,
             r#""transform":{"position":{"x":0.0,"y":0.0},"scale":{"x":1.0,"y":1.0},"rotation_deg":0.0},"#,
-            r#""crop":{"left":0,"top":0,"right":0,"bottom":0},"visible":true},"#,
+            r#""crop":{"left":0,"top":0,"right":0,"bottom":0},"visible":true,"opacity":1.0,"blend":"normal"},"#,
             r#"{"item_id":"cam_2","source_id":"cam","placement":"legacy","#,
             r#""transform":{"position":{"x":100.0,"y":50.5},"scale":{"x":0.5,"y":0.5},"rotation_deg":-90.0},"#,
-            r#""crop":{"left":0,"top":0,"right":10,"bottom":0},"visible":false}]}}}"#,
+            r#""crop":{"left":0,"top":0,"right":10,"bottom":0},"visible":false,"opacity":1.0,"blend":"normal"}]}}}"#,
             "\n"
         ))
     );
@@ -330,7 +334,7 @@ fn state_get_golden() {
     );
     let item = |id: &str| {
         format!(
-            r#"{{"item_id":"{id}","source_id":"cam","placement":"legacy","transform":{{"position":{{"x":0.0,"y":0.0}},"scale":{{"x":1.0,"y":1.0}},"rotation_deg":0.0}},"crop":{{"left":0,"top":0,"right":0,"bottom":0}},"visible":true}}"#
+            r#"{{"item_id":"{id}","source_id":"cam","placement":"legacy","transform":{{"position":{{"x":0.0,"y":0.0}},"scale":{{"x":1.0,"y":1.0}},"rotation_deg":0.0}},"crop":{{"left":0,"top":0,"right":0,"bottom":0}},"visible":true,"opacity":1.0,"blend":"normal"}}"#
         )
     };
     assert_eq!(
@@ -782,6 +786,81 @@ fn stream_keys_golden() {
             "\n"
         ))
     );
+}
+
+/// #438: a key piped from Windows PowerShell 5.1, or saved by Notepad as "UTF-8 with
+/// BOM", starts with U+FEFF. It is dropped with the surrounding whitespace, and a key
+/// that still has a control or non-ASCII character is refused before connecting,
+/// without being repeated. The asserts never print a stored key.
+#[test]
+fn stream_key_byte_order_mark_and_unusable_keys() {
+    let engine = MockEngine::new();
+    let yt = OutputId::new("yt");
+    let create = ["--mock", "edit", "output.create", "yt", "rtmp://host/live2"];
+    assert_eq!(run_on(&engine, &create), ok("applied: rev 1 (req_1)\n"));
+    let stored = |expected: &str| {
+        engine
+            .stream_key(&yt)
+            .is_some_and(|key| key.expose() == expected)
+    };
+    let set_key = ["--mock", "output", "set-key", "yt"];
+
+    assert_eq!(
+        run_on_with_input(&engine, &set_key, "\u{FEFF}bom-key-1\r\n"),
+        ok("output.set_key accepted for yt (req_1)\n")
+    );
+    assert!(
+        stored("bom-key-1"),
+        "stdin: the stored key is not the bare key"
+    );
+    assert_eq!(
+        run_on_with_input(&engine, &set_key, "\u{FEFF} \tbom-key-2 \n"),
+        ok("output.set_key accepted for yt (req_1)\n")
+    );
+    assert!(
+        stored("bom-key-2"),
+        "stdin: the stored key is not the bare key"
+    );
+
+    let dir = std::env::temp_dir().join(format!("jstream-cli-bom-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let file = dir.join("key");
+    let path = file.to_str().expect("a UTF-8 temp path").to_owned();
+    let from_file = ["--mock", "output", "set-key", "yt", "--key-file", &path];
+    std::fs::write(&file, "\u{FEFF}bom-key-3\r\n").expect("written");
+    assert_eq!(
+        run_on(&engine, &from_file),
+        ok("output.set_key accepted for yt (req_1)\n")
+    );
+    assert!(
+        stored("bom-key-3"),
+        "key file: the stored key is not the bare key"
+    );
+
+    for bad in ["sec\u{7}ret", "sec\tret", "s\u{e9}cret", "sec\u{FEFF}ret"] {
+        std::fs::write(&file, bad).expect("written");
+        assert_eq!(
+            run_on(&engine, &from_file),
+            failed(
+                2,
+                &format!(
+                    "error: the key file `{path}` holds a stream key with a control or \
+                     non-ASCII character, which no streaming service accepts (the key is \
+                     not shown)\n"
+                )
+            )
+        );
+        assert_eq!(
+            run_on_with_input(&engine, &set_key, bad),
+            failed(
+                2,
+                "error: stdin holds a stream key with a control or non-ASCII character, \
+                 which no streaming service accepts (the key is not shown)\n"
+            )
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(stored("bom-key-3"), "a refused key replaced the stored one");
 }
 
 #[test]
@@ -1356,5 +1435,78 @@ fn mcp_over_the_mock_connection() {
     assert_eq!(
         replies[1]["result"]["structuredContent"]["result"]["result"]["state"],
         "stopped"
+    );
+}
+
+/// A session that answers the pairing calls as `jstream-server` does, over the mock.
+struct Pairing(MockControl);
+
+impl Control for Pairing {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        self.0.hello(hello)
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        use jstream_control::protocol::{
+            Action, ActionResult, CallResult, DeviceId, DeviceInfo, Query, QueryResult, RequestId,
+            SecretString,
+        };
+        let result = match call {
+            Call::Action {
+                action: Action::PairingStart,
+            } => CallResult::Action {
+                result: Some(ActionResult::PairingStart {
+                    code: SecretString::new("7K3M-9QXA"),
+                    expires_in_secs: 120,
+                }),
+            },
+            Call::Query {
+                query: Query::DeviceList,
+            } => CallResult::Query {
+                result: QueryResult::DeviceList {
+                    devices: vec![DeviceInfo {
+                        device_id: DeviceId::new("dev_1"),
+                        name: "Tablet".into(),
+                        paired_at: 1_790_000_000,
+                        last_used_at: 1_790_003_600,
+                    }],
+                },
+            },
+            other => return self.0.call(other),
+        };
+        Box::pin(async move {
+            Ok(Response {
+                id: RequestId::new("server_1"),
+                result,
+            })
+        })
+    }
+
+    fn events(&self) -> EventStream {
+        self.0.events()
+    }
+}
+
+#[test]
+fn pairing_golden() {
+    let engine = MockEngine::new();
+    let connector = |_: &Connection| -> Result<Box<dyn Control>, CliError> {
+        Ok(Box::new(Pairing(engine.connect())))
+    };
+    assert_eq!(
+        run_with(&connector, &["pair"]),
+        ok("pairing code: 7K3M-9QXA\nenter it on the device within 120 s; it works once\n")
+    );
+    let json = run_with(&connector, &["--json", "pair"]);
+    assert_eq!(json.code, exit::OK);
+    let value: Value = serde_json::from_str(json.out.trim()).expect("one JSON line");
+    assert_eq!(value["result"]["result"]["code"], "7K3M-9QXA");
+    let listed = run_with(&connector, &["device", "list"]);
+    assert_eq!(listed.code, exit::OK, "{}", listed.err);
+    assert!(
+        listed.out.starts_with("ID     NAME    PAIRED (UNIX S)")
+            && listed.out.contains("dev_1  Tablet  1790000000"),
+        "{}",
+        listed.out
     );
 }

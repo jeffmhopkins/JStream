@@ -15,9 +15,14 @@
 //! default replaced by one in another format), and finds an application again when the
 //! process it recorded has exited (it restarted, under a new process ID).
 //!
+//! Each source's input runs its audio filter chain (ADR-0026): the thread keeps the
+//! input's filters in line with the chain on the same passes, updating a filter in place
+//! when only its settings changed. A filter the mixer refuses is bypassed, and new
+//! settings it refuses are tried again on the next pass; both are logged.
+//!
 //! A source that makes audio of its own (a `browser` page) gets an input too, fed by
 //! the running source itself ([`jstream_sources::SourceAudio`]) from when it is built
-//! until it is deleted or built again.
+//! until it is deleted or built again, and not while its audio is turned off.
 //!
 //! While the collection has no audio source, the program records the default
 //! microphone and desktop audio, as it did before audio sources existed, so a
@@ -42,6 +47,7 @@ use jstream_protocol::{SourceId, SourceKind};
 use jstream_sources::{AudioTarget, SourceAudio};
 
 use crate::drops::{AudioInputDrops, DropLedger, DropSourceId, lock_ledger};
+use crate::filters::{Chain, Chained, chain_of};
 use crate::lock;
 
 /// How often the thread retries unavailable sources, reopens failed streams and checks
@@ -102,6 +108,9 @@ struct Target {
 #[derive(Default)]
 struct WantedState {
     targets: Targets,
+    /// Each source's audio filter chain, as the mixer runs it. Sources without filters
+    /// have no entry.
+    chains: BTreeMap<SourceId, Vec<Chained>>,
     /// How each source fares while the program stage runs.
     status: BTreeMap<SourceId, AudioStatus>,
 }
@@ -171,7 +180,17 @@ impl AudioSources {
                 targets.entry(id).or_insert(Target { recorded, on });
             }
         }
+        let chains: BTreeMap<SourceId, Vec<Chained>> = state
+            .sources()
+            .filter(|source| targets.contains_key(source.id()))
+            .map(|source| (source.id().clone(), chain_of(source)))
+            .filter(|(_, chain)| !chain.is_empty())
+            .collect();
         let mut wanted = lock(&self.wanted.state);
+        if wanted.chains != chains {
+            wanted.chains = chains;
+            self.wanted.changed.notify_all();
+        }
         if wanted.targets != targets {
             // A deleted source, or one whose audio is off, has no status from now on,
             // even before the thread closes its input.
@@ -315,6 +334,8 @@ struct Live {
     drops: DropSourceId,
     /// The process an application input records.
     pid: Option<u32>,
+    /// The source's filters on this input.
+    chain: Chain,
 }
 
 impl AudioInputs {
@@ -345,8 +366,11 @@ impl AudioInputs {
             stop,
             thread: None,
         };
-        let targets = lock(&inputs.wanted.state).targets.clone();
-        let pass = lock(&inputs.open).reconcile(&targets);
+        let (targets, chains) = {
+            let wanted = lock(&inputs.wanted.state);
+            (wanted.targets.clone(), wanted.chains.clone())
+        };
+        let pass = lock(&inputs.open).reconcile(&targets, &chains);
         pass.finish(&inputs.wanted, &targets);
         let thread = thread::Builder::new()
             .name("jstream-audio-sources".into())
@@ -396,7 +420,7 @@ impl Drop for AudioInputs {
 /// The thread: reconciles whenever the collection changes, and on every tick.
 fn run(open: &Mutex<Open>, wanted: &Wanted, stop: &AtomicBool) {
     loop {
-        let targets = {
+        let (targets, chains) = {
             let state = lock(&wanted.state);
             if stop.load(Ordering::Acquire) {
                 return;
@@ -409,9 +433,9 @@ fn run(open: &Mutex<Open>, wanted: &Wanted, stop: &AtomicBool) {
             if stop.load(Ordering::Acquire) {
                 return;
             }
-            state.targets.clone()
+            (state.targets.clone(), state.chains.clone())
         };
-        let pass = lock(open).reconcile(&targets);
+        let pass = lock(open).reconcile(&targets, &chains);
         pass.finish(wanted, &targets);
     }
 }
@@ -428,6 +452,8 @@ enum Note {
     Reopening(Key, &'static str),
     Available(Key),
     Unavailable(Key, String),
+    /// A filter, or a filter's new settings, the mixer refused.
+    Refused(Key, String),
 }
 
 impl Pass {
@@ -444,6 +470,9 @@ impl Pass {
                 Note::Unavailable(key, reason) => {
                     tracing::warn!(input = ?key, reason, "audio input is unavailable");
                 }
+                Note::Refused(key, reason) => {
+                    tracing::warn!(input = ?key, reason, "audio filter not applied");
+                }
             }
         }
         let mut state = lock(&wanted.state);
@@ -459,8 +488,9 @@ impl Open {
     /// Brings the inputs in line with `targets` and returns each source's status and
     /// what to log:
     /// closes the inputs no longer wanted or wanted differently, reopens failed ones and
-    /// those whose application exited, and opens every input that isn't recording.
-    fn reconcile(&mut self, targets: &Targets) -> Pass {
+    /// those whose application exited, opens every input that isn't recording, and
+    /// brings each source input's filters in line with its chain.
+    fn reconcile(&mut self, targets: &Targets, chains: &BTreeMap<SourceId, Vec<Chained>>) -> Pass {
         let mut notes = Vec::new();
         self.removing.retain(|control| !control.remove());
         let wanted = wanted_inputs(targets);
@@ -511,6 +541,12 @@ impl Open {
                         }
                         input.unavailable = Some(reason);
                     }
+                }
+            }
+            if let (Key::Source(id), Some(live)) = (&key, input.live.as_mut()) {
+                let chain = chains.get(id).map_or(&[][..], Vec::as_slice);
+                for reason in live.chain.apply(&live.control, chain) {
+                    notes.push(Note::Refused(key.clone(), reason));
                 }
             }
             self.inputs.insert(key, input);
@@ -591,6 +627,7 @@ impl Open {
             control,
             drops,
             pid,
+            chain: Chain::default(),
         })
     }
 
@@ -613,6 +650,7 @@ impl Open {
             control,
             drops,
             pid: None,
+            chain: Chain::default(),
         })
     }
 

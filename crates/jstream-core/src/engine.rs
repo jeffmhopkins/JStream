@@ -17,6 +17,7 @@ use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
+use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
     Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program, launch_vcam,
@@ -31,8 +32,8 @@ use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
     EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
-    OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    SecretString, SourceId,
+    OutputKind, OutputState, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer,
+    RequestId, Rev, SecretString, SourceId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -85,6 +86,8 @@ struct Shared {
     /// Where the collection is saved, if the host named a file. Taken before the
     /// collection lock, never while holding it, so the disk write happens outside it.
     collection_file: Mutex<Option<CollectionFile>>,
+    /// The preview thread, which draws and encodes every session's preview streams.
+    previews: PreviewHub,
 }
 
 impl Default for Engine {
@@ -102,6 +105,7 @@ impl Default for Engine {
                 keys: Mutex::new(None),
                 audit: Audit::default(),
                 collection_file: Mutex::new(None),
+                previews: PreviewHub::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -489,6 +493,7 @@ impl Engine {
     #[doc(hidden)]
     #[must_use]
     pub fn with_cpu_compositor(self) -> Self {
+        self.shared.previews.set_draw(crate::preview::cpu_draw());
         self.with_draw(crate::runtime::cpu_draw())
     }
 
@@ -577,6 +582,7 @@ impl Engine {
         client_id: &ClientId,
         request_id: &RequestId,
         call: Call,
+        previews: &SessionPreviews,
     ) -> Executed {
         let span = tracing::info_span!(
             "command",
@@ -613,6 +619,11 @@ impl Engine {
         } = call
         {
             self.key_action(action)
+        } else if let Call::Action {
+            action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
+        } = call
+        {
+            self.preview_action(previews, action)
         } else if self.backends_ready()
             && matches!(
                 call,
@@ -656,6 +667,46 @@ impl Engine {
         Executed::Ready(result)
     }
 
+    /// `preview.subscribe` and `preview.unsubscribe`, on the calling session's
+    /// previews. Nothing here holds the collection lock past reading `rev`.
+    fn preview_action(
+        &self,
+        previews: &SessionPreviews,
+        action: Action,
+    ) -> Result<CallResult, ProtocolError> {
+        match action {
+            Action::PreviewSubscribe {
+                channel,
+                max_width,
+                max_height,
+                fps,
+                codecs,
+            } => {
+                let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
+                let rev = lock(&self.shared.state).graph.rev();
+                let codecs = self.media.as_ref().and_then(|host| {
+                    lock(&host.backends)
+                        .as_ref()
+                        .map(|backends| Arc::clone(&backends.codecs))
+                });
+                let shared: Arc<dyn PreviewSource> = self.shared.clone();
+                previews.subscribe(
+                    &self.shared.previews,
+                    Arc::downgrade(&shared),
+                    channel,
+                    settings,
+                    Opening { codecs, rev },
+                )?;
+                Ok(CallResult::Action { result: None })
+            }
+            Action::PreviewUnsubscribe { channel } => {
+                previews.unsubscribe(channel);
+                Ok(CallResult::Action { result: None })
+            }
+            other => Err(not_implemented(other.name())),
+        }
+    }
+
     /// The key store, if the host gave one. The handle is cloned so the store is
     /// called with no engine lock held.
     fn key_store(&self) -> Option<Arc<dyn StreamKeyStore>> {
@@ -687,7 +738,7 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not store the key: {err}"),
                     })?;
-                Ok(CallResult::Action {})
+                Ok(CallResult::action())
             }
             Action::OutputClearKey { output_id } => {
                 let store = self.key_store().ok_or_else(no_key_store)?;
@@ -696,7 +747,7 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not remove the key: {err}"),
                     })?;
-                Ok(CallResult::Action {})
+                Ok(CallResult::action())
             }
             other => Err(not_implemented(other.name())),
         }
@@ -1057,7 +1108,7 @@ impl Engine {
         };
         wake_all(std::mem::take(&mut wake));
         match outcome {
-            StartOutcome::Active => Ok(CallResult::Action {}),
+            StartOutcome::Active => Ok(CallResult::action()),
             StartOutcome::Cancelled(running) => {
                 drop(running);
                 drop(inflight);
@@ -1143,7 +1194,7 @@ impl Engine {
         settle.state = OutputState::Stopped;
         drop(settle);
         drop(clear_drain);
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     fn settle(&self, output_id: &OutputId, state: OutputState) {
@@ -1830,7 +1881,7 @@ impl State {
             // nothing to restart otherwise, which is no failure.
             Action::AudioResetLoudness {} => {
                 self.routing.reset_loudness();
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::SceneSwitch { scene_id } => {
                 if self.studio.switch(self.graph.state(), &scene_id)? {
@@ -1840,7 +1891,10 @@ impl State {
                     self.route_audio();
                     self.emit_studio(client_id, request_id, wake);
                 }
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
+            }
+            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+                return Err(served_by_the_server(other.name()));
             }
             other => return Err(not_implemented(other.name())),
         };
@@ -1853,7 +1907,7 @@ impl State {
                 wake,
             );
         }
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     /// Collection reads go to `Graph::query`; `output.status` reads the outputs and
@@ -1875,6 +1929,7 @@ impl State {
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                 },
+                Query::DeviceList => return Err(served_by_the_server(query.name())),
                 other => return Err(not_implemented(other.name())),
             },
         };
@@ -1952,6 +2007,13 @@ impl State {
     }
 }
 
+impl PreviewSource for Shared {
+    fn current(&self) -> (Arc<crate::runtime::RenderSnapshot>, Rev) {
+        let state = lock(&self.state);
+        (state.render.load(), state.graph.rev())
+    }
+}
+
 impl LiveHost for Shared {
     fn install(&self, built: Built) {
         let mut state = lock(&self.state);
@@ -1987,6 +2049,9 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
         "must be at most 1024 bytes"
     } else if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
         "must not contain whitespace or control characters"
+    } else if !key.is_ascii() {
+        // No streaming service issues one; a leading U+FEFF is the usual case (#441).
+        "must contain only ASCII characters"
     } else {
         return Ok(());
     };
@@ -2000,6 +2065,13 @@ fn no_key_store() -> ProtocolError {
 }
 
 /// A protocol variant added after this engine was written.
+/// `unsupported`, for the calls that concern the listener's credentials (`pairing.start`,
+/// `device.list`, `device.revoke`): the server in front of the engine answers them
+/// (ADR-0044), so one that reaches the engine came from a client with no server between.
+fn served_by_the_server(call: &str) -> ProtocolError {
+    ProtocolError::Unsupported { call: call.into() }
+}
+
 fn not_implemented(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the engine does not implement {what} yet"),
