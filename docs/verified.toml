@@ -330,7 +330,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:5d78e1bce5e4426c", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:1f1ba8f06f71b9c2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the protocol README change (bus EntityKind compat sentence); the bus/send edits (0.19), history and errors summary still hold" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:dfd21ea6711b150c", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
@@ -993,7 +993,7 @@ stamp = { hash = "b3:bc343a596542a844", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:4080e464df74e92b", by = "agent:claude", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.21 text. From wave/m1: #251's preview text sits beside it unchanged, and #444's 'whitespace, control or non-ASCII characters' key sentence matches engine.rs's check; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:d1931a5574ff0201", by = "agent:claude", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.21 text. From wave/m1: #251's preview text sits beside it unchanged, and #444's 'whitespace, control or non-ASCII characters' key sentence matches engine.rs's check; holds" }
+stamp = { hash = "b3:70897ed4e9adc9c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the protocol Design change (bus EntityKind compat sentence only); the engine/session/calls text names no EntityKind values and still holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:17b528286df59ffa", by = "agent:claude", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.21 text. From wave/m1: #251's preview text sits beside it unchanged, and #444's 'whitespace, control or non-ASCII characters' key sentence matches engine.rs's check; holds" }
@@ -1563,7 +1563,7 @@ stamp = { hash = "b3:6c1b99c4b8c63792" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:d1931a5574ff0201", by = "agent:claude", note = "Cascade only, from protocol Design: the graph crate uses none of pairing's 0.21 actions, query or `device` entity kind, nor #251's preview actions or binary frame; holds" }
+stamp = { hash = "b3:70897ed4e9adc9c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the protocol Design change (bus EntityKind compat sentence); the Bus model and error text here still matches audio.rs and holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2085,7 +2085,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:d1931a5574ff0201", by = "agent:claude", note = "Pairing, protocol 0.21: the version line names 0.21 for pairing, then 0.20 for #251's preview streams, then 0.19; Action result, `unsupported`, Pairing and compat paragraphs match both snapshots (regenerated: pairing examples follow #251's r15-r17) and CallResult::action(); #444's set_key wording matches command.rs and protocol.snap; holds" }
+stamp = { hash = "b3:70897ed4e9adc9c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the compat paragraph's new 0.19 bus sentence against EntityKind::Bus (jstream-protocol error.rs) and its only producers: create_bus/existing_bus/delete_bus/check_send in jstream-graph src/audio.rs (bus.* and send.set/send.remove edits); and Engine::history in jstream-core engine.rs, where an older client's undo of source.delete restoring a send into a since-deleted bus maps to undo_conflict" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }

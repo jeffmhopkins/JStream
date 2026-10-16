@@ -725,8 +725,13 @@ after 1.0:
   exists (the whole response fails, and `WsControl` ends the session). Whether that
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
-  than 0.13, which sends none, never reads it. 0.21 adds `device` the same way: only an
-  error answering `device.revoke` names it. The encoder enums (`VideoCodec`,
+  than 0.13, which sends none, never reads it. 0.19 adds `bus` the same way: only an
+  error answering a bus or send edit (`bus.create`, `bus.rename`, `bus.set_fader`,
+  `bus.delete`, `send.set`, `send.remove`) names it. An older client's undo of its own
+  `source.delete` restores the source's sends, but if one's bus has since been deleted
+  by another client, the undo fails with `undo_conflict`, which names no entity. 0.21
+  adds `device` the same way: only an error answering `device.revoke` names it. The
+  encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
