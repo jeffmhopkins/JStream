@@ -435,7 +435,7 @@ pub enum Edit {
         muted: Option<bool>,
     },
     /// Deletes a bus and every send into it. The master bus can't be deleted
-    /// (`invalid_argument`), nor (since 0.20) a bus a source's settings refer to: that
+    /// (`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that
     /// `invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if
     /// its fader or mute were not the defaults, then `send.set` for each send it had.
     #[serde(rename = "bus.delete")]

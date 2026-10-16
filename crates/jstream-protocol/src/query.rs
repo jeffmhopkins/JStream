@@ -95,7 +95,7 @@ pub enum Query {
     },
 }
 
-/// What a `delete.plan` deletes: a scene, a source or (since 0.20) a bus.
+/// What a `delete.plan` deletes: a scene, a source or (since 0.24) a bus.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -110,7 +110,7 @@ pub enum DeleteTarget {
         /// The source to delete.
         source_id: SourceId,
     },
-    /// A bus other than the master. Since 0.20.
+    /// A bus other than the master. Since 0.24.
     Bus {
         /// The bus to delete.
         bus_id: BusId,

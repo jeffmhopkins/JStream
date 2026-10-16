@@ -567,7 +567,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "DeleteTarget": {
-      "description": "What a `delete.plan` deletes: a scene, a source or (since 0.20) a bus.",
+      "description": "What a `delete.plan` deletes: a scene, a source or (since 0.24) a bus.",
       "oneOf": [
         {
           "description": "A scene.",
@@ -606,7 +606,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A bus other than the master. Since 0.20.",
+          "description": "A bus other than the master. Since 0.24.",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -1548,7 +1548,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.20) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
+          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -2756,7 +2756,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A bus reference (`{\"type\":\"bus\",\"bus_id\":…}`) or `null`. Since 0.20.",
+          "description": "A bus reference (`{\"type\":\"bus\",\"bus_id\":…}`) or `null`. Since 0.24.",
           "properties": {
             "type": {
               "const": "bus",
@@ -4332,5 +4332,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.20"
+  "title": "JStream protocol 0.24"
 }

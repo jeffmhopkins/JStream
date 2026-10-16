@@ -94,10 +94,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.20 because of bus
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.24 because of bus
   references (the `bus` parameter type and reference, which the `waveform` and
   `spectrum` kinds' `audio` setting uses, a `bus` `delete.plan` target, and
-  `bus.delete` refused while one refers to its bus); 0.19 added audio (sources' audio,
+  `bus.delete` refused while one refers to its bus); 0.20 to 0.23 belong to
+  milestone 1 changes that are not merged here yet; 0.19 added audio (sources' audio,
   buses, sends, `bus.list`, `meters.tick` and `audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
   `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
@@ -285,7 +286,7 @@ bus, post-fader, at a gain: `send.set { source_id, bus_id, gain_db }` creates on
 changes its gain, `send.remove` removes it. Only a source with a channel of its own
 sends, so not a `scene` source. A new channel source sends to the master at 0 dB.
 Deleting a bus removes the sends into it, and deleting a source removes its sends;
-the inverses put them back. Since 0.20 a setting can refer to a bus (a `bus`
+the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
 reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
@@ -314,13 +315,13 @@ never a type per kind.
 - A `ParamDescriptor` has an `id`, a `type` with its constraints flattened into the same
   object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
-  `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.20), a `default`, a `label`, an
+  `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24), a `default`, a `label`, an
   optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
 - Values are plain JSON. Colours are `#rrggbb`, or `#rrggbbaa` when `alpha` is set.
   References are tagged objects: `{"type":"scene","scene_id":…}`,
-  `{"type":"source","source_id":…}`, `{"type":"bus","bus_id":…}` (0.20) and
+  `{"type":"source","source_id":…}`, `{"type":"bus","bus_id":…}` (0.24) and
   `{"type":"asset","root":…,"path":…}`, with
   `root` one of `collection`, `app` and `absolute`. A reference parameter also accepts
   `null`. `Settings::references` finds every reference in a map without the descriptor.
@@ -354,7 +355,7 @@ never a type per kind.
 - **Deletes are refused while anything refers to the target**, with no cascading edit
   ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   `source.delete` is refused while an item places the source, and `scene.delete` while a
-  `scene` source shows the scene; either, and `bus.delete` (0.20), is refused while a
+  `scene` source shows the scene; either, and `bus.delete` (0.24), is refused while a
   setting refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
   `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
   or the source whose setting refers to it (`settings.<param>`). `delete.plan` returns
@@ -475,7 +476,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
-  `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.20,
+  `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
   `{"type":"bus","bus_id":…}`) with everything that refers to it, as `edits` and the
   `rev` it was planned at, or `not_found` for a missing target (and
   `invalid_argument` on `target.bus_id` for the master, which is never deleted). In order, the edits remove the items that place a

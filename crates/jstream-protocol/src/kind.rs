@@ -211,7 +211,7 @@ pub enum ParamType {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         media: Option<Media>,
     },
-    /// A bus reference (`{"type":"bus","bus_id":…}`) or `null`. Since 0.20.
+    /// A bus reference (`{"type":"bus","bus_id":…}`) or `null`. Since 0.24.
     Bus,
     /// A type this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a descriptor from a newer server.

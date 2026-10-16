@@ -82,7 +82,7 @@ pub enum Reference {
         /// The source referred to.
         source_id: SourceId,
     },
-    /// A bus (the audio a `waveform` or `spectrum` source draws). Since 0.20.
+    /// A bus (the audio a `waveform` or `spectrum` source draws). Since 0.24.
     Bus {
         /// The bus referred to.
         bus_id: BusId,
