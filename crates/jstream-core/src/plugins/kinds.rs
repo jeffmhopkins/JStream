@@ -46,7 +46,7 @@ pub struct ClapKind {
     pub plugin_id: String,
 }
 
-/// What [`scan`] found.
+/// What [`Engine::scan_clap_plugins`](crate::Engine::scan_clap_plugins) found.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ClapScan {
     /// Every hostable effect, ordered by kind ID. When two files offer the same plugin
