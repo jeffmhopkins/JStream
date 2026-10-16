@@ -245,7 +245,7 @@ verified against a change to it. The inputs, and their keys, are:
    Markdown files, metadata blocks are removed first. In workflow
    files (`.github/workflows/`), the commit SHA and version comment of `uses:` pins are
    ignored, so Dependabot pin bumps don't make the specifying doc stale
-   ([ADR-0018](adr/0018-ci-supply-chain-policy.md)). A file matched only through
+   ([ADR-0056](adr/0056-ci-supply-chain-policy-v2.md)). A file matched only through
    `#jstream-meta` entries contributes the hash of its **jstream view** instead, under the
    key `file:<path>#jstream-meta`: its
    `package.name`, its whole `[package.metadata.jstream]` table, and every entry of
@@ -588,7 +588,7 @@ section saying what is loosened or tightened, and why:
   also carry `reason = "…"`).
 
 **Pre-approved:** a Dependabot PR that only changes pinned `uses:` references is justified by
-[ADR-0018](adr/0018-ci-supply-chain-policy.md) and needs no label.
+[ADR-0056](adr/0056-ci-supply-chain-policy-v2.md) and needs no label.
 
 Agents and the maintainer may both apply the label. The weekly sweep lists every PR
 merged with it, so the maintainer can audit them
