@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:e123a52f9866d0f4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; Output bullet lists generic, youtube, record and virtual camera; broadcast_id checks match target.rs; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -124,7 +123,7 @@ the batch **touched**.
   `kind.target.broadcast_id`, or `target.broadcast_id` in `output.set_target`) when it is empty, over 128 bytes, or has anything but ASCII
   letters, digits, `-` and `_`. A recording's `path` is rejected (field `kind.path`) when it is empty,
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
-  `\…`, `C:\…` or `C:/…`, the same on every platform, as for an absolute asset), or
+  `\…`, `C:\…` or `C:/…`, the same on every platform), or
   doesn't end in a file name; whether it is absolute on the engine's own machine, and
   whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
   `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and

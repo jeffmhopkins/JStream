@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:e6b58484e026dbbf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#363 round 1 N2: re-read the chat bullet; each error class keeps its own ladder, as chat.rs now does; holds" }
 -->
 
 Layer-2 client for Google sign-in and the
@@ -47,6 +46,10 @@ Contents:
   `refresh` gets a new access token and reports a rotated refresh token; `revoke` signs
   out. Access tokens record their expiry (timed from when the request was sent) and the
   scopes granted.
+  - **The built-in client** (ADR-0058 §1): `BUILT_IN_CLIENT_ID` and
+    `BUILT_IN_CLIENT_SECRET` are the "Desktop app" client JStream ships. Both are empty
+    until the maintainer gives their values, and while the ID is empty a build has no
+    client and the engine keeps YouTube's API features off.
   - **Scopes** (ADR-0041 §4): `Scope::Readonly` (`youtube.readonly`) for listing and
     stream health, `Scope::Manage` (`youtube`) for creating, binding and transitioning.
     The Live API reference pages list exactly these: the list methods accept either

@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:bb05e1afd895157c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#363 round 2 B3: re-read the chat_message bullet; create and update now check the settings with no message, then draw the featured one with the blank fallback, so only the settings fail them; frame unchanged; holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -35,14 +34,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   update. `next_change(at)` says when that frame is next replaced (`None`: never), so
   a renderer can skip re-uploading a still. `update(settings)` applies a change to
   `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
-  needs a new source instead.
+  needs a new source instead. A source whose picture is on the GPU also returns it from
+  `gpu_frame` (`None` by default), and one that makes its own audio returns it from
+  `audio` as a `SourceAudio`: its format, and `open(handler)`, which feeds an
+  `AudioInputHandler` until the returned stream is dropped. Only `browser` has either.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
   and its program mix asks each source for `frame` and `next_change` (see
   `jstream-core`'s *Live sources*).
 - `Context`: the featured chat message (`chat`, see `chat_message`), the folders
-  behind the `collection` and `app` asset roots (`AssetRoots`), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
+  behind the `collection` and `app` asset roots (`AssetRoots`), the injected
+  `BrowserBackend` that `browser` sources open their pages in (`browser`; none by
+  default), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
   sides and 1 GiB of decoded memory by default. The image's size is checked before
   anything is allocated for it, and the decoded-memory cap counts the frames kept plus
   the working buffers held while decoding: a GIF's canvas and its "restore to
@@ -101,10 +105,21 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`.
+- `browser` ([ADR-0021](../../docs/adr/0021-browser-source.md)): a web page (`url`,
+  `http://` or `https://`) or the `file` asset (`.html` or `.htm`, which wins when set),
+  opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
+  `Context.browser` ([`jstream-browser`](../jstream-browser/README.md)). An empty URL
+  with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
+  background transparent) is the one live setting: `update` replaces the page's custom
+  CSS without reloading it. Through the engine a `css` edit still reloads the page, until
+  the engine updates live settings in place (core's README › Open items). The page's picture is only on the GPU (`gpu_frame`), so
+  `frame` is a transparent frame of the page's size, and the page's audio is the
+  source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a
+  backend's failure is `SourceError::Browser`. Dropping the source closes the page.
 - `chat_message` (named "Chat message"): the featured live chat message
   ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) §2). It belongs to
-  the optional API path: messages come from the Live API's chat, which needs a Google
-  OAuth client the user configured. The message is
+  the optional API path: messages come from the Live API's chat, which needs JStream's
+  Google OAuth client (built in, empty for now; ADR-0058). The message is
   runtime state, not a setting: `Context::chat` holds a `ChatFeature`, a shared slot
   the host fills with `set(Some(FeaturedMessage { author, badge, text, amount }))` or
   clears with `set(None)`, and every source created from that context draws what it
@@ -173,7 +188,8 @@ Errors name an asset by the root and path its setting holds, never by the host p
 undecodable file is an error from `create`, never from the edit that set it.
 
 **Dependencies.** `jstream-media` (frames and the media clock), `jstream-protocol`
-(descriptors, settings and references), `serde_json` (setting values), `thiserror`
+(descriptors, settings and references), `jstream-browser` (the browser seam) and
+`jstream-platform` (GPU frames and audio handlers), `serde_json` (setting values), `thiserror`
 (`SourceError`), and the pure-Rust decoders `png`, `zune-jpeg` with `zune-core`,
 `image-webp` and `gif`, and for fonts `skrifa` (with `read-fonts`, `font-types`,
 `bytemuck`, `yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with default
@@ -193,4 +209,6 @@ temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
 the test's header describes. `tests/text.rs` draws with the bundled font: wrapping,
 alignment, padding, outline, live updates, font assets and limits, plus golden PNGs in
-`tests/data/text` (`JSTREAM_BLESS=1` rewrites them).
+`tests/data/text` (`JSTREAM_BLESS=1` rewrites them). `tests/browser.rs` runs the
+`browser` kind against `jstream-browser`'s fake backend: the page spec it opens, file
+over URL, setting and backend errors, live CSS, closing on drop and the audio hand-off.

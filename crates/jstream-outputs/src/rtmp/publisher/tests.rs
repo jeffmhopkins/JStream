@@ -425,6 +425,62 @@ fn bad_stream_key_is_rejected() {
     server.join().unwrap();
 }
 
+fn rejection(code: &str, description: &str) -> Vec<Amf0Value> {
+    vec![
+        s("onStatus"),
+        n(0.0),
+        Amf0Value::Null,
+        obj(&[
+            ("level", s("error")),
+            ("code", s(code)),
+            ("description", s(description)),
+        ]),
+    ]
+}
+
+#[test]
+fn rejection_text_is_capped() {
+    let long = "é".repeat(MAX_REMOTE_TEXT + 100);
+    let err = rejected("publish", &rejection(&long, &long), &key());
+    let RtmpError::Rejected {
+        code, description, ..
+    } = err
+    else {
+        panic!("unexpected {err:?}");
+    };
+    assert_eq!(code.chars().count(), MAX_REMOTE_TEXT);
+    assert_eq!(description.chars().count(), MAX_REMOTE_TEXT);
+    assert!(description.chars().all(|c| c == 'é'));
+}
+
+#[test]
+fn rejection_text_has_no_control_characters() {
+    let forged = "denied\nERROR forged line\r\x1b[31mred\x00\t";
+    let err = rejected("connect", &rejection(forged, forged), &key());
+    let RtmpError::Rejected {
+        code, description, ..
+    } = &err
+    else {
+        panic!("unexpected {err:?}");
+    };
+    assert_eq!(description, "denied ERROR forged line  [31mred  ");
+    assert_eq!(code, description);
+    assert!(!err.to_string().chars().any(char::is_control));
+}
+
+#[test]
+fn rejection_redacts_key_before_capping() {
+    // The key straddles the cap: redacting after the cut would leave its prefix behind.
+    let text = format!("{}{KEY}", "x".repeat(MAX_REMOTE_TEXT - 4));
+    let err = rejected("publish", &rejection("c", &text), &key());
+    let RtmpError::Rejected { description, .. } = &err else {
+        panic!("unexpected {err:?}");
+    };
+    assert_eq!(description.chars().count(), MAX_REMOTE_TEXT - 1);
+    assert!(description.ends_with("x***"));
+    assert!(!description.contains(&KEY[..4]));
+}
+
 /// Server bytes for a handshake and a successful publish on stream 1.
 pub(crate) fn accepting_script(after_start: impl FnOnce(&mut Wire)) -> Vec<u8> {
     let mut bytes = vec![RTMP_VERSION];

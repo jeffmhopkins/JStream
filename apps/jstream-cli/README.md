@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:64a7555f490b2b68", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; main's text, Y3 changes nothing here; holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +46,6 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:122501211b14cf2d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; YouTube sentence now says protocol 0.20, beside main's 0.19 audio sentence; other outputs (youtube, virtual_cam, record) list as JSON per run.rs; holds" }
 -->
 
 ```sh
@@ -241,7 +239,6 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:22d3a9e76a2f7120", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; text unchanged by the merge; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -10,8 +10,8 @@
 
 use crate::events::{BUFFER_CAPACITY, PAGE_SIZE};
 use jstream_protocol::{
-    Action, Batch, Call, Edit, HistoryCall, HistoryOp, IdempotencyKey, ProtocolError, Query, Rev,
-    json_schema,
+    Action, Batch, Call, Edit, HistoryCall, HistoryOp, IdempotencyKey, OutputKind, ProtocolError,
+    Query, Rev, RtmpTarget, json_schema,
 };
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -94,8 +94,13 @@ pub(crate) struct Tools {
     owners: BTreeMap<String, String>,
 }
 
+/// The nouns whose ops are for people only, so no tool carries them and a call naming
+/// one is an unknown op (ADR-0058 §3: YouTube is for people, not agents). The protocol
+/// keeps them for the UI.
+pub(crate) const PEOPLE_ONLY: [&str; 1] = ["youtube"];
+
 impl Tools {
-    /// Generates the tools from the protocol schema.
+    /// Generates the tools from the protocol schema, without the [`PEOPLE_ONLY`] ops.
     pub(crate) fn generate() -> Tools {
         let schema = json_schema();
         let empty = Map::new();
@@ -119,6 +124,9 @@ impl Tools {
                     continue;
                 };
                 let noun = name.split_once('.').map_or(name, |(noun, _)| noun);
+                if PEOPLE_ONLY.contains(&noun) {
+                    continue;
+                }
                 let op = Op {
                     name: name.to_owned(),
                     class,
@@ -140,14 +148,6 @@ impl Tools {
         }
         tools.sort_by(|a, b| a.name.cmp(&b.name));
         Tools { tools, owners }
-    }
-
-    /// These tools without the one named `name`, so `tools/list` leaves it out and a
-    /// call of it is an unknown tool. Its ops stay owned by it, so a misrouted op still
-    /// names it.
-    pub(crate) fn without(mut self, name: &str) -> Tools {
-        self.tools.retain(|t| t.name != name);
-        self
     }
 
     /// The MCP `Tool` objects, for `tools/list`.
@@ -172,16 +172,19 @@ impl Tools {
         arguments: Value,
     ) -> Option<Result<Invocation, ProtocolError>> {
         let tool = self.tools.iter().find(|t| t.name == name)?;
-        Some(match &tool.kind {
-            ToolKind::Batch => decode_batch(arguments),
-            ToolKind::Describe => match arguments.as_object() {
-                Some(args) if args.is_empty() => Ok(Invocation::Describe),
-                _ => Err(malformed("`describe_api` takes no arguments")),
-            },
-            ToolKind::Events => from_value::<EventsArgs>(arguments, "arguments")
-                .map(|args| Invocation::Events { after: args.after }),
-            ToolKind::Group(ops) => self.decode_op(&tool.name, ops, arguments),
-        })
+        Some(
+            match &tool.kind {
+                ToolKind::Batch => decode_batch(arguments),
+                ToolKind::Describe => match arguments.as_object() {
+                    Some(args) if args.is_empty() => Ok(Invocation::Describe),
+                    _ => Err(malformed("`describe_api` takes no arguments")),
+                },
+                ToolKind::Events => from_value::<EventsArgs>(arguments, "arguments")
+                    .map(|args| Invocation::Events { after: args.after }),
+                ToolKind::Group(ops) => self.decode_op(&tool.name, ops, arguments),
+            }
+            .and_then(refuse_youtube_targets),
+        )
     }
 
     fn decode_op(
@@ -282,6 +285,37 @@ fn decode_batch(arguments: Value) -> Result<Invocation, ProtocolError> {
         expected_rev: args.expected_rev,
         idempotency_key: args.idempotency_key,
     })))
+}
+
+/// Refuses an edit that points an output at a YouTube broadcast: that binds the output to
+/// YouTube, which is for people, through the UI (ADR-0058 §3). A plain RTMP(S) target
+/// with a stream key stays open to agents.
+fn refuse_youtube_targets(invocation: Invocation) -> Result<Invocation, ProtocolError> {
+    if let Invocation::Call(Call::Batch(batch)) = &invocation {
+        for (i, edit) in batch.edits.iter().enumerate() {
+            let field = match edit {
+                Edit::OutputCreate {
+                    kind:
+                        OutputKind::Rtmp {
+                            target: RtmpTarget::YouTube { .. },
+                        },
+                    ..
+                } => format!("edits.{i}.kind.target"),
+                Edit::OutputSetTarget {
+                    target: RtmpTarget::YouTube { .. },
+                    ..
+                } => format!("edits.{i}.target"),
+                _ => continue,
+            };
+            return Err(ProtocolError::invalid_argument(
+                field,
+                "a `youtube` target binds the output to a YouTube broadcast, which only a \
+                 person can do, in JStream's UI; agents can use a `generic` RTMP(S) target \
+                 with a stream key (`output.set_key`)",
+            ));
+        }
+    }
+    Ok(invocation)
 }
 
 fn from_value<T: DeserializeOwned>(value: Value, what: &str) -> Result<T, ProtocolError> {
@@ -544,15 +578,38 @@ pub(crate) fn check_tool_names_are_valid() {
         }
     }
     // Every edit, action, query and history op in the schema reaches exactly one group
-    // tool.
+    // tool, except the people-only ones, which reach none.
     let schema = json_schema();
     let defs = schema["$defs"].as_object().cloned().unwrap_or_default();
-    let in_schema: usize = ["Edit", "Action", "Query", "HistoryOp"]
+    let names: Vec<String> = ["Edit", "Action", "Query", "HistoryOp"]
         .iter()
-        .map(|def| variants(&defs, def).count())
-        .sum();
-    assert!(in_schema > 0);
-    assert_eq!(tools.owners.len(), in_schema, "an op has no tool, or two");
+        .flat_map(|def| variants(&defs, def))
+        .filter_map(|v| {
+            v.pointer("/properties/type/const")?
+                .as_str()
+                .map(str::to_owned)
+        })
+        .collect();
+    let people_only = names
+        .iter()
+        .filter(|name| {
+            PEOPLE_ONLY
+                .iter()
+                .any(|noun| name.starts_with(&format!("{noun}.")))
+        })
+        .count();
+    assert!(people_only > 0, "the people-only nouns name no op");
+    assert!(
+        tools
+            .tools
+            .iter()
+            .all(|t| !PEOPLE_ONLY.contains(&t.name.as_str()))
+    );
+    assert_eq!(
+        tools.owners.len(),
+        names.len() - people_only,
+        "an op has no tool, or two"
+    );
 }
 
 #[cfg(test)]
@@ -716,5 +773,40 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// ADR-0058 §3: an agent can't bind an output to a YouTube broadcast, in a group
+    /// tool's edit or in a batch; a generic RTMP(S) target is still fine.
+    #[test]
+    fn youtube_targets_are_refused() {
+        let field = |result: Result<Invocation, ProtocolError>| match result {
+            Err(ProtocolError::InvalidArgument { field, reason, .. }) => {
+                assert!(reason.contains("only a person can do"), "{reason}");
+                field
+            }
+            other => panic!("expected invalid_argument, got {other:?}"),
+        };
+        let youtube = json!({"type": "youtube", "broadcast_id": "b1"});
+        let create = json!({"type": "output.create", "output_id": "yt",
+                            "kind": {"type": "rtmp", "target": youtube}});
+        let set = json!({"type": "output.set_target", "output_id": "yt", "target": youtube});
+        assert_eq!(
+            field(decode("output", json!({"op": create}))),
+            "edits.0.kind.target"
+        );
+        assert_eq!(
+            field(decode("output", json!({"op": set}))),
+            "edits.0.target"
+        );
+        let generic = json!({"type": "output.set_target", "output_id": "yt",
+                             "target": {"type": "generic", "url": "rtmps://example.com/live"}});
+        assert_eq!(
+            field(decode("batch", json!({"edits": [generic, set]}))),
+            "edits.1.target"
+        );
+        assert!(matches!(
+            decode("output", json!({"op": generic})),
+            Ok(Invocation::Call(Call::Batch(_)))
+        ));
     }
 }

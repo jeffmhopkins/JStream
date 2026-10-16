@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:d5e5c35d392c707c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; command, output and event lists carry both audio and youtube; version line now 0.20 YouTube, 0.19 audio, 0.18 virtual_cam; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -143,7 +142,6 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:352b8e6e3623cc4d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; YouTube subsection after main's meters.tick text, all YouTube mentions say 0.20, envelope result says 0.20; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -342,8 +340,20 @@ never a type per kind.
   reference to a missing scene or source is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
   `collection` and `app` are relative, with `/` separators and no `..` segment, drive
-  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows); an
-  asset that doesn't exist yet is accepted.
+  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
+  Under `absolute` the path is `/…`, `\…`, `C:\…` or `C:/…`, with no `..` segment, no
+  second leading separator (`\\host\share`, `//host/share`, `\\.\…` and `\\?\…` name
+  a UNC share or a device, and opening one on Windows hands the engine's credentials to
+  that host), no `:` but the drive letter's, and no `?` or `*` (Win32 never allows
+  them in a file name, and `\??\UNC\…` or `\??\GLOBALROOT\Device\…` is an NT object
+  path that reaches the same hosts and devices). Its last component must not name a
+  DOS device, which Win32 opens in place of a file in any folder: a stem (the name
+  before the first `.`, without trailing spaces, in any case) of `CON`, `PRN`, `AUX`,
+  `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or
+  `CONOUT$`, so `C:\x\nul`, `\CON .png` and `/x/aux.txt` are refused and
+  `CONSOLE.png` or `COM10.png` is not. Earlier components may use these names: Win32
+  fails to open such a path, and elsewhere they are ordinary folders. An asset that
+  doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
@@ -661,8 +671,9 @@ YouTube command is an action or a query, so agents reach them over MCP too (0.20
   token goes to the OS credential store. Sent again while a sign-in waits, it returns
   the same URL.
 - `youtube.sign_out` revokes the token and forgets it.
-- `youtube.status` reports `auth`: `unavailable` (no Google OAuth client is configured, so
-  YouTube's API features are off and clients hide them; the user brings their own),
+- `youtube.status` reports `auth`: `unavailable` (the engine has no Google OAuth client, as
+  in a build whose built-in client is still empty, so YouTube's API features are off
+  and clients hide them),
   `signed_out`, `signing_in` or `signed_in`. `youtube.status_changed {auth}` reports
   each change, including Google refusing the account's token.
 - `youtube.list_broadcasts {status?, broadcast_type?, page_token?}` and

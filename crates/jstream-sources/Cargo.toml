@@ -21,7 +21,13 @@ ab_glyph_rasterizer.workspace = true
 # Image decoders (ADR-0031: pure-Rust image crates, the same on every platform).
 gif.workspace = true
 image-webp.workspace = true
+# The browser backend seam (`BrowserBackend`, ADR-0021): the `browser` kind's pages are
+# opened by an injected backend. Without its `cef` feature it is pure Rust.
+jstream-browser.workspace = true
 jstream-media.workspace = true
+# The GPU frame and audio-input types the `Source` seam hands the engine (`gpu_frame`,
+# `audio`).
+jstream-platform.workspace = true
 jstream-protocol.workspace = true
 png.workspace = true
 # Settings values and the kind descriptors' defaults (ADR-0025).
@@ -31,3 +37,7 @@ skrifa.workspace = true
 thiserror.workspace = true
 zune-core.workspace = true
 zune-jpeg.workspace = true
+
+[dev-dependencies]
+# The in-memory browser backend for the `browser` kind's tests (R-TEST-004).
+jstream-browser = { workspace = true, features = ["fake"] }

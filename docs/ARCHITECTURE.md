@@ -20,7 +20,6 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:2b244546dfef74f8", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Crate-map daemon row (N3) now says the daemon registers and publishes the virtual camera via a virtual_cam output, matching serve.rs windows_backends" }
 -->
 
 ```
@@ -54,15 +53,15 @@ verified = { hash = "b3:2b244546dfef74f8", by = "agent:claude@session_01Wfrx1wPt
 
 | Host (`apps/`) | What it is |
 |---|---|
-| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until CEF's sandbox and file limits land, opens browser sources' pages in CEF. |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-browser-helper` | Not a host: CEF's subprocess exe for browser sources, which hosts that turn on browser sources ship next to their own exe ([ADR-0046](adr/0046-browser-crate-and-helper.md), [its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
 ## Core principles
 <!-- @section
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited principle 8: listeners require a token and check Host, and Origin when present, matching R-SEC-002's new wording; other principles unchanged" }
 -->
 
 1. **One API.** Every capability is part of `jstream-protocol` ([R-ARCH-001](RULES.md#R-ARCH-001)).
@@ -83,7 +82,6 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:7f90b5a4097428aa", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Re-read against main.rs, which only adds docs merge-main to the usage list: the xtask line still names docs among its commands, so the layout holds" }
 -->
 
 ```
@@ -116,7 +114,6 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:2a0d214b4ec6124b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; core -> youtube edge and main's ui-e2e row both present; holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -132,6 +129,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 |---|---|---|---|
 | 0 | `jstream-types` | IDs, math (Vec/Mat/Transform3D), color, rational time, units | no |
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
+| 0 | `jstream-anim` | Keyframe-scene model ([ADR-0049](adr/0049-keyframe-scene-model-and-evaluation.md)): a variant's overrides and their inverses, effective values over the live parent, and the switch plan between keyframes; generic over geometry, no dependencies | no |
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
@@ -142,21 +140,23 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0041](adr/0041-youtube-interaction-scope-v3.md)). No media code. | no |
-| 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
+| 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
+| 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling. No GPU device | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
+| 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md)): the `BrowserBackend` seam, pages' audio hand-off and custom CSS, and the CEF off-screen backend (Windows, feature `cef`), which copies shared-texture paints onto the engine's device | **yes** |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
-| 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
+| 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording. Uses `encode`, `mux` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, CEF's subprocess exe ([ADR-0046](adr/0046-browser-crate-and-helper.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -167,7 +167,6 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:2d80bbed6d71cb80", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; kind line has YouTube { broadcast_id } and VirtualCam; holds" }
 -->
 
 ```
@@ -401,7 +400,6 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:6012cce52fa65794", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; main's render-snapshot paragraph (render thread loads lock-free, video.snapshot reads under the lock) kept as is; this PR's CLAP hosts paragraph (shared block and mixer side built, host/restarts/stats.tick not yet, dry-signal bypass) checked against rt/host.rs" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -426,7 +424,7 @@ next to its code, which that section covers: the output pipeline in
 [`jstream-core`'s runtime](../crates/jstream-core/README.md#runtime) and the audio and
 mixer threads in [`jstream-audio`'s real-time design](../crates/jstream-audio/README.md#realtime)
 ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)). Neither may contradict this
-model; a change that would edits it in the same PR.
+model; a change that would contradict it edits it in the same PR.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), M3, in progress: the shared block
 (`jstream-plugin-proto`) and the mixer's side of it (`jstream-audio`) are built; the
@@ -481,51 +479,53 @@ lock-free parameter channels. On the wire they are live values, committed by one
 at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
-The **render snapshot** is built. After every applied batch, undo and redo, every
-stored source frame and a collection file's load, the control side re-plans the program mix under the collection lock: the
-reachable scenes, the frames they show and the passes that draw them. It publishes
-that as the next render generation only when it draws something new, so a batch that
-touches nothing on program publishes nothing. The render thread loads it without the
-lock. `video.snapshot` reads it together with `rev` under the lock on the control path,
-and its thread only receives the snapshot. The render thread draws through a `jstream-render`
-resource cache keyed by source and by nested scene and depth. A frame that shows what
-the last one showed allocates no texture: an unchanged frame is not uploaded again and
-each nested scene is redrawn into the layer it had. An image no frame references is
-retired, then freed once the GPU has finished the last frame that used it (a
-`Queue::on_submitted_work_done` fence the cache polls without blocking). The render
-thread hands those images, and each render snapshot it replaces, to the program
-stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
-reader slot as the handover below says. When a fatal error stops its drawing it
-publishes the stopped marker too: it adopts nothing more and only repeats the frame it
-last drew until teardown. The audio and outputs snapshots are not built.
+The **render snapshot** is built. After every applied batch, undo and redo, every stored
+source frame and a collection file's load, the control side re-plans the program mix
+under the collection lock: the reachable scenes, the frames they show and the passes
+that draw them. It publishes that as the next render generation only when it draws
+something new, so a batch that touches nothing on program publishes nothing. The render
+thread loads it without the lock. `video.snapshot` reads it together with `rev` under
+the lock on the control path, and its thread only receives the snapshot. The render
+thread draws through a `jstream-render` resource cache keyed by source and by nested
+scene and depth. A frame that shows what the last one showed allocates no texture: an
+unchanged frame is not uploaded again and each nested scene is redrawn into the layer it
+had. An image no frame references is retired, then freed once the GPU has finished the
+last frame that used it (a `Queue::on_submitted_work_done` fence the cache polls without
+blocking). The render thread hands those images, and each render snapshot it replaces,
+to the program stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render
+thread stamps its reader slot as the handover below says. When a fatal error stops its
+drawing it publishes the stopped marker too: it adopts nothing more and only repeats the
+frame it last drew until teardown. The audio and outputs snapshots are not built.
 
 **Live-value handover** (decided; the render generation and its reader slot are built,
-the parameter channels and the gesture release are not): the engine learns that a real-time
-thread holds a committed snapshot through a **generation counter per subsystem**. Each
-time the control side publishes a subsystem's snapshot it bumps that subsystem's
-generation and stores it in the snapshot. Each real-time thread that reads the snapshot
-(the render thread for render, the mixer for audio) publishes the last generation it
-adopted with one atomic store when it picks up a new snapshot, which allocates, locks and
-waits on nothing ([R-RT-001](RULES.md#R-RT-001), [R-RT-002](RULES.md#R-RT-002)). When a
-gesture's committing batch applies, the control side notes the generation of the snapshot
-that carries it, and releases the gesture's live values from the parameter channels once
-every thread that reads them has reported a generation at least that high. Until then the
-parameter channel keeps the live value, so no frame shows the old value in between. The
-control side polls the published generations; the real-time threads never wait for it.
-A thread that isn't adopting snapshots counts as caught up, so a gesture's live values
-aren't held while it is stopped or parked (no output running, nothing to render, no
-device to mix for). Before it stops or parks it publishes a stopped marker in place of
-its generation, and it shows nothing while marked. Each reader's slot starts as
-the stopped marker, so a gesture committed before a thread has ever run waits on
-nothing. On starting or resuming it clears the marker before it loads a snapshot, and
-reads the parameter channels only after that load. So if the control side saw the
-marker and released a gesture, the thread's next load comes after the committing
-snapshot was published and already carries the committed value. That needs a store
-then load on each side (the thread clears the marker then loads the snapshot; the
-control side publishes the snapshot then reads the marker), which release and acquire
-alone don't order: the marker and generation stores and reads are `SeqCst`, with a
-`SeqCst` fence between each side's store and its load. A fence doesn't allocate, lock
-or wait, so R-RT-001 and R-RT-002 still hold.
+the parameter channels and the gesture release are not): the engine learns that a
+real-time thread holds a committed snapshot through a **generation counter per
+subsystem**. Each time the control side publishes a subsystem's snapshot it bumps that
+subsystem's generation and stores it in the snapshot. Each real-time thread that reads
+the snapshot (the render thread for render, the mixer for audio) publishes the last
+generation it adopted with one atomic store when it picks up a new snapshot, which
+allocates, locks and waits on nothing ([R-RT-001](RULES.md#R-RT-001),
+[R-RT-002](RULES.md#R-RT-002)). When a gesture's committing batch applies, the control
+side notes the generation of the snapshot that carries it, and releases the gesture's
+live values from the parameter channels once every thread that reads them has reported a
+generation at least that high. Until then the parameter channel keeps the live value, so
+no frame shows the old value in between. The control side polls the published
+generations; the real-time threads never wait for it. A thread that isn't adopting
+snapshots counts as caught up, so a gesture's live values aren't held while it is
+stopped or parked (no output running, nothing to render, no device to mix for). Before
+it stops or parks it publishes a stopped marker in place of its generation, and it shows
+nothing while marked. Each reader's slot starts as the stopped marker, so a gesture
+committed before a thread has ever run waits on nothing. On starting or resuming it
+clears the marker before it loads a snapshot, to a value below every generation (so it
+counts as caught up with nothing until it adopts one), and reads the parameter channels
+only after that load. So if the control side saw the marker and released a gesture, the
+thread's next load comes after the committing snapshot was published and already carries
+the committed value. That needs a store then load on each side (the thread clears the
+marker then loads the snapshot; the control side publishes the snapshot then reads the
+marker), which release and acquire alone don't order: the marker and generation stores
+and reads are `SeqCst`, with a `SeqCst` fence between each side's store and its load. A
+fence doesn't allocate, lock or wait, so [R-RT-001](RULES.md#R-RT-001) and
+[R-RT-002](RULES.md#R-RT-002) still hold.
 
 The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
 reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
@@ -538,7 +538,6 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:feda8e47422ad55f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; YouTube bullet says since protocol 0.20 beside the 0.19 audio text; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -632,7 +631,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   and `youtube.health_changed` (a running YouTube output's stream health); and the RTMP
   target `youtube { broadcast_id }`, which `output.start` resolves to the bound stream's
   `rtmps://` ingest and key through the Live API. All of these need a Google OAuth
-  client the user configured themselves (JStream embeds none); without one
+  client: the one built into JStream (ADR-0058, empty until the maintainer fills it
+  in) or a developer's override; without one
   `youtube.status` reports `unavailable`, the rest fail with `action_failed`, and
   clients hide them. Streaming to YouTube with a stream key needs none of this. Planned
   for M3:
@@ -684,13 +684,14 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:b58873c633f72613", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 94fb25d (D5 audio 0.19, G3b virtual_cam 0.18, #295, #331, #309): re-read; noun list has audio, bus, send and youtube when configured; tools.snap is 192,482 bytes, about 192 KB; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
-  as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
-  schema is generated from the protocol.
+  (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
+  output edit with a `youtube` target is refused, and `youtube.*` events stay out of
+  the `events` feed: YouTube is for people, through
+  the UI (ADR-0058 §3, proposed in #435).
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -699,7 +700,7 @@ verified = { hash = "b3:b58873c633f72613", by = "agent:claude@session_016BkTSqJ3
   about ten a second while the mixer runs, is kept the same way, as `meters`.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 192 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 180 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -729,7 +730,6 @@ verified = { hash = "b3:b58873c633f72613", by = "agent:claude@session_016BkTSqJ3
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:dc199b6560c865f5", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -818,11 +818,13 @@ the output gets a black frame. None of this is built yet.
 ## Browser source
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:cd6c3960b512a104", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review: sandbox is required where supported (bootstrap layout may replace the helper, or a superseding ADR), zip-size estimate marked unchecked and listed as open, pts wording and all three packet counts (2999/3000/2999) re-checked against the run JSON" }
 -->
 
 A browser source is a CEF off-screen browser
-([ADR-0021](adr/0021-browser-source.md)), not built yet. Each `OnAcceleratedPaint`
+([ADR-0021](adr/0021-browser-source.md)), built in `jstream-browser`
+([ADR-0046](adr/0046-browser-crate-and-helper.md),
+[its README](../crates/jstream-browser/README.md)). The desktop app wires it in behind
+its off-by-default `cef` feature; the daemon and the program mix don't use it yet. Each `OnAcceleratedPaint`
 hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
 and no fence. CEF takes the texture back into its pool when the callback returns. So the
 callback opens the handle on the wgpu D3D12 device, imports it through hal as in the GPU
@@ -886,7 +888,6 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:e9fce11408a54542", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): collections bullet (schema_version, forward migrations, checks as edits) holds; the sends fix needs no migration since schema 1 files load as before" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
@@ -908,7 +909,6 @@ verified = { hash = "b3:e9fce11408a54542", by = "agent:claude@session_01D4rY84zM
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:981e101ec9dc1d4b", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: the virtual camera bullet now says the daemon is the --register-vcam mode until the desktop app has it (the app exists but lacks that mode); rest unchanged" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
