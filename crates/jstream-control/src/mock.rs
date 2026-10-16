@@ -1794,6 +1794,9 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
         "must be at most 1024 bytes"
     } else if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
         "must not contain whitespace or control characters"
+    } else if !key.is_ascii() {
+        // No streaming service issues one; a leading U+FEFF is the usual case (#441).
+        "must contain only ASCII characters"
     } else {
         return Ok(());
     };
@@ -3590,6 +3593,8 @@ mod tests {
                 "secret\u{7}",
                 "must not contain whitespace or control characters",
             ),
+            ("\u{FEFF}secret", "must contain only ASCII characters"),
+            ("s\u{e9}cret", "must contain only ASCII characters"),
         ] {
             let error = set("yt", key).expect_err("bad key");
             assert_eq!(

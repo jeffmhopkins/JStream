@@ -175,7 +175,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   encoders, so `output.status` reports no encoder session and zero sessions;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
-  `key`) for an empty, over-long or whitespace key; `output.clear_key` always succeeds.
+  `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII
+  characters; `output.clear_key` always succeeds.
   The keys live in memory, outside the collection: no `rev`, no event, kept when their
   output is deleted. `output.status` reports `key_set` from them, and
   `MockEngine::stream_key` lets a client test check what was stored. Unlike an

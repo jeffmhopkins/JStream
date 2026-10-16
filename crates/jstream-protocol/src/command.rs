@@ -539,7 +539,7 @@ pub enum Action {
     /// edit: the key is not collection state, so it is never undone. A running output
     /// uses the new key from its next `output.start`. Fails with `not_found` for an
     /// output not in the collection, `invalid_argument` (field `key`) for an empty key,
-    /// one over 1024 bytes or one with whitespace or control characters, and
+    /// one over 1024 bytes or one with whitespace, control or non-ASCII characters, and
     /// `action_failed` when the engine has no credential store or the store refuses.
     #[serde(rename = "output.set_key")]
     OutputSetKey {

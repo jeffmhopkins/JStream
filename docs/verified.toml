@@ -222,7 +222,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:028b0382eca63259", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: still 19 tools incl. preview (tests.rs:413), tools.snap 183139 bytes; #296 hello bound text is the wave's; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:99ac70785f202198", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): tool list incl. preview matches tools.rs/tests (19 tools); tools.snap is 183139 bytes so 'about 183 KB' holds; preview.subscribe fails with action_failed over MCP" }
+stamp = { hash = "b3:bce63220288c457e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "MCP section: tools.snap changed only in output.set_key's description text (now names non-ASCII); tool list, schema delivery and snapshot statements hold" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -300,7 +300,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:07915c072e50c894" }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:19f498d3756ec793", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
+stamp = { hash = "b3:8b63b7add297097b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream keys bullet (actions, write-only, key_set) still holds; the non-ASCII refusal of output.set_key adds no command, version or rule stated there" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:a421c4283dce201f", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
@@ -312,7 +312,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:348f342795dc88ae", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:4b5df814fc6aaadb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream keys bullet (actions, write-only, key_set) still holds; the non-ASCII refusal of output.set_key adds no command, version or rule stated there" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -336,13 +336,13 @@ stamp = { hash = "b3:21d26c102287211d", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:3cc940ee388748ab", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e0cb44e8efdae762", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
+stamp = { hash = "b3:20ccca0424b40947", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream keys bullet (actions, write-only, key_set) still holds; the non-ASCII refusal of output.set_key adds no command, version or rule stated there" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:00b08a8a958896ed", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
+stamp = { hash = "b3:ab171f8d2546bf53", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream keys bullet (actions, write-only, key_set) still holds; the non-ASCII refusal of output.set_key adds no command, version or rule stated there" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -828,7 +828,7 @@ stamp = { hash = "b3:81f5ba35d6efa0cd" }
 stamp = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): stale via control design; CLI opens no binary channel; holds" }
+stamp = { hash = "b3:1495d6a745620147", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the control README mock change (mock set_key now refuses non-ASCII keys): CLI stream-key and mock text states no engine key-shape rule, still holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
@@ -897,7 +897,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c7379cddeb275056" }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): main's error-event and e2e-test text merged; binary() bullet (N3 wording) holds; the e2e tests don't cover the binary path, and nothing here says they do" }
+stamp = { hash = "b3:1495d6a745620147", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Mock paragraph now says set_key refuses whitespace, control or non-ASCII characters, matching mock.rs check_key and the engine; parity text unaffected" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
@@ -921,7 +921,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:348f342795dc88ae", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:4b5df814fc6aaadb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Mock paragraph now says set_key refuses whitespace, control or non-ASCII characters, matching mock.rs check_key and the engine; parity text unaffected" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -951,7 +951,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:348f342795dc88ae", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:4b5df814fc6aaadb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose describes the mock and crate contents; the mock's stricter key check changes none of it" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -966,10 +966,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:0ddc9a76eeb853c7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): Cargo.toml keeps zune-jpeg dev-dep beside E3b's windows dev-dep table; E3b's capture path is the program stage's, the preview passes None as capture so a display source still draws nothing as the Preview streams text says; holds" }
+stamp = { hash = "b3:09b6b819bef98565", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream keys paragraph now lists non-ASCII among the refused key shapes (#441); re-read the rest of Design against the check_key change: no other key rule stated" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): stale via control/protocol design and tests.rs; Preview streams text unchanged and matches preview/mod.rs; holds" }
+stamp = { hash = "b3:1495d6a745620147", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream keys paragraph now lists non-ASCII among the refused key shapes (#441); re-read the rest of Design against the check_key change: no other key rule stated" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
 stamp = { hash = "b3:e64d4c4f8eb61304", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): Cargo.toml keeps zune-jpeg dev-dep beside E3b's windows dev-dep table; E3b's capture path is the program stage's, the preview passes None as capture so a display source still draws nothing as the Preview streams text says; holds" }
@@ -1005,7 +1005,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:d94c0be86ccbfc61", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: wave's browser and live-audio text merged; Preview streams text unchanged and matches preview/mod.rs and engine.rs:2006; holds" }
+stamp = { hash = "b3:54f7916e32a83178", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream keys paragraph now lists non-ASCII among the refused key shapes (#441); re-read the rest of Design against the check_key change: no other key rule stated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1059,7 +1059,7 @@ stamp = { hash = "b3:62d7ac855f8e3c18", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:2a9b879f1299c571", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): Cargo.toml keeps zune-jpeg dev-dep beside E3b's windows dev-dep table; E3b's capture path is the program stage's, the preview passes None as capture so a display source still draws nothing as the Preview streams text says; holds" }
+stamp = { hash = "b3:5d85d4d0854993a4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream keys paragraph now lists non-ASCII among the refused key shapes (#441); re-read the rest of Design against the check_key change: no other key rule stated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
@@ -1110,7 +1110,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:d94c0be86ccbfc61", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: engine.rs gains with_browser and audio.sync(live.audio()); PreviewSource for Shared unchanged; Preview bullet holds" }
+stamp = { hash = "b3:54f7916e32a83178", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose lists engine.rs contents and set_key routing only; the added non-ASCII refusal in check_key and its test change nothing stated there" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1164,7 +1164,7 @@ stamp = { hash = "b3:62d7ac855f8e3c18", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:2a9b879f1299c571", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): E3b's GPU capture text merged; preview bullet holds (own headless compositor, snapshot::compose with no capture)" }
+stamp = { hash = "b3:5d85d4d0854993a4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose lists engine.rs contents and set_key routing only; the added non-ASCII refusal in check_key and its test change nothing stated there" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
@@ -1227,7 +1227,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:0ddc9a76eeb853c7", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at 99ecf2b (#219 E3b GPU capture, #408, #413, #414): stale via core design; daemon text is the wave's; holds" }
+stamp = { hash = "b3:09b6b819bef98565", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Going-live and logging bullets re-read against the core Stream keys change (non-ASCII keys refused at set_key); nothing there states key shape rules" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:06af0b68f544ac32", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: stale via core/server design; daemon text is the wave's; holds" }
@@ -2085,13 +2085,13 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:3cc940ee388748ab", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e0cb44e8efdae762", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:20ccca0424b40947", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream-key and compatibility text still hold: errors use fixed reasons that never quote the key; a tighter set_key check with an existing error code adds/removes nothing, so no minor/major bump; snapshot regenerated via INSTA_UPDATE" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:00b08a8a958896ed", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:ab171f8d2546bf53", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream-key and compatibility text still hold: errors use fixed reasons that never quote the key; a tighter set_key check with an existing error code adds/removes nothing, so no minor/major bump; snapshot regenerated via INSTA_UPDATE" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2157,7 +2157,7 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:00b08a8a958896ed", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
+stamp = { hash = "b3:ab171f8d2546bf53", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose lists Action variants and SecretString; only OutputSetKey's doc text (non-ASCII refusal) and protocol.snap description changed, no new wire element" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2334,7 +2334,7 @@ stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:06af0b68f544ac32", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: #296 races the engine's hello against the deadline; events and binary() are still opened only after Some(Ok(welcome)) (session.rs:184-186); Preview frames bullet holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): run drops events and binary before finish, which sends only the JSON outbox, then main's close handshake reads and drops what the client sends (binary included); Preview frames bullet and main's close text agree" }
+stamp = { hash = "b3:1495d6a745620147", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the control README mock change (set_key non-ASCII refusal): server design names no stream-key rules; holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:2cf402350445627c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
@@ -2541,7 +2541,7 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:263637b2f03e8558", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): stale via control design; UI preview still not hooked up; holds" }
+stamp = { hash = "b3:1495d6a745620147", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the control README mock change: UI stream-key bullet (write-only, trims a pasted newline, key_set) still holds; refusal arrives as invalid_argument" }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
