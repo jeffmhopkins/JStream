@@ -741,9 +741,9 @@ a lock ([R-RT-003](../../docs/RULES.md#R-RT-003)). Each tick the tap copies the
 program frame (RGBA) into a buffer the camera thread handed back and sends it,
 without blocking: with a frame still waiting, it drops this one and counts it in
 `output_stats`' output drops. The camera thread converts each frame to BGRA at the
-canvas size (as is when the program frame is the canvas size, otherwise, when the
-canvas changed after the program stage opened, fitted inside it, centred, by nearest
-neighbour, with black bars), publishes it and hands the
+canvas size (as is when the program frame is the canvas size, otherwise fitted inside
+it, centred, by nearest neighbour, with black bars: when the canvas changed after the
+program stage opened, or has an odd edge, which the stage rounds down to even), publishes it and hands the
 buffer back. It runs beside streams and recordings on the same program frame, and
 `output_stats` counts no encoder input for it. A publish error fails that output
 alone, through its own failure line; the others keep running. Once the camera thread

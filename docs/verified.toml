@@ -882,7 +882,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:071621e792175828", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:4e3e5143a4067a68", by = "agent:claude", note = "B1: vcam paragraph now names both fit cases (canvas changed after stage open, or odd edge rounded down by output_size)" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
