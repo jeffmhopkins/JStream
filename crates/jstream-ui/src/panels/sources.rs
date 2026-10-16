@@ -130,6 +130,8 @@ fn place_edits(
         source_id,
         transform: None,
         geometry: ItemGeometry::covering_canvas(canvas.width, canvas.height).ok(),
+        opacity: None,
+        blend: None,
     });
     edits
 }
@@ -423,8 +425,8 @@ mod tests {
     use super::{Choice, default_name, place_edits, rows};
     use crate::store::Collection;
     use jstream_control::protocol::{
-        Canvas, Crop, Edit, ItemInfo, ItemTransform, KindCategory, KindSummary, PlacementForm,
-        SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
+        Canvas, Crop, Edit, Finite32, ItemInfo, ItemTransform, KindCategory, KindSummary,
+        PlacementForm, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
     };
 
     fn collection() -> Collection {
@@ -436,6 +438,8 @@ mod tests {
             geometry: None,
             crop: Crop::NONE,
             visible,
+            opacity: Finite32::ONE,
+            blend: Default::default(),
         };
         Collection {
             canvas: Canvas {
@@ -451,6 +455,7 @@ mod tests {
                 settings: Default::default(),
                 duplicated_from: None,
                 audio: None,
+                filters: Default::default(),
             }],
             scenes: vec![SceneInfo {
                 scene_id: "main".into(),

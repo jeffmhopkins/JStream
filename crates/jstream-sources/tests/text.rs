@@ -330,8 +330,7 @@ fn a_font_asset_is_read_and_a_bad_one_is_an_error() {
             app: None,
         },
         limits: Limits::default(),
-        audio: None,
-        media: None,
+        ..Context::default()
     };
     let font = |path: &str| {
         Reference::Asset {

@@ -29,7 +29,8 @@ Contents ([Design](#design) explains the choices):
   from the session's events. It owns the routing: which panel sits in which region, and
   the inspector's pages. `SessionContext` gives components the open session.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
-  app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there.
+  app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
+  and `desktop_vcam()`, what that global says about the virtual camera.
 - **Session** (`session.rs`): `Session` (the connection and the engine's `welcome`),
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
   and `engine_url_for_page`, the engine URL the connect form offers.
@@ -42,11 +43,11 @@ Contents ([Design](#design) explains the choices):
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
   (`sources.rs`), the properties form (`properties.rs`) and the delete confirmation
   they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel, an inspector
-  page (creating, editing and deleting outputs, their stream keys, start and stop,
-  go-live and the pipeline's health), and the calls and logic behind it, tested
-  natively against `MockEngine`; and `mixer.rs`: `Mixer`, the audio mixer along the
-  bottom (faders, mutes, routing and buses, with meters and the master's loudness),
-  also tested natively against `MockEngine`.
+  page (creating, editing and deleting streams, recordings and the virtual camera, their
+  stream keys, start and stop, go-live and the pipeline's health), and the calls and
+  logic behind it, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
+  audio mixer along the bottom (faders, mutes, routing and buses, with meters and the
+  master's loudness), also tested natively against `MockEngine`.
 - **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
   over a placeholder background, edits their geometry with the pointer and the
   keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
@@ -70,7 +71,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   served the page behind HTTP Basic with the token as the password: the browser's
   cached Basic credentials then carry the token on the upgrade, and no token
   subprotocol is sent. A remote browser will pair with a one-time code instead
-  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)); that isn't built yet. In the desktop app the form is skipped: the
+  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): the server side is built
+  (`pairing.start` and `POST /api/v1/pair`,
+  [jstream-server › Design](../jstream-server/README.md#design)), the UI's pairing form
+  isn't ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md) decides
+  it). In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). That connection carries the
   token in the subprotocol, which `jstream-server` accepts
@@ -136,13 +141,23 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Outputs.** The panel reads the outputs and encoder profiles with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
-  creates RTMP(S) and recording outputs (IDs `output-N`, the first free one), changes
+  creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
   output, and starts and stops each. "Go live" starts every stopped or failed RTMP
   output whose stream key is set, and "End stream" stops the running ones; recordings
   have only their own buttons. Both try every output, even after one fails, and report
   each failure. An RTMP output without a key can't be started from the
-  panel. The health line sums `stats.tick`'s drop totals over the last five ticks; a
+  panel.
+  A virtual camera output (`virtual_cam`) has no target, key or encoder profile, so its
+  card shows none of them; neither "Go live" nor "End stream" touches it. The card says
+  what the page knows of the camera's registration. Only the desktop app knows (its global's `vcam`,
+  read in `host.rs`): there an unregistered camera, or one turned off with `--no-vcam`,
+  can't be started, and the card gives the `jstream-daemon --register-vcam` hint. In a
+  browser the page can't tell, so it lets the engine decide and explains its refusal:
+  an unregistered camera ("is not registered") gets the full registration command, and
+  an engine with no camera at all ("no virtual camera": not running on Windows, or the
+  desktop app's `--no-vcam`) gets that, with no registration advice; on Windows 10 the
+  sink's own reason ("it needs Windows 11") is shown as it is. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its

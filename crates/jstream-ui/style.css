@@ -273,6 +273,8 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .output-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .output .target { margin: 0; color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
 .output .hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.output .vcam-status { margin: 0; font-size: 0.85rem; }
+.output .vcam-status.unregistered { color: var(--muted); }
 .output .buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .output .encoder, .new-output label { display: grid; gap: 0.25rem; color: var(--muted); font-size: 0.85rem; }
 .outputs form.inline { display: flex; gap: 0.4rem; }

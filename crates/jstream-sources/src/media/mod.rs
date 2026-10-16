@@ -416,7 +416,7 @@ impl Source for MediaSource {
         Some(MediaTime::new(next, Timebase::MICROS))
     }
 
-    fn audio(&self) -> Option<MediaAudio> {
+    fn sound(&self) -> Option<MediaAudio> {
         self.audio.clone()
     }
 

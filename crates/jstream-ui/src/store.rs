@@ -561,6 +561,8 @@ mod tests {
                 source_id: "red".into(),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
             Edit::ItemAdd {
                 scene_id: "a".into(),
@@ -568,6 +570,8 @@ mod tests {
                 source_id: "nest".into(),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
             Edit::ItemAdd {
                 scene_id: "b".into(),
@@ -575,6 +579,8 @@ mod tests {
                 source_id: "red".into(),
                 transform: None,
                 geometry: None,
+                opacity: None,
+                blend: None,
             },
         ];
         let batch = session.control.call(Call::Batch(Batch {

@@ -3,11 +3,12 @@
 //!
 //! The edges are: a scene depends on each source its items place; a `scene` source
 //! depends on the scene it shows; and a source depends on every scene, source and bus
-//! its settings refer to. [`edges`] lists what a node depends on, for the cycle check,
-//! and [`blockers`] lists what depends on a node, for the delete check and
-//! `delete.plan`; both read the same three kinds of edge. A bus depends on nothing, so
-//! an edge into one never closes a cycle; it only blocks the bus's delete. Asset
-//! references name files, which are outside the state, so they are not edges.
+//! its settings, or its filters' settings (ADR-0026), refer to. [`edges`] lists what a
+//! node depends on, for the cycle check, and [`blockers`] lists what depends on a node,
+//! for the delete check and `delete.plan`; both read the same three kinds of edge. A bus
+//! depends on nothing, so an edge into one never closes a cycle; it only blocks the
+//! bus's delete. Asset references name files, which are outside the state, so they are
+//! not edges.
 
 use crate::model::State;
 use jstream_protocol::{Blocker, BusId, EntityKind, Reference, SceneId, SourceId, SourceKind};
@@ -53,12 +54,14 @@ fn edges(state: &State, node: &Node) -> Vec<Node> {
             if let SourceKind::Scene { scene_id } = &source.kind {
                 out.push(Node::Scene(scene_id.clone()));
             }
-            out.extend(
-                source
-                    .settings
-                    .references()
-                    .filter_map(|(_, reference)| reference_node(&reference)),
-            );
+            let filters = source.filters.all().map(|(_, filter)| &filter.settings);
+            for settings in std::iter::once(&source.settings).chain(filters) {
+                out.extend(
+                    settings
+                        .references()
+                        .filter_map(|(_, reference)| reference_node(&reference)),
+                );
+            }
             out
         }
         Node::Bus(_) => Vec::new(),
@@ -132,8 +135,9 @@ fn dfs(
 /// Everything that stops `target`'s delete, in a stable order: the items that place a
 /// source (scene display order, then stacking order), the `scene` sources that show a
 /// scene (ID order), then every settings value that refers to the target (source ID
-/// order, then parameter order). A bus is held only by settings values (its sends go
-/// with it). `delete.plan` removes exactly these.
+/// order; the source's own settings in parameter order, then each filter's, in chain
+/// order, as `filters.<filter_id>.<param>`). A bus is held only by settings values (its
+/// sends go with it). `delete.plan` removes exactly these.
 pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
     let mut out = Vec::new();
     match target {
@@ -172,6 +176,19 @@ pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
                     field: format!("settings.{param}"),
                 }),
         );
+        for (_, filter) in source.filters.all() {
+            out.extend(
+                filter
+                    .settings
+                    .references()
+                    .filter(|(_, r)| reference_node(r).as_ref() == Some(target))
+                    .map(|(param, _)| Blocker {
+                        entity: EntityKind::Source,
+                        id: source.id.as_str().to_owned(),
+                        field: format!("filters.{}.{param}", filter.id),
+                    }),
+            );
+        }
     }
     out
 }
