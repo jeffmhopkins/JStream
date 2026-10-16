@@ -11,10 +11,12 @@
 
 use crate::audio::AudioFollow;
 use crate::encoder::EncoderProfile;
+use crate::filter::{FilterChain, FilterOwner};
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::id::{
-    BusId, DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId,
+    BusId, DeviceId, EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId, Rev, SceneId,
+    SourceId,
 };
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::preview::PreviewCodec;
@@ -100,12 +102,19 @@ pub enum Edit {
         /// `item.set_geometry`'s.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         geometry: Option<ItemGeometry>,
+        /// The initial opacity, checked like `item.set_opacity`'s. Omitted means 1.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        opacity: Option<Finite32>,
+        /// The initial blend mode, checked like `item.set_blend`'s. Omitted means
+        /// `normal`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        blend: Option<BlendMode>,
     },
     /// Removes an item from its scene. The source itself stays. Inverse: `item.add` with
-    /// the removed item's scene, ID and source, and its placement in the field matching
-    /// its form (`transform` or `geometry`), then `item.reorder` to its old stacking
-    /// position (unless it was on top), `item.set_crop` if it was cropped, and
-    /// `item.set_visible` if it was hidden.
+    /// the removed item's scene, ID and source, its placement in the field matching its
+    /// form (`transform` or `geometry`), and its opacity and blend where they differ from
+    /// the defaults, then `item.reorder` to its old stacking position (unless it was on
+    /// top), `item.set_crop` if it was cropped, and `item.set_visible` if it was hidden.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -172,6 +181,30 @@ pub enum Edit {
         scene_id: Option<SceneId>,
         /// Whether the item is drawn. Items are visible when added.
         visible: bool,
+    },
+    /// Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by
+    /// `opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items
+    /// are added at 1. Inverse: `item.set_opacity` with the previous value.
+    #[serde(rename = "item.set_opacity")]
+    ItemSetOpacity {
+        /// The item to change.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+        /// The alpha multiplier, from 0 (invisible) to 1 (as the source draws it).
+        opacity: Finite32,
+    },
+    /// Changes how an item composites onto what is below it (ADR-0023 §1). A mode the
+    /// compositor doesn't draw yet is `invalid_argument`, so stored state never claims
+    /// something that isn't drawn; today that is every mode but `normal`. Inverse:
+    /// `item.set_blend` with the previous mode.
+    #[serde(rename = "item.set_blend")]
+    ItemSetBlend {
+        /// The item to change.
+        item_id: ItemId,
+        /// The new blend mode. Items are added with `normal`.
+        blend: BlendMode,
     },
     /// Moves an item to another stacking position in its scene. Inverse: `item.reorder`
     /// back to its previous index.
@@ -258,8 +291,8 @@ pub enum Edit {
         /// Parameter ID to new value, or `null` for the default.
         patch: Settings,
     },
-    /// Copies a source under a new ID: a separate instance with the same kind,
-    /// settings, audio settings and sends, which changes independently from then on. The copy's `duplicated_from`
+    /// Copies a source under a new ID: a separate instance with the same kind, settings,
+    /// filters (with the same filter IDs), audio settings and sends, which changes independently from then on. The copy's `duplicated_from`
     /// names the source it was copied from. Placing the *same* source again is `item.add`
     /// with its existing `source_id`. Inverse: `source.delete` of the copy.
     #[serde(rename = "source.duplicate")]
@@ -272,17 +305,93 @@ pub enum Edit {
         name: String,
     },
     /// Deletes a source. Rejected with `invalid_argument` while any item still places it,
-    /// or any source's settings refer to it: remove those items, or clear those
-    /// references, first (in the same batch if needed). Deleting a source that others were
-    /// copied from is allowed: their `duplicated_from` then reads as absent. Its sends go
-    /// with it. Inverse: `source.create` with its name, kind, settings and
+    /// or any source's or filter's settings refer to it: remove those items, or clear
+    /// those references, first (in the same batch if needed). Deleting a source that
+    /// others were copied from is allowed: their `duplicated_from` then reads as absent.
+    /// Its sends go with it. Inverse: `source.create` with its name, kind, settings and
     /// `duplicated_from`, then `send.remove` of its master send if it had none,
-    /// `send.set` for each send that `source.create` doesn't restore as it was, and
-    /// `source.set_audio` if its audio settings were not the defaults.
+    /// `send.set` for each send that `source.create` doesn't restore as it was,
+    /// `source.set_audio` if its audio settings were not the defaults, and `filter.add`
+    /// for each of its filters, video chain first, in chain order.
     #[serde(rename = "source.delete")]
     SourceDelete {
         /// The source to delete.
         source_id: SourceId,
+    },
+    /// Adds a filter to one of a source's chains (ADR-0026). Rejected with `not_found` if
+    /// the owner doesn't exist, `already_exists` if it has a filter with this ID, and
+    /// `invalid_argument` if the source has no such chain, the chain is full
+    /// ([`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS)), `kind` is not a filter kind of
+    /// that chain (`video_filter` or `audio_filter`), a setting fails its descriptor as in
+    /// `source.create`, a reference in the settings would close a cycle, or `index` is
+    /// past the end. Inverse: `filter.remove`.
+    #[serde(rename = "filter.add")]
+    FilterAdd {
+        /// What owns the chain.
+        owner: FilterOwner,
+        /// Which chain.
+        chain: FilterChain,
+        /// The new filter's ID, chosen by the client, unique within its owner.
+        filter_id: FilterId,
+        /// The filter's kind, as `kind.list` reports it.
+        kind: String,
+        /// Initial settings, checked against the kind's descriptor and completed with its
+        /// defaults, as `source.create`'s are. Omitted means all defaults.
+        #[serde(default, skip_serializing_if = "Settings::is_empty")]
+        settings: Settings,
+        /// Whether it runs. Omitted means enabled.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        /// Its position in the chain, counted from the first filter (0). Must be at most
+        /// the number of filters already in the chain. Omitted means last.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
+    },
+    /// Removes a filter from its chain. Inverse: `filter.add` with its chain, kind,
+    /// settings, `enabled: false` if it was disabled, and its index.
+    #[serde(rename = "filter.remove")]
+    FilterRemove {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to remove.
+        filter_id: FilterId,
+    },
+    /// Turns a filter on or off. A disabled filter stays in its chain and keeps its
+    /// settings, and is bypassed. Inverse: `filter.set_enabled` with the previous value.
+    #[serde(rename = "filter.set_enabled")]
+    FilterSetEnabled {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to change.
+        filter_id: FilterId,
+        /// Whether it runs.
+        enabled: bool,
+    },
+    /// Changes some of a filter's settings, with `source.set_settings`'s rules: each entry
+    /// is checked against the kind's descriptor, `null` resets a parameter to its default
+    /// (a reference to none), and a reference that would make a cycle is
+    /// `invalid_argument` naming it. Inverse: `filter.set_settings` with the patched
+    /// parameters' previous values.
+    #[serde(rename = "filter.set_settings")]
+    FilterSetSettings {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to change.
+        filter_id: FilterId,
+        /// Parameter ID to new value, or `null` for the default.
+        patch: Settings,
+    },
+    /// Moves a filter to another position in its own chain. Inverse: `filter.reorder`
+    /// back to its previous index.
+    #[serde(rename = "filter.reorder")]
+    FilterReorder {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to move.
+        filter_id: FilterId,
+        /// The new position, counted from the first filter (0). Must be less than the
+        /// number of filters in its chain, else `invalid_argument`.
+        index: u32,
     },
     /// Moves a scene to another display position. Inverse: `scene.reorder` back to its
     /// previous index.
@@ -486,12 +595,19 @@ impl Edit {
             Edit::ItemReorder { .. } => "item.reorder",
             Edit::SceneReorder { .. } => "scene.reorder",
             Edit::ItemSetCrop { .. } => "item.set_crop",
+            Edit::ItemSetOpacity { .. } => "item.set_opacity",
+            Edit::ItemSetBlend { .. } => "item.set_blend",
             Edit::ItemSetSource { .. } => "item.set_source",
             Edit::SourceCreate { .. } => "source.create",
             Edit::SourceRename { .. } => "source.rename",
             Edit::SourceSetSettings { .. } => "source.set_settings",
             Edit::SourceDuplicate { .. } => "source.duplicate",
             Edit::SourceDelete { .. } => "source.delete",
+            Edit::FilterAdd { .. } => "filter.add",
+            Edit::FilterRemove { .. } => "filter.remove",
+            Edit::FilterSetEnabled { .. } => "filter.set_enabled",
+            Edit::FilterSetSettings { .. } => "filter.set_settings",
+            Edit::FilterReorder { .. } => "filter.reorder",
             Edit::OutputCreate { .. } => "output.create",
             Edit::OutputSetTarget { .. } => "output.set_target",
             Edit::OutputDelete { .. } => "output.delete",
@@ -859,6 +975,78 @@ impl Crop {
     };
 }
 
+/// How an item composites onto what is below it (ADR-0023 §1, register D13).
+///
+/// The list is the modes the UI offers. The compositor blends in linear light and draws
+/// `normal` only so far; the engine rejects every other mode with `invalid_argument`
+/// until it draws it, so a client can read the list without the engine claiming it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum BlendMode {
+    /// Source-over: the item covers what is below it, by its alpha.
+    #[default]
+    Normal,
+    /// Adds the item's colour to what is below it.
+    Additive,
+    /// Multiplies the colours, which darkens.
+    Multiply,
+    /// The inverse of multiplying the inverses, which lightens.
+    Screen,
+    /// Multiply or screen, depending on the colour below.
+    Overlay,
+    /// The darker of the two colours, per channel.
+    Darken,
+    /// The lighter of the two colours, per channel.
+    Lighten,
+    /// The absolute difference of the colours.
+    Difference,
+    /// Like difference, with lower contrast.
+    Exclusion,
+}
+
+impl BlendMode {
+    /// Every mode, in the order the UI lists them.
+    pub const ALL: [BlendMode; 9] = [
+        BlendMode::Normal,
+        BlendMode::Additive,
+        BlendMode::Multiply,
+        BlendMode::Screen,
+        BlendMode::Overlay,
+        BlendMode::Darken,
+        BlendMode::Lighten,
+        BlendMode::Difference,
+        BlendMode::Exclusion,
+    ];
+
+    /// The mode with this wire name.
+    pub fn from_name(name: &str) -> Option<BlendMode> {
+        BlendMode::ALL
+            .into_iter()
+            .find(|mode| mode.as_str() == name)
+    }
+
+    /// Whether this is the default mode, `normal`.
+    pub fn is_normal(&self) -> bool {
+        *self == BlendMode::Normal
+    }
+
+    /// The mode's wire name (`normal`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BlendMode::Normal => "normal",
+            BlendMode::Additive => "additive",
+            BlendMode::Multiply => "multiply",
+            BlendMode::Screen => "screen",
+            BlendMode::Overlay => "overlay",
+            BlendMode::Darken => "darken",
+            BlendMode::Lighten => "lighten",
+            BlendMode::Difference => "difference",
+            BlendMode::Exclusion => "exclusion",
+        }
+    }
+}
+
 /// What a source shows.
 ///
 /// Serialized with an internal `type` tag. A source is one shared instance: every item
@@ -908,7 +1096,7 @@ impl SceneRole {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, Batch, Command, CommandClass, Edit, SceneRole};
+    use super::{Action, Batch, BlendMode, Command, CommandClass, Edit, SceneRole};
     use crate::id::{IdempotencyKey, OutputId, Rev, SceneId};
     use serde_json::json;
 
@@ -999,6 +1187,16 @@ mod tests {
             assert!(serde_json::from_str::<Edit>(&text).is_err(), "{x} accepted");
         }
         assert_eq!(super::Vec2::new(f32::INFINITY, 0.0), None);
+    }
+
+    /// `as_str` is the wire name serde writes, for every mode, and `from_name` reads it.
+    #[test]
+    fn blend_mode_names_match_the_wire() {
+        for mode in BlendMode::ALL {
+            assert_eq!(serde_json::to_value(mode).ok(), Some(json!(mode.as_str())));
+            assert_eq!(BlendMode::from_name(mode.as_str()), Some(mode));
+        }
+        assert_eq!(BlendMode::from_name("dissolve"), None);
     }
 
     #[test]

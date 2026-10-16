@@ -101,6 +101,8 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
         source_id: SourceId::new(source),
         transform: None,
         geometry: None,
+        opacity: None,
+        blend: None,
     }
 }
 
@@ -2001,6 +2003,8 @@ fn video_snapshot_draws_a_geometry_on_the_collection_canvas() {
                     source_id: SourceId::new("webcam"),
                     transform: None,
                     geometry: Some(geometry),
+                    opacity: None,
+                    blend: None,
                 },
             ],
             expected_rev: None,

@@ -4,9 +4,16 @@
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
-/// The Media Foundation DLLs the backends import from, as in the daemon's build script.
+/// The Media Foundation DLLs the backends import from, as in the daemon's build script,
+/// including `mfsensorgroup.dll`, which `WindowsVcam` imports `MFCreateVirtualCamera`
+/// from; `WindowsVcam::start` probes for that export before calling it.
 #[cfg(windows)]
-const MEDIA_FOUNDATION: [&str; 3] = ["mfplat.dll", "mf.dll", "mfreadwrite.dll"];
+const MEDIA_FOUNDATION: [&str; 4] = [
+    "mfplat.dll",
+    "mf.dll",
+    "mfreadwrite.dll",
+    "mfsensorgroup.dll",
+];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");

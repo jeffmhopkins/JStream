@@ -16,18 +16,19 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTU
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
-web pages rendered off screen by CEF, each page's frames as textures on the engine's GPU
-device and its audio as a stream the engine records like a device's. Layer 3, its own
+web pages rendered off screen by CEF, each page's frames as textures on a GPU device the
+host hands it and its audio as a stream the engine records like a device's. Layer 3, its own
 crate rather than part of a platform crate, so that only builds that ask for CEF
 download and build it ([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.md)).
 
 **The seam.** `BrowserBackend` is what `jstream-sources` opens pages through, injected
 into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageSpec` (a
 location, a size, a frame-rate cap and the custom CSS) and returns a `BrowserPage`:
-its latest frame as a `GpuFrame`, its audio, and a way to replace its custom CSS while it
-runs. `use_device` gives the backend a GPU device to copy the pages' paints onto. Today
-that is one the host opens on the media adapter, since the engine doesn't hand out its
-own device yet; without one a page renders and plays but delivers no frames. Dropping the
+its latest frame as a `GpuFrame`, its audio, a way to replace its custom CSS while it
+runs, and how many of its requests were refused (`denied_requests`). `use_device` gives
+the backend a GPU device to copy the pages' paints onto. Today that is one the host
+opens on the media adapter, since the engine doesn't hand out its own device yet;
+without one a page renders and plays but delivers no frames. Dropping the
 page closes it.
 
 **Built everywhere:**
@@ -48,9 +49,22 @@ page closes it.
   thread never waits: a packet that meets the handler's lock while the engine attaches
   or detaches is dropped and counted (`dropped`), and the device position still counts
   it, so the mixer sees the gap.
+- `RequestPolicy` (`request.rs`): what a page may request, from its location (ADR-0021:
+  no file access beyond the source's own file). Web URLs (`http`, `https`, `ws`,
+  `wss`), `data:`, `blob:`, `about:blank` and `about:srcdoc` are allowed for every
+  page. `file:` URLs are allowed only for a page loaded from a local file, and only for
+  files in its folder or below. The path is compared by name first, with `..` applied,
+  and only a path inside the folder is ever opened. So a URL naming another server (an
+  SMB connection on Windows), a drive-relative path or a device (a `\\.\` path, or on
+  Windows a reserved name such as `COM1` or `nul.txt`) is refused untouched. It is
+  compared again after resolving links on both sides, so a link inside the folder can't
+  reach out; a missing file is refused. Every other scheme is refused. Each refusal is counted. The
+  folder is trusted as an asset root is: something that can write in it could swap a
+  file for a link between the check and the load.
 - `fake` (feature `fake`, and in tests): `FakeBrowser`, a backend that records the
   pages it opens, their CSS changes and whether they were closed, never paints, and can
-  be told to refuse.
+  be told to refuse. `FakePageState::request` plays a request through the page's
+  policy.
 
 **The CEF backend** (`cef/`, Windows and feature `cef` only; `dox` compile-checks it
 without building CEF):
@@ -66,6 +80,10 @@ without building CEF):
   frame rate with a transparent background. Command-line switches let pages play sound
   without a click and turn off first-run and error dialogs. Pop-ups are blocked. The
   custom CSS is applied when the main frame finishes loading and again on each change.
+  Every request a page makes, navigations included, goes through its `RequestPolicy`
+  in `OnBeforeResourceLoad` and is cancelled when refused; the first refusal is logged
+  at `warn` and later ones at `debug`, with the reason and count but never the URL,
+  which may be a local path.
 - **Frames** (`cef/gpu.rs`): each accelerated paint's shared texture is opened on the
   engine's D3D12 device (`OpenSharedHandle`), checked to be single-mip BGRA8, imported
   into wgpu, copied into the next of three textures the page owns, and waited for before
@@ -82,7 +100,8 @@ without building CEF):
 **The hardware check.** `examples/page_check.rs` opens the built-in test page (or
 `--url`) through the CEF backend on the engine's own device and QPC clock, as the daemon
 will, and reports the frames and audio that arrive, a custom-CSS change the page reacts
-to, and the shutdown time. It runs on Windows with the `cef` feature only.
+to, the requests refused (the built-in page loads one image from outside its folder),
+and the shutdown time. It runs on Windows with the `cef` feature only.
 
 <a id="open-items"></a>
 ## Open items
@@ -90,15 +109,12 @@ to, and the shutdown time. It runs on Windows with the `cef` feature only.
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md"]
 -->
 
-What ADR-0021 asks for that this crate doesn't do yet. The first three block any host
+What ADR-0021 asks for that this crate doesn't do yet. The first two block any host
 from turning on the `cef` feature.
 
 - **Sandbox.** CEF runs unsandboxed (`no_sandbox`), as spike S4 did. ADR-0021 requires
   the sandbox where supported; on Windows that means CEF's bootstrap layout, which may
   replace the helper exe, unless a superseding ADR accepts running without it.
-- **File access.** A local-file page can load any `file://` URL. ADR-0021 allows file
-  access only to the chosen file or folder, so a request handler must limit file pages
-  to their folder.
 - **Packaging and updates.** The CEF runtime isn't in the portable zip yet, with its
   licence notices, and nothing checks the pinned CEF against CEF stable.
 - **Hosts.** The daemon doesn't create a backend yet. The desktop app does, with its
