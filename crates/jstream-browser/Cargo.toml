@@ -1,7 +1,7 @@
 [package]
 name = "jstream-browser"
 version = "0.0.0"
-description = "Browser sources' engine: the BrowserBackend seam, pages' audio hand-off and custom CSS, and the CEF backend (Windows, feature `cef`)."
+description = "Browser sources' engine: the BrowserBackend seam, pages' audio hand-off and custom CSS, the CEF backend that drives the sandboxed browser helper (Windows, feature `cef`), and the helper's CEF code (feature `helper`)."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 3
-summary = "Browser sources' engine (ADR-0021, ADR-0046): the `BrowserBackend` seam, pages' audio hand-off and custom CSS, and the CEF off-screen backend (Windows, feature `cef`): shared-texture paints copied onto the engine's device, the audio handler, the helper-exe layout"
+summary = "Browser sources' engine (ADR-0021, ADR-0046, ADR-0048): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, feature `cef`), which starts the sandboxed browser helper and imports its shared-texture frames onto the engine's device; and the helper's CEF code (feature `helper`)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
@@ -26,14 +26,18 @@ allow_attributes_without_reason = "deny"  # R-RS-009
 undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
 [features]
-# The CEF backend (Windows only; elsewhere it builds nothing). `cef-dll-sys`'s build
-# script downloads the CEF binary distribution and builds CEF's C++ wrapper with CMake
-# and Ninja, so it is off by default: only a build that ships browser sources turns it
-# on (ADR-0046).
-cef = ["dep:cef", "dep:windows", "dep:wgpu"]
-# Compile-checks the CEF backend without downloading or building CEF (`cef`'s docs.rs
-# mode): for CI's clippy. A binary built with it doesn't link.
-dox = ["cef", "cef/dox"]
+# The CEF backend the engine holds (Windows only; elsewhere it builds nothing): it starts
+# the browser helper process and talks to it over a pipe (ADR-0048). It doesn't build
+# CEF; off by default, as only a build that ships browser sources needs it.
+cef = ["dep:windows", "dep:wgpu"]
+# CEF itself, run in the browser helper process (Windows only): only
+# `jstream-browser-helper` turns it on. `cef-dll-sys`'s build script downloads the CEF
+# binary distribution and builds CEF's C++ wrapper with CMake and Ninja (ADR-0046), with
+# the sandbox on (ADR-0048).
+helper = ["dep:cef", "cef?/sandbox", "dep:windows"]
+# Compile-checks both without downloading or building CEF (`cef`'s docs.rs mode): for
+# CI's clippy. A binary built with it doesn't link.
+dox = ["cef", "helper", "cef?/dox"]
 # The `fake` module: an in-memory backend for tests here and in the crates that drive
 # this one. Off by default.
 fake = []
@@ -47,13 +51,23 @@ thiserror.workspace = true
 tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-# CEF's C API (ADR-0021, ADR-0046), only with the `cef` feature.
+# CEF's C API (ADR-0021, ADR-0046), only with the `helper` feature.
 cef = { workspace = true, optional = true }
-# Opening CEF's shared textures on the engine's D3D12 device.
+# The engine's side: the helper's pipes and process, and its shared textures opened on
+# the engine's D3D12 device. The helper's side: its pipes, and the D3D11 device that
+# copies CEF's paints into textures it shares.
 windows = { workspace = true, optional = true, features = [
     "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
 ] }
 # The DX12 backend for the texture import through wgpu-hal (ADR-0004); the version is the
 # workspace's exact pin, the one jstream-platform re-exports.
@@ -66,4 +80,4 @@ jstream-platform-windows.workspace = true
 
 [[example]]
 name = "page_check"
-required-features = ["cef"]
+required-features = ["cef", "helper"]

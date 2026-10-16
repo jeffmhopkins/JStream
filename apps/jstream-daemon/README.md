@@ -291,16 +291,21 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   sources), so pages start on the media clock. First
   it opens a GPU device on the media adapter with the backends' `GpuInterop::open_device`
   and hands it over with `use_device`, so a page's first paint already lands on it. CEF
-  starts with the first page: its subprocess exe, `jstream-browser-helper.exe`, and CEF's
-  runtime files must be next to `jstream-daemon.exe`; its cache is the data directory's
-  `cef` folder (else the log directory's) and its log the log directory's `cef.log`. Nothing about the browser
+  runs only in the sandboxed browser helper, which the backend starts with the first
+  page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
+  (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and
+  `jstream-browser-helper.dll`) and CEF's runtime files must be next to
+  `jstream-daemon.exe`; its cache is the data directory's `cef` folder (else the log
+  directory's) and its log the log directory's `cef.log`. Nothing about the browser
   stops the daemon: a device that won't open leaves pages playing audio with their
-  frames dropped, and a daemon whose own path is unknown leaves browser sources empty;
-  both are logged at `warn`. The program mix doesn't draw pages' frames yet (that is the
+  frames dropped, a daemon whose own path is unknown leaves browser sources empty, and
+  a missing helper or missing CEF files fail the page that opens, not the daemon; the
+  first two are logged at `warn`. The program mix doesn't draw pages' frames yet (that is the
   render import of GPU frames), so the device the compositor will sample is still to be
-  settled there. The feature is off by default because building it downloads CEF and
-  builds its C++ wrapper with CMake and Ninja (ADR-0046); `dox` type-checks the wiring
-  without CEF, as CI's Windows clippy does. Without the feature, `browser` sources show
+  settled there. The daemon doesn't build or link CEF (only the helper does); the
+  feature is off by default until the helper and CEF's runtime are packaged
+  ([jstream-browser › Open items](../../crates/jstream-browser/README.md#open-items)).
+  `dox` type-checks the wiring without downloading CEF, as CI's Windows clippy does. Without the feature, `browser` sources show
   nothing, as on other platforms. `browse` is that wiring over any backend, which is how
   the tests run it on `jstream-browser`'s fake.
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server

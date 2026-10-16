@@ -99,9 +99,10 @@ fn windows_backends() -> anyhow::Result<Backends> {
 /// GPU device of the engine's media adapter, opened through the backends' `gpu`, with
 /// pages' audio stamped on their `clock`.
 ///
-/// CEF starts when the first page opens, with its subprocess exe
-/// (`jstream-browser-helper.exe`) next to the daemon's, its cache in the data
-/// directory's `cef` folder and its log in the log directory's `cef.log`. Neither a
+/// CEF runs only in the sandboxed browser helper (ADR-0048), which starts when the first
+/// page opens: the helper (`jstream-browser-helper.exe` and its DLL) and CEF's runtime
+/// files go next to the daemon's exe, CEF's cache in the data directory's `cef` folder
+/// and its log in the log directory's `cef.log`. Neither a
 /// missing data directory nor a device that won't open stops the daemon: without a
 /// device, pages still play their audio and only their frames are dropped, and when the
 /// daemon's own path is unknown, browser sources show nothing (both are logged).

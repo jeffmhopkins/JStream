@@ -1,8 +1,9 @@
-//! Browser sources in the app (ADR-0021, ADR-0046): the CEF backend the engine opens
-//! `browser` sources' pages in, on the engine's media clock, with pages' frames on a GPU
-//! device of the media adapter. Windows with the `cef` feature only.
+//! Browser sources in the app (ADR-0021, ADR-0046, ADR-0048): the CEF backend the engine
+//! opens `browser` sources' pages in, through the sandboxed browser helper, on the engine's
+//! media clock, with pages' frames on a GPU device of the media adapter. Windows with the
+//! `cef` feature only.
 //!
-//! Docs: apps/jstream-desktop/README.md#design, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md
+//! Docs: apps/jstream-desktop/README.md#design, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md
 
 use jstream_browser::{BrowserBackend, CefBackend, CefConfig};
 use jstream_platform::{GpuInterop, MediaClock};
@@ -10,9 +11,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// The browser backend for an engine on `clock`, with CEF's cache under `data` (`cef`)
-/// and its log in `data`'s `logs` folder (`cef.log`). CEF itself starts when the first
-/// page opens, so a missing helper exe or missing resource files fail that source, not
-/// the app. (`libcef.dll` is linked at load time: without it the exe doesn't start.)
+/// and its log in `data`'s `logs` folder (`cef.log`). The browser helper starts when the
+/// first page opens, so a missing helper or missing CEF files fail that source, not the
+/// app, which doesn't link CEF.
 ///
 /// `None`, logged, when the helper's folder (the exe's) is unknown: the engine then runs
 /// without one and `browser` sources draw nothing. Without a GPU device pages still play

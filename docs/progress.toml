@@ -400,7 +400,8 @@ status = "planned"
 id = "C8"
 milestone = "M1b"
 title = "Browser source (CEF)"
-status = "planned"
+status = "review"
+prs = [283, 289, 298]
 
 [[item]]
 id = "D1"
