@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:22338c0c00b36187", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: crate map has both #379's jstream-outputs row (built vs planned, matches Cargo.toml summary) and C8's jstream-browser row with CEF off the platform-windows row" }
+stamp = { hash = "b3:de3f5e959909dcd3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the merged table: the outputs row now lists reconnect, the record sink and the vcam runtime note from the wave, and the youtube and sources rows keep this branch's ADR-0051 citation; layers unchanged" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -327,7 +327,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:319be3918e7685d3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol README and kind.rs changes are asset-path doc wording and a comment rewrap; the control-protocol summary makes no asset-path claim and still holds" }
+stamp = { hash = "b3:c3d64f1f5b022c49", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the summary against the protocol README's new DOS-device asset rule: the summary doesn't restate asset path rules (it notes asset references aren't edges), so it still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
@@ -963,7 +963,7 @@ stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:461bf05e22a4b2f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol Design change only adds the empty-segment rule to the asset-path Rejections text and rewraps; core design's asset statements (collection/app resolution) are unaffected" }
+stamp = { hash = "b3:9a7eb002f3836fc4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the protocol README's asset-path change: core's design covers engine, sessions and dispatch, not asset path validation, so nothing here restates the changed rule" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: stale only via the protocol README design and ARCH#protocol, whose changes are the YouTube citation moving to ADR-0051 (and the wave's #402 asset-path rule); the engine design names neither; holds" }
@@ -1509,7 +1509,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:461bf05e22a4b2f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol Design change only adds the empty-segment rule to the asset-path Rejections text and rewraps; graph purpose says only that asset references are not edges, which still holds" }
+stamp = { hash = "b3:9a7eb002f3836fc4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the protocol README's asset-path change: graph still uses the protocol's Edits, IDs and error codes unchanged and does not describe asset path checks" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1716,7 +1716,7 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:6e5013d99f034114", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367: the FLV-for-RTMP(S) citation, depends_on and lib.rs Docs line move from ADR-0041 to ADR-0051; ADR-0051 §1 makes that RTMPS stream-key output the default YouTube path, so the FLV and enhanced RTMP container this section describes is what it relies on; ADR-0041 changes only to superseded; the media dep moved only its own citation; holds" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:f1d314a4be1d9af9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Reconnect bullet and the testing paragraph against #411: an AVC end-of-sequence tag (0x17 0x02) is now neither the cached header nor a resume keyframe; reworded 'never a SequenceEnd' to cover AVC and listed the AVC case in the reconnect test summary." }
+stamp = { hash = "b3:b07a91c7c3a4097d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: the reconnect resync now keeps HEVC/AV1 enhanced-RTMP sequence starts and skips end-of-sequence tags, and Not yet narrows to end-to-end enhanced RTMP; the ADR-0051 citation for the generic RTMP(S) output still names the right ADR" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:13fabd34e2ef41ff", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose still holds against the reworded crate-map row: it says the Output trait comes later and lists jstream-media and jstream-mux as its JStream dependencies, matching the row" }
@@ -1785,7 +1785,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:76df49408e9eabb9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; frames are delivered and composited, encoders don't take them yet, on_context default method text matches capture.rs; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:22338c0c00b36187", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: re-read against the merged crate map; the platform rows it relies on match, and the CEF move to jstream-browser is consistent with this section" }
+stamp = { hash = "b3:de3f5e959909dcd3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Cascade from the crate map: only the outputs row and ADR-0051 rows changed; GPU frames talks about platform, render and encoders, whose rows and layers are unchanged" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:49324e4ee28be6df", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; frames are delivered and composited, encoders don't take them yet, on_context default method text matches capture.rs; holds" }
@@ -2028,7 +2028,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:461bf05e22a4b2f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: Rejections bullet now lists the empty-segment rule check_asset_path already enforces for collection/app, and the DOS-device sentence is rewrapped; checked against check_asset_path" }
+stamp = { hash = "b3:9a7eb002f3836fc4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: the asset-path rule now refuses empty segments and DOS device names under collection and app roots too; the YouTube kinds still cite ADR-0051 and nothing in the merge touches them" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
