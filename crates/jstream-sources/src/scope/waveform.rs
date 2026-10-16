@@ -4,7 +4,7 @@ use super::{Scope, bad, color, create, ease, smoothing, string};
 use crate::describe::{kind, param, size};
 use crate::source::setting;
 use crate::{Context, Source, SourceError, SourceKind};
-use jstream_protocol::{EnumOption, KindDescriptor, ParamDescriptor, ParamType, Settings};
+use jstream_protocol::{EnumOption, KindDescriptor, Media, ParamDescriptor, ParamType, Settings};
 use serde_json::json;
 
 /// The widest frame a source may have (`describe::size`'s maximum).
@@ -21,6 +21,7 @@ impl WaveformKind {
         Self(KindDescriptor {
             params: vec![
                 audio_param(),
+                audio_source_param(),
                 param("width", "Width", size(), json!(640)),
                 param("height", "Height", size(), json!(160)),
                 live(param(
@@ -86,6 +87,29 @@ pub(super) fn audio_param() -> ParamDescriptor {
                 .into(),
         ),
         ..param("audio", "Audio", ParamType::Bus, serde_json::Value::Null)
+    }
+}
+
+/// The `audio_source` parameter both kinds share: a source to draw instead (#459), as
+/// the audience hears it from that source. It overrides `audio`, so a source added to
+/// an old collection keeps drawing what it drew. Changing it makes a new source.
+pub(super) fn audio_source_param() -> ParamDescriptor {
+    ParamDescriptor {
+        description: Some(
+            "A source to draw instead of the audio above: that source after its own \
+             filters, fader, mute and follow, before any bus, as the audience hears it. \
+             Silent while that source isn't playing into the mixer, and while no output \
+             runs."
+                .into(),
+        ),
+        ..param(
+            "audio_source",
+            "Audio source",
+            ParamType::Source {
+                media: Some(Media::Audio),
+            },
+            serde_json::Value::Null,
+        )
     }
 }
 

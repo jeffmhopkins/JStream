@@ -87,12 +87,15 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   source's `Painter`, on the thread that paints, never on the mixer thread
   ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)'s audio → render
   path).
-- `AudioScopes`: where those sources find their scope, by their `audio` setting: the
-  program mix's (`program()`, which always exists), or a bus's (`bus(id)`, made the
-  first time it is asked for). `retain(drawn)` keeps a scope for each bus in `drawn`
-  and drops the others; `buses()` lists them. The engine keeps one and feeds every
-  scope in it from its mixer thread. Its lock is taken only to find, make or drop a
-  bus's scope, never by the thread that pushes.
+- `AudioScopes`: where those sources find their scope, by their `audio_source` and
+  `audio` settings: the program mix's (`program()`, which always exists), a bus's
+  (`bus(id)`, made the first time it is asked for), or another source's (`source(id)`,
+  the same). `retain(drawn)` keeps a scope for each bus in `drawn` and drops the
+  others, and `retain_sources(drawn)` does the same for sources; `buses()` and
+  `sources()` list them. The engine keeps one and feeds every scope in it from its
+  mixer thread. Its locks are taken only to find, make or drop a scope, never by the
+  thread that pushes. `drawn_source(kind, settings)` names the source a `waveform` or
+  `spectrum` draws, for the engine to feed.
 
 **Kinds.**
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
@@ -198,7 +201,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   the outputs hear it; a `bus` reference is that bus after its fader, before the
   master's filters. The parameter's description says so, and a change of it needs a
   new source; a value that isn't a bus reference or `null` is a setting error. The
-  graph checks that the bus exists and refuses to delete it while a source draws it. `create`
+  graph checks that the bus exists and refuses to delete it while a source draws it.
+  A second setting, `audio_source` (#459), a source reference restricted to audio
+  (`null` by default, so a source from before it draws what it drew, and the kinds'
+  version stays 1), names a source to draw instead and overrides `audio`: that source
+  after its own filters, fader, mute and follow, before any bus, as the audience
+  hears it, from `AudioScopes::source`. It is silent while that source isn't playing
+  into the mixer. One setting holding a bus or a source would change `audio`'s type,
+  which ADR-0025 makes a kind version bump with a migration on load, so it is a second
+  setting. The graph checks that the source exists and produces audio (a `scene`
+  source doesn't: it has no channel of its own), and the reference is an ordinary
+  source → source edge, so the drawn source's delete is refused, and `delete.plan`
+  clears it, as for any source reference. A change of it needs a new source; a value
+  that isn't a source reference or `null` is a setting error. `create`
   paints the first frame; after that their `Painter` draws a new one each 1/30 s tick
   of `at` (`next_change` is the next tick; with no scope, `None`), row by row into a
   pool of up to four frames reused once no one holds them, so a frame handed out
@@ -303,10 +318,18 @@ settings are live, and the `audio` setting (#362): both kinds describe it as a b
 reference defaulting to the program mix
 (`the_audio_setting_names_a_bus_and_defaults_to_the_program_mix`), a source draws the
 mix it names and not the other (`a_scope_source_draws_the_mix_its_audio_setting_names`),
-and the lookup keeps one scope per drawn bus (`the_lookup_keeps_one_scope_per_drawn_bus`).
+and the lookup keeps one scope per drawn bus (`the_lookup_keeps_one_scope_per_drawn_bus`);
+and the `audio_source` setting (#459): both kinds describe it as an audio source
+reference defaulting to `null` with their version unchanged
+(`the_audio_source_setting_names_an_audio_source_and_defaults_to_none`), a source
+draws the source it names rather than its bus or the program mix, and a value that
+isn't a source reference is refused
+(`a_scope_source_draws_the_source_its_audio_source_setting_names`), and the lookup
+keeps one scope per drawn source, which `drawn_source` names
+(`the_lookup_keeps_one_scope_per_drawn_source`).
 `tests/scope_no_alloc.rs`, its own binary under `assert_no_alloc`'s allocator,
 checks that a push, a read, and painting and taking both kinds' frames, of the
-program mix and of a bus, don't allocate once the pool has filled. `tests/media.rs` plays
+program mix, of a bus and of another source, don't allocate once the pool has filled. `tests/media.rs` plays
 `jstream-platform`'s fake media files (`FakeMediaDecoders`, frames told apart by
 colour): frames on the clock, the last frame held, looping and the seek after a gap,
 speed and a speed change, restarting when shown, turning `loop` on after the end, no

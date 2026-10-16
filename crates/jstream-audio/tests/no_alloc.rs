@@ -9,8 +9,9 @@
 //! what the real-time threads do inside a checked scope: every input's audio callback
 //! (`AudioInputHandler::on_packet`), then `Mixer::poll` until no block is due (which runs
 //! the input, bus, master and output-tap filter chains) and a read of each output tap's
-//! block, then a keyed compressor and the meters on each mixed block, as the mixer
-//! thread will run them (ADR-0028; sidechain keys and meters aren't in the mixer yet).
+//! block and of each input's own block (a drawn source's scope, #459), then a keyed
+//! compressor and the meters on each mixed block, as the mixer thread will run them
+//! (ADR-0028; sidechain keys and meters aren't in the mixer yet).
 //! Control-plane work (adding and removing inputs, buses, output taps, sends and
 //! filters, filter edits, gain and mute changes) runs between ticks, outside the scope,
 //! as it does on the control thread.
@@ -293,6 +294,9 @@ struct Sim {
     /// The output taps an encoder reads after each block, and how many blocks it read.
     taps: Vec<OutputTapId>,
     tap_blocks: u64,
+    /// The input blocks a scope read after each block (#459), as the mixer thread
+    /// reads a drawn source's.
+    input_blocks: u64,
     /// The mixer thread does not run until this tick (a stall).
     mixer_stalled_until: u64,
 }
@@ -318,6 +322,12 @@ impl Sim {
                 if let Some((_, block)) = self.mixer.output_block(tap) {
                     std::hint::black_box(block);
                     self.tap_blocks += 1;
+                }
+            }
+            for d in &self.devices {
+                if let Some(block) = self.mixer.input_block(d.control.id()) {
+                    std::hint::black_box(block);
+                    self.input_blocks += 1;
                 }
             }
         }
@@ -378,6 +388,7 @@ mod rt {
             chain: BusChain::new(),
             taps: Vec::new(),
             tap_blocks: 0,
+            input_blocks: 0,
             mixer_stalled_until: 0,
         };
         let control = sim.mixer.control();
@@ -653,6 +664,8 @@ mod rt {
         // tap for a second; minus the stall's.
         assert!(sim.tap_blocks > 1_300, "{}", sim.tap_blocks);
         assert!(aux_tap.expect("added").remove(), "removal queued");
+        // Every input's block, each block: at least the four inputs' for 30 s.
+        assert!(sim.input_blocks > 4 * 1_300, "{}", sim.input_blocks);
         // 45 s of 1024-frame blocks at 48 kHz, minus the stall's.
         assert!(bus.blocks > 2_000, "{bus:?}");
     }

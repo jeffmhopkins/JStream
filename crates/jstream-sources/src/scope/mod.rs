@@ -1,10 +1,10 @@
 //! The audio the `waveform` and `spectrum` sources draw (ADR-0031's audio → render data
 //! path): [`AudioScope`], a lock-free ring of the latest samples of one mix,
-//! [`AudioScopes`], the lookup that finds a source's scope (the program mix's, or a
-//! bus's), and what both kinds share.
+//! [`AudioScopes`], the lookup that finds a source's scope (the program mix's, a bus's,
+//! or another source's), and what both kinds share.
 //!
-//! The mixer thread pushes each block it mixes, and each block of every bus a source
-//! draws. A source reads the latest window when
+//! The mixer thread pushes each block it mixes, each block of every bus a source draws,
+//! and each block of every source a source draws. A source reads the latest window when
 //! its [`Painter`] draws a frame, on the thread that paints (in the engine, the
 //! `jstream-sources` thread, holding no engine lock), so the analysis (the FFT included)
 //! never runs on the mixer thread, and the push neither locks nor allocates
@@ -21,7 +21,7 @@ use crate::color::{parse_color, rgba_frame};
 use crate::source::{at_millis, changed_non_live, millis, setting};
 use crate::{Context, Limits, Painter, Source, SourceError};
 use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
-use jstream_protocol::{BusId, KindDescriptor, Reference, Settings};
+use jstream_protocol::{BusId, KindDescriptor, Reference, Settings, SourceId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering, fence};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -140,22 +140,25 @@ impl std::fmt::Debug for AudioScope {
 }
 
 /// Where the `waveform` and `spectrum` sources find the audio they draw (their `audio`
-/// setting, #362): the program mix's scope, which always exists, and one scope per bus
-/// that a source draws, made when it is first asked for. The engine keeps one, feeds
-/// the program scope and [`buses`](Self::buses)' from the mixer thread, and calls
-/// [`retain`](Self::retain) with the buses the collection's sources draw.
+/// setting, #362, and their `audio_source` setting, #459): the program mix's scope,
+/// which always exists, one scope per bus that a source draws and one per source that a
+/// source draws, each made when it is first asked for. The engine keeps one, feeds the
+/// program scope, [`buses`](Self::buses)' and [`sources`](Self::sources)' from the
+/// mixer thread, and calls [`retain`](Self::retain) and
+/// [`retain_sources`](Self::retain_sources) with what the collection's sources draw.
 ///
-/// Its lock is taken only to find, make or drop a bus's scope, on the threads that
-/// create sources or apply edits, never by the mixer thread: that thread gets each
-/// scope's handle through the engine's lock-free hand-off and only pushes into it.
+/// Its locks are taken only to find, make or drop a scope, on the threads that create
+/// sources or apply edits, never by the mixer thread: that thread gets each scope's
+/// handle through the engine's lock-free hand-off and only pushes into it.
 #[derive(Debug, Default)]
 pub struct AudioScopes {
     program: Arc<AudioScope>,
-    buses: Mutex<BTreeMap<BusId, Arc<AudioScope>>>,
+    buses: Keyed<BusId>,
+    sources: Keyed<SourceId>,
 }
 
 impl AudioScopes {
-    /// A lookup with an empty program scope and no bus scopes.
+    /// A lookup with an empty program scope and no bus or source scopes.
     pub fn new() -> Self {
         Self::default()
     }
@@ -164,7 +167,7 @@ impl AudioScopes {
     pub fn with_program(program: Arc<AudioScope>) -> Self {
         Self {
             program,
-            buses: Mutex::default(),
+            ..Self::default()
         }
     }
 
@@ -176,7 +179,13 @@ impl AudioScopes {
     /// Bus `bus`'s scope, made now if no source has drawn the bus since the last
     /// [`retain`](Self::retain) that dropped it.
     pub fn bus(&self, bus: &BusId) -> Arc<AudioScope> {
-        Arc::clone(lock(&self.buses).entry(bus.clone()).or_default())
+        self.buses.get(bus)
+    }
+
+    /// Source `source`'s scope, made now if no source has drawn it since the last
+    /// [`retain_sources`](Self::retain_sources) that dropped it.
+    pub fn source(&self, source: &SourceId) -> Arc<AudioScope> {
+        self.sources.get(source)
     }
 
     /// The scope a source drawing `bus` reads: the program mix's for `None`.
@@ -190,32 +199,115 @@ impl AudioScopes {
     /// Keeps a scope for each bus in `drawn`, making the missing ones, and drops the
     /// others: a source still holding a dropped one draws silence once it stands still.
     pub fn retain(&self, drawn: &BTreeSet<BusId>) {
-        let mut buses = lock(&self.buses);
-        buses.retain(|bus, _| drawn.contains(bus));
-        for bus in drawn {
-            buses.entry(bus.clone()).or_default();
-        }
+        self.buses.retain(drawn);
+    }
+
+    /// Keeps a scope for each source in `drawn`, making the missing ones, and drops the
+    /// others, as [`retain`](Self::retain) does for buses.
+    pub fn retain_sources(&self, drawn: &BTreeSet<SourceId>) {
+        self.sources.retain(drawn);
     }
 
     /// Every bus scope, ordered by bus ID.
     pub fn buses(&self) -> Vec<(BusId, Arc<AudioScope>)> {
-        lock(&self.buses)
+        self.buses.list()
+    }
+
+    /// Every source scope, ordered by source ID.
+    pub fn sources(&self) -> Vec<(SourceId, Arc<AudioScope>)> {
+        self.sources.list()
+    }
+
+    /// The scope a source drawing `drawn` reads.
+    fn drawn(&self, drawn: &Drawn) -> Arc<AudioScope> {
+        match drawn {
+            Drawn::Program => Arc::clone(&self.program),
+            Drawn::Bus(bus) => self.bus(bus),
+            Drawn::Source(source) => self.source(source),
+        }
+    }
+}
+
+/// One scope per key (a bus or a source), behind a lock that only the control plane
+/// takes.
+#[derive(Debug)]
+struct Keyed<K>(Mutex<BTreeMap<K, Arc<AudioScope>>>);
+
+impl<K> Default for Keyed<K> {
+    fn default() -> Self {
+        Self(Mutex::default())
+    }
+}
+
+impl<K: Ord + Clone> Keyed<K> {
+    fn get(&self, key: &K) -> Arc<AudioScope> {
+        Arc::clone(lock(&self.0).entry(key.clone()).or_default())
+    }
+
+    fn retain(&self, drawn: &BTreeSet<K>) {
+        let mut scopes = lock(&self.0);
+        scopes.retain(|key, _| drawn.contains(key));
+        for key in drawn {
+            scopes.entry(key.clone()).or_default();
+        }
+    }
+
+    fn list(&self) -> Vec<(K, Arc<AudioScope>)> {
+        lock(&self.0)
             .iter()
-            .map(|(bus, scope)| (bus.clone(), Arc::clone(scope)))
+            .map(|(key, scope)| (key.clone(), Arc::clone(scope)))
             .collect()
     }
 }
 
-/// The bus a scope source's `audio` setting names: `None` for `null`, the program mix.
-fn drawn_bus(settings: &Settings) -> Result<Option<BusId>, SourceError> {
+/// What a scope source draws.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Drawn {
+    /// The program mix (`audio` and `audio_source` both `null`).
+    Program,
+    /// A bus (`audio`), after its fader.
+    Bus(BusId),
+    /// A source (`audio_source`), after its fader, mute and activity gain.
+    Source(SourceId),
+}
+
+/// What a scope source's settings draw: the source `audio_source` names, else the bus
+/// `audio` names, else the program mix.
+fn drawn(settings: &Settings) -> Result<Drawn, SourceError> {
+    if let Some(source) = audio_source(settings)? {
+        return Ok(Drawn::Source(source));
+    }
     let value = setting(settings, "audio")?;
+    if value.is_null() {
+        return Ok(Drawn::Program);
+    }
+    match Reference::from_value(value) {
+        Some(Reference::Bus { bus_id }) => Ok(Drawn::Bus(bus_id)),
+        _ => Err(bad("audio", "must be a bus reference or null")),
+    }
+}
+
+/// The source a scope source's `audio_source` setting names; `None` for `null`.
+fn audio_source(settings: &Settings) -> Result<Option<SourceId>, SourceError> {
+    let value = setting(settings, "audio_source")?;
     if value.is_null() {
         return Ok(None);
     }
     match Reference::from_value(value) {
-        Some(Reference::Bus { bus_id }) => Ok(Some(bus_id)),
-        _ => Err(bad("audio", "must be a bus reference or null")),
+        Some(Reference::Source { source_id }) => Ok(Some(source_id)),
+        _ => Err(bad("audio_source", "must be a source reference or null")),
     }
+}
+
+/// The source that a source of kind `kind` with `settings` draws through its
+/// `audio_source` setting (#459): the source whose audio the engine taps into
+/// [`AudioScopes::source`]. `None` for any other kind, or when the setting is `null` or
+/// not a source reference.
+pub fn drawn_source(kind: &str, settings: &Settings) -> Option<SourceId> {
+    if !matches!(kind, "waveform" | "spectrum") {
+        return None;
+    }
+    audio_source(settings).ok().flatten()
 }
 
 /// The ring slot of sample `n`.
@@ -322,8 +414,8 @@ fn create<S: Scope>(
     scope: S,
 ) -> Result<Box<dyn Source>, SourceError> {
     let size = frame_size(settings, &ctx.limits)?;
-    let bus = drawn_bus(settings)?;
-    let feed = ctx.audio.as_ref().map(|scopes| scopes.scope(bus.as_ref()));
+    let drawn = drawn(settings)?;
+    let feed = ctx.audio.as_ref().map(|scopes| scopes.drawn(&drawn));
     let mut drawing = Drawing {
         scope,
         feed: Feed::new(feed),
