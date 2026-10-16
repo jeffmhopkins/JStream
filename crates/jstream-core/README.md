@@ -32,7 +32,7 @@ state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_audit`, `with_history_limit`,
-  `with_browser` (the browser engine `browser` sources open pages in) and
+  `with_browser` (the browser engine `browser` sources and their `youtube_chat` preset open pages in) and
   `with_collection_file`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
@@ -481,7 +481,8 @@ is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 (`audio_input`, `desktop_audio`, `app_audio`, whose descriptors have no video) get no
 `Source`: the program stage records them (*Audio sources*). A `browser` source opens
 its page in the backend the host gave `with_browser` (none by default, so it draws
-nothing and logs `NoBackend`); giving one rebuilds the `browser` sources already there.
+nothing and logs `NoBackend`); giving one rebuilds the sources already there that open
+through it (`browser` and its `youtube_chat` preset, `jstream_sources::opens_browser`).
 Its page's picture is a GPU frame the program mix doesn't draw yet, so it shows as
 transparent. `LiveSources::audio` lists every running source's own audio
 (`Source::audio`) for *Audio sources*.
