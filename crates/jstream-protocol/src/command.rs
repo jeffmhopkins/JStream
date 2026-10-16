@@ -82,7 +82,11 @@ pub enum Edit {
     ///
     /// The item's placement is `geometry` when that is sent, else a legacy placement:
     /// `transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).
-    /// Sending both is `invalid_argument`.
+    /// Sending both is `invalid_argument`. That identity draws the source at its own
+    /// pixel size from the canvas's top-left, so a `display`, `window` or `webcam` larger
+    /// than the canvas shows only its corner: for those, send a `geometry` covering the
+    /// canvas (`center` at half the canvas size, `size` the canvas size, `fit_mode`
+    /// `fit`), as `jstream-cli` does.
     #[serde(rename = "item.add")]
     ItemAdd {
         /// The scene to add to.
