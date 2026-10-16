@@ -1558,7 +1558,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "OutputKind": {
-            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL, recording to a file and the virtual camera are\nconfigurable so far. The YouTube-bound target of the data model comes later as a new\nvariant.",
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL or a YouTube broadcast, recording to a file and the\nvirtual camera are configurable so far.",
             "oneOf": [
               {
                 "description": "A stream sent over RTMP or RTMPS.",
@@ -1702,6 +1702,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "url"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A YouTube broadcast (ADR-0058): on `output.start` the engine reads the\nbroadcast's bound stream from the Live API and publishes to that stream's\n`rtmps://` ingest address with its key. The key comes from YouTube, so\n`output.set_key` isn't needed. The start fails with `action_failed` when the\nengine isn't signed in to YouTube, the broadcast has no bound stream\n(`youtube.bind_broadcast`), or YouTube refuses. The engine rejects, with\n`invalid_argument`, an ID that is empty, longer than 128 bytes or has characters\nother than ASCII letters, digits, `-` and `_`.",
+                "properties": {
+                  "broadcast_id": {
+                    "description": "The broadcast's ID, as `youtube.list_broadcasts` reports it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "youtube",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "broadcast_id"
                 ],
                 "type": "object"
               }
@@ -3690,7 +3708,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "OutputKind": {
-            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL, recording to a file and the virtual camera are\nconfigurable so far. The YouTube-bound target of the data model comes later as a new\nvariant.",
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL or a YouTube broadcast, recording to a file and the\nvirtual camera are configurable so far.",
             "oneOf": [
               {
                 "description": "A stream sent over RTMP or RTMPS.",
@@ -3782,6 +3800,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "url"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A YouTube broadcast (ADR-0058): on `output.start` the engine reads the\nbroadcast's bound stream from the Live API and publishes to that stream's\n`rtmps://` ingest address with its key. The key comes from YouTube, so\n`output.set_key` isn't needed. The start fails with `action_failed` when the\nengine isn't signed in to YouTube, the broadcast has no bound stream\n(`youtube.bind_broadcast`), or YouTube refuses. The engine rejects, with\n`invalid_argument`, an ID that is empty, longer than 128 bytes or has characters\nother than ASCII letters, digits, `-` and `_`.",
+                "properties": {
+                  "broadcast_id": {
+                    "description": "The broadcast's ID, as `youtube.list_broadcasts` reports it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "youtube",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "broadcast_id"
                 ],
                 "type": "object"
               }

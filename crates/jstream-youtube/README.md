@@ -46,6 +46,10 @@ Contents:
   `refresh` gets a new access token and reports a rotated refresh token; `revoke` signs
   out. Access tokens record their expiry (timed from when the request was sent) and the
   scopes granted.
+  - **The built-in client** (ADR-0058 §1): `BUILT_IN_CLIENT_ID` and
+    `BUILT_IN_CLIENT_SECRET` are the "Desktop app" client JStream ships. Both are empty
+    until the maintainer gives their values, and while the ID is empty a build has no
+    client and the engine keeps YouTube's API features off.
   - **Scopes** (ADR-0041 §4, kept by ADR-0058): `Scope::Readonly` (`youtube.readonly`) for listing and
     stream health, `Scope::Manage` (`youtube`) for creating, binding and transitioning.
     The Live API reference pages list exactly these: the list methods accept either
@@ -68,7 +72,9 @@ Contents:
   the access token when less than `REFRESH_MARGIN` (60 s) of it is left, retries a call
   once with a new token after a 401, and reports a second 401 as `SignInRequired`. It
   refuses a call whose scope the grant lacks before sending it. Calls:
-  `list_broadcasts` (mine, by status, or by up to 50 IDs; paged), `broadcast`,
+  `list_broadcasts` (mine, by status, or by up to 50 IDs; paged; `list_broadcasts_of_type`
+  adds the `broadcastType` filter, without which the API leaves the persistent "Stream
+  now" broadcast out), `broadcast`,
   `insert_broadcast`, `bind` (or unbind), `transition` (testing, live, complete),
   `list_streams`, `stream`, `insert_stream` and `stream_health` (`streamStatus`,
   `healthStatus` and its configuration issues).
@@ -98,8 +104,9 @@ column, never quoted. The refresh token is kept in the OS credential store throu
 `Grant` and through `LiveClient::take_rotated_refresh_token`, and never writes it
 anywhere itself.
 
+The engine (`jstream-core`, roadmap Y3) holds one `LiveClient`, keeps its refresh token
+in the `OAuthTokenStore` and exposes these calls as protocol commands for the UI. MCP
+leaves them out: YouTube is for people, not agents (ADR-0058 §3).
+
 **Not yet:** chat (reading, sending as the channel, the featured message) and audience
-stats from ADR-0041 (kept by ADR-0058), quota accounting, the protocol commands that expose all of this
-to the UI (never to MCP, ADR-0058), the engine wiring (including saving the refresh token in the
-`OAuthTokenStore`), and the built-in JStream OAuth client that users sign in through, with
-no setup of their own (ADR-0058).
+stats from ADR-0041 (kept by ADR-0058), and quota accounting.

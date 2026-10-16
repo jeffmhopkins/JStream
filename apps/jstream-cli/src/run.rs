@@ -331,7 +331,7 @@ fn write_response(out: &mut dyn Write, response: &Response, json: bool) -> Resul
     }
     match &response.result {
         CallResult::Batch { rev } => writeln!(out, "applied: rev {rev} ({})", response.id)?,
-        CallResult::Action { .. } => writeln!(out, "accepted ({})", response.id)?,
+        CallResult::Action { result: None } => writeln!(out, "accepted ({})", response.id)?,
         CallResult::Query { result } => write_query(out, result)?,
         _ => line(out, &response.result)?,
     }

@@ -45,7 +45,7 @@ stamp = { hash = "b3:f90b6677800af8e4", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:e5fef95eb12cb895" }
 
 ["ARCH#crate-map"."file:crates/jstream-core/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:8189a4eb16249029", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 into #219: core Cargo.toml now has the wave's jstream-browser (fake) dev-dependency and E3b's hw-tests feature and cfg(windows) platform-windows dev-dependency; both lower layers, core row and layer unchanged; lint-deps passes; holds" }
+stamp = { hash = "b3:5e5f89a77f45e286", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: jstream-core now depends on jstream-youtube (layer 2 under core's layer 5); core's row and Cargo metadata need no change for that; lint-deps passes; holds" }
 
 ["ARCH#crate-map"."file:crates/jstream-effects/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:100b037ae75599a7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
@@ -108,7 +108,7 @@ stamp = { hash = "b3:24cef673281620f5" }
 stamp = { hash = "b3:717f84850b5a595c", by = "agent:youtube-sign-in", note = "Re-read jstream-youtube and jstream-sources rows: summaries now cite ADR-0058; nothing else changed" }
 
 ["ARCH#data-model"."body"]
-stamp = { hash = "b3:ff243f2bac9a17b4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+stamp = { hash = "b3:bef5bc88318f2b92", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the RTMP YouTube target's field is broadcast_id (YouTube's ID), matching OutputKind in the protocol and graph's validation; nothing else in the model changes; holds" }
 
 ["ARCH#data-model"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -207,7 +207,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:bc2d9f8373c34992", by = "agent:youtube-sign-in", note = "Re-read the merged section: the noun list now carries the wave's device, filter, pairing and preview tools beside this PR's statement that the youtube.* commands are the UI's only and get no tool (ADR-0058 §3); the events line still keeps youtube.* events from agents; the jstream-mcp README's new pairing/device paragraph (ADR-0057, agents pair as any client under ADR-0006) and its table's preview note don't touch YouTube; access bullet unchanged; holds" }
+stamp = { hash = "b3:a054a6de381d4a36", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:340acdb9358d89b0", by = "agent:youtube-sign-in", note = "Re-read: noun list now says youtube.* are UI-only with no tool, and youtube.* events are not returned to agents (ADR-0058 §3); R-API-002 carries the matching exception; the jstream-mcp README design says the same; access bullet unchanged" }
@@ -222,16 +222,16 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:b4f8b56bd02fe812", by = "agent:youtube-sign-in", note = "Re-read the merged section: the noun list now carries the wave's device, filter, pairing and preview tools beside this PR's statement that the youtube.* commands are the UI's only and get no tool (ADR-0058 §3); the events line still keeps youtube.* events from agents; the jstream-mcp README's new pairing/device paragraph (ADR-0057, agents pair as any client under ADR-0006) and its table's preview note don't touch YouTube; access bullet unchanged; holds" }
+stamp = { hash = "b3:9ce5bf1045fb545e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:fc6a84e53fb9177d", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:50795317171cd531", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/events.rs"]
-stamp = { hash = "b3:bc976297600d51e0" }
+stamp = { hash = "b3:b5016e051964882f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/jsonrpc.rs"]
 stamp = { hash = "b3:5c306baedd4f5ddc" }
@@ -240,16 +240,16 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: MCP section names no timeout constants; still accurate after the hello bound" }
+stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:d2f3eb60cc9c78df", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:60cbb6e9acd50bcf" }
+stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
 
 ["ARCH#packaging"."body"]
 stamp = { hash = "b3:0199743d1f86cfe2", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the zip ships the sandboxed helper (CEF's bootstrap.exe renamed jstream-browser-helper.exe and jstream-browser-helper.dll, same certificate if signed), per ADR-0048, instead of a subprocess exe" }
@@ -291,7 +291,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:b779208fb5fb4054", by = "agent:youtube-sign-in", note = "Re-read the merged section: the YouTube bullet cites ADR-0058 and says the calls are the UI's only, never offered over MCP; the wave's filter edits (0.22), pairing (0.21) and preview binary streams (0.20) are separate bullets with no YouTube claim; the protocol README input changed by the same wave work plus the youtube.stats link; holds" }
+stamp = { hash = "b3:5b72cc0da0e85c79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -336,31 +336,31 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:1a23a6f70952558f", by = "agent:youtube-sign-in", note = "Re-read the merged section: the YouTube bullet cites ADR-0058 and says the calls are the UI's only, never offered over MCP; the wave's filter edits (0.22), pairing (0.21) and preview binary streams (0.20) are separate bullets with no YouTube claim; the protocol README input changed by the same wave work plus the youtube.stats link; holds" }
+stamp = { hash = "b3:53d3b4c71dc51648", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:4e26b6714c3806c4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "The filter-chain line now names protocol 0.22, matching the protocol README; the rest is unchanged by the bump" }
+stamp = { hash = "b3:a847dcc5ef533c7d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:dd0a60a5c64b01c6", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "The filter-chain line now names protocol 0.22, matching the protocol README; the rest is unchanged by the bump" }
+stamp = { hash = "b3:c9bc8326d174c11a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:595b42eb3391cff5", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:7dd80a3dd12cbcd9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/envelope.rs"]
-stamp = { hash = "b3:48f6a61a2cf072ae", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the new server modules; rechecked after merging wave/m1, with pairing moved to protocol 0.21 (0.20 is #251) and its ADR renumbered 0057; holds" }
+stamp = { hash = "b3:d6bfd8d35940d333", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/error.rs"]
 stamp = { hash = "b3:d22df17622c57b92", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "The filter-chain line now names protocol 0.22, matching the protocol README; the rest is unchanged by the bump" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/event.rs"]
-stamp = { hash = "b3:f2018a2e7c7b8d62" }
+stamp = { hash = "b3:2fc2b8fb0a37cebe", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/filter.rs"]
 stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -369,7 +369,7 @@ stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:1ed09ffbfdcff0f0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:f4fc7d29a2f3c24d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: fixtures.rs adds the YouTube commands, queries, events and the youtube output target, and answers the four YouTube actions with the wave's ActionResult beside its pairing.start one (only the import order changed since the last stamp); the section's YouTube text matches; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -384,10 +384,10 @@ stamp = { hash = "b3:cfbe5ae0f0a5b8c6", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:81d3874a4e5f7ef3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: protocol README and kind.rs changes are asset-path doc wording and a comment rewrap; the control-protocol summary makes no asset-path claim and still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:a6c42d03d9967ff7", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:e52cec124af0973d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:a667a8df3f0ef64b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:68a65f42c4f090ed", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:da1c7b1a4115859b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -396,7 +396,7 @@ stamp = { hash = "b3:da1c7b1a4115859b", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:bef95243a1b983f0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:72681551a440d0da", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:d780bc08b7fa324e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -405,7 +405,10 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Summary of envelope/edits/actions holds; asset-path rule detail lives in protocol README Design, unchanged here by #403" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:dfd1aee1550ed0db", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "The filter-chain line now names protocol 0.22, matching the protocol README; the rest is unchanged by the bump" }
+stamp = { hash = "b3:8bf291f8c99930f6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
+
+["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
+stamp = { hash = "b3:1485046c80293f0f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: the YouTube bullet lists 0.23's actions, queries, events and youtube target, says no token or key crosses the protocol, that it is the UI's only (ADR-0058), and that it needs the built-in OAuth client (§1, empty for now) or a developer's override; matches the protocol crate, its README and the regenerated snapshots; the wave's preview and pairing bullets are untouched; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/Cargo.toml"]
 stamp = { hash = "b3:e9241efe87e7e719" }
@@ -882,7 +885,7 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:533a8e26baacba9c", by = "agent:claude", note = "Pairing: the `pair`/`device` commands send pairing.start, device.list and device.revoke, and the code is printed only as the action result (SecretString). Cascade from control Design, where #251 added the binary stream and #444 the mock's non-ASCII key refusal; the CLI reads no preview frames, and #440's run.rs key check is Usage's, not Design's; holds" }
+stamp = { hash = "b3:ab4c16676f4f2aa6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: run.rs only narrows write_response's Action arm to result: None; one connection and plain output are unchanged; holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
 stamp = { hash = "b3:608a4cbf328ac281", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -909,13 +912,13 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:533a8e26baacba9c", by = "agent:claude", note = "Pairing: run.rs/args.rs gain `pair`, `device list` and `device revoke`, with run/tests.rs covering them; Purpose (a thin CLI over every protocol call) still describes them. From wave/m1, #440's BOM strip and control/non-ASCII key refusal in run.rs and its tests are one more check on `output set-key`, which Purpose doesn't detail; holds" }
+stamp = { hash = "b3:ab4c16676f4f2aa6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: run.rs's write_response matches CallResult::Action { result: None }, so an action with a result (pairing.start's code, the YouTube actions') falls to the JSON line; the CLI's purpose and command list are unchanged; holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
 stamp = { hash = "b3:608a4cbf328ac281", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:a20d9be290ee2393", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:9acfa00277921814", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: says the CLI has no recording or YouTube-bound output form and none of protocol 0.23's YouTube actions and queries, and output get prints any non-rtmp-generic output's kind as JSON; matches run.rs, whose only change is the Action { result: None } match beside the wave's pairing.start print; holds" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:626296cc2770ea70", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -927,13 +930,13 @@ stamp = { hash = "b3:16e79b530b6f8e0a" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:533a8e26baacba9c", by = "agent:claude", note = "Pairing: Usage documents `jstream-cli pair` (prints the one-time code), `device list` and `device revoke <id>`, and maps `unsupported` to exit 20, matching args.rs and run.rs. From wave/m1, #440's set-key paragraph (leading BOM dropped, control or non-ASCII key a usage error) matches read_key in run.rs and sits apart from the pairing commands; holds" }
+stamp = { hash = "b3:ab4c16676f4f2aa6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: says the CLI has no recording or YouTube-bound output form and none of protocol 0.23's YouTube actions and queries, and output get prints any non-rtmp-generic output's kind as JSON; matches run.rs, whose only change is the Action { result: None } match beside the wave's pairing.start print; holds" }
 
 ["CRATE-jstream-control#design"."body"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:b779208fb5fb4054", by = "agent:youtube-sign-in", note = "Re-read against ARCH › Protocol's change (YouTube bullet now ADR-0058 and UI-only; the wave's preview, pairing and filter bullets): this section describes the Control trait and transports and has no YouTube claim; the WebSocket client's preview and pairing handling is the wave's own text; holds" }
+stamp = { hash = "b3:5b72cc0da0e85c79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: stale via ARCH#protocol, whose YouTube bullet adds commands, events and the youtube target (ADR-0058) that Control carries as any others; this PR leaves mock.rs as the wave has it; holds" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1005,16 +1008,16 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:da0ec8a527633884", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). body: this PR's only change is the RTMP stop-drain sentence that output_loop checks the deadline before each of a pass's video and audio sends, which matches pipeline.rs; the rest is wave/m1's text. tests.rs: StalledPeer's stalled sends drop to 50 ms and it still ignores stop_by, and Design doesn't describe the fake's timing" }
+stamp = { hash = "b3:f4df86b55f90ceae", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, ingest resolved outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs; tests.rs adds mod youtube; the wave's new stop text (the deadline checked before each send) and its 50 ms StalledPeer test sit beside it unchanged; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:437412be146c5f8d", by = "agent:youtube-sign-in", note = "Re-read against protocol README › Design (youtube.stats link now ADR-0058, plus the wave's 0.20-0.22 additions) and ARCH › Protocol (YouTube bullet UI-only): the engine section's only YouTube mention is the youtube_chat browser preset (a source, not the API, so agents keep it); no youtube.* wiring is described yet; holds" }
+stamp = { hash = "b3:2034791df530f807", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:b779208fb5fb4054", by = "agent:youtube-sign-in", note = "Re-read against protocol README › Design (youtube.stats link now ADR-0058, plus the wave's 0.20-0.22 additions) and ARCH › Protocol (YouTube bullet UI-only): the engine section's only YouTube mention is the youtube_chat browser preset (a source, not the API, so agents keep it); no youtube.* wiring is described yet; holds" }
+stamp = { hash = "b3:5b72cc0da0e85c79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1023,7 +1026,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
-stamp = { hash = "b3:52eb348b3cc7d46c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:54c6a146ed093984", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -1044,7 +1047,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:c5e4383c41566843", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's change is the browser paragraph saying a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser; the wave's preview-stream and session changes sit in other paragraphs; holds" }
+stamp = { hash = "b3:8b6be6f533e7484e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1059,7 +1062,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:d42333c6e2afe010", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:80df6421e219d8d5", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:f52a14b4fc69ad6b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:5ca839944dbeae17", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: Live sources says giving a backend rebuilds the sources that open through it (browser and its youtube_chat preset, jstream_sources::opens_browser), matching live.rs's set_browser and the new test in tests/audio.rs; the rest is the wave's C8 text; holds" }
@@ -1101,7 +1104,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:45aa02b6469b1a8a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). body: this PR's only change is the RTMP stop-drain sentence that output_loop checks the deadline before each of a pass's video and audio sends, which matches pipeline.rs; the rest is wave/m1's text. tests.rs: StalledPeer's stalled sends drop to 50 ms and it still ignores stop_by, and Design doesn't describe the fake's timing" }
+stamp = { hash = "b3:1d96c0a4f96940c7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, ingest resolved outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs; tests.rs adds mod youtube; the wave's new stop text (the deadline checked before each send) and its 50 ms StalledPeer test sit beside it unchanged; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's browser paragraph says a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser and the new tests/audio.rs case; the wave's B7 opacity/blend/filter text is in other paragraphs; holds" }
@@ -1127,8 +1130,14 @@ stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1K
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/windows_gpu.rs"]
 stamp = { hash = "b3:f16b463f8715a669", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
+["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/youtube.rs"]
+stamp = { hash = "b3:1cb3f432ff4f8d5d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
+
+["CRATE-jstream-core#design"."file:crates/jstream-core/src/youtube.rs"]
+stamp = { hash = "b3:97c448bb25c6d46c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
+
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:1cd76a51b94dcdee", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
+stamp = { hash = "b3:24c680e7b2e95291", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: the YouTube bullet (with_youtube; YoutubeSetup::built_in from jstream-youtube's constants, None while empty; YoutubeSetup::new as a developer override; one LiveClient, opaque TOKEN_ACCOUNT, sign-in thread, youtube outputs reading the bound ingest, the health thread) and the builder list (with_youtube beside the wave's with_browser and youtube_chat preset) match youtube.rs, engine.rs and lib.rs; tests.rs adds mod youtube beside windows_gpu; tests/youtube.rs as listed; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1152,7 +1161,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:c5e4383c41566843", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#251 preview streams, #265 pairing): this PR's only change here is with_browser naming the youtube_chat preset among the sources that open pages through it; the builder list still matches engine.rs beside the wave's preview additions; holds" }
+stamp = { hash = "b3:8b6be6f533e7484e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: the YouTube bullet (with_youtube; YoutubeSetup::built_in from jstream-youtube's constants, None while empty; YoutubeSetup::new as a developer override; one LiveClient, opaque TOKEN_ACCOUNT, sign-in thread, youtube outputs reading the bound ingest, the health thread) and the builder list (with_youtube beside the wave's with_browser and youtube_chat preset) match youtube.rs, engine.rs and lib.rs; tests.rs adds mod youtube beside windows_gpu; tests/youtube.rs as listed; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1167,7 +1176,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:d42333c6e2afe010", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:80df6421e219d8d5", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:f52a14b4fc69ad6b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: the YouTube bullet (with_youtube; YoutubeSetup::built_in from jstream-youtube's constants, None while empty; YoutubeSetup::new as a developer override; one LiveClient, opaque TOKEN_ACCOUNT, sign-in thread, youtube outputs reading the bound ingest, the health thread) and the builder list (with_youtube beside the wave's with_browser and youtube_chat preset) match youtube.rs, engine.rs and lib.rs; tests.rs adds mod youtube beside windows_gpu; tests/youtube.rs as listed; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:5ca839944dbeae17", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375: with_browser's description names the youtube_chat preset beside browser; engine.rs's doc says the same; live.rs's set_browser now rebuilds every kind opens_browser names, which tests/audio.rs's browser_presets_open_once_the_backend_arrives covers; the rest is the wave's C8 text; holds" }
@@ -1209,7 +1218,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:45aa02b6469b1a8a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). tests.rs: the Tests bullet's stalled-stop test (a peer that stops reading while a stop's deadline runs out) still describes StalledPeer with its 50 ms stalled sends; the rest of tests.rs is wave/m1's" }
+stamp = { hash = "b3:1d96c0a4f96940c7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: tests.rs adds mod youtube (tests/youtube.rs: sign-in, broadcasts, youtube outputs, health, the empty built-in client) beside the wave's windows_gpu module and its 50 ms stalled-peer test; the YouTube bullet and builder list still match youtube.rs, engine.rs and lib.rs; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
@@ -1234,6 +1243,12 @@ stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1K
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/windows_gpu.rs"]
 stamp = { hash = "b3:f16b463f8715a669", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
+
+["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/youtube.rs"]
+stamp = { hash = "b3:1cb3f432ff4f8d5d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: the YouTube bullet (with_youtube; YoutubeSetup::built_in from jstream-youtube's constants, None while empty; YoutubeSetup::new as a developer override; one LiveClient, opaque TOKEN_ACCOUNT, sign-in thread, youtube outputs reading the bound ingest, the health thread) and the builder list (with_youtube beside the wave's with_browser and youtube_chat preset) match youtube.rs, engine.rs and lib.rs; tests.rs adds mod youtube beside windows_gpu; tests/youtube.rs as listed; holds" }
+
+["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/youtube.rs"]
+stamp = { hash = "b3:97c448bb25c6d46c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: the YouTube bullet (with_youtube; YoutubeSetup::built_in from jstream-youtube's constants, None while empty; YoutubeSetup::new as a developer override; one LiveClient, opaque TOKEN_ACCOUNT, sign-in thread, youtube outputs reading the bound ingest, the health thread) and the builder list (with_youtube beside the wave's with_browser and youtube_chat preset) match youtube.rs, engine.rs and lib.rs; tests.rs adds mod youtube beside windows_gpu; tests/youtube.rs as listed; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/tests/mcp.rs"]
 stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: tests/mcp.rs change is only block_on's doc comment (hello wait's timer never starts when hello is ready); crate purpose unaffected" }
@@ -1272,7 +1287,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:d7c604129bdde866", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:da0ec8a527633884", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read after merging wave/m1 (0e29faa). dep core#design: this PR only adds the stop-drain sentence (a deadline check before each send), and the daemon's Design names no output stop timing, so nothing it relies on changed" }
+stamp = { hash = "b3:f4df86b55f90ceae", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: stale via core#design, which adds the YouTube engine section (built-in client or developer override) and, from the wave, the per-send stop deadline; the daemon, now with the wave's CEF browser wiring, doesn't call with_youtube, so nothing it says about YouTube changes; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
@@ -1560,7 +1575,7 @@ stamp = { hash = "b3:9f95f4d2d15eb904", by = "agent:claude@session_017gppowEjn8Z
 stamp = { hash = "b3:984f333744172f87" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#data-model"]
-stamp = { hash = "b3:ff243f2bac9a17b4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+stamp = { hash = "b3:bef5bc88318f2b92", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: stale via ARCH#data-model, whose only change is the YouTube target field renamed broadcast_binding to broadcast_id; encoding is untouched; holds" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:74397f35965002f4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 (#320 only adds the jstream-outputs crate-map row; merge-main took wave stamps that predate this PR): stale via ARCH#threading's Preview row only (not a real-time thread); section text is main's; holds" }
@@ -1593,19 +1608,19 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:6c1b99c4b8c63792" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:428d2b2c0cc1fe89", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+stamp = { hash = "b3:54026df692a28914", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the Output bullet names RTMP to a YouTube broadcast by ID and the broadcast_id rule (non-empty, at most 128 bytes, ASCII letters, digits, - and _; field kind.target.broadcast_id or target.broadcast_id), matching target.rs, apply.rs and the new tests; data-model's broadcast_id and the protocol README's 0.23 youtube target agree; the wave's asset and filter rules sit beside it; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:437412be146c5f8d", by = "agent:youtube-sign-in", note = "Re-read against protocol README › Design (youtube.stats link now ADR-0058; the wave's filter chains, opacity and blend in 0.22): graph's model text covers sources, filters and items and makes no YouTube claim; holds" }
+stamp = { hash = "b3:2034791df530f807", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the Output bullet names RTMP to a YouTube broadcast by ID and the broadcast_id rule (non-empty, at most 128 bytes, ASCII letters, digits, - and _; field kind.target.broadcast_id or target.broadcast_id), matching target.rs, apply.rs and the new tests; data-model's broadcast_id and the protocol README's 0.23 youtube target agree; the wave's asset and filter rules sit beside it; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#data-model"]
-stamp = { hash = "b3:ff243f2bac9a17b4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+stamp = { hash = "b3:bef5bc88318f2b92", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the Output bullet names RTMP to a YouTube broadcast by ID and the broadcast_id rule (non-empty, at most 128 bytes, ASCII letters, digits, - and _; field kind.target.broadcast_id or target.broadcast_id), matching target.rs, apply.rs and the new tests; data-model's broadcast_id and the protocol README's 0.23 youtube target agree; the wave's asset and filter rules sit beside it; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/apply.rs"]
-stamp = { hash = "b3:ae0f82a0d7f642c6", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+stamp = { hash = "b3:f4bb46e7e270e9f8", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the Output bullet names RTMP to a YouTube broadcast by ID and the broadcast_id rule (non-empty, at most 128 bytes, ASCII letters, digits, - and _; field kind.target.broadcast_id or target.broadcast_id), matching target.rs, apply.rs and the new tests; data-model's broadcast_id and the protocol README's 0.23 youtube target agree; the wave's asset and filter rules sit beside it; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/audio.rs"]
 stamp = { hash = "b3:3a5dcf3b621fc077" }
@@ -1641,10 +1656,10 @@ stamp = { hash = "b3:8c058ced95267ce0", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:04818355851e3789", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/target.rs"]
-stamp = { hash = "b3:675f46eea33b1c83", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:45ffe3f32a447d4f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the Output bullet names RTMP to a YouTube broadcast by ID and the broadcast_id rule (non-empty, at most 128 bytes, ASCII letters, digits, - and _; field kind.target.broadcast_id or target.broadcast_id), matching target.rs, apply.rs and the new tests; data-model's broadcast_id and the protocol README's 0.23 youtube target agree; the wave's asset and filter rules sit beside it; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
-stamp = { hash = "b3:7e2b5e45fa41df7a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
+stamp = { hash = "b3:212fb358903358e3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: the Output bullet names RTMP to a YouTube broadcast by ID and the broadcast_id rule (non-empty, at most 128 bytes, ASCII letters, digits, - and _; field kind.target.broadcast_id or target.broadcast_id), matching target.rs, apply.rs and the new tests; data-model's broadcast_id and the protocol README's 0.23 youtube target agree; the wave's asset and filter rules sit beside it; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests/filters.rs"]
 stamp = { hash = "b3:d5931f8e252cd9f7", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -1653,10 +1668,10 @@ stamp = { hash = "b3:d5931f8e252cd9f7", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:d3586a31945acf3a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:a38b41b926404b7c", by = "agent:youtube-sign-in", note = "Re-read the merged design: the 'a new noun becomes a new tool, except youtube' clause (ADR-0058 §3) sits beside the wave's tool table (device, filter, pairing, preview; preview fails over MCP) and the pairing/device paragraph (ADR-0057); none of the wave's tools is YouTube, and ARCH › MCP says the same; holds" }
+stamp = { hash = "b3:50219b1fac367d89", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:bc2d9f8373c34992", by = "agent:youtube-sign-in", note = "Re-read the merged design: the 'a new noun becomes a new tool, except youtube' clause (ADR-0058 §3) sits beside the wave's tool table (device, filter, pairing, preview; preview fails over MCP) and the pairing/device paragraph (ADR-0057); none of the wave's tools is YouTube, and ARCH › MCP says the same; holds" }
+stamp = { hash = "b3:a054a6de381d4a36", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1674,7 +1689,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:824842188b289238" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/events.rs"]
-stamp = { hash = "b3:bc976297600d51e0" }
+stamp = { hash = "b3:b5016e051964882f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/jsonrpc.rs"]
 stamp = { hash = "b3:5c306baedd4f5ddc" }
@@ -1683,19 +1698,19 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: 3 s hello bound for initialize and tool-call hello matches HELLO_TIMEOUT in server.rs; error-table row matches the disconnected retry message" }
+stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:d2f3eb60cc9c78df", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:60cbb6e9acd50bcf" }
+stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
 
 ["CRATE-jstream-mcp#purpose"."body"]
-stamp = { hash = "b3:45b6bf20e4397784", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; meters kept beside stats.tick; holds" }
+stamp = { hash = "b3:18f14fc86f4276c6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
 
 ["CRATE-jstream-mcp#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
@@ -1704,7 +1719,7 @@ stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 stamp = { hash = "b3:824842188b289238" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/events.rs"]
-stamp = { hash = "b3:bc976297600d51e0" }
+stamp = { hash = "b3:b5016e051964882f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/jsonrpc.rs"]
 stamp = { hash = "b3:5c306baedd4f5ddc" }
@@ -1713,16 +1728,16 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: contents list still matches server.rs/tests.rs; HELLO_TIMEOUT rename adds no item" }
+stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:d2f3eb60cc9c78df", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:60cbb6e9acd50bcf" }
+stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
@@ -2124,7 +2139,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:437412be146c5f8d", by = "agent:youtube-sign-in", note = "Re-read the merged design: this PR's only change is the youtube.stats link, now ADR-0058; the wave's 0.20 preview binary frames, 0.21 pairing/device calls and unsupported code, and 0.22 filter chains, opacity and blend (PROTOCOL_VERSION 0.22) add no youtube op, so the UI-only YouTube calls stay as planned; holds" }
+stamp = { hash = "b3:2034791df530f807", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2142,28 +2157,28 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:4e26b6714c3806c4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "0.22 bump: hello/welcome examples show minor 22 as examples.snap does, Opacity, blend and filters says it is added in 0.22, and the compat paragraph lists encoder, bus, device and then filter (0.22) in version order; protocol.snap only changes the Filter doc" }
+stamp = { hash = "b3:a847dcc5ef533c7d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:dd0a60a5c64b01c6", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "0.22 bump: hello/welcome examples show minor 22 as examples.snap does, Opacity, blend and filters says it is added in 0.22, and the compat paragraph lists encoder, bus, device and then filter (0.22) in version order; protocol.snap only changes the Filter doc" }
+stamp = { hash = "b3:c9bc8326d174c11a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:595b42eb3391cff5", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:7dd80a3dd12cbcd9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/envelope.rs"]
-stamp = { hash = "b3:48f6a61a2cf072ae", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.21: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.21 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; rechecked after merging wave/m1, with pairing moved to protocol 0.21 (0.20 is #251) and its ADR renumbered 0057; holds" }
+stamp = { hash = "b3:d6bfd8d35940d333", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/error.rs"]
 stamp = { hash = "b3:d22df17622c57b92", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "0.22 bump: hello/welcome examples show minor 22 as examples.snap does, Opacity, blend and filters says it is added in 0.22, and the compat paragraph lists encoder, bus, device and then filter (0.22) in version order; protocol.snap only changes the Filter doc" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/event.rs"]
-stamp = { hash = "b3:f2018a2e7c7b8d62" }
+stamp = { hash = "b3:2fc2b8fb0a37cebe", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/filter.rs"]
 stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -2172,7 +2187,7 @@ stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:1ed09ffbfdcff0f0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:f4fc7d29a2f3c24d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: fixtures.rs adds the YouTube commands, queries, events and the youtube output target, and answers the four YouTube actions with the wave's ActionResult beside its pairing.start one (only the import order changed since the last stamp); the section's YouTube text matches; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2187,10 +2202,10 @@ stamp = { hash = "b3:cfbe5ae0f0a5b8c6", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:81d3874a4e5f7ef3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: Rejections bullet now lists the empty-segment rule check_asset_path already enforces for collection/app, and the DOS-device sentence is rewrapped; checked against check_asset_path" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:a6c42d03d9967ff7", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:e52cec124af0973d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:a667a8df3f0ef64b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:68a65f42c4f090ed", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:da1c7b1a4115859b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -2199,7 +2214,7 @@ stamp = { hash = "b3:da1c7b1a4115859b", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:bef95243a1b983f0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:72681551a440d0da", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:d780bc08b7fa324e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -2208,10 +2223,13 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Rejections bullet updated for #403: DOS device names refused as the last component under every root (relative CON.png, media/nul); rest of Design unaffected" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:dfd1aee1550ed0db", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "0.22 bump: hello/welcome examples show minor 22 as examples.snap does, Opacity, blend and filters says it is added in 0.22, and the compat paragraph lists encoder, bus, device and then filter (0.22) in version order; protocol.snap only changes the Filter doc" }
+stamp = { hash = "b3:8bf291f8c99930f6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
+
+["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/youtube.rs"]
+stamp = { hash = "b3:1485046c80293f0f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: PROTOCOL_VERSION 0.23 is explained as YouTube (commands, events, the youtube target and the YouTube ActionResults, ADR-0058) above the wave's 0.22, 0.21 and 0.20; the action paragraph names pairing.start's code (0.21) and the YouTube results (0.23); the YouTube part says the calls are for the UI, MCP offers none, and unavailable means no OAuth client; matches youtube.rs, envelope.rs and the regenerated snapshots; holds" }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:b3d2751dfc243db4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "PROTOCOL_VERSION is 0.22 for opacity, blend and the filter chains (ADR-0023, ADR-0026), and the 0.21 pairing list follows it; matches version.rs and the Filter EntityKind doc in error.rs" }
+stamp = { hash = "b3:3d8873c341e38fc2", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: lists the youtube.* actions and queries, the youtube RTMP target, youtube.rs's types with other fallbacks, and the two youtube events; ActionResult is the wave's envelope.rs enum, now also holding youtube.sign_in's URL and the three broadcast answers, and the purpose says so there; matches command.rs, query.rs, event.rs, output.rs, envelope.rs, youtube.rs, fixtures.rs and lib.rs; PROTOCOL_VERSION 0.23 in version.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -2220,19 +2238,19 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:595b42eb3391cff5", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:7dd80a3dd12cbcd9", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: lists the youtube.* actions and queries, the youtube RTMP target, youtube.rs's types with other fallbacks, and the two youtube events; ActionResult is the wave's envelope.rs enum, now also holding youtube.sign_in's URL and the three broadcast answers, and the purpose says so there; matches command.rs, query.rs, event.rs, output.rs, envelope.rs, youtube.rs, fixtures.rs and lib.rs; PROTOCOL_VERSION 0.23 in version.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/envelope.rs"]
-stamp = { hash = "b3:48f6a61a2cf072ae", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.21: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; rechecked after merging wave/m1, with pairing moved to protocol 0.21 (0.20 is #251) and its ADR renumbered 0057; holds" }
+stamp = { hash = "b3:d6bfd8d35940d333", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: lists the youtube.* actions and queries, the youtube RTMP target, youtube.rs's types with other fallbacks, and the two youtube events; ActionResult is the wave's envelope.rs enum, now also holding youtube.sign_in's URL and the three broadcast answers, and the purpose says so there; matches command.rs, query.rs, event.rs, output.rs, envelope.rs, youtube.rs, fixtures.rs and lib.rs; PROTOCOL_VERSION 0.23 in version.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/error.rs"]
 stamp = { hash = "b3:d22df17622c57b92", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "PROTOCOL_VERSION is 0.22 for opacity, blend and the filter chains (ADR-0023, ADR-0026), and the 0.21 pairing list follows it; matches version.rs and the Filter EntityKind doc in error.rs" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/event.rs"]
-stamp = { hash = "b3:f2018a2e7c7b8d62" }
+stamp = { hash = "b3:2fc2b8fb0a37cebe", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: lists the youtube.* actions and queries, the youtube RTMP target, youtube.rs's types with other fallbacks, and the two youtube events; ActionResult is the wave's envelope.rs enum, now also holding youtube.sign_in's URL and the three broadcast answers, and the purpose says so there; matches command.rs, query.rs, event.rs, output.rs, envelope.rs, youtube.rs, fixtures.rs and lib.rs; PROTOCOL_VERSION 0.23 in version.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/filter.rs"]
 stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -2241,7 +2259,7 @@ stamp = { hash = "b3:772f782ad8d14941", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:1ed09ffbfdcff0f0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:f4fc7d29a2f3c24d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: fixtures.rs adds the YouTube commands, queries, events and the youtube output target, and answers the four YouTube actions with the wave's ActionResult beside its pairing.start one (only the import order changed since the last stamp); the section's YouTube text matches; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2256,10 +2274,10 @@ stamp = { hash = "b3:cfbe5ae0f0a5b8c6", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:81d3874a4e5f7ef3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#412: kind.rs change is a rewrap of check_asset_path's doc comment only; Kinds and settings contents bullet still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:a6c42d03d9967ff7", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:e52cec124af0973d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: lists the youtube.* actions and queries, the youtube RTMP target, youtube.rs's types with other fallbacks, and the two youtube events; ActionResult is the wave's envelope.rs enum, now also holding youtube.sign_in's URL and the three broadcast answers, and the purpose says so there; matches command.rs, query.rs, event.rs, output.rs, envelope.rs, youtube.rs, fixtures.rs and lib.rs; PROTOCOL_VERSION 0.23 in version.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:a667a8df3f0ef64b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:68a65f42c4f090ed", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: lists the youtube.* actions and queries, the youtube RTMP target, youtube.rs's types with other fallbacks, and the two youtube events; ActionResult is the wave's envelope.rs enum, now also holding youtube.sign_in's URL and the three broadcast answers, and the purpose says so there; matches command.rs, query.rs, event.rs, output.rs, envelope.rs, youtube.rs, fixtures.rs and lib.rs; PROTOCOL_VERSION 0.23 in version.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:da1c7b1a4115859b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
@@ -2268,7 +2286,7 @@ stamp = { hash = "b3:da1c7b1a4115859b", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:bef95243a1b983f0", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): PreviewSettings, BinaryFrame layout, KeyframeGate and version 0.20 match preview.rs/version.rs and the schema snapshots; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:72681551a440d0da", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:d780bc08b7fa324e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: lists the youtube.* actions and queries, the youtube RTMP target, youtube.rs's types with other fallbacks, and the two youtube events; ActionResult is the wave's envelope.rs enum, now also holding youtube.sign_in's URL and the three broadcast answers, and the purpose says so there; matches command.rs, query.rs, event.rs, output.rs, envelope.rs, youtube.rs, fixtures.rs and lib.rs; PROTOCOL_VERSION 0.23 in version.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -2277,7 +2295,10 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Contents list unchanged by #403 (check_asset_path rule only); no asset-path rule stated here" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:dfd1aee1550ed0db", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "PROTOCOL_VERSION is 0.22 for opacity, blend and the filter chains (ADR-0023, ADR-0026), and the 0.21 pairing list follows it; matches version.rs and the Filter EntityKind doc in error.rs" }
+stamp = { hash = "b3:8bf291f8c99930f6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: lists the youtube.* actions and queries, the youtube RTMP target, youtube.rs's types with other fallbacks, and the two youtube events; ActionResult is the wave's envelope.rs enum, now also holding youtube.sign_in's URL and the three broadcast answers, and the purpose says so there; matches command.rs, query.rs, event.rs, output.rs, envelope.rs, youtube.rs, fixtures.rs and lib.rs; PROTOCOL_VERSION 0.23 in version.rs; holds" }
+
+["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
+stamp = { hash = "b3:1485046c80293f0f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: lists the youtube.* actions and queries, the youtube RTMP target, youtube.rs's types with other fallbacks, and the two youtube events; ActionResult is the wave's envelope.rs enum, now also holding youtube.sign_in's URL and the three broadcast answers, and the purpose says so there; matches command.rs, query.rs, event.rs, output.rs, envelope.rs, youtube.rs, fixtures.rs and lib.rs; PROTOCOL_VERSION 0.23 in version.rs; holds" }
 
 ["CRATE-jstream-render#design"."body"]
 stamp = { hash = "b3:69374f6949f04237", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
@@ -2403,7 +2424,7 @@ stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Pairing (AD
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:b779208fb5fb4054", by = "agent:youtube-sign-in", note = "Re-read against ARCH › Protocol (YouTube bullet now ADR-0058 and UI-only; the wave's pairing and preview bullets): the server's token, Origin and pairing text and its MCP transport carry no YouTube claim, and serving MCP doesn't add youtube tools; holds" }
+stamp = { hash = "b3:5b72cc0da0e85c79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 at 0.23: stale via ARCH#protocol, whose YouTube bullet adds commands and events the session relays unchanged; this PR leaves session.rs as the wave has it; holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -2856,7 +2877,7 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
 ["CRATE-jstream-youtube#purpose"."body"]
-stamp = { hash = "b3:695ede26bf4682d8", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
+stamp = { hash = "b3:17f96763b6619765", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "Dep: platform #purpose gained the Codecs::on_context and FrameSync::platform bullets and a new Not yet; youtube still uses jstream-platform only for Secret, so this section is unaffected" }
@@ -2928,13 +2949,13 @@ stamp = { hash = "b3:a1b77e31232697af" }
 stamp = { hash = "b3:2a7db87174f1fd6d" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/lib.rs"]
-stamp = { hash = "b3:407cdc283e7cc3f5", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
+stamp = { hash = "b3:d6e76127c1f0fc8c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/live.rs"]
-stamp = { hash = "b3:37cfb6646affdb72" }
+stamp = { hash = "b3:a973aec7a81ebb2d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/live/tests.rs"]
-stamp = { hash = "b3:21c5a49c69bdfd06" }
+stamp = { hash = "b3:df2bf7557aa2b67d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/loopback.rs"]
 stamp = { hash = "b3:49badb1e6e8761a0" }
@@ -2943,7 +2964,7 @@ stamp = { hash = "b3:49badb1e6e8761a0" }
 stamp = { hash = "b3:a9e8a37ad1f0f16f" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/oauth.rs"]
-stamp = { hash = "b3:bbd477d163aefe57", by = "agent:youtube-sign-in", note = "Re-read whole section for ADR-0058: scopes, PKCE+loopback, token handling unchanged; Not-yet list now names the built-in client and UI-only protocol commands (no MCP tools)" }
+stamp = { hash = "b3:a842476030f67423", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/oauth/tests.rs"]
 stamp = { hash = "b3:b593d1da7528ba61" }
@@ -3123,7 +3144,7 @@ stamp = { hash = "b3:7c0a5283f684f83d", by = "agent:youtube-sign-in", note = "Re
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:b779208fb5fb4054", by = "agent:youtube-sign-in", note = "Re-read against ARCH › Protocol (YouTube bullet now cites ADR-0058 and is UI-only; the wave's 0.20-0.22 bullets): the compatibility rules (versioning, additive changes, R-API-002 with its youtube exception) still match; holds" }
+stamp = { hash = "b3:5b72cc0da0e85c79", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: stale via ARCH#protocol's YouTube bullet; 0.23 only adds commands, events, a target variant and ActionResult variants, which the minor-bump rule allows; holds" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
@@ -3159,7 +3180,7 @@ stamp = { hash = "b3:a61b2dec171a5423", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:a20d9be290ee2393", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:9acfa00277921814", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: stale via the CLI usage, which now says the CLI has no YouTube-bound output or YouTube actions (0.23); the smoke script uses only generic RTMP outputs; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:a61b2dec171a5423", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from CLI and daemon Usage: smoke.ps1 uses the control token and doesn't pair; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -3171,7 +3192,7 @@ stamp = { hash = "b3:a560da0e5768f43e" }
 stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:a20d9be290ee2393", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:9acfa00277921814", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: stale via the CLI usage, which now says the CLI has no YouTube-bound output or YouTube actions (0.23); the steps stream with a generic RTMPS URL and stream key, which the CLI still does; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:a61b2dec171a5423", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from CLI Usage (pair/device), daemon Usage (device file) and server Design (pairing): no step pairs a device, and every command still uses the control token; holds. Merge of main (f0cb974) and wave/m1 kept their text." }

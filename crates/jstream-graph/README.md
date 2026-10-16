@@ -58,10 +58,10 @@ codes, so the engine passes them to clients unchanged.
   gain in dB from a source into a bus.
 - `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
   `State::encoding_of` gives the encoding an output starts with.
-- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, a recording
-  to an MP4 file, or the virtual camera, which has nothing to check) and the encoder
-  profile it uses, if not the default (a virtual camera encodes nothing, so it ignores
-  its profile). Whether it
+- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL or to a YouTube
+  broadcast by its ID, a recording to an MP4 file, or the virtual camera, which has
+  nothing to check) and the encoder profile it uses, if not the default (a virtual
+  camera encodes nothing, so it ignores its profile). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -141,7 +141,9 @@ the batch **touched**.
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
   name, and one that could carry a credential (`user:password@`, a query or a
-  fragment). A recording's `path` is rejected (field `kind.path`) when it is empty,
+  fragment). A `youtube` target's `broadcast_id` is rejected (field
+  `kind.target.broadcast_id`, or `target.broadcast_id` in `output.set_target`) when it is empty, over 128 bytes, or has anything but ASCII
+  letters, digits, `-` and `_`. A recording's `path` is rejected (field `kind.path`) when it is empty,
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
   `\…`, `C:\…` or `C:/…`, the same on every platform), or
   doesn't end in a file name; whether it is absolute on the engine's own machine, and
