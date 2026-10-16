@@ -1,0 +1,40 @@
+[package]
+name = "jstream-platform-linux"
+version = "0.0.0"
+description = "Linux platform backends: the CLOCK_MONOTONIC media clock, ScreenCast portal and PipeWire capture, PipeWire audio and VA-API codecs (ADR-0060). Draft."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "Draft (ADR-0060, proposed): CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal capture targets, PipeWire and VA-API loaded at run time with `dlopen`, VA-API H.264 encoder probing"
+unsafe_allowed = true
+
+# Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
+# one of the crates R-UNSAFE-001 allows to use it. Every other workspace lint is copied
+# unchanged; keep the two tables in step.
+[lints.rust]
+missing_docs = "warn"    # R-RS-006 (blocking under -D warnings)
+
+[lints.clippy]
+unwrap_used = "deny"                      # R-RS-004
+print_stdout = "deny"                     # R-RS-005
+print_stderr = "deny"                     # R-RS-005
+allow_attributes_without_reason = "deny"  # R-RS-009
+undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
+
+[features]
+# Platform tests against a real Linux desktop (docs/RULES.md#testing): a PipeWire daemon,
+# the ScreenCast portal and a GPU with a VA-API driver. Additive, off by default, and the
+# tests are also `#[ignore]`d. Run them on such a machine with
+# `cargo test -p jstream-platform-linux --features hw-tests -- --ignored`.
+hw-tests = []
+
+[dependencies]
+jstream-platform.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true
+libloading.workspace = true
