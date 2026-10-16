@@ -60,7 +60,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 97 of 112 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 22 items, by next step: 🔨 build 12, 🌊 its wave lands 1, 🧪 Windows run 7, 👤 maintainer 2</summary>
+<summary><b>What's left</b>: 22 items, by next step: 🔨 build 11, 🌊 its wave lands 2, 🧪 Windows run 7, 👤 maintainer 2</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -71,7 +71,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | A6b | Daemon YouTube wiring | M1a | 🔨 build, then 👤 maintainer, then 🧪 Windows run | draft #312; sign-in needs the OAuth client (ADR-0058); Windows run #337 |  |
 | C5 | Audio sources | M1b | 🧪 Windows run | audio hardware tests | #238 |
 | C3 | Display and window capture sources | M1b | 🔨 build, then 🧪 Windows run | draft #365; Windows run #378 |  |
-| C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341 | #283, #289, #298 |
+| C8 | Browser source (CEF) | M1b | 🧪 Windows run | #341, #335, #336 | #283, #289, #298 |
 | I2 | Live values | M1b | 🔨 build |  | #244 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | pacing rerun | #174, #195, #200, #229 |
 | G3d | Virtual camera in the UI and the desktop app | M1c | 🧪 Windows run | Windows run (#390) | #316 |
@@ -82,7 +82,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | D8p | Audio chain protocol fields | M2 | 🔨 build | draft #303 |  |
 | C9 | Media file source | M2 | 🧪 Windows run | media file hardware tests (#382) | #245, #322 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build | drafts #319 and #323 |  |
-| X1 | Full 3D transforms and WGSL effect packs | M3 | 🔨 build | effect packs #368; full 3D transforms | #359 |
+| X1 | Full 3D transforms and WGSL effect packs | M3 | 🌊 its wave lands, then 🔨 build | effect packs #368 land with wave/m1-2; full 3D transforms to build | #359 |
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | draft #363; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
 | CL1 | CLAP plugin host | M3 | 🌊 its wave lands, then 🔨 build, then 🧪 Windows run | parts 2 and 3 land with wave/m3 (#477); CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272 |
 | WA1 | WASM automation plugins | M3 | 🔨 build |  |  |
@@ -161,7 +161,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C2 | Text source | ✅ merged | #221 |
 | C5 | Audio sources | 🧪 merged, Windows run pending: audio hardware tests | #238 |
 | C3 | Display and window capture sources | ⏳ planned: draft #365; Windows run #378 |  |
-| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341 | #283, #289, #298 |
+| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341, #335, #336 | #283, #289, #298 |
 | D1 | Live mixer inputs | ✅ merged | #149, #199 |
 | D3 | Loudness meters | ✅ merged | #152 |
 | D7a | Filter kernels | ✅ merged | #159 |
@@ -249,7 +249,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ✅ merged | #325 |
-| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368; full 3D transforms | #359 |
+| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned: effect packs #368 land with wave/m1-2; full 3D transforms to build | #359 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review: draft #363; signed-in features need the OAuth client (ADR-0058) | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: parts 2 and 3 land with wave/m3 (#477); CLAP filters to run; then a live-audio Windows run (new issue once CLAP filters run) | #272 |

@@ -412,7 +412,7 @@ milestone = "M1b"
 title = "Browser source (CEF)"
 status = "hardware"
 prs = [283, 289, 298]
-note = "#341"
+note = "#341, #335, #336"
 
 [[item]]
 id = "D1"
@@ -823,8 +823,8 @@ milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
 prs = [359]
-note = "effect packs #368; full 3D transforms"
-needs = ["build"]
+note = "effect packs #368 land with wave/m1-2; full 3D transforms to build"
+needs = ["wave", "build"]
 
 [[item]]
 id = "3D1"

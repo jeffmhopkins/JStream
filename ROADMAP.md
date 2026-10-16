@@ -173,8 +173,9 @@ The remaining work lands in this order. A step doesn't wait for the one before i
 finish: builds, runs and decisions go on side by side, and the order is what lands first.
 
 1. **Land the open waves** in milestone order, M1, then M2, then M3
-   ([RUNBOOK-WAVES › Landing](docs/runbooks/waves.md#landing)). Items marked *build* finish through review
-   into their wave. Items marked *its wave lands* are already in one.
+   ([RUNBOOK-WAVES › Landing](docs/runbooks/waves.md#landing)). Items marked *build*
+   finish through review into their wave. Items marked *its wave lands* are already in
+   one.
 2. **Windows runs.** Every item marked *Windows run* passes its run on Windows hardware,
    which only the maintainer can do. Items that a later build changes run again.
 3. **Maintainer decisions and actions**, for items marked *maintainer*:
