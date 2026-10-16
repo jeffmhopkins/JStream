@@ -118,14 +118,14 @@ state machine. Contents:
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
   end), the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
-  `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
+  `video.snapshot` on whatever adapter opens (the software one in CI), nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
   thread's output size (the capture filling it with no scene, the program scaled from
   the canvas, a `display` source showing the capture) and nested-scene layers reused
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), the pipeline against the platform fakes
-  (on the software adapter, and again on a CPU stand-in for the compositor so the
+  (on whatever adapter opens, the software one in CI, and again on a CPU stand-in for the compositor so the
   stage-failure, late-tick, teardown, final-tick, link-loss, stalled-stop and
   blocked-send stop tests run without one),
   `connect_rtmp` against a slow fake RTMP server on loopback, one that hangs up
@@ -496,8 +496,8 @@ or a size that does not fit in memory is `SourceFrameError`.
 
 The work runs on `jstream-snapshot`, a thread the engine starts on the first
 snapshot. It owns the compositor, serves requests in order, and stops when the
-engine goes away. The compositor opens on the first snapshot, software adapter first
-(`OpenOptions::headless`: lavapipe or WARP). No adapter is `internal`, and the reason
+engine goes away. The compositor opens on the first snapshot, hardware adapter first,
+with lavapipe or WARP as the fallback (`OpenOptions::hardware`). No adapter is `internal`, and the reason
 starts with `no wgpu adapter`. A failed open is cached: until its retry time,
 snapshots answer that error at once instead of probing adapters again. The first
 retry is 5 s after the failure, and each failure in a row doubles the wait, up to
@@ -791,7 +791,9 @@ emits `stopping` and `stopped` as from `active`.
 The render thread reads the platform capture mailbox, composites the program mix of
 the render snapshot (see *Snapshots*) at 30 frames per second, repeats the last
 capture when the mailbox is empty, and reads the composite back as RGBA8 because this
-cut has no GPU encode target. Each tick first calls `RenderReader::adopt`, which
+cut has no GPU encode target. It opens its compositor on a hardware adapter when the
+machine has one, and on the software adapter otherwise (`OpenOptions::hardware`): on
+WARP a 720p program ran at about 10 fps (#433). Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
 the snapshot it held to the program stage's `jstream-collector` thread. The GPU images the

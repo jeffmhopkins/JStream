@@ -107,7 +107,7 @@ pub(crate) type DrawFn = Box<
 >;
 
 /// Opens the render thread's [`DrawFn`], on that thread. The engine's opens the wgpu
-/// compositor on the software adapter ([`gpu_draw`]). Tests inject [`cpu_draw`] (or a
+/// compositor on a hardware adapter first ([`gpu_draw`]). Tests inject [`cpu_draw`] (or a
 /// variant) so the pipeline runs without an adapter.
 pub(crate) type OpenDraw = Arc<dyn Fn() -> Result<DrawFn, String> + Send + Sync>;
 
@@ -731,12 +731,14 @@ pub(crate) fn parts_from(
     }
 }
 
-/// The wgpu compositor on the software adapter, reading every frame back to the CPU.
+/// The wgpu compositor on a hardware adapter, or the software one when there is none
+/// (`OpenOptions::hardware`), reading every frame back to the CPU. The render thread
+/// has a 1/30 s budget, which a software adapter misses at 720p already (#433).
 /// Its [`ResourceCache`] keeps the uploads and nested-scene layers from tick to tick.
 pub(crate) fn gpu_draw() -> OpenDraw {
     Arc::new(|| {
         let mut compositor =
-            Compositor::open(OpenOptions::headless()).map_err(|err| render_open_error(&err))?;
+            Compositor::open(OpenOptions::hardware()).map_err(|err| render_open_error(&err))?;
         let mut cache = ResourceCache::<GpuKey>::new();
         let draw: DrawFn = Box::new(move |shot, size, capture, out| {
             cache.begin_frame();
@@ -1166,9 +1168,9 @@ fn video_config(size: FrameSize, profile: &EncoderProfile) -> Result<VideoEncode
         _ => return Err("the encoder profile's rate control is not one this engine knows".into()),
     };
     let hardware = match video.hardware {
-        ProfileHardware::Prefer => HardwarePreference::Prefer,
+        ProfileHardware::Avoid => HardwarePreference::Avoid,
         ProfileHardware::Require => HardwarePreference::Require,
-        _ => HardwarePreference::Avoid,
+        _ => HardwarePreference::Prefer,
     };
     Ok(VideoEncoderConfig {
         codec: Codec::H264,
@@ -1938,7 +1940,7 @@ mod tests {
         let config = video_config(size, &EncoderProfile::DEFAULT).expect("default");
         assert_eq!(config.rate_control, RateControl::Cbr { kbps: 2500 });
         assert_eq!(config.keyframe_interval, 60);
-        assert_eq!(config.hardware, HardwarePreference::Avoid);
+        assert_eq!(config.hardware, HardwarePreference::Prefer);
 
         let mut profile = EncoderProfile::DEFAULT;
         profile.video.rate_control = ProfileRate::Vbr {

@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 /// How an output's video and audio are encoded.
 ///
 /// An output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:
-/// H.264 at a constant 2500 kbit/s with a keyframe every 2 s on the software encoder,
-/// and AAC at 160 kbit/s.
+/// H.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when
+/// there is one (else the software one), and AAC at 160 kbit/s.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct EncoderProfile {
     /// The video encoding.
@@ -31,7 +31,7 @@ impl EncoderProfile {
             codec: VideoCodec::H264,
             rate_control: RateControl::Cbr { kbps: 2500 },
             keyframe_interval_s: 2,
-            hardware: HardwarePreference::Avoid,
+            hardware: HardwarePreference::Prefer,
         },
         audio: AudioEncoding {
             codec: AudioCodec::Aac,
@@ -120,7 +120,7 @@ pub struct VideoEncoding {
     /// Seconds from one keyframe to the next, 1..=10, else `invalid_argument`. Most
     /// streaming services ask for 2.
     pub keyframe_interval_s: u32,
-    /// Whether to use a hardware encoder. Omitted means `avoid`.
+    /// Whether to use a hardware encoder. Omitted means `prefer`.
     #[serde(default)]
     pub hardware: HardwarePreference,
 }
@@ -171,12 +171,12 @@ pub enum RateControl {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum HardwarePreference {
-    /// Hardware if there is one, else software.
+    /// Hardware if there is one, else software. The default (ADR-0031: hardware first).
+    #[default]
     Prefer,
     /// Hardware only: `output.start` fails when there is none.
     Require,
     /// Software only.
-    #[default]
     Avoid,
     /// A preference this version of the protocol doesn't know, from a newer server.
     /// The engine refuses it in an edit with `invalid_argument`.
@@ -254,7 +254,7 @@ mod tests {
                     "codec": "h264",
                     "rate_control": {"type": "cbr", "kbps": 2500},
                     "keyframe_interval_s": 2,
-                    "hardware": "avoid"
+                    "hardware": "prefer"
                 },
                 "audio": {"codec": "aac", "kbps": 160}
             }))
@@ -275,6 +275,6 @@ mod tests {
         .expect("parses");
         assert_eq!(profile.video.codec, VideoCodec::Unknown);
         assert_eq!(profile.video.rate_control, RateControl::Unknown);
-        assert_eq!(profile.video.hardware, HardwarePreference::Avoid);
+        assert_eq!(profile.video.hardware, HardwarePreference::Prefer);
     }
 }

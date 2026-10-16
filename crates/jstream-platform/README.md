@@ -152,8 +152,8 @@ The design for frames that stay on the GPU, which ARCH's pipeline needs (capture
 Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene on
-that device when the engine has one, and opens its own (software adapter first) when it
-does not; it does not write the NV12 encode target. The encoders' GPU input comes next.
+that device when the engine has one, and opens its own (hardware adapter first, the
+software one as the fallback) when it does not; it does not write the NV12 encode target. The encoders' GPU input comes next.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call

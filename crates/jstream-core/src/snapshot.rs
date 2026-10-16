@@ -654,7 +654,7 @@ fn open<'a>(
         if let Some(error) = backoff.cached(now) {
             return Err(error);
         }
-        match Compositor::open(OpenOptions::headless()) {
+        match Compositor::open(OpenOptions::hardware()) {
             Ok(compositor) => {
                 tracing::info!(
                     adapter = %compositor.adapter_description(),
@@ -1283,7 +1283,7 @@ pub(crate) mod tests {
     /// is no adapter outside CI.
     fn snap(shot: &Shot) -> Option<Vec<u8>> {
         let _gpu = crate::tests::one_gpu_test_at_a_time();
-        let mut compositor = match Compositor::open(OpenOptions::headless()) {
+        let mut compositor = match Compositor::open(OpenOptions::hardware()) {
             Ok(compositor) => compositor,
             Err(err) => {
                 let error = super::from_render(err);
@@ -1382,7 +1382,7 @@ pub(crate) mod tests {
     /// Opens the software adapter for a test that drives [`compose`] itself. `None` when
     /// there is no adapter outside CI.
     fn gpu() -> Option<Compositor> {
-        match Compositor::open(OpenOptions::headless()) {
+        match Compositor::open(OpenOptions::hardware()) {
             Ok(compositor) => Some(compositor),
             Err(err) => {
                 let error = super::from_render(err);
