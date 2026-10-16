@@ -586,6 +586,67 @@ fn a_file_with_only_audio_plays_it_and_loops_seamlessly() {
     assert!(resumed.ms < 60_700, "{resumed:?}");
 }
 
+/// #446: a decoder that hands over a second of sound at once (as an MP3 file did on
+/// Windows) is still handed on only shortly ahead of the timeline. Handed on whole, its
+/// end overwrote its start in the mixer input's ring before it was heard, so each
+/// second played only its last fifth.
+#[test]
+fn long_decoded_blocks_are_handed_on_only_shortly_ahead() {
+    let (dir, fake) = setup(
+        "audio-long-blocks",
+        FakeClip {
+            frames: 0,
+            audio: Some(FakeAudio {
+                format: AudioFormat::new(
+                    48_000,
+                    ChannelLayout::Stereo,
+                    SampleFormat::F32Interleaved,
+                )
+                .expect("a format"),
+                block_frames: 48_000,
+                blocks: 3,
+            }),
+            ..clip()
+        },
+    );
+    let source = create(
+        &ctx(&dir, &fake),
+        &settings(Some("clip.mp4"), false, 1.0, true),
+    )
+    .expect("a source");
+    let (audio, _stream, recorder, clock) = open_audio(source.as_ref());
+    audio.set_audible(true);
+    recorder.wait("100 ms of audio", |got| got.len() >= 10);
+    // A few more ticks of the feeder, with the clock still at 0.
+    std::thread::sleep(Duration::from_millis(50));
+    let got = recorder.got();
+    assert!(
+        got.iter().all(|g| g.ms <= 100),
+        "nothing more than 100 ms ahead: {:?}",
+        got.last()
+    );
+    for t in (50..=1_500).step_by(50) {
+        clock.advance(50_000);
+        recorder.wait("audio up to the clock", |got| {
+            got.last().is_some_and(|g| g.ms >= t + 90)
+        });
+        let ahead = recorder.got().last().map_or(0, |g| g.ms);
+        assert!(ahead <= t + 100, "{ahead} ms handed on at {t} ms");
+    }
+    let got = recorder.got();
+    // Every packet, across the blocks' seam at 1 s, follows the last one.
+    for pair in got.windows(2) {
+        assert_eq!(pair[1].ms - pair[0].ms, 10, "{pair:?}");
+        assert_eq!(pair[1].position, pair[0].position + 480);
+        assert!(!pair[1].discontinuity, "{pair:?}");
+    }
+    let seam = got.iter().position(|g| g.ms == 1_000).expect("the seam");
+    assert_eq!(
+        (got[seam - 1].level, got[seam].level),
+        (FakeAudio::level(0), FakeAudio::level(1))
+    );
+}
+
 /// [`clip`] with sound that outlasts the picture: 3 s of 48 kHz stereo.
 fn with_long_sound() -> FakeClip {
     let mut clip = with_sound();
