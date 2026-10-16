@@ -1649,6 +1649,7 @@ fn fitting_reads_the_state_only_when_needed() {
         edits,
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     let unread = || -> Result<(Canvas, Vec<SourceInfo>), CliError> { panic!("read the state") };
 

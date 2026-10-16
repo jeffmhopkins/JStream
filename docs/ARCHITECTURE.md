@@ -431,7 +431,7 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
-| Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot and `rev` under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
+| Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
@@ -500,8 +500,9 @@ source frame and a collection file's load, the control side re-plans the program
 under the collection lock: the reachable scenes, the frames they show and the passes
 that draw them. It publishes that as the next render generation only when it draws
 something new, so a batch that touches nothing on program publishes nothing. The render
-thread loads it without the lock. `video.snapshot` reads it together with `rev` under
-the lock on the control path, and its thread only receives the snapshot. The render
+thread loads it without the lock. `video.snapshot` and the preview thread read it
+together with `rev` and the live values under the lock, and draw the live values over
+it. The render
 thread draws through a `jstream-render` resource cache keyed by source and by nested
 scene and depth. A frame that shows what the last one showed allocates no texture: an
 unchanged frame is not uploaded again and each nested scene is redrawn into the layer it
@@ -749,7 +750,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 249 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 311 KB
   of `tools/list` today, the `live` tool's share most of the edit schemas `item` and
   `batch` carry, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in

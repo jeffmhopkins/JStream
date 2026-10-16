@@ -95,8 +95,8 @@ state machine. Contents:
   sends. While there is no audio-only source, the default microphone and desktop audio
   are recorded too, sent to master at unity (see *Audio sources* in
   [Design](#design)).
-- **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
-  `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
+- **Snapshot** (`snapshot.rs`): the program mix as the render thread, the preview
+  thread and `video.snapshot` draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
   compositor.
 - **Studio** (`studio.rs`): which scene is on program, runtime state under the
@@ -230,7 +230,8 @@ state machine. Contents:
   JPEG without an encoder following the mix's changes and the canvas size, H.264 from
   the platform fakes starting at a keyframe and JPEG beside it for a client that asks,
   the subscription checks and limit, unsubscribe and the session's end, and a reader
-  that stops reading holding a bounded queue and resuming in order), the
+  that stops reading holding a bounded queue and resuming in order, and a live value
+  sent at once with the same `rev`), the
   collection file (`src/tests/collection.rs`: created when missing, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
   outputs, a `waveform` drawing another source saved and loaded with the source it
@@ -356,8 +357,8 @@ crate.
 Batches and the collection queries run under the collection lock, so those calls
 are serialized across sessions and their events are queued in the order the changes
 happened. Placeholder output actions do too: they only step the state machine.
-`video.snapshot` reads `rev` and the published render snapshot under that lock and
-hands them to the snapshot thread after releasing it (see *Snapshots*).
+`video.snapshot` reads `rev`, the published render snapshot and the live values under
+that lock and hands them to the snapshot thread after releasing it (see *Snapshots*).
 
 A pipeline `output.start` or `output.stop` holds the collection lock only while it
 changes that output's state and queues events. Opening devices, waiting for the
@@ -479,8 +480,9 @@ the render parameter channel, never through the collection:
   tick, with a pointer compare, and hands a replaced one to the collector
   (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
   crop wherever the item is drawn, nested passes included, with no new snapshot and
-  no allocation. `video.snapshot` reads the channel with the snapshot under the lock,
-  so a snapshot shows an open gesture as the output does.
+  no allocation. `video.snapshot` and the preview thread read the channel with the
+  snapshot under the lock, so a snapshot or a preview picture shows an open gesture as
+  the output does; a preview stream is due when the live values change.
 - **`live.changed`** is coalesced per gesture: a gesture whose last event is at least
   1/30 s old sends its unsent values at once; otherwise the `jstream-live` thread sends
   the newest values when the interval is up. The thread starts when there is such work
@@ -570,10 +572,11 @@ it through `arc-swap` as the next render generation only when it draws something
 (the canvas, the scenes, their placements or the frames' versions differ). So a batch
 that changes nothing on program, or a frame for a source no program scene shows,
 publishes nothing. Each stored frame carries a version, so a cache re-uploads it only when it
-changed. `video.snapshot` reads `rev` and the published snapshot together under the
-lock and hands both to the snapshot thread.
+changed. `video.snapshot` reads `rev`, the published snapshot and the live values
+together under the lock and hands them to the snapshot thread.
 
-`snapshot::compose` draws a `Shot` for both threads through a `jstream-render`
+`snapshot::compose` draws a `Shot`, with the live values over it, for the render,
+snapshot and preview threads through a `jstream-render`
 `ResourceCache` keyed by `GpuKey`: a source's upload, the capture's (an upload of a
 CPU frame, or an import of the platform's texture, `ResourceCache::import`), a nested
 scene's layer at its depth, and the program at the canvas size. An unchanged frame is not
@@ -769,11 +772,12 @@ JPEG always. One `jstream-preview` thread per engine, started by the first strea
 gone once none is left, serves them all. It owns a compositor (`Compositor::open`
 headless, or the CPU stand-in under `with_cpu_compositor`) and keeps each stream's
 encoder and pacing to itself, so the stream its session holds is only flags. On each
-pass it loads the published render snapshot and `rev` (a brief collection lock, never
-held while drawing), and for each stream that is due draws the shot at the stream's
-size, reads it back and encodes it. A stream is due at most `fps` times a second, and
-only when the snapshot changed, a keyframe was asked for, or 2 s passed since its last
-keyframe; one whose queue is full isn't drawn. H.264 runs on a `jstream-encode`
+pass it loads the published render snapshot and `rev` and the live values on the
+render parameter channel (a brief collection lock, never held while drawing), and for
+each stream that is due draws the shot with the live values over it, as the render
+thread does, at the stream's size, reads it back and encodes it. A stream is due at
+most `fps` times a second, and only when the snapshot or the live values changed, a
+keyframe was asked for, or 2 s passed since its last keyframe; one whose queue is full isn't drawn. H.264 runs on a `jstream-encode`
 `VideoSession` that avoids hardware (so a preview never takes an output's hardware
 session), VBR, with a keyframe every 2 s, reopened when the picture size changes; its
 packets go out with the `rev` of the picture they encode. If it can't be opened the
@@ -1266,7 +1270,7 @@ lock, then takes the collection lock only to install a build or re-plan, which a
 each live source for a frame it already has. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The preview thread takes its own state lock, and the
-collection lock alone and only to load the render snapshot and `rev`, never while
+collection lock alone and only to load the render snapshot, `rev` and the live values, never while
 drawing or encoding; a session's preview streams and binary channel are leaf locks. The render snapshot is published under the collection
 lock (which makes the control side its one writer) and loaded by the render thread
 with no lock at all, as are the live values on the parameter channel. `video.snapshot`

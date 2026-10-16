@@ -762,7 +762,7 @@ impl State {
             }
             Action::LiveCancel { gesture_id } => {
                 self.end_gesture(client_id, &gesture_id, LiveOutcome::Cancelled, None);
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::OutputSetKey { output_id, key } => {
                 // The engine's order: the output must be configured, then the key valid.
@@ -987,7 +987,7 @@ impl State {
             client_id: key.0,
             values: changed.into_values().collect(),
         });
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     /// Ends `client_id`'s gesture without a commit, if it is open, and emits `live.ended`.
@@ -3290,6 +3290,7 @@ mod tests {
                 ],
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
         )
         .expect("created");
@@ -3310,6 +3311,7 @@ mod tests {
                 edits: vec![wave(serde_json::Value::Null), delete],
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
         )
         .expect("cleared, then deleted");
@@ -3615,6 +3617,7 @@ mod tests {
             edits: vec![create("a"), webcam(), add("a", "i1", "webcam")],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, setup), Ok(Rev(1)));
         let before = state(&*control);
@@ -3632,6 +3635,7 @@ mod tests {
             ],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         };
         assert_eq!(batch(&*control, fade), Ok(Rev(2)));
         let faded = state(&*control);

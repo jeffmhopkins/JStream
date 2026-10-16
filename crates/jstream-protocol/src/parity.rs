@@ -1028,6 +1028,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                     .collect(),
                 expected_rev: None,
                 idempotency_key: None,
+                ends_gesture: None,
             },
             invalid("edits.6.chain", "a chain holds at most 8 filters"),
         ),

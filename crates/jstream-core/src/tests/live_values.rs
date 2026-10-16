@@ -42,7 +42,7 @@ fn live_set(control: &dyn Control, id: &str, values: Vec<Edit>) -> Result<(), Co
         values,
     };
     match block_on(control.call(Call::Action { action }))?.result {
-        CallResult::Action {} => Ok(()),
+        CallResult::Action { .. } => Ok(()),
         other => panic!("not an action result: {other:?}"),
     }
 }

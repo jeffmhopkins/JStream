@@ -32,8 +32,9 @@ Contents (a first cut; [Design](#design) explains the choices):
   less the people-only `youtube.*` ops (`PEOPLE_ONLY`), and the decoding of tool
   arguments into protocol calls, which refuses an output edit with a `youtube` target.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
-  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`;
-  `youtube.*` events are dropped.
+  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`; a
+  `live.changed` may be merged into an unread one of its gesture, and `youtube.*`
+  events are dropped.
 - **JSON-RPC** (`jsonrpc.rs`): parsing one message and building replies.
 - **stdio transport** (`stdio.rs`): `serve_stdio`, newline-delimited messages over any
   `BufRead`/`Write` pair.

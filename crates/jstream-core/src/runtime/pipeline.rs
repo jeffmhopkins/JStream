@@ -2472,7 +2472,7 @@ mod tests {
         let size = FrameSize::new(4, 4).expect("size");
         // Fills the output, checking the capture it is given.
         let drawing = |expected: Option<(u64, FrameSize)>| -> DrawFn {
-            Box::new(move |_, size: FrameSize, capture, out: &mut Vec<u8>| {
+            Box::new(move |_, _, size: FrameSize, capture, out: &mut Vec<u8>| {
                 let got = capture.map(|c| match c.image {
                     CaptureImage::Rgba { size, .. } => (c.version, size),
                     CaptureImage::Gpu(_) => panic!("a CPU capture"),
@@ -2485,13 +2485,25 @@ mod tests {
         let program = crate::snapshot::tests::one_scene_shot();
         assert!(!program.shows_capture());
         frames
-            .draw(&mut drawing(None), &program, size)
+            .draw(
+                &mut drawing(None),
+                &program,
+                &crate::snapshot::LiveParams::default(),
+                size,
+            )
             .expect("draw");
         assert!(frames.pending.is_some(), "not converted");
         let empty = Shot::default();
         assert!(empty.shows_capture());
         let mut check = drawing(Some((1, FrameSize::new(8, 2).expect("size"))));
-        frames.draw(&mut check, &empty, size).expect("draw");
+        frames
+            .draw(
+                &mut check,
+                &empty,
+                &crate::snapshot::LiveParams::default(),
+                size,
+            )
+            .expect("draw");
         assert!(frames.pending.is_none());
         assert_eq!(frames.source_version, 1);
         assert_eq!(frames.shown.len(), 4 * 4 * 4);

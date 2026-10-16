@@ -2195,8 +2195,8 @@ impl State {
     /// What follows every applied batch, undo and redo: the outputs, the live sources and
     /// the program mixer follow the collection, a deleted source's stored frame goes
     /// (unless the same edits made a new source under its id), live values on a deleted
-    /// item go, `state.changed` is
-    /// emitted, and the program scene is reconciled (ADR-0030).
+    /// item go, `state.changed` is emitted, and the program scene is reconciled
+    /// (ADR-0030).
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -2264,7 +2264,7 @@ impl State {
                     Some(request_id),
                     wake,
                 );
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             // Restarts the master's integrated loudness, if the mixer runs; there is
             // nothing to restart otherwise, which is no failure.
@@ -2392,7 +2392,7 @@ impl State {
         self.gestures.set(client_id, gesture_id, values);
         self.publish_live();
         self.live_tick(Instant::now(), wake);
-        Ok(CallResult::Action {})
+        Ok(CallResult::action())
     }
 
     /// Ends one of `client_id`'s gestures without a commit, if it is open: its values
@@ -2516,9 +2516,19 @@ impl State {
 }
 
 impl PreviewSource for Shared {
-    fn current(&self) -> (Arc<crate::runtime::RenderSnapshot>, Rev) {
+    fn current(
+        &self,
+    ) -> (
+        Arc<crate::runtime::RenderSnapshot>,
+        Arc<crate::snapshot::LiveParams>,
+        Rev,
+    ) {
         let state = lock(&self.state);
-        (state.render.load(), state.graph.rev())
+        (
+            state.render.load(),
+            state.render.load_live(),
+            state.graph.rev(),
+        )
     }
 }
 
