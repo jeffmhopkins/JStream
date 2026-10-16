@@ -1104,7 +1104,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:8abaa727b4a71f8a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3's Design additions (YouTube actions with no engine lock, the sign-in and LiveClient mutexes after the start lock) sit apart from #458's: the stop-drain paragraph (each count takes what it counts off the queue; abandon held over the latch), the drop-table Stop drain row and the abandon, video, audio lock order still match pipeline.rs, which Y3 left untouched. Tests pass after the merge." }
+stamp = { hash = "b3:46e3da0e16d2373a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (#458) into #457. #457's tests.rs change makes no Design claim; #458's stop-drain paragraph, drop table and lock order came in unchanged from wave/m1 and match pipeline.rs. Tests pass after the merge." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's browser paragraph says a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser and the new tests/audio.rs case; the wave's B7 opacity/blend/filter text is in other paragraphs; holds" }
@@ -1218,7 +1218,7 @@ stamp = { hash = "b3:c54471c0763d3882", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:8abaa727b4a71f8a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3 added the YouTube bullets, tests and youtube.rs and did not touch pipeline.rs or the Drop-counts bullet, which still says the output source counts the output thread's drops or what the stop drops for it when it leaves the thread behind (Running::drop -> Queues::abandon). The Tests list keeps #458's left-behind test beside Y3's src/tests/youtube.rs. clippy and cargo test -p jstream-core (178 passed) after the merge." }
+stamp = { hash = "b3:46e3da0e16d2373a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (#458, stop-drain count) into #457. #457 changes only the vcam test's per-run frame baseline in tests.rs; #458 added its left-behind test and the stop-side drop-count wording. The Tests list names both correctly and the Drop-counts bullet is #458's verified text. cargo test -p jstream-core passes after the merge." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
