@@ -96,6 +96,7 @@ skip = [
     { crate = "serde_derive_internals@0.29.1", reason = "schemars_derive 0.8, for tauri-build and tauri-utils (build time)" },
     { crate = "serde_spanned@0.6.9", reason = "toml 0.8 and toml_edit 0.20, for system-deps and proc-macro-crate (gtk-rs builds, Linux only)" },
     { crate = "syn@1.0.109", reason = "proc-macro-error (gtk3-macros, Linux only under Tauri) uses syn 1" },
+    { crate = "target-lexicon@0.12.16", reason = "cfg-expr 0.15 (system-deps 6, gtk-rs builds, Linux only under Tauri) uses 0.12; cranelift (wasmtime, jstream-plugin-wasm) uses 0.13" },
     { crate = "toml@0.8.2", reason = "system-deps 6 (gtk-rs -sys builds, Linux only under Tauri) uses toml 0.8" },
     { crate = "toml_datetime@0.6.3", reason = "toml 0.8 and toml_edit 0.19/0.20 (gtk-rs builds, Linux only under Tauri)" },
     { crate = "toml_edit@0.19.15", reason = "proc-macro-crate 1 (gtk3-macros, Linux only under Tauri)" },
@@ -134,7 +135,9 @@ deny = [
     # (jstream-ui, ADR-0045) that uses it internally; no JStream error type is an anyhow one.
     # `tauri`, `tauri-build` and `tauri-utils` (jstream-desktop) use it internally the same way.
     # `cef-dll-sys` (jstream-browser, feature `helper`) uses it in its build script only.
-    { crate = "anyhow", wrappers = ["jstream-desktop", "jstream-daemon", "jstream-cli", "xtask", "leptos_hot_reload", "tauri", "tauri-build", "tauri-utils", "cef-dll-sys"], reason = "R-RS-003" },
+    # `wasmtime-environ` and `wasmprinter` (wasmtime, jstream-plugin-wasm) use it internally;
+    # wasmtime's own `Error` is not anyhow's, and jstream-plugin-wasm's errors are thiserror.
+    { crate = "anyhow", wrappers = ["jstream-desktop", "jstream-daemon", "jstream-cli", "xtask", "leptos_hot_reload", "tauri", "tauri-build", "tauri-utils", "cef-dll-sys", "wasmtime-environ", "wasmprinter"], reason = "R-RS-003" },
 ]
 
 [sources]
