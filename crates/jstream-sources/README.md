@@ -299,6 +299,8 @@ handed to a recording handler: nothing until heard, stamps 100 ms ahead of the
 timeline with continuous positions, a restart as a discontinuity, silence at another
 speed, an audio-only file looping without a seam and seeking after a long gap, and
 audio that outlasts the video playing on without a seek, then looping to the first
-frame, and a decoder's long blocks still handed on only 100 ms ahead, continuous across
-the block seam. `player.rs`'s own tests cut a block at a rate where 10 ms isn't a whole
+frame, silence in the file before the next play stepped over as a gap rather than a
+discontinuity, and a decoder's long blocks still handed on only 100 ms ahead,
+continuous across the block seam. `player.rs`'s own tests loop a stream that starts late
+in the file one frame period apart, and cut a block at a rate where 10 ms isn't a whole
 number of frames, keeping every frame and the pieces contiguous.
