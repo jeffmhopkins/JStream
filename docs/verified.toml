@@ -1770,7 +1770,7 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:7522c9a00d99ef52", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Re-read WindowsVcam Start: probe then HKLM check, matching sink.rs; the N-edition wording holds for this crate's hosts in general. The sink.rs change only moved registered()'s doc back above it (B1)" }
+stamp = { hash = "b3:54752a7a73020412", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via jstream-platform#purpose's new Data folder bullet; this crate's portable-install mentions (key store, Moved registration) agree with paths' marker semantics; holds" }
@@ -1812,7 +1812,7 @@ stamp = { hash = "b3:d47d64ab0a716fca" }
 stamp = { hash = "b3:3294ae8699585eea" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/convert.rs"]
-stamp = { hash = "b3:c69cc7614d14a3de" }
+stamp = { hash = "b3:96e21a6b605c08a9", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/id.rs"]
 stamp = { hash = "b3:a5976c69be087903" }
@@ -1821,7 +1821,7 @@ stamp = { hash = "b3:a5976c69be087903" }
 stamp = { hash = "b3:a15cf56d9898996a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/mod.rs"]
-stamp = { hash = "b3:05a494ad3dae5f79" }
+stamp = { hash = "b3:f70081c751fc7074", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/ring.rs"]
 stamp = { hash = "b3:bc308dcc158e28d4" }
@@ -1839,13 +1839,13 @@ stamp = { hash = "b3:bcbc90e406de91b4" }
 stamp = { hash = "b3:0b4fe8918cdd233a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/h264.rs"]
-stamp = { hash = "b3:a5e1bd2cf0f9cd5e" }
+stamp = { hash = "b3:40424fccd7d72dde", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mf.rs"]
 stamp = { hash = "b3:c5d1fa497918f58d" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/codec/mod.rs"]
-stamp = { hash = "b3:e7ff5e49bb280c63" }
+stamp = { hash = "b3:41b4f0c62b4c4b54", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/com.rs"]
 stamp = { hash = "b3:c237392a0b5423fa" }
