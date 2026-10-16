@@ -299,6 +299,16 @@ struct Decode {
     /// The streams that have ended in this play.
     video_done: bool,
     audio_done: bool,
+    /// Where each stream's first frame or block sits in the file, once a play from the
+    /// start has read it. A stream need not start at zero: Media Foundation leaves an
+    /// MP4's edit list unapplied, so its H.264 frames start a B-frame delay late (#445).
+    /// A play lasts from a stream's first frame to the end of its last, so the next play
+    /// follows straight on rather than that delay late.
+    video_start: Option<i64>,
+    audio_start: Option<i64>,
+    /// Whether this play started at the start of the file, so its first frame and block
+    /// are where the streams start.
+    from_start: bool,
 }
 
 impl Decode {
@@ -324,6 +334,9 @@ impl Decode {
             audio_end: None,
             video_done: false,
             audio_done: false,
+            video_start: first.map(|(at, _)| at),
+            audio_start: None,
+            from_start: true,
         }
     }
 
@@ -428,13 +441,15 @@ impl Decode {
             None => (0, to),
         };
         self.base = base;
-        self.new_play();
+        self.new_play(time == 0);
         self.skip_to = Some(base + time);
         self.decoder.seek(MediaTime::new(time, Timebase::MICROS))
     }
 
-    /// Forgets what this play decoded, for a seek or the next loop.
-    fn new_play(&mut self) {
+    /// Forgets what this play decoded, for a seek or the next loop, which starts at the
+    /// start of the file when `from_start`.
+    fn new_play(&mut self, from_start: bool) {
+        self.from_start = from_start;
         self.last = None;
         self.held = None;
         self.audio_end = None;
@@ -470,6 +485,9 @@ impl Decode {
             });
         }
         let time = micros(frame.info().pts).unwrap_or(0);
+        if self.from_start && self.video_start.is_none() {
+            self.video_start = Some(time);
+        }
         if let Some(last) = self.last.filter(|&last| time > last) {
             self.period = time - last;
         }
@@ -540,6 +558,9 @@ impl Decode {
         let start = micros(block.pts()).unwrap_or(0);
         let frames = i64::try_from(block.frames()).unwrap_or(i64::MAX);
         let end = start.saturating_add(frames.saturating_mul(1_000_000) / rate);
+        if self.from_start && self.audio_start.is_none() {
+            self.audio_start = Some(start);
+        }
         self.audio_end = Some(end);
         let mut at = self.base + start;
         let mut samples = block.samples().to_vec();
@@ -575,7 +596,8 @@ impl Decode {
     }
 
     /// The file ended: queue what a seek held back, learn the play's length, and start
-    /// the next play or stop.
+    /// the next play or stop. The length is the longest stream's, from its first frame or
+    /// block to the end of its last, so that stream's next play joins straight on.
     fn end(
         &mut self,
         shared: &(Mutex<State>, Condvar),
@@ -585,13 +607,18 @@ impl Decode {
             self.queue(shared, held);
         }
         let target = self.skip_to.take();
-        let video_end = self.last.map(|last| last + self.period);
-        let Some(last) = video_end.max(self.audio_end) else {
+        let video = self
+            .last
+            .map(|last| last + self.period - self.video_start.unwrap_or(0));
+        let audio = self
+            .audio_end
+            .map(|end| end - self.audio_start.unwrap_or(0));
+        let Some(last) = video.max(audio) else {
             if let Some(target) = target.filter(|_| looping) {
                 // A seek past the end before the length was known (the container
                 // didn't say): play from the start at the target instead.
                 self.base = target;
-                self.new_play();
+                self.new_play(true);
                 return self.decoder.seek(MediaTime::zero(Timebase::MICROS));
             }
             // Nothing in this play: a file with nothing left to play.
@@ -603,7 +630,7 @@ impl Decode {
             return self.stop(shared);
         }
         self.base += length;
-        self.new_play();
+        self.new_play(true);
         self.decoder.seek(MediaTime::zero(Timebase::MICROS))
     }
 
@@ -661,11 +688,15 @@ mod tests {
         FrameSize::new(side, side).expect("a size")
     }
 
-    /// A decoder for these tests: `frames` frames 40 ms apart, each of `sizes(index)`,
-    /// with or without a duration; its seeks can be made to wait for a go-ahead.
+    /// A decoder for these tests: `frames` frames 40 ms apart from `lead`, each of
+    /// `sizes(index)`, with or without a duration; its seeks can be made to wait for a
+    /// go-ahead.
     struct Clip {
         info: MediaInfo,
         frames: i64,
+        /// The first frame's time: zero, or later as Media Foundation gives an MP4
+        /// whose edit list removes its B-frame delay.
+        lead: i64,
         next: i64,
         sizes: fn(i64) -> u32,
         /// Told when a seek starts, then waited on before it finishes.
@@ -685,6 +716,7 @@ mod tests {
                         .then(|| MediaTime::new(frames * PERIOD_US, Timebase::MICROS)),
                 },
                 frames,
+                lead: 0,
                 next: 0,
                 sizes,
                 gate: None,
@@ -703,7 +735,7 @@ mod tests {
             }
             let side = (self.sizes)(self.next);
             let pixels = (side * side * 4) as usize;
-            let pts = MediaTime::new(self.next * PERIOD_US, Timebase::MICROS);
+            let pts = MediaTime::new(self.lead + self.next * PERIOD_US, Timebase::MICROS);
             self.next += 1;
             let frame = rgba_frame(size(side), vec![0; pixels], pts).expect("a frame");
             Ok(Some(frame))
@@ -718,16 +750,18 @@ mod tests {
                 let _ = started.send(());
                 let _ = go.recv();
             }
-            self.next = micros(to).unwrap_or(0).div_euclid(PERIOD_US).max(0);
+            let to = micros(to).unwrap_or(0) - self.lead;
+            self.next = to.div_euclid(PERIOD_US).max(0);
             Ok(())
         }
     }
 
-    /// Starts a player on `clip`, whose first frame (at 0, 2x2) has been taken.
+    /// Starts a player on `clip`, whose first frame (at its lead, 2x2) has been taken.
     fn start(clip: Clip, capacity: usize, looping: bool) -> Player {
+        let lead = clip.lead;
         Player::start(Start {
             decoder: Box::new(clip),
-            first: Some((0, size(2))),
+            first: Some((lead, size(2))),
             capacity,
             looping,
             timing: Timing {
@@ -810,5 +844,23 @@ mod tests {
             "the file's start, at the target"
         );
         assert_eq!(state.queue.get(1).map(|d| d.at), Some(1_040_000));
+    }
+
+    /// #445: a stream whose first frame comes late in the file (an MP4's B-frame delay,
+    /// which Media Foundation leaves in) still loops one frame period apart, not that
+    /// delay more.
+    #[test]
+    fn a_loop_follows_on_from_a_stream_that_starts_late() {
+        let mut clip = Clip::new(5, true, |_| 2);
+        clip.lead = 2 * PERIOD_US;
+        clip.next = 1;
+        let player = start(clip, 8, true);
+        wait(&player, "the second play", |s| s.queue.len() >= 6);
+        let at: Vec<i64> = player.state().queue.iter().map(|d| d.at).collect();
+        assert_eq!(
+            at[..6],
+            [120_000, 160_000, 200_000, 240_000, 280_000, 320_000],
+            "the second play's first frame comes one period after the first's last"
+        );
     }
 }

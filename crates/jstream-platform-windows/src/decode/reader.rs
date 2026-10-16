@@ -2,13 +2,14 @@
 //! through the OS decoders, converting to RGB32 with its video processor; this module
 //! hands the frames on as packed RGBA or BGRA. Audio, when asked for, comes out as
 //! interleaved `f32` at the stream's own rate, mixed down to stereo by the decoder when
-//! its channel count has no layout here.
+//! its channel count has no layout here, and cut to its content without the encoder's
+//! priming and padding ([`gapless`](super::gapless)).
 
 use std::path::Path;
 
 use jstream_platform::media::{
     AudioBuffer, AudioFormat, ChannelLayout, ColorInfo, ColorRange, ColorSpace, FrameSize,
-    MediaTime, PixelFormat, Plane, SampleFormat, VideoFrame, VideoFrameInfo,
+    MediaTime, PixelFormat, Plane, Rounding, SampleFormat, VideoFrame, VideoFrameInfo,
 };
 use jstream_platform::{
     HardwarePreference, MediaAudioInfo, MediaDecoder, MediaDecoderConfig, MediaDecoders, MediaInfo,
@@ -22,17 +23,19 @@ use windows::Win32::Media::MediaFoundation::{
     MF_MT_AUDIO_NUM_CHANNELS, MF_MT_AUDIO_SAMPLES_PER_SECOND, MF_MT_DEFAULT_STRIDE,
     MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_MAJOR_TYPE, MF_MT_MINIMUM_DISPLAY_APERTURE,
     MF_MT_SUBTYPE, MF_PD_DURATION, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS,
-    MF_SOURCE_READER_ALL_STREAMS, MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING,
-    MF_SOURCE_READER_FIRST_AUDIO_STREAM, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-    MF_SOURCE_READER_MEDIASOURCE, MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED,
-    MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READERF_ERROR, MFAudioFormat_Float,
-    MFCreateAttributes, MFCreateMediaType, MFCreateSourceReaderFromURL, MFMediaType_Audio,
-    MFMediaType_Video, MFVideoArea, MFVideoFormat_RGB32,
+    MF_SD_AUDIO_ENCODER_DELAY, MF_SD_AUDIO_ENCODER_PADDING, MF_SOURCE_READER_ALL_STREAMS,
+    MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, MF_SOURCE_READER_FIRST_AUDIO_STREAM,
+    MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_MEDIASOURCE,
+    MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED, MF_SOURCE_READERF_ENDOFSTREAM,
+    MF_SOURCE_READERF_ERROR, MFAudioFormat_AAC, MFAudioFormat_Float, MFCreateAttributes,
+    MFCreateMediaType, MFCreateSourceReaderFromURL, MFMediaType_Audio, MFMediaType_Video,
+    MFVideoArea, MFVideoFormat_RGB32,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::core::{GUID, HRESULT, HSTRING, Interface};
 
 use super::convert::{self, Area};
+use super::gapless::{AAC_PRIMING, Block, Gapless, frames_at};
 use crate::com::{Com, OsResult, os_error};
 use crate::video_device::source::MfStarted;
 
@@ -99,12 +102,15 @@ impl MediaDecoders for MfMediaDecoders {
             audio: audio.map(|format| MediaAudioInfo { format }),
             duration: duration(&reader),
         };
+        let gapless = audio.map(|format| gapless(&reader, format, info.duration));
         Ok(Box::new(MfMediaDecoder {
             reader,
             info,
             shape,
             format: config.video_format,
             at_end: false,
+            gapless,
+            audio_ended: false,
             _mf: mf,
         }))
     }
@@ -332,6 +338,34 @@ fn audio_format(reader: &IMFSourceReader) -> Result<Option<AudioFormat>, Platfor
     )?))
 }
 
+/// What to cut from the audio stream: the priming and padding the source reports
+/// (`MF_SD_AUDIO_ENCODER_DELAY` and `_PADDING`, from an MP3's LAME header or an MP4's
+/// `iTunSMPB`), else for AAC the usual 1024 frames of priming, and whatever runs past
+/// the file's duration (`MF_PD_DURATION`, which an MP4's edit list sets to the content's
+/// length). The reader applies none of these itself (#445).
+fn gapless(reader: &IMFSourceReader, format: AudioFormat, duration: Option<MediaTime>) -> Gapless {
+    let attribute = |key: &GUID| {
+        // SAFETY: plain COM call on a live reader; the PROPVARIANT is cleared by its Drop.
+        let value = unsafe { reader.GetPresentationAttribute(AUDIO, key) }.ok()?;
+        u32::try_from(&value).ok()
+    };
+    // SAFETY: plain COM calls on a live reader and the type it returns.
+    let aac = unsafe {
+        reader
+            .GetNativeMediaType(AUDIO, 0)
+            .and_then(|t| t.GetGUID(&MF_MT_SUBTYPE))
+    }
+    .is_ok_and(|subtype| subtype == MFAudioFormat_AAC);
+    let delay = attribute(&MF_SD_AUDIO_ENCODER_DELAY)
+        .or(aac.then_some(AAC_PRIMING))
+        .unwrap_or(0);
+    let padding = attribute(&MF_SD_AUDIO_ENCODER_PADDING).unwrap_or(0);
+    let end = duration
+        .and_then(|d| d.rescale(format.timebase(), Rounding::Nearest).ok())
+        .map(MediaTime::ticks);
+    Gapless::new(format.channels(), delay, padding, end)
+}
+
 /// How long the file plays, when the container says.
 fn duration(reader: &IMFSourceReader) -> Option<MediaTime> {
     // SAFETY: plain COM call on a live reader; the PROPVARIANT is cleared by its Drop.
@@ -352,6 +386,11 @@ struct MfMediaDecoder {
     format: PixelFormat,
     /// Seeked past the end: both streams read as ended until the next seek.
     at_end: bool,
+    /// Cuts the audio to its content; `None` with no audio.
+    gapless: Option<Gapless>,
+    /// The audio stream ended, and its last block was handed on: it reads as ended
+    /// until the next seek.
+    audio_ended: bool,
     /// Declared last, so the reader is released before Media Foundation shuts down.
     _mf: MfStarted,
 }
@@ -414,7 +453,7 @@ impl MediaDecoder for MfMediaDecoder {
         let Some(audio) = self.info.audio else {
             return Ok(None);
         };
-        if self.at_end {
+        if self.at_end || self.audio_ended {
             return Ok(None);
         }
         loop {
@@ -448,11 +487,24 @@ impl MediaDecoder for MfMediaDecoder {
                     what: "an audio format change partway through".into(),
                 });
             }
+            let gapless = self.gapless.as_mut().ok_or(PlatformError::InvalidState {
+                what: "reading audio",
+                state: "the file has no audio",
+            })?;
             if let Some(sample) = sample {
-                return samples(&sample, audio.format, timestamp).map(Some);
+                let block = samples(&sample, audio.format, timestamp)?;
+                // Priming, or the block held back to see whether it is the last.
+                match gapless.push(block) {
+                    Some(block) => return buffer(audio.format, block).map(Some),
+                    None => continue,
+                }
             }
             if flags & MF_SOURCE_READERF_ENDOFSTREAM.0.cast_unsigned() != 0 {
-                return Ok(None);
+                self.audio_ended = true;
+                return gapless
+                    .finish()
+                    .map(|block| buffer(audio.format, block))
+                    .transpose();
             }
             // No sample and no end: a gap in the stream. Read on.
         }
@@ -465,6 +517,10 @@ impl MediaDecoder for MfMediaDecoder {
             })?
             .max(0);
         let position = PROPVARIANT::from(hns);
+        if let Some(gapless) = &mut self.gapless {
+            gapless.reset();
+        }
+        self.audio_ended = false;
         // SAFETY: plain COM call; GUID_NULL is 100 ns units, and `position` is a VT_I8
         // that lives for the duration of the call.
         match unsafe { self.reader.SetCurrentPosition(&GUID::zeroed(), &position) } {
@@ -517,12 +573,12 @@ impl MfMediaDecoder {
 }
 
 /// A decoded float PCM sample as a block of `format`, starting at `timestamp` (100 ns
-/// units).
+/// units), which is counted in frames at the stream's rate.
 fn samples(
     sample: &IMFSample,
     format: AudioFormat,
     timestamp: i64,
-) -> Result<AudioBuffer, PlatformError> {
+) -> Result<Block, PlatformError> {
     // SAFETY: plain COM call on a live sample.
     let buffer =
         unsafe { sample.ConvertToContiguousBuffer() }.os("IMFSample::ConvertToContiguousBuffer")?;
@@ -554,7 +610,17 @@ fn samples(
         .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
         .collect();
     drop(locked);
-    Ok(AudioBuffer::new(format, convert::from_hns(timestamp), pcm)?)
+    Ok(Block {
+        start: frames_at(timestamp, format.sample_rate()),
+        samples: pcm,
+    })
+}
+
+/// A block cut to the content, as the stream's next buffer: its time is its first
+/// frame's, at the stream's rate.
+fn buffer(format: AudioFormat, block: Block) -> Result<AudioBuffer, PlatformError> {
+    let pts = MediaTime::new(block.start, format.timebase());
+    Ok(AudioBuffer::new(format, pts, block.samples)?)
 }
 
 /// Calls `f` with a buffer's picture, locked for the duration of the call: its bytes

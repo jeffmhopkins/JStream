@@ -2,11 +2,14 @@
 //! backend on the Media Foundation Source Reader (`reader`), which demuxes and decodes a
 //! local file with the OS's own containers and codecs. Video comes out on the CPU as
 //! packed RGBA or BGRA, converted from the reader's RGB32 (`convert`); frames on the GPU
-//! follow the zero-copy work (E3).
+//! follow the zero-copy work (E3). Audio comes out cut to its content, without the
+//! encoder's priming and padding (`gapless`).
 
 // Platform-independent, so it is tested on every platform.
 #[cfg(any(windows, test))]
 mod convert;
+#[cfg(any(windows, test))]
+mod gapless;
 #[cfg(windows)]
 mod reader;
 

@@ -96,7 +96,9 @@ Contents:
   never resampled) or `None` when there is none, it wasn't asked for or the platform
   can't decode it, and the duration when the container says. `next_video()` and
   `next_audio()` (an `AudioBuffer`) block while they decode the next frame or block of
-  their stream, in presentation order, and are `Ok(None)` at its end. The caller reads
+  their stream, in presentation order, and are `Ok(None)` at its end. Audio is the
+  stream's content only: a backend drops the encoder's priming and padding where it can
+  tell them. The caller reads
   the two in step by time, since a backend holds what one stream demuxed while the
   other is read. `seek(to)` moves both: video restarts at the key frame at or before
   `to`, so the frames up to it may come out first, and audio at or before `to`. Times

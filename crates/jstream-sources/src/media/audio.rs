@@ -11,7 +11,9 @@
 //! and plays at `speed` 1: at any other speed the source is silent, since the mixer
 //! steers an input's rate by half a percent at most. Audio the timeline has passed is
 //! dropped, and a jump in the timeline (a restart, a seek, the source shown again) is
-//! a discontinuity the mixer re-anchors at.
+//! a discontinuity the mixer re-anchors at. Silence in the file itself, such as where a
+//! looping file's sound ends before its picture does, is a gap in the device position
+//! instead, which the mixer fills with silence where it falls.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, PoisonError};
@@ -39,6 +41,10 @@ const PACKET_US: i64 = 10_000;
 /// Two packets whose stamps are further apart than their length by more than this are
 /// not continuous, in microseconds.
 const JUMP_US: i64 = 1_000;
+/// The longest silence in the file itself the device position steps over, rather than
+/// flagging a discontinuity, in microseconds: well inside the 2 s gap a mixer input
+/// fills with silence.
+const GAP_US: i64 = 1_000_000;
 
 /// A `media` source's audio. Clones share it.
 #[derive(Clone)]
@@ -271,6 +277,19 @@ impl Feed {
             let continuous = self
                 .next
                 .is_some_and(|next| (stamp - next).abs() <= JUMP_US);
+            // Nothing skipped, and the stamp a little ahead: silence in the file, such as
+            // a looping file's picture outlasting its sound before the next play. The
+            // position steps over it, so the mixer hears a gap where it falls. A flagged
+            // discontinuity there would not re-anchor at once, the stamp being off the
+            // line the mixer fitted, but some 400 ms later, as a second hole (#445).
+            let silence = self
+                .next
+                .map(|next| stamp - next)
+                .filter(|&gap| !self.jumped && gap > JUMP_US && gap <= GAP_US);
+            if let Some(gap) = silence {
+                self.position += u64::try_from((gap * rate + 500_000) / 1_000_000).unwrap_or(0);
+            }
+            let continuous = continuous || silence.is_some();
             let discontinuity = self.next.is_some() && (self.jumped || !continuous);
             self.jumped = false;
             self.handler.on_packet(&AudioPacket {
