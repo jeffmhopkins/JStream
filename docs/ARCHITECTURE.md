@@ -589,7 +589,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
-  `output.status` reports only `key_set`.
+  `output.status` reports only `key_set`. A key is bound to its output's server: an
+  applied change that deletes the output or points it at another scheme, host or port
+  removes the key, so it never goes to a server it wasn't set for (#343).
 - **Actions** (`output.start`, `scene.switch`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.

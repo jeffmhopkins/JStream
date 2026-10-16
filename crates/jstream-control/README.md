@@ -190,8 +190,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII
   characters; `output.clear_key` always succeeds.
-  The keys live in memory, outside the collection: no `rev`, no event, kept when their
-  output is deleted. `output.status` reports `key_set` from them, and
+  The keys live in memory, outside the collection: no `rev`, no event. As in the
+  engine, an applied batch, undo or redo that deletes an output or changes its
+  `OutputKind::key_server` (another scheme, host or port) removes its key (#343). `output.status` reports `key_set` from them, and
   `MockEngine::stream_key` lets a client test check what was stored. Unlike an
   `Engine` built without `with_key_store`, which answers `action_failed`, the mock
   always has a store, so clients can test the whole flow;

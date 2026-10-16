@@ -2082,7 +2082,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Changes where an RTMP output publishes. A running output keeps its connection;\nthe new target applies from its next `output.start`. Its stream key is kept.\nInverse: `output.set_target` with the previous target.",
+          "description": "Changes where an RTMP output publishes. A running output keeps its connection;\nthe new target applies from its next `output.start`. Its stream key is kept only\nwhile the server stays the same (scheme, host and port; the path may change): a\nnew server removes the key from the credential store, so the old key never goes\nto it, and needs a new `output.set_key`. Inverse: `output.set_target` with the\nprevious target, which can't restore a removed key.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",
@@ -2132,7 +2132,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key stays in the credential store, so undoing the delete restores a\nworking output; `output.clear_key` removes it. Inverse: `output.create` with its\nkind.",
+          "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key is removed from the credential store, so an output created later\nwith the same ID doesn't inherit it. Inverse: `output.create` with its kind, which\ncan't restore the key: set it again with `output.set_key`.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",

@@ -219,7 +219,8 @@ non-finite samples turned to silence.
   coming back are not validated (nothing reads them yet); plugin-reported names reach
   the UI and agents; the host can reset the mixer's miss counters.
 - WASM (#348): no CPU or memory limits are decided, and nothing limits which `Control`
-  calls a plugin may make, so a sandboxed plugin could still retarget an output (#343).
+  calls a plugin may make, so a sandboxed plugin could still retarget an output (it
+  can't take the old key along: #343 removes it on a new server).
   R-SEC-003 names an enforcing test in a crate that doesn't exist yet.
 - WGSL (#349): validation doesn't bound run time; a hanging shader resets the GPU, and
   device loss isn't handled.
@@ -236,7 +237,8 @@ injection), and so using its full access against the user.
 **Controls on main:** MCP goes through the same gate and token as the WebSocket API
 (over stdio, through `jstream-cli mcp`, it uses the CLI's token). The desktop app keeps
 MCP off. Tool arguments and results are not logged; the audit log records who changed
-what, without arguments. Stream keys are never in a result.
+what, without arguments. Stream keys are never in a result, and a retarget to another
+host removes the output's key rather than sending it there (#343).
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through
@@ -244,8 +246,7 @@ what, without arguments. Stream keys are never in a result.
 agent sets with `output.set_key` is in the agent's own transcript.
 
 **Gaps:** results don't mark third-party text, and an RTMP server's error text reaches
-the agent unbounded (#346); a retarget sends an existing key to a new host, which is
-the main thing an injected instruction would aim for (#343).
+the agent unbounded (#346).
 
 <a id="secrets"></a>
 ## Secrets and the network
@@ -263,15 +264,17 @@ intercepted connection.
   one (user info, query, fragment) are refused.
 - RTMPS and the YouTube API use rustls with the OS roots and hostname checks; nothing
   turns verification off. An RTMP server's text has the key replaced before it is kept.
+- A key is bound to its server: pointing an output at another scheme, host or port,
+  or deleting it, removes its key, and the output can't start until that removal has
+  happened, so a retarget never sends the old key to the new host (#343).
 - OAuth uses PKCE and a `state` check on a one-shot loopback listener.
 - `secrets_are_redacted` checks the engine's logs, replies, events and audit lines.
 
 **Accepted:** a key pasted into the URL's path (`rtmp://host/app/<key>`) is stored as
 the URL, as the target documentation warns.
 
-**Gaps:** retargeting keeps the key (#343); `rtmp://` sends the key in cleartext with no
-warning, crash reports redact only the control token, and the redaction test covers
-the engine only (#353).
+**Gaps:** `rtmp://` sends the key in cleartext with no warning, crash reports redact
+only the control token, and the redaction test covers the engine only (#353).
 
 <a id="vcam"></a>
 ## Virtual camera
@@ -304,7 +307,6 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 
 | Issue | Area | Gap | Severity |
 |---|---|---|---|
-| #343 | Secrets, MCP | `output.set_target` keeps the stream key, so a retarget sends it to the new host | High |
 | #344 | Server, pairing | Windows token, devices and log files only inherit their folder's ACL | Medium |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #346 | MCP | Remote text reaches agents unbounded and unmarked | Medium |

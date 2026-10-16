@@ -2535,6 +2535,78 @@ mod cpu_pipeline {
         }
     }
 
+    /// When the credential store refuses to remove the key of an output that moved to
+    /// another server (#343), the output can't start, so the opener never sends the old
+    /// key to the new server; once `output.clear_key` succeeds, it can.
+    #[test]
+    fn an_output_whose_old_key_is_not_removed_does_not_start() {
+        use super::{clear_key, rtmp_output, set_key};
+        use crate::OpenPublish;
+        use jstream_platform::fake::MemoryKeyStore;
+        use jstream_protocol::RtmpTarget;
+
+        let opens = Arc::new(AtomicU64::new(0));
+        let open: OpenPublish = {
+            let opens = Arc::clone(&opens);
+            Arc::new(move |_: &OutputId| {
+                opens.fetch_add(1, Ordering::SeqCst);
+                Err(crate::PublishError::new("no server in this test"))
+            })
+        };
+        let store = MemoryKeyStore::new();
+        let fakes = fakes();
+        let engine = Engine::new()
+            .with_key_store(Arc::new(store.clone()))
+            .with_backends(share(&fakes.backends))
+            .with_draw(cpu_draw())
+            .with_publish_opener(open);
+        let control = connected(&engine);
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("yt"),
+                kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+            }]),
+        )
+        .expect("output.create");
+        block_on(control.call(set_key("yt", "yt-key"))).expect("set_key");
+        store.set_failing(true);
+        batch(
+            &control,
+            edits(vec![Edit::OutputSetTarget {
+                output_id: OutputId::new("yt"),
+                target: RtmpTarget::Generic {
+                    url: "rtmp://attacker.example/live2".into(),
+                },
+            }]),
+        )
+        .expect("the batch applies even when the store refuses");
+        store.set_failing(false);
+        assert_eq!(store.len(), 1, "the store kept the key");
+
+        let refused = block_on(control.call(output_call("yt", true))).expect_err("refused");
+        assert_eq!(code(&refused), Some("action_failed"));
+        assert!(
+            refused.to_string().contains("output.clear_key"),
+            "{refused}"
+        );
+        assert!(!refused.to_string().contains("yt-key"), "{refused}");
+        assert_eq!(opens.load(Ordering::SeqCst), 0, "the opener never ran");
+
+        block_on(control.call(clear_key("yt"))).expect("clear_key");
+        assert!(store.is_empty());
+        let failed = block_on(control.call(output_call("yt", true))).expect_err("no server");
+        assert!(
+            failed.to_string().contains("opening the publish target"),
+            "{failed}"
+        );
+        assert_eq!(
+            opens.load(Ordering::SeqCst),
+            1,
+            "the start reached the opener"
+        );
+    }
+
     // --- Item: an encoder that fails mid-stream fails the output.
 
     struct FailingVideo {
@@ -4583,6 +4655,104 @@ fn output_edits_configure_the_collection() {
     assert_eq!(engine.output_kind(&OutputId::new("out_yt")), None);
     let gone = block_on(control.call(output_call("out_yt", true))).expect_err("deleted");
     assert_eq!(code(&gone), Some("not_found"));
+}
+
+/// A stream key is bound to the server it was set for (#343): `output.set_target` to a
+/// new path on the same server keeps it, a new scheme, host or port removes it from the
+/// credential store, and so does an undo or redo that moves the output to another
+/// server, or deletes it. Before the fix, the key stayed and the next `output.start`
+/// sent it to whatever server the output then named.
+#[test]
+fn a_stream_key_never_follows_its_output_to_another_server() {
+    use jstream_platform::StreamKeyStore;
+    use jstream_platform::fake::MemoryKeyStore;
+    use jstream_protocol::{HistoryCall, HistoryOp, RtmpTarget};
+
+    let store = MemoryKeyStore::new();
+    let engine = Engine::new().with_key_store(Arc::new(store.clone()));
+    let control = connected(&engine);
+    let retarget = |url: &str| {
+        edits(vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("out_yt"),
+            target: RtmpTarget::Generic { url: url.into() },
+        }])
+    };
+    let stored = || {
+        store
+            .get("out_yt")
+            .expect("store reads")
+            .map(|key| key.expose().to_owned())
+    };
+    let history = |op| {
+        block_on(control.call(Call::History(HistoryCall::new(op)))).expect("history step");
+    };
+    batch(
+        &control,
+        edits(vec![Edit::OutputCreate {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+        }]),
+    )
+    .expect("output.create");
+    block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+
+    // The same server, written differently and with another path: the key stays.
+    batch(
+        &control,
+        retarget("RTMP://A.rtmp.youtube.com:1935/live2/backup"),
+    )
+    .expect("same server");
+    assert_eq!(stored().as_deref(), Some("yt-key"));
+
+    // Another host: the key is removed, so a start can't send it there.
+    batch(&control, retarget("rtmp://attacker.example/live2")).expect("new host");
+    assert_eq!(stored(), None);
+    assert_eq!(key_set(&control, "out_yt").ok(), Some(false));
+    // Undo moves it back, but can't bring the secret back.
+    history(HistoryOp::Undo);
+    assert_eq!(
+        engine.output_kind(&OutputId::new("out_yt")),
+        Some(rtmp_output("RTMP://A.rtmp.youtube.com:1935/live2/backup"))
+    );
+    assert_eq!(stored(), None);
+    // A key set again is removed when a redo moves the output away once more.
+    block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+    history(HistoryOp::Redo);
+    assert_eq!(stored(), None);
+    history(HistoryOp::Undo);
+
+    // Another scheme, or another port, is another server too.
+    for url in [
+        "rtmps://a.rtmp.youtube.com/live2",
+        "rtmps://a.rtmp.youtube.com:8443/live2",
+    ] {
+        block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+        batch(&control, retarget(url)).expect("new server");
+        assert_eq!(stored(), None, "{url}");
+    }
+
+    // Deleting the output removes its key, so an output re-created with its ID starts
+    // with none.
+    block_on(control.call(set_key("out_yt", "yt-key"))).expect("set_key");
+    batch(
+        &control,
+        edits(vec![Edit::OutputDelete {
+            output_id: OutputId::new("out_yt"),
+        }]),
+    )
+    .expect("output.delete");
+    assert_eq!(stored(), None);
+    batch(
+        &control,
+        edits(vec![Edit::OutputCreate {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp_output("rtmp://attacker.example/live2"),
+        }]),
+    )
+    .expect("output.create");
+    assert_eq!(key_set(&control, "out_yt").ok(), Some(false));
+    // Another output's key is not touched.
+    assert!(store.is_empty());
 }
 
 /// `output.set_key` stores the key and `output.status` reports `key_set`; every error

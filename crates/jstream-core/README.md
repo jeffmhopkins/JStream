@@ -38,7 +38,9 @@ state machine. Contents:
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
-  injected `StreamKeyStore`, never under the collection lock. It holds the
+  injected `StreamKeyStore`, never under the collection lock, and so does the removal
+  of a key whose output a batch, undo or redo deleted or moved to another server
+  (*Stream keys* below). It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys, the undo
   history and the subscribers behind one lock, and the drop ledger behind another, and executes
   batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
@@ -883,7 +885,14 @@ collection (`not_found`), then the key's shape (`invalid_argument`, field `key`:
 over 1024 bytes, or with whitespace, control or non-ASCII characters), then stores it
 under the output ID with no engine lock held. `output.clear_key` removes it and succeeds
 when there is none, even for an output no longer in the collection. With no store, or when
-the store refuses, both fail with `action_failed`. The key is write-only
+the store refuses, both fail with `action_failed`. A key is bound to its server (#343):
+under the collection lock, an applied batch, undo or redo marks every output it deleted
+or whose `OutputKind::key_server` it changed in `State::stale_keys`; once the lock is
+released the engine removes those keys from the store and unmarks each one removed.
+`output.start` refuses a marked output with `action_failed`, so the opener never reads
+the old key for the new server, even for a start racing the batch. A store that refuses
+leaves the output marked (the batch still succeeds, and a warning is logged) until an
+`output.set_key` or `output.clear_key` succeeds. The key is write-only
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): every reason is fixed text, nothing logs
 the call's arguments, and no response, event or query carries it. The crate-root test
 `secrets_are_redacted` sets a key and checks the reply, `state.get`, `output.list`,
