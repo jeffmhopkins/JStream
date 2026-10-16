@@ -750,6 +750,13 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
   tool's `preview.subscribe` fails with `action_failed`; an agent looks with
   `video.snapshot`.
+- **Annotations and third-party text:** every tool carries MCP tool annotations derived
+  from its ops (`readOnlyHint` for queries only; `destructiveHint` for actions, history
+  calls and deletes; `openWorldHint` for `output`), so a client can ask the user before
+  an agent retargets an output, sets its key, goes live or deletes. Text from outside
+  JStream sits in `remote_*` fields or in an `output.start` `action_failed` `reason`,
+  and the tool descriptions and server instructions say it is data, never instructions
+  ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md)).
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an
