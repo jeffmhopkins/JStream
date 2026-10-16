@@ -291,7 +291,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:a5223735ebcb291e", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:b8651870ac0f0d4f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "The filter-chain line now names protocol 0.22, matching the protocol README; the rest is unchanged by the bump" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -336,13 +336,13 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:d53f1db2f4545163", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 #453: the compat paragraph now names filter (B7's edits), bus (0.19) and device (0.21) in turn, and nothing else in the section changed" }
+stamp = { hash = "b3:d9de3602fe40f39d", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "The filter-chain line now names protocol 0.22, matching the protocol README; the rest is unchanged by the bump" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:b8a36f91bf151722", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:4e26b6714c3806c4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "The filter-chain line now names protocol 0.22, matching the protocol README; the rest is unchanged by the bump" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:d7b87faf358c6b97", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:dd0a60a5c64b01c6", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "The filter-chain line now names protocol 0.22, matching the protocol README; the rest is unchanged by the bump" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
@@ -357,7 +357,7 @@ stamp = { hash = "b3:241d371850f187f6" }
 stamp = { hash = "b3:48f6a61a2cf072ae", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the new server modules; rechecked after merging wave/m1, with pairing moved to protocol 0.21 (0.20 is #251) and its ADR renumbered 0057; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:2ecfd0ca0262dc27", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:d22df17622c57b92", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "The filter-chain line now names protocol 0.22, matching the protocol README; the rest is unchanged by the bump" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
@@ -405,7 +405,7 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Summary of envelope/edits/actions holds; asset-path rule detail lives in protocol README Design, unchanged here by #403" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:97d4f0e22f1cbfd4", by = "agent:claude", note = "Pairing: the protocol 0.21 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0057) matches the protocol crate, mock.rs and the server modules; it sits beside #251's 0.20 binary-streams bullet, which holds through Admitted's binary forward; #444's key wording in mock.rs and command.rs changes no claim here; holds" }
+stamp = { hash = "b3:dfd1aee1550ed0db", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "The filter-chain line now names protocol 0.22, matching the protocol README; the rest is unchanged by the bump" }
 
 ["ARCH#protocol"."file:crates/jstream-server/Cargo.toml"]
 stamp = { hash = "b3:e9241efe87e7e719" }
@@ -921,7 +921,7 @@ stamp = { hash = "b3:533a8e26baacba9c", by = "agent:claude", note = "Pairing: Us
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a5223735ebcb291e", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:b8651870ac0f0d4f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after ARCH#protocol named protocol 0.22 for the filter chains: this section names no version that the bump changes, and the 0.22 bump is an additive minor as R-API-001 asks" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -993,16 +993,16 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:bc343a596542a844", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 against wave/m1: C8b2 changes only the Audio sources lead, which names each running source's own audio beside audio-only sources, matching AudioSources' Recorded::Own and the extended page audio test; the wave's Preview streams, E3b GPU capture and ADR-0057 credential-call text is untouched by this PR and kept as merged" }
+stamp = { hash = "b3:92c94fa1fe501d85", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 #289 and the 0.22 bump: Audio sources now says own audio has no input while its audio is off, which fits B7's chain-per-input text; nothing names the protocol version" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:f8fd94bad34f8f6b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 #453: the compat paragraph now names filter (B7's edits), bus (0.19) and device (0.21) in turn, and nothing else in the section changed" }
+stamp = { hash = "b3:5dcb4dd87c9c3d67", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 #289 and the 0.22 bump: Audio sources now says own audio has no input while its audio is off, which fits B7's chain-per-input text; nothing names the protocol version" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a5223735ebcb291e", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:b8651870ac0f0d4f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 #289 and the 0.22 bump: Audio sources now says own audio has no input while its audio is off, which fits B7's chain-per-input text; nothing names the protocol version" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1020,7 +1020,7 @@ stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:9bf96ff70481b881", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 carries C8's N6 and N7: the Audio sources lead sentence names each running source's own audio beside audio-only sources' targets, matching Target { recorded, on }; audio_sources.rs's module doc says a page's input closes while its audio is off; tests/audio.rs checks off (no status, not metered, page kept) and on again; holds" }
+stamp = { hash = "b3:46c5faa269823861", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 #289 and the 0.22 bump: Audio sources now says own audio has no input while its audio is off, which fits B7's chain-per-input text; nothing names the protocol version" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -1128,7 +1128,7 @@ stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:9bf96ff70481b881", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 carries C8's N7: a_browser_page_is_recorded_alongside_the_defaults now turns the page's audio off and on; the Audio sources bullet already says a page's input exists only while its audio is on, and audio_sources.rs's module doc now says the same; holds" }
+stamp = { hash = "b3:46c5faa269823861", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 #289 (browser own-audio closes while its audio is off): the purpose text already says each own-audio input exists while the source's audio is on and runs its enabled filters" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -1260,7 +1260,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:a984c6e7ba2e3698", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:bc343a596542a844", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "Stale via jstream-core#design only: C8b2 reworded core's Audio sources lead, and the wave added Preview streams and pairing; the daemon design cites core only for per-connection sessions and the no-backend placeholder outputs, unchanged, and its paired-devices text comes from the wave; holds" }
+stamp = { hash = "b3:92c94fa1fe501d85", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after core's design gained the #289 own-audio-off sentence: the daemon's design doesn't depend on it" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
@@ -1575,7 +1575,7 @@ stamp = { hash = "b3:6c1b99c4b8c63792" }
 stamp = { hash = "b3:428d2b2c0cc1fe89", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:f8fd94bad34f8f6b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 #453: the compat paragraph now names filter (B7's edits), bus (0.19) and device (0.21) in turn, and nothing else in the section changed" }
+stamp = { hash = "b3:5dcb4dd87c9c3d67", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after the 0.22 bump of the protocol design: the graph's validation of opacity, blend and filter edits is unchanged, and it names no version" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2103,7 +2103,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:f8fd94bad34f8f6b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 #453: the compat paragraph now names filter (B7's edits), bus (0.19) and device (0.21) in turn, and nothing else in the section changed" }
+stamp = { hash = "b3:5dcb4dd87c9c3d67", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "0.22 bump: hello/welcome examples show minor 22 as examples.snap does, Opacity, blend and filters says it is added in 0.22, and the compat paragraph lists encoder, bus, device and then filter (0.22) in version order; protocol.snap only changes the Filter doc" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2121,10 +2121,10 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:b8a36f91bf151722", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:4e26b6714c3806c4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "0.22 bump: hello/welcome examples show minor 22 as examples.snap does, Opacity, blend and filters says it is added in 0.22, and the compat paragraph lists encoder, bus, device and then filter (0.22) in version order; protocol.snap only changes the Filter doc" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:d7b87faf358c6b97", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:dd0a60a5c64b01c6", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "0.22 bump: hello/welcome examples show minor 22 as examples.snap does, Opacity, blend and filters says it is added in 0.22, and the compat paragraph lists encoder, bus, device and then filter (0.22) in version order; protocol.snap only changes the Filter doc" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
@@ -2139,7 +2139,7 @@ stamp = { hash = "b3:241d371850f187f6" }
 stamp = { hash = "b3:48f6a61a2cf072ae", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.21: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.21 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; rechecked after merging wave/m1, with pairing moved to protocol 0.21 (0.20 is #251) and its ADR renumbered 0057; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:2ecfd0ca0262dc27", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:d22df17622c57b92", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "0.22 bump: hello/welcome examples show minor 22 as examples.snap does, Opacity, blend and filters says it is added in 0.22, and the compat paragraph lists encoder, bus, device and then filter (0.22) in version order; protocol.snap only changes the Filter doc" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
@@ -2187,10 +2187,10 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Rejections bullet updated for #403: DOS device names refused as the last component under every root (relative CON.png, media/nul); rest of Design unaffected" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:97d4f0e22f1cbfd4", by = "agent:claude", note = "Pairing, protocol 0.21: the version line names 0.21 for pairing, then 0.20 for #251's preview streams, then 0.19; Action result, `unsupported`, Pairing and compat paragraphs match both snapshots (regenerated: pairing examples follow #251's r15-r17) and CallResult::action(); #444's set_key wording matches command.rs and protocol.snap; holds" }
+stamp = { hash = "b3:dfd1aee1550ed0db", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "0.22 bump: hello/welcome examples show minor 22 as examples.snap does, Opacity, blend and filters says it is added in 0.22, and the compat paragraph lists encoder, bus, device and then filter (0.22) in version order; protocol.snap only changes the Filter doc" }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:319913a21556935b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:b3d2751dfc243db4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "PROTOCOL_VERSION is 0.22 for opacity, blend and the filter chains (ADR-0023, ADR-0026), and the 0.21 pairing list follows it; matches version.rs and the Filter EntityKind doc in error.rs" }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -2208,7 +2208,7 @@ stamp = { hash = "b3:241d371850f187f6" }
 stamp = { hash = "b3:48f6a61a2cf072ae", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.21: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; rechecked after merging wave/m1, with pairing moved to protocol 0.21 (0.20 is #251) and its ADR renumbered 0057; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:2ecfd0ca0262dc27", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:d22df17622c57b92", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "PROTOCOL_VERSION is 0.22 for opacity, blend and the filter chains (ADR-0023, ADR-0026), and the 0.21 pairing list follows it; matches version.rs and the Filter EntityKind doc in error.rs" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
@@ -2256,7 +2256,7 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Contents list unchanged by #403 (check_asset_path rule only); no asset-path rule stated here" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:97d4f0e22f1cbfd4", by = "agent:claude", note = "Pairing, protocol 0.21: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult beside #251's preview exports, matching command.rs, envelope.rs, lib.rs (both re-exports) and version.rs (minor 21); #444 only rewords command.rs's set_key doc; holds" }
+stamp = { hash = "b3:dfd1aee1550ed0db", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "PROTOCOL_VERSION is 0.22 for opacity, blend and the filter chains (ADR-0023, ADR-0026), and the 0.21 pairing list follows it; matches version.rs and the Filter EntityKind doc in error.rs" }
 
 ["CRATE-jstream-render#design"."body"]
 stamp = { hash = "b3:69374f6949f04237", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
@@ -2382,7 +2382,7 @@ stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Pairing (AD
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a5223735ebcb291e", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:b8651870ac0f0d4f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after ARCH#protocol named protocol 0.22 for the filter chains: this section names no version that the bump changes, and the 0.22 bump is an additive minor as R-API-001 asks" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -3096,7 +3096,7 @@ stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a5223735ebcb291e", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:b8651870ac0f0d4f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after ARCH#protocol named protocol 0.22 for the filter chains: this section names no version that the bump changes, and the 0.22 bump is an additive minor as R-API-001 asks" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }

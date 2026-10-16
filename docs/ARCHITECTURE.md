@@ -578,7 +578,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   (`item.add` takes both too), and `filter.add`, `filter.remove`, `filter.set_enabled`,
   `filter.set_settings` and `filter.reorder` edit a source's filter chains, addressed by
   an `owner` and a filter ID; `SourceInfo.filters` reports them
-  ([ADR-0026](adr/0026-source-filter-chains.md)). `source.set_audio`, `bus.create`,
+  ([ADR-0026](adr/0026-source-filter-chains.md), protocol 0.22). `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set` and `send.remove` edit
   sources' audio, the buses and the send matrix ([ADR-0028](adr/0028-audio-model-v2.md),
   protocol 0.19).

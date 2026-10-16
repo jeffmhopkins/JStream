@@ -105,10 +105,14 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.21 because of
-  pairing (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.22 because of
+  opacity, blend and filter chains (`item.set_opacity`, `item.set_blend`, the
+  `filter.*` edits, `SourceInfo.filters` and the `filter` entity kind,
+  [ADR-0023](../../docs/adr/0023-placements-references-and-clones.md),
+  [ADR-0026](../../docs/adr/0026-source-filter-chains.md)); 0.21 added pairing
+  (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
   `unsupported` error and the `device` entity kind,
-  [ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)); 0.20 added
+  [ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), 0.20
   the preview streams (`preview.subscribe`, `preview.unsubscribe` and the binary
   frame), 0.19 audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
   `audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
@@ -173,8 +177,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":20},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":20},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":22},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":22},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -389,7 +393,7 @@ parameters), so a reader of 0.7 messages sees no change for those.
 
 ### Opacity, blend and filters
 
-A placement has an `opacity`, an alpha multiplier from 0 to 1 (default 1), and a
+All of this is added in 0.22. A placement has an `opacity`, an alpha multiplier from 0 to 1 (default 1), and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
 `difference`, `exclusion`; default `normal`). `item.add` takes both, optional;
 `item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
@@ -763,13 +767,13 @@ after 1.0:
   exists (the whole response fails, and `WsControl` ends the session). Whether that
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
-  than 0.13, which sends none, never reads it. The filter edits add `filter` on the same
-  terms. 0.19 adds `bus` the same way: only an error answering a bus or send edit
+  than 0.13, which sends none, never reads it. 0.19 adds `bus` the same way: only an error answering a bus or send edit
   (`bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`)
   names it. An older client's undo of its own `source.delete` restores the source's
   sends, but if one's bus has since been deleted by another client, the undo fails with
   `undo_conflict`, which names no entity. 0.21 adds `device` the same way: only an error
-  answering `device.revoke` names it. The encoder enums (`VideoCodec`,
+  answering `device.revoke` names it, and 0.22 adds `filter` on the same terms for the
+  filter edits. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or

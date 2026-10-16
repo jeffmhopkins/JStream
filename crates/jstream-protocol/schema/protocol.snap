@@ -2180,7 +2180,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "filter",
-          "description": "A filter in a source's chain (ADR-0026). Its ID is unique within the source.",
+          "description": "A filter in a source's chain (0.22, ADR-0026). Its ID is unique within the\nsource. Only an error answering a filter edit names it, so a client older than\n0.22, which sends none, never reads it.",
           "type": "string"
         },
         {
@@ -4954,5 +4954,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.21"
+  "title": "JStream protocol 0.22"
 }
