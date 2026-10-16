@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:9791b6115c98c0f2", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the apps row combines the wave's daemon clause (always links jstream-browser, CEF's backend with cef) with this PR's helper clause (the sandboxed helper's DLL, ADR-0048, unsafe for its one export)" }
+stamp = { hash = "b3:38821a2f08b58df6", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: #298's jstream-browser row (helper over pipes, helper feature) and apps/* row (the helper's DLL, unsafe for its one export) sit beside P1's jstream-platform paths row and main's jstream-effects and jstream-anim rows; lint-deps passes; holds" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -30,7 +30,7 @@ stamp = { hash = "b3:dbacb2dd7907964d" }
 stamp = { hash = "b3:00badea83615c29f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Layer-6 apps row: desktop links jstream-browser optionally with cef, daemon always links it; matches both Cargo.toml files" }
 
 ["ARCH#crate-map"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:5c51e1eba3426ff0", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: jstream-platform row adds 'and paths (the data folder, ADR-0020)', matching its Cargo.toml summary; desktop's jstream-meta unchanged in layer; main's jstream-anim row also present; lint-deps passes" }
+stamp = { hash = "b3:55293f9db47b4e2b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: #298's jstream-browser row (helper over pipes, helper feature) and apps/* row (the helper's DLL, unsafe for its one export) sit beside P1's jstream-platform paths row and main's jstream-effects and jstream-anim rows; lint-deps passes; holds" }
 
 ["ARCH#crate-map"."file:crates/jstream-anim/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:324421806c43a0e9" }
@@ -252,7 +252,7 @@ stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
 
 ["ARCH#packaging"."body"]
-stamp = { hash = "b3:0199743d1f86cfe2", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the zip ships the sandboxed helper (CEF's bootstrap.exe renamed jstream-browser-helper.exe and jstream-browser-helper.dll, same certificate if signed), per ADR-0048, instead of a subprocess exe" }
+stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's State and Building-the-zip bullets (dist.rs, .cargo/config.toml, after-review dist job) stand beside #298's sandboxed helper (bootstrap exe renamed plus the DLL, same certificate if signed); now that the helper exists, the zip bullet says it and the CEF runtime are not in the zip yet, which matches dist.rs (it ships no helper); holds" }
 
 ["ARCH#packaging"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
@@ -492,7 +492,7 @@ stamp = { hash = "b3:00badea83615c29f", by = "agent:claude@session_01YKRrREb5gUV
 stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon row is unchanged, and main.rs only adds the device-file path; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#shape"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:5c51e1eba3426ff0", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: desktop main.rs now gets its data folder from jstream_platform::paths and its Cargo.toml adds jstream-platform as a common dependency; Shape's app rows name no data module and still match; holds" }
+stamp = { hash = "b3:55293f9db47b4e2b", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: the desktop row now says its cef feature waits on packaging the CEF runtime, and the helper row describes the sandboxed helper (bootstrap exe plus DLL, driven over pipes, ADR-0048); P1's desktop paths dependency names no data module; both match the apps' Cargo.toml; holds" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/src/main.rs"]
 stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: desktop main.rs now gets its data folder from jstream_platform::paths and its Cargo.toml adds jstream-platform as a common dependency; Shape's app rows name no data module and still match; holds" }
@@ -1014,7 +1014,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:00c1d96c79f24c4b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3's Design additions (YouTube actions with no engine lock, the sign-in and LiveClient mutexes after the start lock) sit apart from #458's: the stop-drain paragraph (each count takes what it counts off the queue; abandon held over the latch), the drop-table Stop drain row and the abandon, video, audio lock order still match pipeline.rs, which Y3 left untouched. Tests pass after the merge." }
+stamp = { hash = "b3:f5afb6bd0ee186e9", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: render-thread paragraph joins #434 (canvas-sized output, scaled capture) with E3b (GPU frame sampled in place); #458's stop-drain text (the stop drops and counts what a stuck thread leaves queued, under the abandon lock) and lock order match the merged pipeline.rs Queues; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -1086,7 +1086,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; compose's capture import via ResourceCache::import, scaled-to-fill with no program scene, GPU-path held frame and allocation text, and the hw-tests dev-dependency note match snapshot.rs, pipeline.rs and Cargo.toml; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:f1ff92f8048bf21e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Round-2 fix for B2: the RTMP stop-drain paragraph now says no packet is counted twice because each count takes what it counts off the queue (try_recv in discard), and that the abandon lock, held by the counting side and by the stop over its latch, keeps a thread count wholly in or out of the final tick. pipeline.rs's Queues::abandon field doc says the same. The drop table and the Locking order (abandon, video, audio) are unchanged and still match. tests.rs: only N1's removed assertion." }
+stamp = { hash = "b3:e35c77fd5b61f96e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: render-thread paragraph joins #434 (canvas-sized output, scaled capture) with E3b (GPU frame sampled in place); #458's stop-drain text (the stop drops and counts what a stuck thread leaves queued, under the abandon lock) and lock order match the merged pipeline.rs Queues; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1110,7 +1110,7 @@ stamp = { hash = "b3:b3f8a6543cd7d21a", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:8abaa727b4a71f8a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3's Design additions (YouTube actions with no engine lock, the sign-in and LiveClient mutexes after the start lock) sit apart from #458's: the stop-drain paragraph (each count takes what it counts off the queue; abandon held over the latch), the drop-table Stop drain row and the abandon, video, audio lock order still match pipeline.rs, which Y3 left untouched. Tests pass after the merge." }
+stamp = { hash = "b3:37216ca75b8875c5", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: render-thread paragraph joins #434 (canvas-sized output, scaled capture) with E3b (GPU frame sampled in place); #458's stop-drain text (the stop drops and counts what a stuck thread leaves queued, under the abandon lock) and lock order match the merged pipeline.rs Queues; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1: this PR's browser paragraph says a backend rebuilds browser and youtube_chat sources via jstream_sources::opens_browser, matching live.rs set_browser and the new tests/audio.rs case; the wave's B7 opacity/blend/filter text is in other paragraphs; holds" }
@@ -1143,7 +1143,7 @@ stamp = { hash = "b3:1cb3f432ff4f8d5d", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:97c448bb25c6d46c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 at 0.23: the YouTube section (sign-in and sign-out ordering, the rotated token stored before the client is released, quota prefix, outputs resolving the ingest outside the locks, a health thread per output, lock order) matches youtube.rs and engine.rs, which now answer with the wave's ActionResult through CallResult::action(); without a client calls fail with NO_YOUTUBE_CLIENT; Cargo.toml adds jstream-youtube and its fake feature; the protocol README and ARCH#protocol changes are the 0.23 YouTube commands core executes; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:217f59dd4251efa7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3 added the YouTube bullets, tests and youtube.rs and did not touch pipeline.rs or the Drop-counts bullet, which still says the output source counts the output thread's drops or what the stop drops for it when it leaves the thread behind (Running::drop -> Queues::abandon). The Tests list keeps #458's left-behind test beside Y3's src/tests/youtube.rs. clippy and cargo test -p jstream-core (178 passed) after the merge." }
+stamp = { hash = "b3:22684028adc488b5", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: tests list joins the wave's GPU-capture render test, main's #433 tests (output size follows the canvas; captures converted at their own size, only when shown) and #458's final-tick count of what a blocked send leaves queued; all three exist in tests.rs and pipeline.rs; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1200,7 +1200,7 @@ stamp = { hash = "b3:bc7f6dd2e689cce2", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Contents' render-thread GPU-context sentence and Tests' gpu_capture.rs / windows_gpu.rs (hw-tests, ignored) text match runtime/pipeline.rs, snapshot.rs and tests.rs:9-10; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:f1ff92f8048bf21e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Round-2 fix for B1: the Drop-counts bullet now says the output source counts what the output thread drops or what the stop drops for it when it leaves that thread behind, matching Running::drop -> Queues::abandon adding to output_drops. pipeline.rs changed only in the Queues::abandon field doc (B2). tests.rs: the new test's closing tick comparison was removed (N1, it could not fail since the source is latched) and its doc says so; the Tests list still names the left-behind count correctly. clippy and the test pass." }
+stamp = { hash = "b3:e35c77fd5b61f96e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: tests list joins the wave's GPU-capture render test, main's #433 tests (output size follows the canvas; captures converted at their own size, only when shown) and #458's final-tick count of what a blocked send leaves queued; all three exist in tests.rs and pipeline.rs; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1224,7 +1224,7 @@ stamp = { hash = "b3:b3f8a6543cd7d21a", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:8abaa727b4a71f8a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1 (Y3 #223) into #458. Y3 added the YouTube bullets, tests and youtube.rs and did not touch pipeline.rs or the Drop-counts bullet, which still says the output source counts the output thread's drops or what the stop drops for it when it leaves the thread behind (Running::drop -> Queues::abandon). The Tests list keeps #458's left-behind test beside Y3's src/tests/youtube.rs. clippy and cargo test -p jstream-core (178 passed) after the merge." }
+stamp = { hash = "b3:37216ca75b8875c5", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: tests list joins the wave's GPU-capture render test, main's #433 tests (output size follows the canvas; captures converted at their own size, only when shown) and #458's final-tick count of what a blocked send leaves queued; all three exist in tests.rs and pipeline.rs; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:a456ca3990e076bf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read after merging wave/m1 (#252 B7, #316, #289): this PR names the youtube_chat preset in with_browser's builder-list entry, and tests/audio.rs adds the test that a youtube_chat source created before the backend opens its page once set_browser gives one; the builder list still matches engine.rs; holds" }
@@ -1275,7 +1275,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:a5a9c3d6498fc98d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture path paragraph matches open_capture's fallbacks and launch_program, gpu_captures beside readbacks, teardown order matches render_loop; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:f1ff92f8048bf21e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "pipeline.rs changed only in the Queues::abandon field doc (wording of what the abandon lock guarantees). The Runtime section describes threads, the drain and jstream-stats and makes no claim about stop-drain counting, so it holds." }
+stamp = { hash = "b3:e35c77fd5b61f96e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: re-read against the merged pipeline.rs: canvas-size compositing (#434), E3b's capture path and drop order, and #458's drop-table row (the stop counts packets it leaves behind) hold; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1290,10 +1290,10 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:d7c604129bdde866", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
+stamp = { hash = "b3:82cdad9de7819d94", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data-directory bullet and Dependencies entry (jstream-platform paths, merged with the wave's jstream-browser entry) hold; #298's browser bullet now says CEF runs only in the sandboxed helper (exe, DLL and CEF runtime beside jstream-daemon.exe; missing files fail the page, not the daemon; the daemon doesn't link CEF), matching cef_browser wiring and ADR-0048; #458 changes no daemon text; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:00c1d96c79f24c4b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through core#design after merging wave/m1. The daemon's Design cites core Design for sessions, backends, placeholder outputs, audit and collection; Y3's YouTube text and #458's stop-drain wording change none of those claims." }
+stamp = { hash = "b3:f5afb6bd0ee186e9", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data-directory bullet and Dependencies entry (jstream-platform paths, merged with the wave's jstream-browser entry) hold; #298's browser bullet now says CEF runs only in the sandboxed helper (exe, DLL and CEF runtime beside jstream-daemon.exe; missing files fail the page, not the daemon; the daemon doesn't link CEF), matching cef_browser wiring and ADR-0048; #458 changes no daemon text; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
@@ -1329,7 +1329,7 @@ stamp = { hash = "b3:0bca1913ca49b58e", by = "agent:claude-c8b1", note = "re-rea
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:0eccb529e1f8aad5", by = "agent:claude", note = "Re-read Purpose test list: e2e now sets the canvas before building the scene (outputs encode at the canvas, #433)" }
+stamp = { hash = "b3:836196d28bf06c3c", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data-directory log default (logs.rs via jstream_platform::paths) and the e2e test setting the canvas first (#433) from main stand beside the wave's text; #298 changes nothing in the purpose's contents or test list; holds" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291) and this PR's serve.rs doc edit: serve.rs still builds a live engine on Windows that with the cef feature opens browser sources; the crate map's apps row now says the daemon always links jstream-browser, which matches its Cargo.toml" }
@@ -1368,7 +1368,7 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:5c4cdf576676cc18", by = "agent:claude", note = "Re-read Purpose test list: e2e now sets the canvas before building the scene (outputs encode at the canvas, #433)" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#247 --ui-dir): main's --ui-dir row, Web UI bullet and exit-1 row sit beside P1's Log files bullet (data folder beside the exe with a portable marker; missing HOME/APPDATA fails only without it), which still matches paths::data_dir_for and logs.rs; holds" }
+stamp = { hash = "b3:9fe1fc129910be06", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: main's --ui-dir row and P1's Log files bullet (data folder, portable marker) sit beside the wave's pairing device file; #298 moves CEF into the sandboxed helper but adds no flag; the usage rows match args.rs; holds" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
@@ -1413,7 +1413,7 @@ stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:585937dddc3fdee0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:df16daf5092f4655", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: inputs changed are data.rs removal, lib.rs and main.rs moving to jstream_platform::paths::data_dir_for; Design names no data module and its ADR-0020 portable/state text matches paths; holds" }
+stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's paths-based data folder and #298's browser bullet (CEF only in the sandboxed helper, a missing helper fails the source, not the app) match lib.rs and browser.rs; Design names no data module; holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
@@ -1434,7 +1434,7 @@ stamp = { hash = "b3:558b5c5512b30191" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:237641d2046203da", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs deleted and lib.rs drops its module; contents list says logs.rs in the data folder from jstream-platform's paths, Tests drop the data folder; main.rs calls paths::data_dir_for; release build of the portable folder is now cargo xtask dist (ARCH Packaging)" }
+stamp = { hash = "b3:2115a85b23caf8dc", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1 removes data.rs (lib.rs keeps the wave's cef-gated browser module, drops data); the contents list and tests (delay-load test kept, data-folder test gone) match; #298's not-yet line keeps browser sources off by default; holds" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the crate map's apps row changed for the daemon and helper only; the desktop's links and its browser.rs contents line still hold" }
@@ -1452,7 +1452,7 @@ stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:585937dddc3fdee0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (C8b4 browser sources, #290): G3d's virtual camera text beside the wave's cef/browser text; engine(collection, data, audit, vcam) as host.rs now takes it; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:df16daf5092f4655", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs deleted and lib.rs drops its module; contents list says logs.rs in the data folder from jstream-platform's paths, Tests drop the data folder; main.rs calls paths::data_dir_for; release build of the portable folder is now cargo xtask dist (ARCH Packaging)" }
+stamp = { hash = "b3:7a0d908b4584df52", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1 removes data.rs (lib.rs keeps the wave's cef-gated browser module, drops data); the contents list and tests (delay-load test kept, data-folder test gone) match; #298's not-yet line keeps browser sources off by default; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
@@ -1470,10 +1470,10 @@ stamp = { hash = "b3:45624952598c1f3a" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against #327: covers now includes tests/**, and the Tests bullet names the new integration test tests/delay_load.rs (media_foundation_is_delay_loaded, Windows MSVC only), which reads the built jstream.exe's PE headers and requires each DLL in build.rs's delay-load list in the delay-import table and none in the import table; the unit-test list and the rest of the contents are unchanged" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:7de4cf8f66e3da87", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: the wave's --no-vcam option and virtual-camera bullet sit beside the browser-sources paragraph, which still matches ADR-0048 (app links no CEF, needs the helper exe, DLL and CEF runtime beside it, feature off until packaged)" }
+stamp = { hash = "b3:d3ce322b950f6555", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data folder through jstream-platform paths (now a common dependency) and #298's cef feature text (the sandboxed helper exe, its DLL and CEF's runtime beside jstream.exe; the app doesn't link CEF, so it starts without them) both match Cargo.toml's merged dependencies and feature comment; holds" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
-stamp = { hash = "b3:ac2977e8c9f522c0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the Browser sources paragraph now says the helper is CEF's bootstrap exe renamed plus jstream-browser-helper.dll and CEF's files, that the app doesn't build or link CEF so it starts without them, and that the cef feature stays off until the runtime and helper are packaged, matching Cargo.toml's comment and CefConfig::beside_exe" }
+stamp = { hash = "b3:d54c5b373e86c4d2", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's data folder through jstream-platform paths (now a common dependency) and #298's cef feature text (the sandboxed helper exe, its DLL and CEF's runtime beside jstream.exe; the app doesn't link CEF, so it starts without them) both match Cargo.toml's merged dependencies and feature comment; holds" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after 741cfc28: a rustfmt-only line wrap of the engine call in app.rs; nothing the section says changed; holds" }
@@ -1890,7 +1890,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:9791b6115c98c0f2", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: its dependency on ARCH#crate-map changed only in the apps row (daemon links jstream-browser, helper DLL); jstream-platform's row and GpuInterop's wgpu types are unchanged" }
+stamp = { hash = "b3:38821a2f08b58df6", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: stale via ARCH#crate-map, where #298 rewrites the jstream-browser and helper rows and P1 adds paths to jstream-platform's; this section's frame lifetime and encoder text (E3b, E3c) is untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
@@ -2802,7 +2802,7 @@ stamp = { hash = "b3:5506fd7891457520" }
 stamp = { hash = "b3:6d760c430e428d10", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:0199743d1f86cfe2", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale only via ARCH packaging, whose change is the browser helper's files; the vcam hardware check names none of them; holds" }
+stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: stale via ARCH#packaging (P1's dist, #298's helper, the helper not yet in the zip); the hardware-check steps build and register the DLL by hand as before; holds" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."file:crates/jstream-vcam-windows/examples/vcam_smoke/main.rs"]
 stamp = { hash = "b3:741967485a750fec" }
@@ -2820,7 +2820,7 @@ stamp = { hash = "b3:b6a3f609729e0f1f" }
 stamp = { hash = "b3:ecfd9b5f74db77b1" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:0199743d1f86cfe2", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via R-UNSAFE-001 (adds jstream-browser-helper) and ARCH packaging (the zip ships the sandboxed helper instead of a subprocess exe); the vcam text and its own packaging line are unaffected; holds" }
+stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: stale via ARCH#packaging, where P1's dist job, #298's sandboxed helper and a line saying the helper and CEF runtime are not in the zip yet changed; the DLL and its registration text are unaffected; holds" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:c66590fe31f34aee", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via R-UNSAFE-001 (adds jstream-browser-helper) and ARCH packaging (the zip ships the sandboxed helper instead of a subprocess exe); the vcam text and its own packaging line are unaffected; holds" }

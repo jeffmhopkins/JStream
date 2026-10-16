@@ -1000,7 +1000,7 @@ Direct3D 12).
   deflated, with fixed timestamps, so the same files make the same zip. The `dist` job in
   `after-review.yml` builds it with the release UI its `dist-ui` job builds, names it
   after the commit tested (`--revision`), and uploads it as an artifact, as is, on `main`
-  and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The CEF runtime and the browser helper join it when they exist.
+  and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The sandboxed browser helper and the CEF runtime are not in it yet; they join it when the hosts turn their `cef` features on.
 - **Virtual camera:** the app registers the COM media source from its own folder the first
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
   because Frame Server ignores per-user registration. The app can unregister the source and
