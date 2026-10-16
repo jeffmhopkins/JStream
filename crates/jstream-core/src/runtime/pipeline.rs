@@ -1904,9 +1904,10 @@ struct Queues {
     video: Mutex<Subscription>,
     audio: Mutex<Subscription>,
     /// Held by whichever side drops and counts what is queued, until its count is in
-    /// `output_drops`; the stop also holds it over its latch. So each packet is
-    /// counted once, and none counted on the thread is missed by the latch unless it
-    /// was queued after the stop's count.
+    /// `output_drops`; the stop also holds it over its latch. So a count the thread
+    /// makes is either wholly in the latch or wholly after it, and then covers only
+    /// packets queued after the stop's count. (No packet is counted twice in any case:
+    /// each count takes what it counts off the queue.)
     abandon: Mutex<()>,
 }
 

@@ -126,7 +126,8 @@ state machine. Contents:
 - **Drop counts** (`drops.rs`): the sources a `stats.tick` sums. `output.start`
   registers the capture cell, both encode sessions, each mixer input, the mix
   bus, and the packets the output thread drops (muxer rejects and what a stop's
-  drain abandons) and the publish link's, and a sampler thread
+  drain abandons), or the stop drops for it when it leaves that thread behind, and
+  the publish link's, and a sampler thread
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/audio.rs`,
@@ -978,8 +979,10 @@ ignores `stop_by` cannot hold `output.stop` either. The thread is detached and e
 once that send returns. Before the stop removes the output's drop source, it drops
 and counts the packets still queued for that thread itself (the two share the
 encoder subscriptions, each locked only to receive, never over a send), so the
-final `stats.tick` has them, and a lock over both counts keeps a packet from being
-counted twice (#385). Only what is queued after the stop's count, and the tag the
+final `stats.tick` has them (#385). Each count takes the packets it counts off the
+queue, so none is counted twice. A lock held by whichever side is counting, and by
+the stop over its latch, keeps a count the thread makes either wholly in the final
+tick or wholly out of it. Only what is queued after the stop's count, and the tag the
 blocked send holds, are not in the final tick.
 A recording's output thread is always joined, so its file is renamed into place
 when the stop returns. `RtmpPublish` honors the deadline: every socket write's
