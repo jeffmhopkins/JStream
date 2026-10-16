@@ -398,8 +398,9 @@ status = "planned"
 id = "C8"
 milestone = "M1b"
 title = "Browser source (CEF)"
-status = "review"
+status = "hardware"
 prs = [283, 289, 298]
+note = "#341"
 
 [[item]]
 id = "D1"
@@ -650,7 +651,7 @@ prs = [265, 288]
 id = "U3a"
 milestone = "M2"
 title = "Scenes, sources, properties"
-status = "review"
+status = "done"
 prs = [256]
 
 [[item]]
@@ -664,7 +665,8 @@ prs = [254]
 id = "U3c"
 milestone = "M2"
 title = "Mixer panel"
-status = "planned"
+status = "done"
+prs = [308]
 
 [[item]]
 id = "U4"
@@ -751,14 +753,16 @@ status = "planned"
 id = "C9"
 milestone = "M2"
 title = "Media file source"
-status = "review"
-prs = [245]
+status = "hardware"
+prs = [245, 322]
+note = "media file hardware tests (#382)"
 
 [[item]]
 id = "W1"
 milestone = "M2"
 title = "Audio waveform and spectrum sources"
-status = "planned"
+status = "done"
+prs = [315, 460, 463, 466]
 
 [[item]]
 id = "K1"

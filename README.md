@@ -46,13 +46,13 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `█████████░` 94% | 17 | 0 | 1 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 91% | 32 | 2 | 1 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 94% | 33 | 1 | 1 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `██████░░░░` 57% | 13 | 4 | 6 |
+| [M2: UI](ROADMAP.md#m2) | `███████░░░` 74% | 17 | 2 | 4 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 33% | 3 | 1 | 5 |
 
-92 of 112 items are merged; 3 of those still wait on a run on Windows hardware.
+97 of 112 items are merged; 5 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -100,7 +100,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M1b</b> Scenes and mixing: 32 of 35 merged</summary>
+<summary><b>M1b</b> Scenes and mixing: 33 of 35 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -124,7 +124,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | C2 | Text source | ✅ merged | #221 |
 | C5 | Audio sources | 🧪 merged, Windows run pending: audio hardware tests | #238 |
 | C3 | Display and window capture sources | ⏳ planned |  |
-| C8 | Browser source (CEF) | 🔍 in review | #283, #289, #298 |
+| C8 | Browser source (CEF) | 🧪 merged, Windows run pending: #341 | #283, #289, #298 |
 | D1 | Live mixer inputs | ✅ merged | #149, #199 |
 | D3 | Loudness meters | ✅ merged | #152 |
 | D7a | Filter kernels | ✅ merged | #159 |
@@ -175,7 +175,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M2</b> UI: 13 of 23 merged</summary>
+<summary><b>M2</b> UI: 17 of 23 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -183,9 +183,9 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U2a | ADR-0044 pairing | ✅ merged | #248 |
 | U2 | Serve the UI | ✅ merged | #246, #247 |
 | U2b | Device pairing | ✅ merged | #265, #288 |
-| U3a | Scenes, sources, properties | 🔍 in review | #256 |
+| U3a | Scenes, sources, properties | ✅ merged | #256 |
 | U3b | Outputs and go-live panel | ✅ merged | #254 |
-| U3c | Mixer panel | ⏳ planned |  |
+| U3c | Mixer panel | ✅ merged | #308 |
 | U4 | Canvas editing | ✅ merged | #255 |
 | U4p | Live preview on canvas | ⏳ planned |  |
 | U1 | Preview stream | ✅ merged | #251 |
@@ -198,8 +198,8 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | E2 | Video mixes | 🔍 in review | #259 |
 | D8 | Master and output audio chains | ✅ merged | #249 |
 | D8p | Audio chain protocol fields | ⏳ planned |  |
-| C9 | Media file source | 🔍 in review | #245 |
-| W1 | Audio waveform and spectrum sources | ⏳ planned |  |
+| C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
+| W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned |  |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
 

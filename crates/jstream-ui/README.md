@@ -23,24 +23,35 @@ webview. It is a client like the CLI and the MCP server: it holds a `dyn Control
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)). Layer 3: it builds on `jstream-control`
 (layer 2) and `jstream-protocol`.
 
-Contents (the skeleton; [Design](#design) explains the choices):
+Contents ([Design](#design) explains the choices):
 - **App** (`app.rs`): `App`, the root component. It shows the connect form until a
-  session is open, then the shell with its regions, and follows the engine's revision
-  from `state.changed` events. `SessionContext` gives components the open session.
+  session is open, then the shell with its regions, and keeps the shared state current
+  from the session's events. It owns the routing: which panel sits in which region, and
+  the inspector's pages. `SessionContext` gives components the open session.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
   and `desktop_vcam()`, what that global says about the virtual camera.
 - **Session** (`session.rs`): `Session` (the connection and the engine's `welcome`),
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
   and `engine_url_for_page`, the engine URL the connect form offers.
-- **Panels** (`panels/`): the scenes and sources tree, the inspector and the mixer.
-  Placeholders for now, except `outputs.rs`: `Outputs`, the outputs panel under the
-  inspector (creating, editing and deleting streams, recordings and the virtual
-  camera, their stream keys, start and stop, go-live and the pipeline's health), and
-  the calls and logic behind it, tested natively against `MockEngine`.
-- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the outputs (start
-  pairing and show the code, list and revoke devices), and the calls behind it, tested
-  natively against `MockEngine` and a stub that answers them as the server does.
+- **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
+  share: the collection as `state.get` last reported it (`Collection`, with its buses
+  for the bus picker), the program
+  scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
+  last failed call. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
+  `plan_summary` and `fresh_id`.
+- **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
+  (`sources.rs`), the properties form (`properties.rs`) and the delete confirmation
+  they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel, an inspector
+  page (creating, editing and deleting streams, recordings and the virtual camera, their
+  stream keys, start and stop, go-live and the pipeline's health), and the calls and
+  logic behind it, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
+  audio mixer along the bottom (faders, mutes, routing and buses, with meters and the
+  master's loudness), also tested natively against `MockEngine`.
+- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the inspector's pages,
+  shown only when the server pairs devices (start pairing and show the code, list and
+  revoke devices), and the calls behind it, tested natively against `MockEngine` and a
+  stub that answers them as the server does.
 - **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
   over a placeholder background, edits their geometry with the pointer and the
   keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
@@ -80,11 +91,57 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   panel calls the engine with `session.control.call(…)` and never sees the socket. The
   session is `Rc`-shared: everything in the page runs on one thread, and on `wasm32`
   `Control` needs no `Send`.
-- **Events.** One task reads the session's event stream and keeps the status bar's
-  revision current. When the stream ends (the engine closed the connection) the UI goes
-  back to the connect form with the reason. Disconnecting drops the session, which
-  closes the socket. Panels open their own `events()` subscriptions as they need them.
-- **The shell** is a CSS grid: a status bar on top, the scenes tree on the left, the
+- **Events and the shared state.** One task reads the session's event stream. It keeps
+  the status bar's revision current and hands each event to `Studio`, which re-reads
+  the state with `state.get` after a `state.changed` newer than its copy (or after
+  `events.dropped`), and follows `studio.changed` for the program scene. Reads coalesce:
+  while one `state.get` is in flight, any number of further changes cost one more read.
+  Panels never edit the copy: they send edits and the copy follows from the
+  `state.changed` that comes back, so every client's change shows the same way. When
+  the stream ends (the engine closed the connection) the UI goes back to the connect
+  form with the reason. The loop reads the session from the context per event and
+  holds no handle of its own, so Disconnecting drops the last one, which closes the
+  socket.
+- **Selection.** `Selection` is the scene being edited (shown by the sources list) and
+  an item in it (edited by the properties form). A new session reads the program scene
+  before the state, so it starts on the scene on program. It is fixed up after every
+  change: a
+  deleted scene falls back to the program scene, then the first listed scene, and an
+  item that left the scene is dropped. The canvas still draws the program scene with a
+  selection of its own; moving it onto `Selection` is a canvas follow-up.
+- **Scenes and sources.** The scene list shows scenes in display order and leaves out
+  groups (ADR-0024), marks the program scene, and puts a scene on program with
+  `scene.switch`. The sources list shows the selected scene's items with the top of the
+  stack first. New scenes, sources and items get IDs from `fresh_id`, which includes
+  the session's client ID so two UIs on one engine don't pick the same one. "Add"
+  creates a source of a kind `kind.list` reports, or places an existing source or
+  another scene (a `scene` source), as one batch, with a geometry covering the canvas
+  (ADR-0022). An engine that lists no kinds (the mock) offers no new kinds, only
+  existing sources and scenes. A `kind.list` that fails does the same, and its
+  error shows as any failed call's does. Deleting a scene, or a source everywhere, reads `delete.plan` first,
+  shows what else it takes, and sends the plan's edits expecting the plan's revision,
+  so a change in between makes the engine refuse it rather than delete more than the
+  user saw. Removing an item from its scene is a plain `item.remove`.
+- **The properties form** is generated from the kind's descriptor (`kind.describe`,
+  read once per kind and kept), with no code per kind (ADR-0025): a checkbox, number
+  (and slider when bounded), select, colour, text, asset (root and path) or reference
+  select (of the scenes, the other sources, or the buses, with None for `null`, which
+  for a `waveform`'s or `spectrum`'s `audio` is the program mix; a source reference
+  restricted to audio, such as their `audio_source`, offers only the sources that
+  report audio settings, less `scene` sources, as the engine accepts no other) per
+  parameter type, in the descriptor's order, grouped by `group`, advanced
+  ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
+  doesn't know is shown read-only. A change is checked with the descriptor's own check,
+  then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
+  the default. The descriptor's or the engine's reason shows under the field. A
+  `scene` source has no settings.
+- **Routing.** `app.rs` decides the regions: the scene and sources lists on the left,
+  the canvas in the middle, the inspector on the right, and the mixer along the
+  bottom. The inspector's pages are `inspector_pages()`, one line each, shown as tabs
+  once there is more than one; the pairing panel sits under them, outside the tabs,
+  because it hides itself where the server pairs nothing. A failed call shows in a
+  dismissable bar.
+- **The shell** is a CSS grid: a status bar on top, the scene and sources lists on the left, the
   preview canvas in the middle, the inspector on the right and the mixer along the
   bottom; narrow windows stack them. Each region is its own component, so the panels
   and the canvas are built separately without touching the shell. Colours follow the
@@ -129,6 +186,34 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sends it back: the panel shows only `output.status`'s `key_set`, re-read after it
   sets or clears a key, since no event reports that. Another client's key change shows
   on the next re-read.
+- **Mixer** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)). The panel reads
+  the audio sources (those `state.get` reports with `audio`), the buses and the sends
+  into a copy of its own, not `Studio`'s, and re-reads them on `state.changed` and
+  `events.dropped`. Each source gets a strip,
+  ordered by name: its meter, fader, mute and, folded under "Routing", whether its
+  audio is on, when it is heard (`always` or `when_shown`) and its send into each bus
+  (on or off, and its gain). A nested scene's strip has only the routing toggles,
+  since it has no fader or sends of its own. Each bus gets a strip too, the master
+  first, with renaming and (except the master) deleting. A delete reads `delete.plan`
+  first, as a scene's or source's does: the strip asks, saying how many `waveform` or
+  `spectrum` settings drawing the bus the plan clears, and sends the plan's edits
+  expecting the plan's revision. The master's adds its
+  momentary, short-term and integrated loudness, its true peak, and a button that
+  resets the integrated loudness (`audio.reset_loudness`). New buses take the first
+  free `bus-N` ID; the button is off at the protocol's bus limit (`MAX_BUSES`, 16).
+  - **Faders** run from −100 to +24 dB on a console taper: unity at three quarters
+    of the travel, the quiet end compressed, and snapping to 0 dB within a quarter of
+    a dB. While the pointer holds a fader the strip shows the value under it; letting
+    go (or each key press) sends one `source.set_audio` or `bus.set_fader`, so a drag
+    is one undo step. Hearing the fader during the drag needs live values
+    ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), not in the protocol
+    yet. Clicking the readout sets 0 dB. An accepted edit is applied to the shown
+    state at once, so the strip doesn't jump back before the re-read.
+  - **Meters** take `meters.tick`: an RMS bar over a fainter peak bar per channel,
+    from −60 dBFS to full scale, and a peak hold that waits about 1.5 s, then falls
+    about 3 dB a tick, and turns red at full scale. A source the tick leaves out loses
+    its reading, and half a second without a tick (no output runs, so the mixer is
+    stopped) blanks every meter.
 - **Browser password managers are out of scope.** The stream key and the control
   token are secrets for the OS credential store, not for the browser's
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)), so their fields opt out: each is
@@ -137,7 +222,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   no form submission for the browser to offer saving. A test checks both fields.
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
-  (`session.rs`); only `start()` needs a browser.
+  (`session.rs`, `store.rs`, `panels/outputs.rs`, `panels/mixer.rs`) and in plain functions the panels are built on (the rows,
+  what "Add" sends, the form's sections, parsing and checks); only the components
+  themselves need a browser.
+- **Debug bundle size.** A leptos view's type spells out every element and closure
+  inside it, and a debug build names each function with those types: most of its
+  `_bg.wasm` is that name section. The server refuses a file over its size limit
+  ([jstream-server › Design](../jstream-server/README.md#design)), so the mixer's strips, rows, meters, faders and mute buttons return `AnyView` rather than
+  `impl IntoView`, which keeps a nested view's type out of its parents' names. A
+  component that grows as large does the same.
 
 <a id="canvas"></a>
 ## Canvas

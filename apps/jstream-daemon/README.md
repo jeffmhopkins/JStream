@@ -67,7 +67,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
-Not here yet: YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
+Not here yet: YouTube sign-in (the daemon doesn't call `Engine::with_youtube` yet), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
@@ -218,10 +218,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `Arc`; the server, and through it every session, keep it alive.
 - **Live on Windows** (`serve.rs`). Under `cfg(windows)` the engine gets the
   `jstream-platform-windows` backends (`QpcClock`, `WgcCapture`, `MfVideoDevices`,
-  `WasapiAudio`, `MfCodecs`, `WindowsGpu`, and `WindowsVcam` as the virtual camera, so
-  a `virtual_cam` output's `output.start` publishes the program as a webcam; that start
-  fails with the sink's reason on a Windows without `MFCreateVirtualCamera` (before
-  Windows 11) or before `--register-vcam`), `WindowsCredentials` as its
+  `WasapiAudio`, `MfCodecs`, `WindowsGpu`, `MfMediaDecoders`, and `WindowsVcam` as the
+  virtual camera, so a `virtual_cam` output's `output.start` publishes the program as a
+  webcam; that start fails with the sink's reason on a Windows without
+  `MFCreateVirtualCamera` (before Windows 11) or before `--register-vcam`),
+  `WindowsCredentials` as its
   stream key store (`with_key_store`), and a publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
   starts. Elsewhere there are no backends yet, so outputs stay the placeholder state
@@ -242,9 +243,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
   `build.rs` links the binary (and its unit-test harness, which `link-arg-bins` also
   reaches, but not the integration tests) with `/DELAYLOAD` for each DLL
-  the daemon's backends import from (`mfplat.dll` for `MfCodecs` and
-  `MfVideoDevices`, `mf.dll` and `mfreadwrite.dll` for `MfVideoDevices`,
-  `mfsensorgroup.dll` for `WindowsVcam`) and
+  the daemon's backends import from (`mfplat.dll` for `MfCodecs`, `MfVideoDevices`
+  and `MfMediaDecoders`, `mf.dll` for `MfVideoDevices`, `mfreadwrite.dll` for
+  `MfVideoDevices` and `MfMediaDecoders`, `mfsensorgroup.dll` for `WindowsVcam`) and
   `delayimp.lib` when the target is MSVC, so each loads on the first call into it.
   `main.rs` runs `jstream_platform_windows::check_media_foundation` right after
   logging starts, before the engine is built or anything else calls Media Foundation,

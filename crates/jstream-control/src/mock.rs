@@ -824,6 +824,8 @@ impl State {
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
             },
+            // The mock describes no kinds, so it lists none.
+            Query::KindList => QueryResult::KindList { kinds: Vec::new() },
             Query::DeviceList => {
                 return Err(ProtocolError::Unsupported {
                     call: "device.list".into(),
@@ -2427,6 +2429,27 @@ mod tests {
         (engine, control)
     }
 
+    /// `kind.list` answers with no kinds, even for kinds `with_kinds` told it about: the
+    /// mock describes none. It answers rather than failing, so a client can report a
+    /// failed `kind.list` without the mock tripping it (#401). `kind.describe` still
+    /// answers `internal`.
+    #[test]
+    fn kind_list_lists_no_kinds() {
+        let (_engine, control) = parity_engine();
+        assert_eq!(
+            query(&*control, Query::KindList),
+            Ok(QueryResult::KindList { kinds: Vec::new() })
+        );
+        let describe = Query::KindDescribe {
+            kind_id: "color".into(),
+        };
+        let refused = query(&*control, describe).expect_err("kind.describe");
+        assert!(
+            matches!(refused.protocol(), Some(ProtocolError::Internal { .. })),
+            "{refused:?}"
+        );
+    }
+
     /// The answer to a history call: `(rev, step_rev, undo_depth, redo_depth)`.
     fn history(
         control: &dyn Control,
@@ -3039,6 +3062,62 @@ mod tests {
             .find(|item| item.item_id.as_str() == "ib")
             .expect("ib is in b");
         assert_eq!(ib.source_id.as_str(), "a_src");
+    }
+
+    /// #362: a bus a source's settings draw can't be deleted until they are cleared, as
+    /// the engine refuses it (`jstream-graph`), in the same batch or before.
+    #[test]
+    fn a_bus_a_source_draws_cannot_be_deleted() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let wave = |bus: serde_json::Value| Edit::SourceSetSettings {
+            source_id: SourceId::new("wave"),
+            patch: [("audio", bus)].into_iter().collect(),
+        };
+        batch(
+            &*control,
+            Batch {
+                edits: vec![
+                    Edit::BusCreate {
+                        bus_id: BusId::new("vod"),
+                        name: "VOD".into(),
+                    },
+                    Edit::SourceCreate {
+                        source_id: SourceId::new("wave"),
+                        name: "Waveform".into(),
+                        kind: SourceKind::Builtin {
+                            kind: "waveform".into(),
+                        },
+                        settings: Settings::new(),
+                        duplicated_from: None,
+                    },
+                    wave(serde_json::json!({"type": "bus", "bus_id": "vod"})),
+                ],
+                expected_rev: None,
+                idempotency_key: None,
+            },
+        )
+        .expect("created");
+        let delete = Edit::BusDelete {
+            bus_id: BusId::new("vod"),
+        };
+        let error = batch(&*control, Batch::single(delete.clone())).expect_err("refused");
+        assert!(
+            matches!(
+                error.protocol(),
+                Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.bus_id"
+            ),
+            "{error:?}"
+        );
+        batch(
+            &*control,
+            Batch {
+                edits: vec![wave(serde_json::Value::Null), delete],
+                expected_rev: None,
+                idempotency_key: None,
+            },
+        )
+        .expect("cleared, then deleted");
     }
 
     /// Every batch the shared parity fixture rejects fails with exactly the error

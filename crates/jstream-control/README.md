@@ -51,7 +51,7 @@ depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md
 
 ### The trait
 
-A `Control` value is one client session. Its three methods mirror the protocol's
+A `Control` value is one client session. Its four methods mirror the protocol's
 envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
 
 - `hello(Hello) -> Welcome`: the handshake. It fixes the session's `client_id`, which
@@ -151,7 +151,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
     or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
-    deleting the master, an empty `bus.set_fader`, sends from a `scene` source or a
+    deleting the master or a bus a source's settings refer to (a `bus` reference, as
+    a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
@@ -161,9 +162,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   whether a builtin source has the chain a filter names, stores settings (a source's
   and a filter's) as sent without checking them or filling in defaults (a `null` in a
   patch removes the entry), and doesn't follow settings references when it looks for
-  cycles.
-  `kind.list`, `kind.describe` and `delete.plan` answer `internal`, and its refused
-  deletes carry no `blockers`;
+  cycles. `kind.list` answers with no kinds, `kind.describe` and `delete.plan` answer
+  `internal`, and its refused deletes carry no `blockers`;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing

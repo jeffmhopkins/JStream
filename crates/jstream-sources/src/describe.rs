@@ -71,15 +71,6 @@ impl SourceKind for Described {
 pub(crate) fn described() -> Vec<Described> {
     vec![
         Described(kind("display", "Display capture", true, false)),
-        Described(KindDescriptor {
-            params: vec![param(
-                "file",
-                "Media file",
-                asset(&["mp4", "mkv", "mov", "webm", "mp3", "wav", "flac", "ogg"]),
-                Value::Null,
-            )],
-            ..kind("media", "Media file", true, true)
-        }),
         Described(kind("webcam", "Webcam", true, false)),
         Described(kind("window", "Window capture", true, false)),
     ]

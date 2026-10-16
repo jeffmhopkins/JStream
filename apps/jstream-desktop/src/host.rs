@@ -237,7 +237,8 @@ pub fn vcam_status(exe_dir: Option<&Path>, enabled: bool) -> VcamStatus {
 #[cfg(windows)]
 fn windows_backends(vcam: bool) -> anyhow::Result<Backends> {
     use jstream_platform_windows::{
-        MfCodecs, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu, WindowsVcam,
+        MfCodecs, MfMediaDecoders, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu,
+        WindowsVcam,
     };
     Ok(Backends {
         clock: Arc::new(QpcClock::new().context("could not open the QPC media clock")?),
@@ -247,6 +248,7 @@ fn windows_backends(vcam: bool) -> anyhow::Result<Backends> {
         codecs: Arc::new(MfCodecs::new()),
         gpu: Arc::new(WindowsGpu::new()),
         vcam: vcam.then(|| Box::new(WindowsVcam::new()) as Box<dyn jstream_platform::VcamSink>),
+        media: Arc::new(MfMediaDecoders::new()),
     })
 }
 
