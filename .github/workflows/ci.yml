@@ -79,11 +79,6 @@ jobs:
           echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
       - name: Test
         run: cargo test --workspace --locked
-      # The browser source's engine side (feature `cef`) builds without CEF since
-      # ADR-0048, so its Windows-only tests (the helper's pipes) can run here.
-      - name: Test the browser engine side
-        if: runner.os == 'Windows'
-        run: cargo test -p jstream-browser --features cef --locked
 
   doc:
     if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))

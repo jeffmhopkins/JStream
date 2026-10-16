@@ -22,7 +22,7 @@ path = "src/main.rs"
 
 [features]
 # Browser sources (ADR-0021, ADR-0046): the engine opens `browser` sources' pages in CEF.
-# Off by default, as in `jstream-browser`, until CEF's sandbox and file-access limits land
+# Off by default, as in `jstream-browser`, until the CEF runtime and the helper are packaged
 # (its README's open items); the portable folder then also needs the helper exe and the
 # CEF runtime beside `jstream.exe`. Windows only: elsewhere it builds nothing.
 cef = ["dep:jstream-browser", "jstream-browser/cef"]

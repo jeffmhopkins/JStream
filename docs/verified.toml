@@ -3,7 +3,7 @@
 # blank line per entry let parallel PRs that re-verify different inputs usually merge.
 
 ["ARCH#browser-source"."body"]
-stamp = { hash = "b3:9a6b619be12de381", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:d4dac0d8ee8bf239", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: says the desktop app wires the browser source in behind its off-by-default cef feature (from #290) and that CEF runs only in the sandboxed helper over two pipes (ADR-0048); the paint, shared-texture hand-back and interleaved audio path match cef/ and helper/; S4's choices and table are unchanged" }
 
 ["ARCH#browser-source"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:22338c0c00b36187", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: crate map has both #379's jstream-outputs row (built vs planned, matches Cargo.toml summary) and C8's jstream-browser row with CEF off the platform-windows row" }
+stamp = { hash = "b3:fa98c6d7e30438a4", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the jstream-browser row names the request policy, the CEF backend driving the sandboxed helper over pipes and the helper feature (ADR-0048); the apps/* row keeps the wave's desktop links (sources, jstream-browser with cef) and names jstream-browser-helper as the helper's DLL with unsafe for its one export; each matches the crates' jstream metadata and lint-deps" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -450,7 +450,7 @@ stamp = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDH
 stamp = { hash = "b3:0c6fb015c0446730", by = "agent:claude", note = "xtask/src/main.rs only changed the merge-main help line; the layout and the xtask command list still hold." }
 
 ["ARCH#shape"."body"]
-stamp = { hash = "b3:db1313d94973cb92", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 at c71718b (#283/#290 browser source, #296 hello deadline, #399, #402/#409 asset paths); merge-main took wave stamps: diagram's 'binary frames: preview' holds; new desktop cef and browser-helper rows are the wave's" }
+stamp = { hash = "b3:da46b5361fdd34d1", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the hosts table keeps the wave's desktop and daemon rows (desktop's off-by-default cef feature, now said to wait on packaging since the sandbox and file limits have landed) and C8b1's helper row (CEF's bootstrap exe renamed plus this crate's DLL, driven over pipes, ADR-0048); the diagram is unchanged" }
 
 ["ARCH#shape"."dep:docs/adr/0001-library-first-engine.md"]
 stamp = { hash = "b3:7a1c016d1f87fdaf" }
@@ -762,7 +762,7 @@ stamp = { hash = "b3:c470e006d8095daa" }
 stamp = { hash = "b3:3e63f714aef88590" }
 
 ["CRATE-jstream-browser#open-items"."body"]
-stamp = { hash = "b3:96f1e1c1344ffb05", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 against wave/m1: the File access item is gone since RequestPolicy now limits file pages to their folder, so two items block a host (sandbox, packaging); the wave's Hosts item from #290 (desktop creates a backend on its own media-adapter device, daemon doesn't) is kept; Compositing still holds after E3b, which imports capture frames but nothing reads Source::gpu_frame" }
+stamp = { hash = "b3:7334aaf855bd4d17", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the sandbox item stays gone (the helper is sandboxed, ADR-0048) and file access was closed by #289; packaging (now including the helper exe and DLL) blocks shipping; measurements of the helper path stay open; Hosts takes the wave's text (desktop creates a backend on its own media-adapter device, daemon doesn't); compositing still holds after E3b" }
 
 ["CRATE-jstream-browser#open-items"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
@@ -777,7 +777,7 @@ stamp = { hash = "b3:7d20d7a1c4f8bf54", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:fb26b9d70c46ce05", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
-stamp = { hash = "b3:9a6b619be12de381", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:d4dac0d8ee8bf239", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "Stale via ARCH#browser-source only: that section now also names the desktop app's cef wiring; this README's seam, helper and request-policy text says the host hands the device and starts no host itself, which still holds" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-browser"]
 stamp = { hash = "b3:fab0c5bb163d7be3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro says CEF runs in a sandboxed helper process and only the helper's build builds CEF; PageAudio takes interleaved packets from the helper (push_interleaved); the CEF backend bullets now describe starting the helper over two single-instance named pipes with the PID check, the 30 s start wait, sticky start failure and restart after a crash, the 15 s kill on drop; the pipe (wire.rs, link.rs) bullet; frames duplicated from the helper, opened once per slot and copied into the page's ring, use_device passing the adapter LUID; the helper's side (run_helper, sandbox on, handlers and RequestPolicy in the helper); all match cef/, helper/, wire.rs and link.rs; C8b2's RequestPolicy bullet and C8's host-device wording kept" }
@@ -834,7 +834,10 @@ stamp = { hash = "b3:dc6d71acf3e43565", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:fb26b9d70c46ce05", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: rewritten for ADR-0048: a cdylib whose only code is the RunWinMain export, shipped beside CEF's bootstrap.exe renamed jstream-browser-helper.exe, which sets up the sandbox and hands the process to jstream_browser::run_helper; unsafe_allowed for the unmangled export; cef turns on jstream-browser's helper feature; the manifest and build.rs are gone; matches src/lib.rs and Cargo.toml" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:baee976629629da3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: stale via the crate map's apps/* row (now the helper's DLL with unsafe for its export, beside the wave's desktop links) and ADR-0048; the purpose text (bootstrap exe renamed, the DLL's RunWinMain export, feature cef turning on jstream-browser's helper) matches both and src/lib.rs" }
+
+["CRATE-jstream-browser-helper#purpose"."dep:docs/adr/0048-sandboxed-browser-helper.md"]
+stamp = { hash = "b3:7d20d7a1c4f8bf54", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: stale via the crate map's apps/* row (now the helper's DLL with unsafe for its export, beside the wave's desktop links) and ADR-0048; the purpose text (bootstrap exe renamed, the DLL's RunWinMain export, feature cef turning on jstream-browser's helper) matches both and src/lib.rs" }
 
 ["CRATE-jstream-browser-helper#purpose"."file:apps/jstream-browser-helper/Cargo.toml"]
 stamp = { hash = "b3:9313794338e1911e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: rewritten for ADR-0048: a cdylib whose only code is the RunWinMain export, shipped beside CEF's bootstrap.exe renamed jstream-browser-helper.exe, which sets up the sandbox and hands the process to jstream_browser::run_helper; unsafe_allowed for the unmangled export; cef turns on jstream-browser's helper feature; the manifest and build.rs are gone; matches src/lib.rs and Cargo.toml" }
@@ -879,7 +882,7 @@ stamp = { hash = "b3:4bafe193e0933119", by = "agent:claude", note = "Pairing: th
 stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's, the CLI's commands are unchanged by D5; holds" }
 
 ["CRATE-jstream-cli#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:baee976629629da3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "Stale via ARCH#crate-map apps/* only: C8b1 changes the jstream-browser-helper part of that row; the jstream-cli part (control and mcp only) is unchanged; holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:de3f78e4fd9c1ab7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: run.rs/args.rs gain `pair`, `device list` and `device revoke`, with run/tests.rs covering them; Purpose (a thin CLI over every protocol call) still describes them; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -1287,7 +1290,7 @@ stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:616f38d798b0a7e0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:baee976629629da3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "Stale via ARCH#crate-map apps/* only: C8b1 changes the jstream-browser-helper part of that row; the daemon's links (core, server, platform crate) are unchanged and the daemon creates no browser backend; holds" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
@@ -1335,7 +1338,7 @@ stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:2b83d70dc8bb9855", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the new sentence that the app sets no device file, so a device paired from it (ADR-0044) lasts only until exit and, like the token, is accepted only on loopback, matches the desktop ServerConfig (no device_file, loopback bind) and gate.rs devices_allowed; rechecked after merging wave/m1; rechecked after merging wave/m1, with pairing moved to protocol 0.21 (0.20 is #251) and its ADR renumbered 0057; holds" }
+stamp = { hash = "b3:1e9bbd16203171e6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the browser bullet no longer says a cef build links libcef.dll at load time; with ADR-0048 CEF runs only in the helper, which starts on the first page, so a missing helper or CEF files fail that source, as browser.rs's doc now says; the device and clock text holds" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1359,7 +1362,7 @@ stamp = { hash = "b3:46946d3ef73adbf5", by = "agent:claude@session_01D6iWjpMkoHb
 stamp = { hash = "b3:f0fe0fb519a068bf" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/browser.rs"]
-stamp = { hash = "b3:6d9ebaeab4249226", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the browser bullet no longer says a cef build links libcef.dll at load time; with ADR-0048 CEF runs only in the helper, which starts on the first page, so a missing helper or CEF files fail that source, as browser.rs's doc now says; the device and clock text holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/data.rs"]
 stamp = { hash = "b3:ca2f21dc552ae191" }
@@ -1389,7 +1392,7 @@ stamp = { hash = "b3:558b5c5512b30191" }
 stamp = { hash = "b3:d279c9bf130da277", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:baee976629629da3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the apps/* row still says the desktop links sources and jstream-browser with cef; browser.rs now drives the sandboxed helper (its doc names ADR-0048 and says the app doesn't link CEF), and the Browser sources bullet still describes it; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:46946d3ef73adbf5", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
@@ -1398,7 +1401,7 @@ stamp = { hash = "b3:46946d3ef73adbf5", by = "agent:claude@session_01D6iWjpMkoHb
 stamp = { hash = "b3:f0fe0fb519a068bf" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/browser.rs"]
-stamp = { hash = "b3:6d9ebaeab4249226", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the apps/* row still says the desktop links sources and jstream-browser with cef; browser.rs now drives the sandboxed helper (its doc names ADR-0048 and says the app doesn't link CEF), and the Browser sources bullet still describes it; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/data.rs"]
 stamp = { hash = "b3:ca2f21dc552ae191" }
@@ -1422,10 +1425,10 @@ stamp = { hash = "b3:ee281b0fbf540f66" }
 stamp = { hash = "b3:45624952598c1f3a" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:9ccb51f8581fe0c8", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:6bbbc26cca03c13a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the Browser sources paragraph now says the helper is CEF's bootstrap exe renamed plus jstream-browser-helper.dll and CEF's files, that the app doesn't build or link CEF so it starts without them, and that the cef feature stays off until the runtime and helper are packaged, matching Cargo.toml's comment and CefConfig::beside_exe" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
-stamp = { hash = "b3:7261cd248aac926a", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
+stamp = { hash = "b3:ac2977e8c9f522c0", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the Browser sources paragraph now says the helper is CEF's bootstrap exe renamed plus jstream-browser-helper.dll and CEF's files, that the app doesn't build or link CEF so it starts without them, and that the cef feature stays off until the runtime and helper are packaged, matching Cargo.toml's comment and CefConfig::beside_exe" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:46946d3ef73adbf5", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
@@ -1839,7 +1842,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:22338c0c00b36187", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: re-read against the merged crate map; the platform rows it relies on match, and the CEF move to jstream-browser is consistent with this section" }
+stamp = { hash = "b3:fa98c6d7e30438a4", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "Stale via ARCH#crate-map only: C8b1 rewrites the jstream-browser and apps/* rows for the sandboxed helper; the jstream-platform row and GPU frame design are untouched, and the engine's copy from the helper's shared texture uses GpuFrame as described; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
