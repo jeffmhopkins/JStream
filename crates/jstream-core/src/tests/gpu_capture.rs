@@ -527,6 +527,10 @@ impl jstream_browser::BrowserPage for PaintedPage {
     fn audio(&self) -> &Arc<jstream_browser::PageAudio> {
         &self.audio
     }
+
+    fn denied_requests(&self) -> u64 {
+        0
+    }
 }
 
 /// On the GPU path a browser page paints on the program stage's device, and the render
