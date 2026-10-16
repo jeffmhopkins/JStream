@@ -60,7 +60,7 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
   that are only between stamps or only inside `@generated` blocks, moves inline stamps a branch from before ADR-0053 still
-  has, and lists the sections left stale.
+  has, and lists the sections left stale with the notes the branch had written on each.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -326,7 +326,9 @@ other conflict, including one in a file that also has stamp conflicts, is left e
 git wrote it, and the merge stays open for you to finish by hand. When every conflict was
 resolved this way it commits the merge, runs
 `docs migrate` and commits what that changed separately, and prints the sections that are
-now stale, for `docs verify` after a re-read.
+now stale, for `docs verify` after a re-read. Under each one it prints the notes this
+branch wrote on that section since its merge base, because the re-verify replaces them
+([Verification notes](#notes)).
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes
@@ -417,6 +419,10 @@ holds**. The note says what was checked and why it still holds, e.g.:
   of every entry whose input changed since the previous verify. An earlier note on such an
   entry survives only in git history (`docs log`), so the last note on each entry must
   cover the PR's whole change to that input: it is the one the reviewer reads.
+- After `docs merge-main`, each stale section needs its own note: what its earlier note
+  said about this PR's change, plus what the merge changed in that section's inputs.
+  `merge-main` prints the earlier notes under each stale section for this. One stock note
+  across every stale section, such as "rechecked after merging main", fails review.
 - A verify that only drops removed inputs, or finds no input changed, records no `by` or
   `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. Say in
   the PR what you re-read after removing a covered file.

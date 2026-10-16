@@ -615,6 +615,16 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             }
             for s in &m.stale {
                 eprintln!("stale: {s}");
+                for n in m.notes.get(s).into_iter().flatten() {
+                    eprintln!("  this branch's note: {n}");
+                }
+            }
+            if !m.notes.is_empty() {
+                eprintln!(
+                    "a re-verify replaces those notes: write each section's own note, keeping \
+                     what it said about this branch's change and adding what the merge changed \
+                     (docs/DOCS.md#notes)"
+                );
             }
             eprintln!(
                 "docs merge-main: merged {} stamp conflict(s) and resolved {} @generated conflict(s); {} stale \
@@ -1112,12 +1122,22 @@ mod tests {
         verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies on main");
         commit_all(&origin, "main: a again");
         work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
-        verify(&work.0, "S#a", "agent:work", NOTE).expect("S verifies on work");
+        let work_note = "a1 is the branch's change to a.rs and the text still describes it";
+        verify(&work.0, "S#a", "agent:work", work_note).expect("S verifies on work");
         commit_all(&work, "work: a");
         let m = merge::merge_main(&work.0, "main").expect("merges");
         assert!(m.committed, "{m:?}");
         assert_eq!(m.stamps, vec!["S#a".to_owned()]);
         assert_eq!(m.stale, vec!["S#a".to_owned()]);
+        // Every note the branch wrote on S's entries since its merge base with main (a.rs
+        // now, b.rs before the first merge) is reported for the re-verify, once each.
+        assert_eq!(
+            m.notes,
+            BTreeMap::from([(
+                "S#a".to_owned(),
+                vec![work_note.to_owned(), NOTE.to_owned()]
+            )])
+        );
         let ledger =
             std::fs::read_to_string(work.0.join(ledger::PATH)).expect("invariant: written");
         assert!(

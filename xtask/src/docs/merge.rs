@@ -42,6 +42,10 @@ pub(crate) struct Merge {
     pub(crate) committed: bool,
     /// Sections stale after the merge, as `DOC#anchor`; empty unless `committed`.
     pub(crate) stale: Vec<String>,
+    /// For each stale section, the notes this branch had written on it before the merge
+    /// (on entries that differ from the merge base's), so the re-verify can carry them
+    /// forward (docs/DOCS.md#notes).
+    pub(crate) notes: BTreeMap<String, Vec<String>>,
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<Output> {
@@ -100,6 +104,7 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
         report.committed = true;
         report.migrated = migrate_inline(root)?;
         report.stale = stale_sections(root)?;
+        report.notes = branch_notes(root, &report.stale)?;
         return Ok(report);
     }
     if !git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
@@ -168,8 +173,59 @@ pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
         report.committed = true;
         report.migrated = migrate_inline(root)?;
         report.stale = stale_sections(root)?;
+        report.notes = branch_notes(root, &report.stale)?;
     }
     Ok(report)
+}
+
+/// The ledger as it was at `rev`; empty when the file is missing or doesn't parse there.
+fn ledger_at(root: &Path, rev: &str) -> Result<ledger::Ledger> {
+    let out = git(root, &["show", &format!("{rev}:{}", ledger::PATH)])?;
+    if !out.status.success() {
+        return Ok(ledger::Ledger::default());
+    }
+    Ok(ledger::Ledger::parse(&String::from_utf8_lossy(&out.stdout)).unwrap_or_default())
+}
+
+/// For each of `stale`, the distinct notes the branch wrote on it: notes on entries of the
+/// merge's first parent that differ from the merge base's entry. Called after the merge
+/// commit, so `HEAD^1` is the branch and `HEAD^2` what was merged. A merge-main that only
+/// ran `docs migrate` on top leaves the merge at `HEAD~1`; both are tried.
+fn branch_notes(root: &Path, stale: &[String]) -> Result<BTreeMap<String, Vec<String>>> {
+    let mut out = BTreeMap::new();
+    if stale.is_empty() {
+        return Ok(out);
+    }
+    let merge = ["HEAD", "HEAD~1"].into_iter().find(|rev| {
+        git(root, &["rev-parse", "-q", "--verify", &format!("{rev}^2")])
+            .is_ok_and(|o| o.status.success())
+    });
+    let Some(merge) = merge else { return Ok(out) };
+    let (ours, theirs) = (format!("{merge}^1"), format!("{merge}^2"));
+    let base = git_ok(root, &["merge-base", &ours, &theirs])?;
+    let base = String::from_utf8_lossy(&base).trim().to_owned();
+    let (branch, base) = (ledger_at(root, &ours)?, ledger_at(root, &base)?);
+    for key in stale {
+        let Some(stamp) = branch.sections.get(key) else {
+            continue;
+        };
+        let before = base.sections.get(key);
+        let mut notes: Vec<String> = Vec::new();
+        for (input, e) in stamp {
+            if before.and_then(|b| b.get(input)) == Some(e) {
+                continue;
+            }
+            if let Some(n) = &e.note
+                && !notes.contains(n)
+            {
+                notes.push(n.clone());
+            }
+        }
+        if !notes.is_empty() {
+            out.insert(key.clone(), notes);
+        }
+    }
+    Ok(out)
 }
 
 /// After a merge commit: runs `docs migrate` and commits what it changed, if anything, so
