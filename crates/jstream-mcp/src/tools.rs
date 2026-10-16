@@ -10,8 +10,8 @@
 
 use crate::events::{BUFFER_CAPACITY, PAGE_SIZE};
 use jstream_protocol::{
-    Action, Batch, Call, Edit, HistoryCall, HistoryOp, IdempotencyKey, ProtocolError, Query, Rev,
-    json_schema,
+    Action, Batch, Call, Edit, HistoryCall, HistoryOp, IdempotencyKey, OutputKind, ProtocolError,
+    Query, Rev, RtmpTarget, json_schema,
 };
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -172,16 +172,19 @@ impl Tools {
         arguments: Value,
     ) -> Option<Result<Invocation, ProtocolError>> {
         let tool = self.tools.iter().find(|t| t.name == name)?;
-        Some(match &tool.kind {
-            ToolKind::Batch => decode_batch(arguments),
-            ToolKind::Describe => match arguments.as_object() {
-                Some(args) if args.is_empty() => Ok(Invocation::Describe),
-                _ => Err(malformed("`describe_api` takes no arguments")),
-            },
-            ToolKind::Events => from_value::<EventsArgs>(arguments, "arguments")
-                .map(|args| Invocation::Events { after: args.after }),
-            ToolKind::Group(ops) => self.decode_op(&tool.name, ops, arguments),
-        })
+        Some(
+            match &tool.kind {
+                ToolKind::Batch => decode_batch(arguments),
+                ToolKind::Describe => match arguments.as_object() {
+                    Some(args) if args.is_empty() => Ok(Invocation::Describe),
+                    _ => Err(malformed("`describe_api` takes no arguments")),
+                },
+                ToolKind::Events => from_value::<EventsArgs>(arguments, "arguments")
+                    .map(|args| Invocation::Events { after: args.after }),
+                ToolKind::Group(ops) => self.decode_op(&tool.name, ops, arguments),
+            }
+            .and_then(refuse_youtube_targets),
+        )
     }
 
     fn decode_op(
@@ -282,6 +285,37 @@ fn decode_batch(arguments: Value) -> Result<Invocation, ProtocolError> {
         expected_rev: args.expected_rev,
         idempotency_key: args.idempotency_key,
     })))
+}
+
+/// Refuses an edit that points an output at a YouTube broadcast: that binds the output to
+/// YouTube, which is for people, through the UI (ADR-0058 §3). A plain RTMP(S) target
+/// with a stream key stays open to agents.
+fn refuse_youtube_targets(invocation: Invocation) -> Result<Invocation, ProtocolError> {
+    if let Invocation::Call(Call::Batch(batch)) = &invocation {
+        for (i, edit) in batch.edits.iter().enumerate() {
+            let field = match edit {
+                Edit::OutputCreate {
+                    kind:
+                        OutputKind::Rtmp {
+                            target: RtmpTarget::YouTube { .. },
+                        },
+                    ..
+                } => format!("edits.{i}.kind.target"),
+                Edit::OutputSetTarget {
+                    target: RtmpTarget::YouTube { .. },
+                    ..
+                } => format!("edits.{i}.target"),
+                _ => continue,
+            };
+            return Err(ProtocolError::invalid_argument(
+                field,
+                "a `youtube` target binds the output to a YouTube broadcast, which only a \
+                 person can do, in JStream's UI; agents can use a `generic` RTMP(S) target \
+                 with a stream key (`output.set_key`)",
+            ));
+        }
+    }
+    Ok(invocation)
 }
 
 fn from_value<T: DeserializeOwned>(value: Value, what: &str) -> Result<T, ProtocolError> {
@@ -739,5 +773,40 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// ADR-0058 §3: an agent can't bind an output to a YouTube broadcast, in a group
+    /// tool's edit or in a batch; a generic RTMP(S) target is still fine.
+    #[test]
+    fn youtube_targets_are_refused() {
+        let field = |result: Result<Invocation, ProtocolError>| match result {
+            Err(ProtocolError::InvalidArgument { field, reason, .. }) => {
+                assert!(reason.contains("only a person can do"), "{reason}");
+                field
+            }
+            other => panic!("expected invalid_argument, got {other:?}"),
+        };
+        let youtube = json!({"type": "youtube", "broadcast_id": "b1"});
+        let create = json!({"type": "output.create", "output_id": "yt",
+                            "kind": {"type": "rtmp", "target": youtube}});
+        let set = json!({"type": "output.set_target", "output_id": "yt", "target": youtube});
+        assert_eq!(
+            field(decode("output", json!({"op": create}))),
+            "edits.0.kind.target"
+        );
+        assert_eq!(
+            field(decode("output", json!({"op": set}))),
+            "edits.0.target"
+        );
+        let generic = json!({"type": "output.set_target", "output_id": "yt",
+                             "target": {"type": "generic", "url": "rtmps://example.com/live"}});
+        assert_eq!(
+            field(decode("batch", json!({"edits": [generic, set]}))),
+            "edits.1.target"
+        );
+        assert!(matches!(
+            decode("output", json!({"op": generic})),
+            Ok(Invocation::Call(Call::Batch(_)))
+        ));
     }
 }

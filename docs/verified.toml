@@ -201,7 +201,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:f23d57be0deee60c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list drops the planned youtube tool and says youtube.* ops get no tool and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; the size is now about 180 KB (tools.snap is 179,936 bytes, the base's 177,744 plus the 0.20 youtube output target in the output tool's schema); holds" }
+stamp = { hash = "b3:ffb748944bdc7742", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README and tools.rs/events.rs do; tools.snap is unchanged by the refusal, still about 180 KB; holds" }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:8eea55b34b97d6a9" }
@@ -216,7 +216,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:f321c94e73604b6a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list drops the planned youtube tool and says youtube.* ops get no tool and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap matches the base apart from the 0.20 youtube output target in the output tool's schema; holds" }
+stamp = { hash = "b3:1ac86a04b036ed1d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README and tools.rs/events.rs do; tools.snap is unchanged by the refusal, still about 180 KB; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
 stamp = { hash = "b3:22dcc67d98ee6155", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list drops the planned youtube tool and says youtube.* ops get no tool and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap matches the base apart from the 0.20 youtube output target in the output tool's schema; holds" }
@@ -243,7 +243,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:0799a2d773d767ae", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list drops the planned youtube tool and says youtube.* ops get no tool and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap matches the base apart from the 0.20 youtube output target in the output tool's schema; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:1896cc1cf62f36ea", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list drops the planned youtube tool and says youtube.* ops get no tool and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap matches the base apart from the 0.20 youtube output target in the output tool's schema; holds" }
+stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README and tools.rs/events.rs do; tools.snap is unchanged by the refusal, still about 180 KB; holds" }
 
 ["ARCH#packaging"."body"]
 stamp = { hash = "b3:1c343ec4bf85722c", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: the virtual camera bullet now says the daemon is the --register-vcam mode until the desktop app has it (the app exists but lacks that mode); rest unchanged" }
@@ -1563,10 +1563,10 @@ stamp = { hash = "b3:381c8cf17eea8c11", by = "agent:claude@session_016BkTSqJ3kAf
 stamp = { hash = "b3:943bb9518712a4b5" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:1c73216ec876c09b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the tool table has no youtube row; youtube.* ops get no tool and are an unknown op in any other tool (no_youtube_tool_and_no_youtube_op); the Events part says youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; the snapshot has no youtube tool; the wave's 3 s hello wait text is kept; holds" }
+stamp = { hash = "b3:6cc6fa7101f86ac7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool; an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering; describe_api still returns the whole schema; holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:f23d57be0deee60c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops get no tool and are an unknown op in any other tool; youtube.* events are dropped before numbering; describe_api still returns the whole schema. ARCH#mcp's size figure moved to about 180 KB, which this section doesn't restate; holds" }
+stamp = { hash = "b3:ffb748944bdc7742", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool; an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering; describe_api still returns the whole schema; holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1602,10 +1602,10 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:0799a2d773d767ae", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the tool table has no youtube row; youtube.* ops get no tool and are an unknown op in any other tool (no_youtube_tool_and_no_youtube_op); the Events part says youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; the snapshot has no youtube tool; the wave's 3 s hello wait text is kept; holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:1896cc1cf62f36ea", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the tool table has no youtube row; youtube.* ops get no tool and are an unknown op in any other tool (no_youtube_tool_and_no_youtube_op); the Events part says youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; the snapshot has no youtube tool; the wave's 3 s hello wait text is kept; holds" }
+stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool; an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering; describe_api still returns the whole schema; holds" }
 
 ["CRATE-jstream-mcp#purpose"."body"]
-stamp = { hash = "b3:659e0f184fdd80aa", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the MCP server has no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and events.rs drops youtube.* events; purpose says agents get full control except YouTube's account features; the wave's hello wait (with_open_early_timeout) is untouched; holds" }
+stamp = { hash = "b3:18f14fc86f4276c6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), and events.rs drops youtube.* events; purpose says agents get full control except YouTube's account features; holds" }
 
 ["CRATE-jstream-mcp#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
@@ -1632,7 +1632,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:0799a2d773d767ae", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the MCP server has no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and events.rs drops youtube.* events; purpose says agents get full control except YouTube's account features; the wave's hello wait (with_open_early_timeout) is untouched; holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:1896cc1cf62f36ea", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the MCP server has no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and events.rs drops youtube.* events; purpose says agents get full control except YouTube's account features; the wave's hello wait (with_open_early_timeout) is untouched; holds" }
+stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), and events.rs drops youtube.* events; purpose says agents get full control except YouTube's account features; holds" }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:e204cadb57ccceae", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the enhanced-RTMP link; ADR-0041 keeps ADR-0009/0034's RTMP/RTMPS with enhanced RTMP for HEVC/AV1, so the text holds" }
