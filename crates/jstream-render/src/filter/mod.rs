@@ -21,10 +21,6 @@ mod pass;
 #[cfg(test)]
 pub(crate) mod testing;
 
-#[allow(
-    unused_imports,
-    reason = "Lane V: only the tests use Blend, Draw and Shader until the filter groups land"
-)]
 pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Shader};
 
 use jstream_protocol::{KindDescriptor, Settings};
