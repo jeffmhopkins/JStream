@@ -58,7 +58,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   requests, and stopped with
   SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
   daemon makes it live, on the platform fakes with the CPU compositor, behind the
-  server with MCP on, where MCP builds a scene and creates an RTMP output to a local
+  server with MCP on, where MCP sets the canvas to the fake display's size, builds a
+  scene and creates an RTMP output to a local
   loopback sink and a recording, the WebSocket client sets the key and starts the
   stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
   received and the recorded MP4. The binary has no backends off Windows, so it runs
@@ -139,9 +140,10 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   are kept and older ones deleted, so the logs stay under about 100 MiB. The default
   directory is `logs` in the data directory: `%APPDATA%\JStream` on Windows,
   `~/Library/Application Support/JStream` on macOS, `$XDG_DATA_HOME/jstream` (else
-  `~/.local/share/jstream`) elsewhere. At `info` and above, the first line logged names the file. A log
-  directory that can't be created, or a data directory that can't be found (no `HOME`
-  or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
+  `~/.local/share/jstream`) elsewhere, or a `data` folder beside the exe when a file
+  named `portable` sits there (ADR-0020). At `info` and above, the first line logged
+  names the file. A log directory that can't be created, or a data directory that can't
+  be found (no portable marker, and no `HOME` or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
   file is touched. On Unix the directories it creates are mode `0700` and the files
   `0600`.
 - **Crash reports.** A panic writes `crash-<UTC time>-<pid>-<n>.txt` into the log
@@ -371,10 +373,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   Pruning skips the file being written but may delete another running daemon's (on
   Unix it keeps writing to the unlinked file; on Windows `std` opens files with
   `FILE_SHARE_DELETE`, so the same is expected, untested).
-- **The data directory** is found from the environment (`APPDATA`, `HOME`,
-  `XDG_DATA_HOME`), not a crate: three cases don't pay for `dirs`, which adds
-  `dirs-sys` and, on Windows, `windows-sys`. ADR-0020's `portable` marker is not
-  handled yet ([Open questions](#open-questions)).
+- **The data directory** comes from `jstream-platform`'s `paths` module, the desktop
+  app's too: `%APPDATA%\JStream`, or a `data` folder beside the exe when a `portable`
+  marker file sits there ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md),
+  [jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **Crash reports** (`crash.rs`, [R-SEC-004](../../docs/RULES.md#R-SEC-004)). The panic
   hook, installed as soon as the log directory exists, writes the daemon and protocol
   versions, OS and architecture, the UTC time, the process ID, the thread name, the
@@ -392,10 +394,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`--token-file`, `--port`, `--output`, `--log-dir`, `--log-level`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
-  `jstream-platform` (`Backends`, the key store trait), `jstream-browser` (the
-  `BrowserBackend` seam, and its CEF backend with the `cef` feature; already in the
-  tree through core), `jstream-platform-windows` on
-  Windows only (the backends, the key store and the Media Foundation check),
+  `jstream-platform` (`Backends`, the key store trait, the data directory),
+  `jstream-browser` (the `BrowserBackend` seam, and its CEF backend with the `cef`
+  feature; already in the tree through core), `jstream-platform-windows` on Windows only
+  (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `anyhow`, `tracing` (the startup line) and `blake3`
   (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,
@@ -435,10 +437,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
    ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001); the daemon forbids `unsafe`), or
    an out-of-process monitor (`crash-handler` and `minidumper`), whose attach call is
    `unsafe` too and which adds a helper process. Either needs testing on Windows.
-5. **Data directory.** The log directory's default should come from the same settings
-   code as question 2, which will also handle ADR-0020's `portable` marker (state in a
-   folder beside the exe). Until then the daemon reads `APPDATA`, `HOME` and
-   `XDG_DATA_HOME` itself, and `--log-dir` overrides them.
+5. **Data directory.** The log directory's default is `logs` in the data directory
+   (`jstream-platform`'s `paths`, which handles ADR-0020's `portable` marker), and
+   `--log-dir` overrides it. The token file (question 2) and the collection
+   (question 6) don't default to it yet.
 6. **Default collection file.** Without `--collection` the collection is not saved.
    A default (in the data directory, as [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)
    places collections) would make every run persist, but needs the same settings code as

@@ -119,7 +119,7 @@ fn cef_browser(
         .as_ref()
         .map(std::path::PathBuf::from)
         .or_else(crate::logs::default_dir);
-    let Some(state) = crate::logs::data_dir().or_else(|| logs.clone()) else {
+    let Some(state) = jstream_platform::paths::data_dir().or_else(|| logs.clone()) else {
         tracing::warn!("no data directory for the browser's cache, so browser sources are off");
         return engine;
     };

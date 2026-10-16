@@ -259,6 +259,12 @@ impl Shot {
     pub(crate) fn uses_capture(&self) -> bool {
         self.uses_capture
     }
+
+    /// Whether drawing this shows the pipeline's capture: a pass places it, or there is
+    /// no program scene and the capture fills the output.
+    pub(crate) fn shows_capture(&self) -> bool {
+        self.uses_capture || self.passes.is_empty()
+    }
 }
 
 /// Two shots are equal when they draw the same thing: the passes and keys follow from
@@ -858,7 +864,7 @@ pub(crate) fn compose(
         }
     }
     let capture = match capture {
-        Some(capture) if shot.uses_capture || shot.passes.is_empty() => {
+        Some(capture) if shot.shows_capture() => {
             match capture.image {
                 CaptureImage::Rgba { size, rgba } => cache.upload(
                     compositor,
@@ -876,6 +882,7 @@ pub(crate) fn compose(
     };
     let Some((program, nested)) = shot.passes.split_last() else {
         let image = cache.get(&GpuKey::Capture).filter(|_| capture);
+        // Scaled to fill the output, which follows the canvas, not the display.
         let items: Vec<Item<'_>> = image
             .into_iter()
             .map(|image| {

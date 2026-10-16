@@ -39,25 +39,25 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard and
   shutdown.
-- **Data folder and log file** (`data.rs`, `logs.rs`).
+- **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds.
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
-  script's escaping, the command line, the virtual camera's status values, the data
-  folder and the capped log file), and one integration test, `tests/delay_load.rs`
-  (Windows MSVC only), which reads the built `jstream.exe`'s PE headers to check that
-  each Media Foundation DLL `build.rs` delay-loads is delay-loaded and none is a
-  load-time import.
+  script's escaping, the command line, the virtual camera's status values and the
+  capped log file), and one integration test, `tests/delay_load.rs` (Windows MSVC
+  only), which reads the built `jstream.exe`'s PE headers to check that each Media
+  Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
 
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
 virtual camera's registration mode (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, crash
-reports, MCP and the token for outside clients, the release build of the portable
-folder, and browser sources in a default build (the `cef` feature is off).
+reports, MCP and the token for outside clients, and browser sources in a default build
+(the `cef` feature is off). `cargo xtask dist` builds the portable folder
+([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 
 <a id="usage"></a>
 ## Usage
 <!-- @section
-covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
+covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
 -->
 
 On Windows, with the UI built first:
@@ -91,7 +91,9 @@ folder, and its log `logs\cef.log`.
 
 - **Data folder.** `%APPDATA%\JStream`, the daemon's too. When a file named `portable`
   sits beside the exe, a `data` folder beside the exe instead, so the app can run from
-  a USB stick ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)).
+  a USB stick ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). Both
+  hosts find it through `jstream-platform`'s `paths` module
+  ([jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **The collection** is `collection.json` in the data folder, created empty the first
   time and saved on every change, so the next start opens where the last one stopped.
 - **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start and
