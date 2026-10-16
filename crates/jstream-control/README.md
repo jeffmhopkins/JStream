@@ -51,7 +51,7 @@ depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md
 
 ### The trait
 
-A `Control` value is one client session. Its three methods mirror the protocol's
+A `Control` value is one client session. Its four methods mirror the protocol's
 envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
 
 - `hello(Hello) -> Welcome`: the handshake. It fixes the session's `client_id`, which

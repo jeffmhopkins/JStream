@@ -329,9 +329,9 @@ reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), 
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
 Buses never feed buses (ADR-0028), so a send always runs from a source to a bus, and
-an audio routing cycle can't be expressed. A routing check comes with filters, the
-first thing that could feed one bus from another. The mixer has filter chains (D7b),
-but filters are not in the protocol yet. `follow`'s activity gain is the engine's (D6); the
+an audio routing cycle can't be expressed. Filter chains (0.22) belong only to
+sources (`FilterOwner` is `source`), so none feeds one bus from another either; a
+routing check comes with the first thing that could. `follow`'s activity gain is the engine's (D6); the
 protocol only stores it.
 
 Levels and loudness are runtime state: `meters.tick` carries them (see

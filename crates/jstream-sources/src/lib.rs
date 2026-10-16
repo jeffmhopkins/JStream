@@ -40,10 +40,10 @@ mod youtube_chat;
 pub use audio::AudioTarget;
 pub use browser::opens_browser;
 pub use error::SourceError;
-pub use media::MediaAudio;
 /// The browser engine seam `browser` sources open their pages through, which the host
 /// injects into the engine (ADR-0021).
 pub use jstream_browser::BrowserBackend;
+pub use media::MediaAudio;
 pub use registry::Registry;
 pub use scope::{AudioScope, AudioScopes};
 pub use source::{

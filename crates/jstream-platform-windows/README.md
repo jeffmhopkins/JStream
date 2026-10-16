@@ -439,7 +439,8 @@ The code is ported from spikes S1 to S3. This first cut has:
   `Moved`, the last when a portable install was moved after registering. That comparison
   is tested on every platform.
 
-**Not yet:** Media Foundation video decoders, the virtual camera taking
+**Not yet:** Media Foundation's packet-level video decoders (`MfCodecs`; media files
+decode through `MfMediaDecoders`), the virtual camera taking
 `VideoSurface::Gpu`, and a `Backends` constructor, which needs all of them.
 
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
@@ -454,7 +455,7 @@ video-device helpers (subtypes and frame rates to formats, repeats left out, col
 fallbacks, NV12 and I420 copies, YUY2 to NV12, short buffers, audio pairing by container)
 and the media-file helpers (RGB32 rows to RGBA and BGRA, top-down and bottom-up,
 cropping to an aperture, short buffers, packed sizes and rates, 100 ns times, the
-verbatim path prefix) run on every platform. The QPC clock test, the start-race test (a destroyed message-only
+verbatim path prefix, and the gapless cut of audio priming and padding) run on every platform. The QPC clock test, the start-race test (a destroyed message-only
 window maps to `NotFound`), the credential limits check, the credential round trip (a
 uniquely named credential written, replaced, read and deleted in the real store, a
 non-UTF-8 one refused on read, deleted again on failure), the same through
@@ -489,8 +490,10 @@ runs only when `JSTREAM_UNPLUG_TEST` is set. The H.264 tests encode two seconds 
 software from NV12 and from RGBA (the engine's input), and in hardware from RGBA. The
 media-file tests play the video file `JSTREAM_TEST_MEDIA` names (over two seconds
 long): thirty frames in order, opaque and of the stream's size, a seek to the middle
-landing at or before it, a seek past the end ending the stream, and the errors for a
-missing file, a file that isn't media and an unsupported pixel format. Run them on a
+landing at or before it, a seek past the end ending the stream, a second of its audio
+as contiguous `f32` blocks and a seek of it, no audio when none is asked for, and the
+errors for a missing file, a file that isn't media and an unsupported pixel format.
+Run them on a
 Windows machine with a
 microphone, speakers, a display, a webcam and a DX12 GPU with a hardware H.264 encoder:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`. The

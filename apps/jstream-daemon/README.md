@@ -67,7 +67,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
-Not here yet: YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
+Not here yet: YouTube sign-in (the daemon doesn't call `Engine::with_youtube` yet), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 

@@ -87,13 +87,13 @@ state machine. Contents:
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
   on, added when the source is created or turned on and removed when it is deleted or
-  turned off, and one for each running source with audio of its own whose audio is on,
-  a `browser` page's; each runs the source's enabled audio filters and is listed for
-  the audio routing, which sets its fader, mute and sends. While there is no audio-only
-  source, the default microphone and desktop audio are recorded too, sent to master at
-  unity; and one more input for each live source with sound of its own (a `media`
-  file) whose audio is on, routed the same way and fed while the program shows it (see
-  *Audio sources* in [Design](#design)).
+  turned off; one for each running source with audio of its own whose audio is on, a
+  `browser` page's; and one for each live source with sound of its own whose audio is
+  on, a `media` file's, fed while the program shows it. Each runs the source's enabled
+  audio filters and is listed for the audio routing, which sets its fader, mute and
+  sends. While there is no audio-only source, the default microphone and desktop audio
+  are recorded too, sent to master at unity (see *Audio sources* in
+  [Design](#design)).
 - **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -195,7 +195,8 @@ state machine. Contents:
   stand-in (`src/tests/audio.rs`: the defaults while there is none, sources added and
   deleted while an output runs, an unavailable device or application that leaves the
   output running, a failed stream reopened, an application found again under a new
-  process ID, a settings change reopening its input, a media file's sound reaching
+  process ID, a settings change reopening its input, a `browser` page recorded beside
+  the defaults and its presets opening once the backend arrives, a media file's sound reaching
   its own input beside the defaults, silent while hidden, routed and metered, closed
   while its audio is off and removed with the source, the program mix reaching the
   engine's audio scope while an output runs, and a bus a `waveform` draws reaching its
@@ -310,13 +311,16 @@ values: the audio filter kinds' defaults and what the mixer kernels read from a 
 settings), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
-(`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
-`tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
+(`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
+`arc-swap` (the published render snapshot and the mixer thread's list of bus scopes)
+and `tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`), `jstream-youtube`'s `fake` feature (`src/tests/youtube.rs`),
-`jstream-mcp` (`tests/mcp.rs`) and, on Windows,
+`jstream-browser`'s `fake` feature (the browser pages in `src/tests/audio.rs`),
+`zune-jpeg` (decoding the preview's JPEG pictures in tests), `jstream-mcp`
+(`tests/mcp.rs`) and, on Windows,
 `jstream-platform-windows` (the GPU capture hardware test, `src/tests/windows_gpu.rs`,
 compiled only with this crate's `hw-tests` feature); the tests also use `serde_json`
 for settings values and saved collection files. All of them
