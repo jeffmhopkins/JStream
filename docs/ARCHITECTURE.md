@@ -965,7 +965,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   Each stored source and filter records its kind's descriptor version, migrated on load
   like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until
   kinds ship settings migrations, a source or filter saved at another version is
-  refused on load. A placement's `opacity` and `blend` are written only when they differ
+  refused on load. A filter whose kind the engine doesn't describe (a pack that isn't
+  installed, or a CLAP plugin before the scan that runs after the load) loads with its
+  settings and version verbatim and is saved back as it was; the engine bypasses it
+  until its kind appears. A placement's `opacity` and `blend` are written only when they differ
   from 1 and `normal`, a disabled filter's `enabled` only when false, and the reserved
   `effects[]` must be empty.
 - **App settings:** `jstream.toml` in the platform config directory.

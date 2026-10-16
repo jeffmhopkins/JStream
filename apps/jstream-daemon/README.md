@@ -228,7 +228,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   starts. A `jstream-clap-scan` thread then scans the CLAP plugins with
   `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
   audio-filter kinds once found, and logs each file it couldn't scan; the daemon
-  serves meanwhile. Without `jstream-plugin-host.exe` beside the daemon every file
+  serves meanwhile. The engine keeps the hosts, and from then on starts a
+  `jstream-plugin-host.exe` for each CLAP filter in a source's audio chain. Without `jstream-plugin-host.exe` beside the daemon every file
   fails to scan, and is logged. Elsewhere there are no backends yet, so outputs stay the placeholder state
   machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
 - **The publish opener.** On each `output.start` it reads the output's server URL with

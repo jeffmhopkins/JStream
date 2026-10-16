@@ -13,9 +13,16 @@ use jstream_audio::filter::{
     CompressorParams, GateParams, LimiterParams, MAX_DELAY_MS, MAX_LOOKAHEAD_MS,
 };
 use jstream_audio::{FilterControl, FilterParams, FilterSpec, InputControl};
+use jstream_platform::HostBlock;
 use jstream_protocol::{
-    FilterChain, KindCategory, KindDescriptor, ParamDescriptor, ParamType, Settings,
+    FilterChain, FilterId, KindCategory, KindDescriptor, ParamDescriptor, ParamType, Settings,
 };
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+use std::time::Instant;
+
+use crate::plugins::filter::{ClapCatalog, ClapFilter};
+use crate::plugins::kinds::CLAP_KIND_PREFIX;
 use serde_json::Value;
 
 /// The kind that changes a source's level.
@@ -218,102 +225,251 @@ pub(crate) fn params(kind_id: &str, settings: &Settings) -> Option<FilterParams>
 }
 
 /// One filter of a source's audio chain, as the mixer runs it: enabled, of a built-in
-/// kind, with its settings complete as the graph stores them.
+/// kind or a CLAP kind, with its settings as the graph stores them.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Chained {
+    id: FilterId,
     kind: String,
     settings: Settings,
 }
 
+impl Chained {
+    /// Whether this is a CLAP filter, run by a plugin host (ADR-0035).
+    fn is_clap(&self) -> bool {
+        self.kind.starts_with(CLAP_KIND_PREFIX)
+    }
+}
+
 /// The filters the mixer runs for `source`: its audio chain in order, without the
-/// disabled filters and those of a kind the engine has no kernel for (a pack kind),
-/// which are bypassed.
+/// disabled filters and those of a kind the engine runs nothing for (a pack kind),
+/// which are bypassed. A CLAP filter is kept even before the scan that describes its
+/// kind: the chain reports it and bypasses it until then.
 pub(crate) fn chain_of(source: &jstream_graph::Source) -> Vec<Chained> {
     source
         .filters()
         .chain(FilterChain::Audio)
         .iter()
-        .filter(|f| f.enabled() && spec(f.kind(), f.settings()).is_some())
+        .filter(|f| {
+            f.enabled()
+                && (f.kind().starts_with(CLAP_KIND_PREFIX)
+                    || spec(f.kind(), f.settings()).is_some())
+        })
         .map(|f| Chained {
+            id: f.id().clone(),
             kind: f.kind().to_owned(),
             settings: f.settings().clone(),
         })
         .collect()
 }
 
+/// One filter the mixer was last asked to run.
+struct Slot {
+    chained: Chained,
+    /// Its control: `None` for one the mixer refused, and for a CLAP filter whose host
+    /// isn't ready, both bypassed.
+    control: Option<FilterControl>,
+    /// A CLAP filter's block, when it was added on one.
+    block: Option<HostBlock>,
+}
+
 /// The filters one mixer input runs, kept in line with its source's chain by
 /// [`Self::apply`].
 #[derive(Default)]
 pub(crate) struct Chain {
-    /// What the input was last asked to run, and each filter's control: `None` for one
-    /// the mixer refused, which is bypassed.
-    filters: Vec<(Chained, Option<FilterControl>)>,
-    /// Filters whose removal the mixer's command queue could not take yet.
-    removing: Vec<FilterControl>,
+    filters: Vec<Slot>,
+    /// Each CLAP filter's host, by filter ID, kept across rebuilds of the chain.
+    clap: BTreeMap<FilterId, ClapFilter>,
+    /// CLAP filters already reported as not installed, so each is logged once.
+    missing: BTreeSet<FilterId>,
+    /// Filters whose removal the mixer's command queue could not take yet, with a CLAP
+    /// filter's block: no new filter goes on that block until they are gone.
+    removing: Vec<(FilterControl, Option<HostBlock>)>,
+    /// Rebuild on the next pass even if nothing changed: a CLAP filter's block was
+    /// still in use.
+    retry: bool,
 }
 
 impl Chain {
-    /// Brings `input`'s chain in line with `wanted`. When only settings changed, and
-    /// none that rebuilds a filter, each changed filter is updated in place, so its
-    /// state (a gate's envelope, a delay line) carries on; otherwise the chain is
-    /// rebuilt. Returns what the mixer refused, to log: a filter it would not add is
-    /// bypassed, and one whose new settings it would not take keeps its old ones and
-    /// is tried again on the next pass. A refusal is a runtime error on that filter,
-    /// never an edit failure (ADR-0026 §6).
-    pub(crate) fn apply(&mut self, input: &InputControl, wanted: &[Chained]) -> Vec<String> {
-        self.removing.retain(|control| !control.remove());
-        let current: Vec<&Chained> = self.filters.iter().map(|(chained, _)| chained).collect();
-        if current.iter().copied().eq(wanted) {
-            return Vec::new();
-        }
-        let mut refused = Vec::new();
-        let in_place = self.filters.len() == wanted.len()
-            && self
-                .filters
-                .iter()
-                .zip(wanted)
-                .all(|((old, control), new)| {
-                    control.is_some() && old.kind == new.kind && !rebuilds(old, new)
-                });
-        if in_place {
-            for ((old, control), new) in self.filters.iter_mut().zip(wanted) {
-                if old == new {
+    /// Brings `input`'s chain in line with `wanted`, at `now`. When only settings
+    /// changed, and none that rebuilds a filter, each changed built-in filter is updated
+    /// in place, so its state (a gate's envelope, a delay line) carries on; otherwise
+    /// the chain is rebuilt. Returns what to log: a filter the mixer would not add is
+    /// bypassed, and new settings it would not take keep the old ones and are tried
+    /// again on the next pass. A refusal is a runtime error on that filter, never an
+    /// edit failure (ADR-0026 §6).
+    ///
+    /// A CLAP filter runs in a host process that `clap` starts and supervises
+    /// ([`ClapFilter`]); it is bypassed until its host is ready and whenever the host is
+    /// down, and its settings reach the plugin as parameter changes, never through a
+    /// rebuild. Without `clap`, or with no plugin for its kind, it is bypassed.
+    pub(crate) fn apply(
+        &mut self,
+        input: &InputControl,
+        wanted: &[Chained],
+        clap: Option<&ClapCatalog>,
+        now: Instant,
+    ) -> Vec<String> {
+        self.removing.retain(|(control, _)| !control.remove());
+        let mut notes = self.sync_clap(input, wanted, clap, now);
+        let same_layout = !self.retry
+            && self.filters.len() == wanted.len()
+            && self.filters.iter().zip(wanted).all(|(slot, new)| {
+                let old = &slot.chained;
+                old.id == new.id
+                    && old.kind == new.kind
+                    && if new.is_clap() {
+                        same_block(slot.block.as_ref(), self.block_of(&new.id))
+                    } else {
+                        (slot.control.is_some() && !rebuilds(old, new))
+                            || old.settings == new.settings
+                    }
+            });
+        if same_layout {
+            for (slot, new) in self.filters.iter_mut().zip(wanted) {
+                if new.is_clap() || slot.chained == *new {
                     continue;
                 }
-                if let (Some(control), Some(params)) = (control, params(&new.kind, &new.settings))
+                if let (Some(control), Some(params)) =
+                    (&slot.control, params(&new.kind, &new.settings))
                     && let Err(err) = control.set(params)
                 {
-                    // `old` stays as it was, so the next pass tries again.
-                    refused.push(format!(
+                    // The old settings stay recorded, so the next pass tries again.
+                    notes.push(format!(
                         "{} filter keeps its previous settings: {err}",
                         new.kind
                     ));
                     continue;
                 }
-                *old = new.clone();
+                slot.chained = new.clone();
             }
-            return refused;
+        } else {
+            self.rebuild(input, wanted, &mut notes);
         }
-        for (_, control) in self.filters.drain(..) {
-            if let Some(control) = control
+        for new in wanted.iter().filter(|new| new.is_clap()) {
+            if let Some(filter) = self.clap.get_mut(&new.id) {
+                filter.send(&new.settings);
+            }
+        }
+        notes
+    }
+
+    /// Starts a host for each wanted CLAP filter that has none, stops those no longer
+    /// wanted, and ticks the rest.
+    fn sync_clap(
+        &mut self,
+        input: &InputControl,
+        wanted: &[Chained],
+        clap: Option<&ClapCatalog>,
+        now: Instant,
+    ) -> Vec<String> {
+        let mut notes = Vec::new();
+        let ids: BTreeSet<&FilterId> = wanted
+            .iter()
+            .filter(|c| c.is_clap())
+            .map(|c| &c.id)
+            .collect();
+        // Dropping a filter stops its host.
+        self.clap.retain(|id, _| ids.contains(id));
+        self.missing.retain(|id| ids.contains(id));
+        for new in wanted.iter().filter(|c| c.is_clap()) {
+            if !self.clap.contains_key(&new.id) {
+                let started = clap.and_then(|catalog| {
+                    ClapFilter::new(
+                        catalog,
+                        &new.kind,
+                        input.mixer_rate(),
+                        input.mixer_block_frames(),
+                        now,
+                    )
+                });
+                match started {
+                    Some(filter) => {
+                        self.missing.remove(&new.id);
+                        self.clap.insert(new.id.clone(), filter);
+                    }
+                    None => {
+                        if self.missing.insert(new.id.clone()) {
+                            notes.push(format!(
+                                "{} filter is bypassed: no CLAP plugin found for its kind",
+                                new.kind
+                            ));
+                        }
+                        continue;
+                    }
+                }
+            }
+            if let Some(filter) = self.clap.get_mut(&new.id) {
+                notes.extend(filter.tick(&new.kind, now).notes);
+            }
+        }
+        notes
+    }
+
+    /// The block CLAP filter `id` runs on now.
+    fn block_of(&self, id: &FilterId) -> Option<&HostBlock> {
+        self.clap.get(id).and_then(ClapFilter::block)
+    }
+
+    /// Removes every filter from the input and adds `wanted`'s, in order.
+    fn rebuild(&mut self, input: &InputControl, wanted: &[Chained], notes: &mut Vec<String>) {
+        self.retry = false;
+        for slot in self.filters.drain(..) {
+            if let Some(control) = slot.control
                 && !control.remove()
             {
-                self.removing.push(control);
+                self.removing.push((control, slot.block));
             }
         }
         for chained in wanted {
-            let control = spec(&chained.kind, &chained.settings)
-                .map(|spec| input.add_filter(spec))
-                .and_then(|added| {
-                    added
+            let (control, block) = if chained.is_clap() {
+                let block = self.block_of(&chained.id).cloned();
+                let control = match &block {
+                    Some(block)
+                        if self
+                            .removing
+                            .iter()
+                            .any(|(_, old)| same_block(old.as_ref(), Some(block))) =>
+                    {
+                        // Its old filter is still on the block: next pass.
+                        self.retry = true;
+                        None
+                    }
+                    Some(block) => input
+                        .insert_host_filter(usize::MAX, Arc::clone(block))
                         .map_err(|err| {
-                            refused.push(format!("{} filter is bypassed: {err}", chained.kind));
+                            notes.push(format!("{} filter is bypassed: {err}", chained.kind));
                         })
-                        .ok()
-                });
-            self.filters.push((chained.clone(), control));
+                        .ok(),
+                    None => None,
+                };
+                (control, block)
+            } else {
+                let control = spec(&chained.kind, &chained.settings)
+                    .map(|spec| input.add_filter(spec))
+                    .and_then(|added| {
+                        added
+                            .map_err(|err| {
+                                notes.push(format!("{} filter is bypassed: {err}", chained.kind));
+                            })
+                            .ok()
+                    });
+                (control, None)
+            };
+            self.filters.push(Slot {
+                chained: chained.clone(),
+                control,
+                block,
+            });
         }
-        refused
+    }
+}
+
+/// Whether `a` and `b` are the same block, or both none.
+fn same_block(a: Option<&HostBlock>, b: Option<&HostBlock>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+        (None, None) => true,
+        _ => false,
     }
 }
 
@@ -391,8 +547,9 @@ mod tests {
     use jstream_audio::filter::{CompressorParams, GateParams, LimiterParams};
     use jstream_audio::{FilterParams, FilterSpec, Mixer, MixerConfig};
     use jstream_media::{AudioFormat, ChannelLayout, SampleFormat};
-    use jstream_protocol::Settings;
+    use jstream_protocol::{FilterId, Settings};
     use serde_json::{Value, json};
+    use std::time::Instant;
 
     fn defaults(kind: &str) -> Settings {
         let descriptor = descriptors()
@@ -482,6 +639,7 @@ mod tests {
             settings.insert(*id, value.clone());
         }
         Chained {
+            id: FilterId::new(kind),
             kind: kind.into(),
             settings,
         }
@@ -500,12 +658,12 @@ mod tests {
             chain
                 .filters
                 .iter()
-                .map(|(_, c)| c.as_ref().map(|c| (c.id(), c.latency_frames())))
+                .map(|s| s.control.as_ref().map(|c| (c.id(), c.latency_frames())))
                 .collect()
         };
 
         let first = [chained("gain", &[]), chained("limiter", &[])];
-        assert!(chain.apply(&input, &first).is_empty());
+        assert!(chain.apply(&input, &first, None, Instant::now()).is_empty());
         let built = ids(&chain);
         // 5 ms of look-ahead at 48 kHz.
         assert!(
@@ -517,23 +675,35 @@ mod tests {
             chained("gain", &[("gain_db", json!(6))]),
             chained("limiter", &[]),
         ];
-        assert!(chain.apply(&input, &louder).is_empty());
+        assert!(
+            chain
+                .apply(&input, &louder, None, Instant::now())
+                .is_empty()
+        );
         assert_eq!(ids(&chain), built, "updated in place");
 
         let longer = [
             chained("gain", &[("gain_db", json!(6))]),
             chained("limiter", &[("lookahead_ms", json!(10))]),
         ];
-        assert!(chain.apply(&input, &longer).is_empty());
+        assert!(
+            chain
+                .apply(&input, &longer, None, Instant::now())
+                .is_empty()
+        );
         let rebuilt = ids(&chain);
         assert_ne!(rebuilt[0], built[0]);
         assert!(matches!(rebuilt[1], Some((_, 480))), "{rebuilt:?}");
 
         let reordered = [longer[1].clone(), longer[0].clone()];
-        assert!(chain.apply(&input, &reordered).is_empty());
+        assert!(
+            chain
+                .apply(&input, &reordered, None, Instant::now())
+                .is_empty()
+        );
         assert_ne!(ids(&chain)[1], rebuilt[0]);
 
-        assert!(chain.apply(&input, &[]).is_empty());
+        assert!(chain.apply(&input, &[], None, Instant::now()).is_empty());
         assert!(chain.filters.is_empty());
     }
 
@@ -553,14 +723,18 @@ mod tests {
                 &[("gain_db", json!(-f64::from(step) / 10.0))],
             )]
         };
-        assert!(chain.apply(&input, &gain(0)).is_empty());
+        assert!(
+            chain
+                .apply(&input, &gain(0), None, Instant::now())
+                .is_empty()
+        );
 
         // Nothing mixes, so nothing drains the mixer's bounded command queue: in-place
         // changes fill it until one is refused.
         let mut accepted = 0;
         let (step, reasons) = (1..=200)
             .find_map(|step| {
-                let refused = chain.apply(&input, &gain(step));
+                let refused = chain.apply(&input, &gain(step), None, Instant::now());
                 if refused.is_empty() {
                     accepted = step;
                     None
@@ -575,7 +749,7 @@ mod tests {
             "{reasons:?}"
         );
         assert_eq!(
-            chain.filters[0].0,
+            chain.filters[0].chained,
             gain(accepted)[0],
             "the refused change is not recorded"
         );
@@ -583,12 +757,112 @@ mod tests {
         // Mixing drains the queue, and the next pass applies the same wanted chain.
         let mut out = vec![0.0; block * 2];
         mixer.mix(0, &mut out).expect("mix");
-        let again = chain.apply(&input, &gain(step));
+        let again = chain.apply(&input, &gain(step), None, Instant::now());
         assert!(again.is_empty(), "{again:?}");
-        assert_eq!(chain.filters[0].0, gain(step)[0]);
+        assert_eq!(chain.filters[0].chained, gain(step)[0]);
         assert!(
-            chain.apply(&input, &gain(step)).is_empty(),
+            chain
+                .apply(&input, &gain(step), None, Instant::now())
+                .is_empty(),
             "nothing left to retry"
         );
+    }
+
+    /// A CLAP filter is bypassed until its host is ready, then runs on the host's
+    /// block; a rebuilt chain keeps the same host, and dropping the filter stops it. A
+    /// CLAP filter without a plugin is reported once and bypassed.
+    #[test]
+    fn a_clap_filter_runs_on_its_hosts_block() {
+        use crate::plugins::filter::ClapCatalog;
+        use crate::plugins::supervisor::SupervisorPolicy;
+        use jstream_platform::plugin_host::fake::{FAKE_LATENCY, FakePluginHosts};
+        use jstream_plugin_proto::DEFAULT_DEPTH;
+        use std::collections::BTreeMap;
+        use std::sync::Arc;
+        use std::time::Duration;
+
+        let config = MixerConfig::default();
+        let block = config.block_frames;
+        let mut mixer = Mixer::new(config).expect("mixer");
+        let format = AudioFormat::new(48_000, ChannelLayout::Stereo, SampleFormat::F32Interleaved)
+            .expect("format");
+        let (_producer, input) = mixer.add_input(format).expect("input");
+        let fake = FakePluginHosts::new();
+        let catalog = ClapCatalog {
+            hosts: Arc::new(fake.clone()),
+            plugins: BTreeMap::from([(
+                "clap/org.example.gain".to_owned(),
+                ("a.clap".into(), "org.example.gain".to_owned()),
+            )]),
+            policy: SupervisorPolicy::default(),
+        };
+        let clap = |id: &str, kind: &str| Chained {
+            id: FilterId::new(id),
+            kind: kind.into(),
+            settings: [("1", json!(0.5))].into_iter().collect(),
+        };
+        let wanted = [chained("gain", &[]), clap("verb", "clap/org.example.gain")];
+        let mut chain = Chain::default();
+        let mut out = vec![0.0; block * 2];
+        let mut pass = |chain: &mut Chain, mixer: &mut Mixer, wanted: &[Chained]| {
+            let notes = chain.apply(&input, wanted, Some(&catalog), Instant::now());
+            mixer.mix(0, &mut out).expect("mix");
+            notes
+        };
+        assert!(pass(&mut chain, &mut mixer, &wanted).is_empty());
+        assert!(
+            chain.filters[1].control.is_none(),
+            "bypassed while starting"
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while chain.filters[1].control.is_none() {
+            assert!(Instant::now() < deadline, "the host never got ready");
+            std::thread::sleep(Duration::from_millis(1));
+            let notes = pass(&mut chain, &mut mixer, &wanted);
+            assert!(notes.is_empty(), "{notes:?}");
+        }
+        let latency = |chain: &Chain| {
+            chain.filters[1]
+                .control
+                .as_ref()
+                .map(jstream_audio::FilterControl::latency_frames)
+        };
+        let host_latency = DEFAULT_DEPTH as usize * block + FAKE_LATENCY as usize;
+        assert_eq!(latency(&chain), Some(host_latency));
+
+        // Moved behind a new filter: rebuilt, on the same host.
+        let rebuilt = [
+            chained("delay", &[]),
+            chained("gain", &[]),
+            clap("verb", "clap/org.example.gain"),
+        ];
+        assert!(pass(&mut chain, &mut mixer, &rebuilt).is_empty());
+        assert_eq!(
+            chain.filters[2]
+                .control
+                .as_ref()
+                .map(|c| c.latency_frames()),
+            Some(host_latency)
+        );
+        assert_eq!(fake.hosts().len(), 1);
+
+        // A second instance of a plugin no scan found: reported once, bypassed.
+        let missing = [
+            clap("verb", "clap/org.example.gain"),
+            clap("other", "clap/org.example.missing"),
+        ];
+        let notes = pass(&mut chain, &mut mixer, &missing);
+        assert!(
+            matches!(&notes[..], [note] if note.contains("no CLAP plugin")),
+            "{notes:?}"
+        );
+        assert!(chain.filters[1].control.is_none());
+        assert!(
+            pass(&mut chain, &mut mixer, &missing).is_empty(),
+            "reported once"
+        );
+
+        assert!(pass(&mut chain, &mut mixer, &[]).is_empty());
+        assert!(fake.hosts()[0].has_exited(), "its host stopped");
     }
 }

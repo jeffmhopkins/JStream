@@ -80,7 +80,8 @@ stamped on the clock, and no device is the master.
   the mixer's side of an out-of-process plugin host, through its shared block
   (`HostMemory`, a [`jstream-plugin-proto`](../jstream-plugin-proto/README.md)
   `Shared` however it is mapped). The block must be initialised for the mixer's rate
-  and block size and its host ready; the master chain refuses one, since each bus's
+  and block size (`InputControl::mixer_rate`, `mixer_block_frames`) and its host
+  ready, with one filter on it at a time; the master chain refuses one, since each bus's
   copy would need its own host. `Mixer::latency_frames` is the
   chains' latency the mixer compensates, and each block's `pts` is its first frame minus
   it, the master chain's included.
@@ -147,7 +148,8 @@ not start. No variant allocates.
   its buffer, the 16-bus limit, and a removed bus's state freed once its handle is gone;
 - CLAP filters (`host.rs`): the host's output heard `depth` blocks late, a missing
   host bypassed with the same latency and each miss counted, the crossfades both ways,
-  non-finite host samples as silence, a reset passed on to the host, and blocks that
+  non-finite host samples as silence, a reset passed on to the host, a new filter on a
+  block an earlier one used carrying on its numbers with no miss, and blocks that
   aren't ready or don't match refused;
 - filter chains: an input's chain before its fader and a bus's on its sum, edits and
   removal applied live, latency compensation (a limiter on one input and one bus: every
@@ -342,7 +344,9 @@ the plugin's output when it comes back, and from the plugin's last frame to dry 
 goes missing, since the missing block can't be faded. The host's samples are another
 process's data, so non-finite ones become 0. A chain reset clears the dry delay and
 bumps `reset_seq` for the host to reset the plugin; block numbers carry on, so the
-rings stay in step. The shared block (`HostMemory`) is dropped on the collector like
+rings stay in step. A filter numbers its blocks on from the input ring's head, so when
+a chain is rebuilt a new filter can go on a block whose filter was removed and the host
+carries on without a restart. The shared block (`HostMemory`) is dropped on the collector like
 any removed filter.
 
 **Master chain and output taps** (`tap.rs`,
@@ -572,9 +576,11 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
 - **The engine side of CLAP filters**
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the mixer's side is
   here (`insert_host_filter`), and starting and watching the host process are built
-  (`jstream-platform`'s `PluginHosts`, `jstream-core`'s `HostSupervisor`), but running a
-  CLAP filter from the graph, reporting `mixer_misses` in `stats.tick` and the degraded
-  event, and live changes to the plugin's parameters are not.
+  (`jstream-platform`'s `PluginHosts`, `jstream-core`'s `HostSupervisor`), and
+  `jstream-core` runs a CLAP filter from a source's chain and sends its settings as
+  parameter changes, but reporting `mixer_misses` in `stats.tick` and the degraded
+  event in the protocol, and keeping those counts on the engine's side of the block
+  (#351), are not.
 - **A CPU measurement** of the mixer on Windows hardware, and of resampling
   ([Real-time design](#realtime) has a cloud machine's numbers for the mix).
 - **Feeding the fitted drift forward** into the controller, which would shorten the

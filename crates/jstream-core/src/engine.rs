@@ -190,11 +190,25 @@ impl Engine {
     /// earlier scan found stays. Each plugin file is scanned in its own host process, so
     /// this can take seconds: call it from a worker thread. The engine's locks are held
     /// only to add the kinds, after the scan.
-    pub fn scan_clap_plugins(&self, hosts: &dyn PluginHosts) -> ClapScan {
-        let scan = clap_kinds::scan(hosts);
+    ///
+    /// From then on a source's audio chain runs its CLAP filters, each in a host process
+    /// `hosts` starts. A collection may hold CLAP filters before the scan that
+    /// describes their kinds (it loads before the scan runs): they are bypassed until
+    /// then.
+    pub fn scan_clap_plugins(&self, hosts: Arc<dyn PluginHosts>) -> ClapScan {
+        let scan = clap_kinds::scan(hosts.as_ref());
         let mut state = lock(&self.shared.state);
         state.graph = std::mem::take(&mut state.graph)
             .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
+        state.audio.add_clap_plugins(
+            hosts,
+            scan.kinds.iter().map(|k| {
+                (
+                    k.descriptor.kind_id.clone(),
+                    (k.file.clone(), k.plugin_id.clone()),
+                )
+            }),
+        );
         scan
     }
 
@@ -1983,7 +1997,6 @@ impl State {
         if let Some(result) = keyed.as_ref().and_then(|keyed| self.applied.get(keyed)) {
             return Ok(result.clone());
         }
-        clap_kinds::refuse_filters(&batch.edits)?;
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
             &batch.edits,
