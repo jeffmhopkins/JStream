@@ -27,7 +27,7 @@ struct Opened {
 /// tests create and drop Dx12 devices at once.
 fn open() -> Option<Opened> {
     let _lock = gpu_lock();
-    match Compositor::open(OpenOptions::headless()) {
+    match Compositor::open(OpenOptions::hardware()) {
         Ok(compositor) => {
             let _ = writeln!(
                 std::io::stderr(),

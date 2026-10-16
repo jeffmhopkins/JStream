@@ -11,20 +11,32 @@ use crate::error::RenderError;
 /// How [`crate::Compositor::open`] chooses an adapter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OpenOptions {
-    /// Try a software adapter first (lavapipe, WARP), then any adapter.
+    /// Try a software adapter first (lavapipe, WARP), then any adapter. When `false`,
+    /// a hardware adapter first, then the software one.
     pub software: bool,
 }
 
 impl OpenOptions {
-    /// Software adapter first. This is the headless and test default (ARCH principle 7).
+    /// Software adapter first, for a caller that wants CPU rasterisation even on a
+    /// machine with a GPU. ARCH principle 7 needs only that the engine *can* run on one,
+    /// which [`Self::hardware`]'s fallback already gives.
     pub const fn headless() -> Self {
         Self { software: true }
     }
+
+    /// A hardware adapter first (the high-performance one when there are several),
+    /// then the software adapter, so a machine with no GPU still runs. The default: a
+    /// software adapter composites far slower than 30 fps needs (#433).
+    pub const fn hardware() -> Self {
+        Self { software: false }
+    }
 }
 
+/// Hardware first: the engine accelerates everything it can, and the software adapter is
+/// the fallback.
 impl Default for OpenOptions {
     fn default() -> Self {
-        Self::headless()
+        Self::hardware()
     }
 }
 
@@ -100,17 +112,21 @@ impl Gpu {
 }
 
 fn pick_adapter(instance: &wgpu::Instance, software: bool) -> Result<wgpu::Adapter, RenderError> {
-    if software {
-        match request(instance, true) {
-            Ok(adapter) => Ok(adapter),
-            Err(software_err) => {
-                request(instance, false).map_err(|any_err| RenderError::NoAdapter {
-                    detail: format!("software adapter: {software_err}; any adapter: {any_err}"),
-                })
-            }
-        }
+    // The preferred kind first, then the other.
+    let (first, second) = if software {
+        (true, false)
     } else {
-        request(instance, false).map_err(|detail| RenderError::NoAdapter { detail })
+        (false, true)
+    };
+    match request(instance, first) {
+        Ok(adapter) => Ok(adapter),
+        Err(first_err) => request(instance, second).map_err(|second_err| RenderError::NoAdapter {
+            detail: if software {
+                format!("software adapter: {first_err}; any adapter: {second_err}")
+            } else {
+                format!("hardware adapter: {first_err}; software adapter: {second_err}")
+            },
+        }),
     }
 }
 
@@ -119,7 +135,7 @@ fn request(instance: &wgpu::Instance, fallback: bool) -> Result<wgpu::Adapter, S
         power_preference: if fallback {
             wgpu::PowerPreference::LowPower
         } else {
-            wgpu::PowerPreference::default()
+            wgpu::PowerPreference::HighPerformance
         },
         force_fallback_adapter: fallback,
         compatible_surface: None,

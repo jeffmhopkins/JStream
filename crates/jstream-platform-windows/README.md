@@ -172,8 +172,11 @@ The code is ported from spikes S1 to S3. This first cut has:
     initialising COM. Sessions are opened from a thread that isn't an STA.
   - **Teardown:** dropping a session ends streaming and calls `ShutdownObject` on the
     activation object, as Microsoft asks. One output sample is reused for every pull.
-  - **H.264 encoder (CPU path):** this takes NV12 `VideoSurface::Cpu` frames and copies
-    them into Media Foundation memory buffers. It is ARCH's fallback path; the zero-copy
+  - **H.264 encoder (CPU path):** this takes NV12, RGBA or BGRA `VideoSurface::Cpu`
+    frames and copies them into Media Foundation memory buffers as NV12, the MFTs' input.
+    RGBA (the compositor's output, which the engine's pipeline encodes) and BGRA are
+    converted first, the way display capture converts WGC's BGRA: BT.709 limited range,
+    left-sited chroma. It is ARCH's fallback path; the zero-copy
     D3D11 path arrives with the Windows `GpuInterop` implementation
     ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 6).
     - **Choosing an encoder:** hardware encoder MFTs come first, then the OS software
@@ -369,10 +372,10 @@ The code is ported from spikes S1 to S3. This first cut has:
 a `Backends` constructor, which needs all of them.
 
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
-packet flags, positions across a device move), the capture helpers (BGRA to NV12 with
+packet flags, positions across a device move), the capture helpers (BGRA and RGBA to NV12 with
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the H.264
-helpers (configuration check, NV12 packing, `pts` mapping), the GPU capture ring's slot
+helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts` mapping), the GPU capture ring's slot
 choice (reuse, drop when full, release on resize), the credential helpers (target names
 of both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
 the Media Foundation check's decision (edition kinds and the advice for each) and the
@@ -405,7 +408,8 @@ checks that a second producer is refused and that the block is stopped after `st
 video-device tests list devices, formats and paired audio, capture an uncompressed format
 and the largest MJPEG format for two seconds each (checking size, format and `pts`), open
 a device twice (shared or `Busy`), and refuse an unknown device or format; an unplug test
-runs only when `JSTREAM_UNPLUG_TEST` is set. Run them on a Windows machine with a
+runs only when `JSTREAM_UNPLUG_TEST` is set. The H.264 tests encode two seconds in
+software from NV12 and from RGBA (the engine's input), and in hardware from RGBA. Run them on a Windows machine with a
 microphone, speakers, a display, a webcam and a DX12 GPU with a hardware H.264 encoder:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`. The
 virtual-camera test also needs the `jstream-vcam-windows` DLL registered
