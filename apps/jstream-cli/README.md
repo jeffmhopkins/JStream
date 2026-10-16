@@ -138,11 +138,14 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
-  and press Ctrl-D; the terminal shows what is typed). Surrounding whitespace, such as
-  a final newline, is dropped. Anything else after the output ID is a usage error that
-  doesn't repeat it. An empty key, an unreadable file, or input over 4096 bytes (no
-  stream key is that long; it is refused before it is buffered or sent) is a usage
-  error too, and the key is read before connecting. Neither the CLI nor the engine prints a key back: the
+  and press Ctrl-D; the terminal shows what is typed). A leading byte-order mark
+  (Windows PowerShell 5.1 writes one on a pipe; Notepad's "UTF-8 with BOM" starts a
+  file with one) and surrounding whitespace, such as a final newline, are dropped.
+  Anything else after the output ID is a usage error that doesn't repeat it. An empty
+  key, a key with a control or non-ASCII character (no streaming service issues one),
+  an unreadable file, or input over 4096 bytes (no stream key is that long; it is
+  refused before it is buffered or sent) is a usage error too, and the key is read
+  before connecting. Neither the CLI nor the engine prints a key back: the
   reply is `output.set_key accepted for <id> (<request>)`, and `output status` says
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID

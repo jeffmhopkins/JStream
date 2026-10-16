@@ -849,10 +849,10 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:c7379cddeb275056" }
+stamp = { hash = "b3:503ea208e930d4a1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "read_key's BOM strip and character check add no dependency, async or output path; tests still drive run with byte buffers; design bullets hold" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:0fd49566ae310db7" }
+stamp = { hash = "b3:83a0ff73e1e64636", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "re-read after rustfmt of the new #438 test; tests still use byte buffers and a temp key file, design bullets hold" }
 
 ["CRATE-jstream-cli#purpose"."body"]
 stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's, the CLI's commands are unchanged by D5; holds" }
@@ -876,13 +876,13 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:c7379cddeb275056" }
+stamp = { hash = "b3:503ea208e930d4a1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "run.rs still reads the stream key from the BufRead it is given; the contents list holds after the BOM strip and key check in read_key" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:0fd49566ae310db7" }
+stamp = { hash = "b3:83a0ff73e1e64636", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "re-read after rustfmt of the new #438 test; only formatting changed, contents list holds" }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:6dc625770a5edc67", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; D5 note now says protocol 0.19 audio is not in the CLI; holds" }
+stamp = { hash = "b3:942b84d9ba8851af", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream keys bullet now says a leading BOM is dropped with surrounding whitespace and a key with a control or non-ASCII character is a usage error before connecting; exit code 2 table row still covers it; rest unchanged" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:5ae0e8dd6e0d9eee" }
@@ -894,7 +894,7 @@ stamp = { hash = "b3:16e79b530b6f8e0a" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:c7379cddeb275056" }
+stamp = { hash = "b3:503ea208e930d4a1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stream keys bullet now says a leading BOM is dropped with surrounding whitespace and a key with a control or non-ASCII character is a usage error before connecting; exit code 2 table row still covers it; rest unchanged" }
 
 ["CRATE-jstream-control#design"."body"]
 stamp = { hash = "b3:624e2b8eeac4dc57", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): main's error-event and e2e-test text merged; binary() bullet (N3 wording) holds; the e2e tests don't cover the binary path, and nothing here says they do" }
@@ -3069,7 +3069,7 @@ stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:6dc625770a5edc67" }
+stamp = { hash = "b3:942b84d9ba8851af", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "smoke step 5 set-key --key-file unaffected; the placeholder key is plain ASCII" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
@@ -3081,7 +3081,7 @@ stamp = { hash = "b3:a560da0e5768f43e" }
 stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:6dc625770a5edc67" }
+stamp = { hash = "b3:942b84d9ba8851af", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "step 3 set-key --key-file or typed key still accurate; a BOM key file from Notepad now works instead of failing at start" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
