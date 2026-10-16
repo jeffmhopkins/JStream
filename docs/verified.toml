@@ -279,7 +279,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:411e7e7c0209acb3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
+stamp = { hash = "b3:7eee2436993b0389", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -321,19 +321,19 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:e332f58cb291d1ef", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
+stamp = { hash = "b3:89b6377c02b5c7a5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:6c8ccf1a51223b76", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
+stamp = { hash = "b3:b87c68ff1ec27a15", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:af2d693fcfbf29a6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
+stamp = { hash = "b3:2ee90ba64d0e29cc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:6b62b8b3ca36a71b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
+stamp = { hash = "b3:e7a1710941b10268", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -363,7 +363,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:c8ee2fc597dabb92", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
+stamp = { hash = "b3:9ecb3e00ddd134c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:7c230fe311147750", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
@@ -375,16 +375,16 @@ stamp = { hash = "b3:489f2e86af7bf320" }
 stamp = { hash = "b3:d6aa367b923f0078", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:1e0e1661ca6d91c2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
+stamp = { hash = "b3:18a0bbcfc0c77448", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:1a377d9e1b8ec2a5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
+stamp = { hash = "b3:bd9e9739fcfba182", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
+stamp = { hash = "b3:29a8f3270014c222", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2: the two protocol-version mentions for bus references (delete.plan with a bus target, and bus.delete blockers) now say 0.24, matching version.rs and the protocol README. The snapshots and sources changed only in that number, and the rest of the section is unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-server/Cargo.toml"]
 stamp = { hash = "b3:e9241efe87e7e719" }
@@ -810,7 +810,7 @@ stamp = { hash = "b3:c7379cddeb275056" }
 stamp = { hash = "b3:b2b0815752c7d7b0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs refuses bus.delete while a setting holds a bus reference, as the graph does; mock.rs adds a_bus_a_source_draws_cannot_be_deleted. Edited the audio checks bullet to list it. ARCH#protocol's new bus delete.plan/blockers text is consistent: the mock still answers delete.plan with internal and its refusals carry no blockers, as stated here." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:411e7e7c0209acb3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs refuses bus.delete while a setting holds a bus reference, as the graph does; mock.rs adds a_bus_a_source_draws_cannot_be_deleted. Edited the audio checks bullet to list it. ARCH#protocol's new bus delete.plan/blockers text is consistent: the mock still answers delete.plan with internal and its refusals carry no blockers, as stated here." }
+stamp = { hash = "b3:7eee2436993b0389", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale only through ARCH#protocol, whose change is the bus-reference version number (0.20 to 0.24). Control's Design names no protocol version for bus references; the mock's refusal of bus.delete while referenced is unchanged." }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -882,10 +882,10 @@ stamp = { hash = "b3:f17bf31fc1689b5b", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:b2b0815752c7d7b0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:07a33064bf37a491", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
+stamp = { hash = "b3:40ae5bbe2cbf2885", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through protocol#design and ARCH#protocol, whose only change is the bus-reference version (0.20 to 0.24). Core's Design describes the bus scopes and ScopeTaps without naming a protocol version, so it holds." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:411e7e7c0209acb3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read Live sources (now AudioScopes, the scope the audio setting names) and Audio routing, where a new bullet describes retain of drawn bus scopes, the ScopeTaps arc-swap hand-off (stored only on change), the mixer thread's lock-free adopt and push of Mixer::bus_block, and replaced lists going to the collector; engine.rs, live.rs, audio.rs, pipeline.rs, render.rs and the two new tests (a_bus_a_source_draws_feeds_its_scope_while_an_output_runs, a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus) match. Deps (control design, protocol design, ARCH protocol) changed only by bus references and the mock's bus.delete refusal, consistent with this section." }
+stamp = { hash = "b3:7eee2436993b0389", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through protocol#design and ARCH#protocol, whose only change is the bus-reference version (0.20 to 0.24). Core's Design describes the bus scopes and ScopeTaps without naming a protocol version, so it holds." }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1410,7 +1410,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:011fc55efbe66bc4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: apply.rs check_value finds a bus reference's bus (not_found); deps.rs adds Node::Bus (edges none, blockers from settings), audio.rs delete_bus refuses with blockers, plan.rs plans a bus target (master refused), persist/mod.rs rebuilds buses before sources. Edited the settings, dangling-reference, bus, no-cycles, delete.plan and loading-order paragraphs, and the tests list: a_bus_reference_must_name_a_bus, a_drawn_bus_is_deleted_only_with_its_references_cleared (tests.rs) and a_source_drawing_a_bus_round_trips (persist/tests.rs). The protocol design dep's new bus reference text matches." }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:07a33064bf37a491", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: apply.rs check_value finds a bus reference's bus (not_found); deps.rs adds Node::Bus (edges none, blockers from settings), audio.rs delete_bus refuses with blockers, plan.rs plans a bus target (master refused), persist/mod.rs rebuilds buses before sources. Edited the settings, dangling-reference, bus, no-cycles, delete.plan and loading-order paragraphs, and the tests list: a_bus_reference_must_name_a_bus, a_drawn_bus_is_deleted_only_with_its_references_cleared (tests.rs) and a_source_drawing_a_bus_round_trips (persist/tests.rs). The protocol design dep's new bus reference text matches." }
+stamp = { hash = "b3:40ae5bbe2cbf2885", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through protocol#design, whose only change is the version number for bus references (0.20 to 0.24). Graph's Purpose describes Node::Bus edges and the bus delete plan without a version, so it holds." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1944,7 +1944,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:07a33064bf37a491", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read against ParamType::Bus/Reference::Bus (kind.rs, settings.rs), DeleteTarget::Bus (query.rs), the bus.delete doc (command.rs), 0.20 (version.rs) and the regenerated protocol.snap/examples.snap (new bus param type, DeleteTarget bus variant, r34 bus delete.plan, 0.20 handshake). Edited: param type list, reference forms, not_found for a missing bus, bus references as edges that never close a cycle, bus.delete refused with blockers, delete.plan bus target and master refusal, the Buses paragraph, the undo paragraph, and the hello/welcome examples to 0.20." }
+stamp = { hash = "b3:40ae5bbe2cbf2885", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -1962,16 +1962,16 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:6c8ccf1a51223b76", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read against ParamType::Bus/Reference::Bus (kind.rs, settings.rs), DeleteTarget::Bus (query.rs), the bus.delete doc (command.rs), 0.20 (version.rs) and the regenerated protocol.snap/examples.snap (new bus param type, DeleteTarget bus variant, r34 bus delete.plan, 0.20 handshake). Edited: param type list, reference forms, not_found for a missing bus, bus references as edges that never close a cycle, bus.delete refused with blockers, delete.plan bus target and master refusal, the Buses paragraph, the undo paragraph, and the hello/welcome examples to 0.20." }
+stamp = { hash = "b3:b87c68ff1ec27a15", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:af2d693fcfbf29a6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read against ParamType::Bus/Reference::Bus (kind.rs, settings.rs), DeleteTarget::Bus (query.rs), the bus.delete doc (command.rs), 0.20 (version.rs) and the regenerated protocol.snap/examples.snap (new bus param type, DeleteTarget bus variant, r34 bus delete.plan, 0.20 handshake). Edited: param type list, reference forms, not_found for a missing bus, bus references as edges that never close a cycle, bus.delete refused with blockers, delete.plan bus target and master refusal, the Buses paragraph, the undo paragraph, and the hello/welcome examples to 0.20." }
+stamp = { hash = "b3:2ee90ba64d0e29cc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:6b62b8b3ca36a71b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read against ParamType::Bus/Reference::Bus (kind.rs, settings.rs), DeleteTarget::Bus (query.rs), the bus.delete doc (command.rs), 0.20 (version.rs) and the regenerated protocol.snap/examples.snap (new bus param type, DeleteTarget bus variant, r34 bus delete.plan, 0.20 handshake). Edited: param type list, reference forms, not_found for a missing bus, bus references as edges that never close a cycle, bus.delete refused with blockers, delete.plan bus target and master refusal, the Buses paragraph, the undo paragraph, and the hello/welcome examples to 0.20." }
+stamp = { hash = "b3:e7a1710941b10268", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2001,7 +2001,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:c8ee2fc597dabb92", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read against ParamType::Bus/Reference::Bus (kind.rs, settings.rs), DeleteTarget::Bus (query.rs), the bus.delete doc (command.rs), 0.20 (version.rs) and the regenerated protocol.snap/examples.snap (new bus param type, DeleteTarget bus variant, r34 bus delete.plan, 0.20 handshake). Edited: param type list, reference forms, not_found for a missing bus, bus references as edges that never close a cycle, bus.delete refused with blockers, delete.plan bus target and master refusal, the Buses paragraph, the undo paragraph, and the hello/welcome examples to 0.20." }
+stamp = { hash = "b3:9ecb3e00ddd134c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:7c230fe311147750", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
@@ -2013,19 +2013,19 @@ stamp = { hash = "b3:489f2e86af7bf320" }
 stamp = { hash = "b3:d6aa367b923f0078", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:1e0e1661ca6d91c2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read against ParamType::Bus/Reference::Bus (kind.rs, settings.rs), DeleteTarget::Bus (query.rs), the bus.delete doc (command.rs), 0.20 (version.rs) and the regenerated protocol.snap/examples.snap (new bus param type, DeleteTarget bus variant, r34 bus delete.plan, 0.20 handshake). Edited: param type list, reference forms, not_found for a missing bus, bus references as edges that never close a cycle, bus.delete refused with blockers, delete.plan bus target and master refusal, the Buses paragraph, the undo paragraph, and the hello/welcome examples to 0.20." }
+stamp = { hash = "b3:18a0bbcfc0c77448", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:1a377d9e1b8ec2a5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read against ParamType::Bus/Reference::Bus (kind.rs, settings.rs), DeleteTarget::Bus (query.rs), the bus.delete doc (command.rs), 0.20 (version.rs) and the regenerated protocol.snap/examples.snap (new bus param type, DeleteTarget bus variant, r34 bus delete.plan, 0.20 handshake). Edited: param type list, reference forms, not_found for a missing bus, bus references as edges that never close a cycle, bus.delete refused with blockers, delete.plan bus target and master refusal, the Buses paragraph, the undo paragraph, and the hello/welcome examples to 0.20." }
+stamp = { hash = "b3:bd9e9739fcfba182", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: re-read against ParamType::Bus/Reference::Bus (kind.rs, settings.rs), DeleteTarget::Bus (query.rs), the bus.delete doc (command.rs), 0.20 (version.rs) and the regenerated protocol.snap/examples.snap (new bus param type, DeleteTarget bus variant, r34 bus delete.plan, 0.20 handshake). Edited: param type list, reference forms, not_found for a missing bus, bus references as edges that never close a cycle, bus.delete refused with blockers, delete.plan bus target and master refusal, the Buses paragraph, the undo paragraph, and the hello/welcome examples to 0.20." }
+stamp = { hash = "b3:29a8f3270014c222", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): renumbered 0.20 to 0.24. Design's mentions (bus reference since 0.24, the bus param type, the bus delete.plan target, bus.delete refused while referenced) match command.rs, kind.rs, query.rs, settings.rs and version.rs. examples.snap's hello, welcome and unsupported_version now carry minor 24, and protocol.snap's title and since-0.24 descriptions were regenerated with INSTA_UPDATE=always. The snapshot tests pass without it." }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:8a492aebdd51d4c0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: kind.rs adds ParamType::Bus (check, schema, is_reference), settings.rs Reference::Bus with the bus tag in from_value, query.rs DeleteTarget::Bus, command.rs documents bus.delete refused while referenced, version.rs bumps to 0.20, fixtures.rs adds a bus param and a bus delete.plan example. Edited the Kinds-and-settings bullet (bus references), the Queries bullet (DeleteTarget kinds) and the version history line (0.20). Tests: kind::tests::references_accept_null_and_only_their_own_tag and settings::tests::references_are_found_without_a_descriptor now cover bus." }
+stamp = { hash = "b3:5836d48c0fd669b3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -2034,7 +2034,7 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:6b62b8b3ca36a71b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: kind.rs adds ParamType::Bus (check, schema, is_reference), settings.rs Reference::Bus with the bus tag in from_value, query.rs DeleteTarget::Bus, command.rs documents bus.delete refused while referenced, version.rs bumps to 0.20, fixtures.rs adds a bus param and a bus delete.plan example. Edited the Kinds-and-settings bullet (bus references), the Queries bullet (DeleteTarget kinds) and the version history line (0.20). Tests: kind::tests::references_accept_null_and_only_their_own_tag and settings::tests::references_are_found_without_a_descriptor now cover bus." }
+stamp = { hash = "b3:e7a1710941b10268", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2064,7 +2064,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:c8ee2fc597dabb92", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: kind.rs adds ParamType::Bus (check, schema, is_reference), settings.rs Reference::Bus with the bus tag in from_value, query.rs DeleteTarget::Bus, command.rs documents bus.delete refused while referenced, version.rs bumps to 0.20, fixtures.rs adds a bus param and a bus delete.plan example. Edited the Kinds-and-settings bullet (bus references), the Queries bullet (DeleteTarget kinds) and the version history line (0.20). Tests: kind::tests::references_accept_null_and_only_their_own_tag and settings::tests::references_are_found_without_a_descriptor now cover bus." }
+stamp = { hash = "b3:9ecb3e00ddd134c6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:7c230fe311147750", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
@@ -2076,16 +2076,16 @@ stamp = { hash = "b3:489f2e86af7bf320" }
 stamp = { hash = "b3:d6aa367b923f0078", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: listed MAX_BUSES under Audio; no message change, PROTOCOL_VERSION stays 0.19" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:1e0e1661ca6d91c2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: kind.rs adds ParamType::Bus (check, schema, is_reference), settings.rs Reference::Bus with the bus tag in from_value, query.rs DeleteTarget::Bus, command.rs documents bus.delete refused while referenced, version.rs bumps to 0.20, fixtures.rs adds a bus param and a bus delete.plan example. Edited the Kinds-and-settings bullet (bus references), the Queries bullet (DeleteTarget kinds) and the version history line (0.20). Tests: kind::tests::references_accept_null_and_only_their_own_tag and settings::tests::references_are_found_without_a_descriptor now cover bus." }
+stamp = { hash = "b3:18a0bbcfc0c77448", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:1a377d9e1b8ec2a5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: kind.rs adds ParamType::Bus (check, schema, is_reference), settings.rs Reference::Bus with the bus tag in from_value, query.rs DeleteTarget::Bus, command.rs documents bus.delete refused while referenced, version.rs bumps to 0.20, fixtures.rs adds a bus param and a bus delete.plan example. Edited the Kinds-and-settings bullet (bus references), the Queries bullet (DeleteTarget kinds) and the version history line (0.20). Tests: kind::tests::references_accept_null_and_only_their_own_tag and settings::tests::references_are_found_without_a_descriptor now cover bus." }
+stamp = { hash = "b3:bd9e9739fcfba182", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: kind.rs adds ParamType::Bus (check, schema, is_reference), settings.rs Reference::Bus with the bus tag in from_value, query.rs DeleteTarget::Bus, command.rs documents bus.delete refused while referenced, version.rs bumps to 0.20, fixtures.rs adds a bus param and a bus delete.plan example. Edited the Kinds-and-settings bullet (bus references), the Queries bullet (DeleteTarget kinds) and the version history line (0.20). Tests: kind::tests::references_accept_null_and_only_their_own_tag and settings::tests::references_are_found_without_a_descriptor now cover bus." }
+stamp = { hash = "b3:29a8f3270014c222", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#460 round 2 (B1): bus references now take protocol 0.24 instead of 0.20, because wave/m1 holds 0.20 to 0.23 and lands first (the wave owner assigned 0.24). version.rs says minor 24; the since-0.24 doc comments in command.rs (BusDelete), kind.rs (ParamType::Bus), query.rs (DeleteTarget::Bus) and settings.rs (Reference::Bus) match. The Purpose body's version sentence says 0.24 for bus references and that 0.20 to 0.23 are milestone 1 changes not merged here yet. cargo test -p jstream-protocol passes (81)." }
 
 ["CRATE-jstream-render#design"."body"]
 stamp = { hash = "b3:7f2a94f0736d9611", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
@@ -2211,7 +2211,7 @@ stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:b2b0815752c7d7b0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: deps jstream-control design (mock refuses bus.delete while referenced) and ARCH protocol (bus references, bus delete.plan, 0.20) changed; the server forwards any dyn Control call and checks the handshake version generically, so nothing here needs the new types. Holds." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:411e7e7c0209acb3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: deps jstream-control design (mock refuses bus.delete while referenced) and ARCH protocol (bus references, bus delete.plan, 0.20) changed; the server forwards any dyn Control call and checks the handshake version generically, so nothing here needs the new types. Holds." }
+stamp = { hash = "b3:7eee2436993b0389", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through ARCH#protocol, whose only change is the bus-reference version (0.20 to 0.24). The server's Design negotiates PROTOCOL_VERSION from the protocol crate and names no specific minor, so it holds." }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:9bcfb0336f6adad9" }
@@ -2964,7 +2964,7 @@ stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:7ab4accbf98f6662" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:411e7e7c0209acb3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: ARCH protocol now records protocol 0.20's bus reference, DeleteTarget::Bus and bus.delete refusal, all additive (ParamType has its unknown fallback, a new tag in a settings Value, a new client-sent target) with the minor bump R-API-001 asks for; the compatibility rules themselves are unchanged and hold." }
+stamp = { hash = "b3:7eee2436993b0389", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through ARCH#protocol, whose only change is the bus-reference version number (0.20 to 0.24). R-API-001's rule (a minor bump for additions) is still what #460 follows, and the section names no specific version." }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
