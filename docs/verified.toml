@@ -774,7 +774,7 @@ stamp = { hash = "b3:c470e006d8095daa" }
 stamp = { hash = "b3:3e63f714aef88590" }
 
 ["CRATE-jstream-browser#open-items"."body"]
-stamp = { hash = "b3:8cf798e440520095", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:96f1e1c1344ffb05", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 against wave/m1: the File access item is gone since RequestPolicy now limits file pages to their folder, so two items block a host (sandbox, packaging); the wave's Hosts item from #290 (desktop creates a backend on its own media-adapter device, daemon doesn't) is kept; Compositing still holds after E3b, which imports capture frames but nothing reads Source::gpu_frame" }
 
 ["CRATE-jstream-browser#open-items"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
@@ -783,7 +783,7 @@ stamp = { hash = "b3:64d21faa19974bc3" }
 stamp = { hash = "b3:1300403d18de6566" }
 
 ["CRATE-jstream-browser#purpose"."body"]
-stamp = { hash = "b3:aa231c43fc78de6d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1 (#290 review N1): seam paragraph says use_device gets a device the host opens on the media adapter for now, not the engine's own; rest re-read against page.rs, audio.rs, fake.rs and cef/" }
+stamp = { hash = "b3:e2c66926a525f32a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
 stamp = { hash = "b3:9a6b619be12de381", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
@@ -795,34 +795,37 @@ stamp = { hash = "b3:e7a418098a8ef546" }
 stamp = { hash = "b3:f8343546bd9692f3" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/examples/page_check.rs"]
-stamp = { hash = "b3:cdb5d603e6278b06" }
+stamp = { hash = "b3:dd6e264674ed1100", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/audio.rs"]
 stamp = { hash = "b3:09a503c0bd3342be" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/gpu.rs"]
-stamp = { hash = "b3:4cd2645cc349307d" }
+stamp = { hash = "b3:9ee2b7ba834e8404", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/handlers.rs"]
-stamp = { hash = "b3:e50e51e202fe75c8" }
+stamp = { hash = "b3:260bce29e6e7c9ae", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/mod.rs"]
-stamp = { hash = "b3:e3ccb60c7440a82a" }
+stamp = { hash = "b3:efdd7afd1b1a0f83", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/fake.rs"]
-stamp = { hash = "b3:b3446b76280e4cb9" }
+stamp = { hash = "b3:e4729bc158373b96", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/lib.rs"]
-stamp = { hash = "b3:fe1cd7c0c3d41560" }
+stamp = { hash = "b3:f6b24b3ac471a35a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/page.rs"]
-stamp = { hash = "b3:e057d1998087d7f3" }
+stamp = { hash = "b3:bfae3b74fd072f83", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
+
+["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/request.rs"]
+stamp = { hash = "b3:8ac270a94f116ebd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
 
 ["CRATE-jstream-browser-helper#purpose"."body"]
 stamp = { hash = "b3:c38bcef596eeb573", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1: stale only via the browser README's seam paragraph; helper main.rs, build.rs and manifest unchanged, text holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:crates/jstream-browser/README.md#purpose"]
-stamp = { hash = "b3:aa231c43fc78de6d" }
+stamp = { hash = "b3:e2c66926a525f32a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2: stale only via the browser README's purpose (denied_requests, the RequestPolicy bullet, the host-device wording); the helper's sources and text are untouched; holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
@@ -990,7 +993,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:2ddeabb43c8c70e7", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:bc343a596542a844", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 against wave/m1: C8b2 changes only the Audio sources lead, which names each running source's own audio beside audio-only sources, matching AudioSources' Recorded::Own and the extended page audio test; the wave's Preview streams, E3b GPU capture and ADR-0057 credential-call text is untouched by this PR and kept as merged" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:39aafd3c0380d6e0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -1017,7 +1020,7 @@ stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:45c5dba198a06682", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:9bf96ff70481b881", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 carries C8's N6 and N7: the Audio sources lead sentence names each running source's own audio beside audio-only sources' targets, matching Target { recorded, on }; audio_sources.rs's module doc says a page's input closes while its audio is off; tests/audio.rs checks off (no status, not metered, page kept) and on again; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -1089,7 +1092,7 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:9d4a483023bf0308", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Live sources says a browser source opens its page in the with_browser backend (NoBackend without), with_browser rebuilds existing browser sources, LiveSources::audio lists sources' own audio; Audio sources adds Recorded::Own (compared by identity, synced on install, opens muted, listed in Routed, closed when off or deleted, not counted for defaults); changed() syncs with live.audio() and routes once after studio.reconcile, so when_shown gain applies to a page; live.rs drops entries before ctx; matches the code" }
+stamp = { hash = "b3:1be763883388d12c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 carries C8's N6 and N7: the Audio sources lead sentence names each running source's own audio beside audio-only sources' targets, matching Target { recorded, on }; audio_sources.rs's module doc says a page's input closes while its audio is off; tests/audio.rs checks off (no status, not metered, page kept) and on again; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:0a4ad5a1d04d5f8d", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -1125,7 +1128,7 @@ stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:45c5dba198a06682", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:9bf96ff70481b881", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 carries C8's N7: a_browser_page_is_recorded_alongside_the_defaults now turns the page's audio off and on; the Audio sources bullet already says a page's input exists only while its audio is on, and audio_sources.rs's module doc now says the same; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -1197,7 +1200,7 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:9d4a483023bf0308", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:60ace087390b5bfd", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: Engine gains with_browser (the backend browser sources open pages in); the Audio sources bullet adds one input per running source's own audio whose audio is on (a browser page's), listed for the routing, while defaults stay until an audio-only source exists; matches engine.rs, live.rs, audio_sources.rs and the browser test in tests/audio.rs" }
+stamp = { hash = "b3:1be763883388d12c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 carries C8's N7: a_browser_page_is_recorded_alongside_the_defaults now turns the page's audio off and on; the Audio sources bullet already says a page's input exists only while its audio is on, and audio_sources.rs's module doc now says the same; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:0a4ad5a1d04d5f8d", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
@@ -1257,7 +1260,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:a984c6e7ba2e3698", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:2ddeabb43c8c70e7", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#251 preview 0.20, #265 pairing 0.21, #452) into B7: the wave's preview, pairing and device text stands beside B7's filter-chain text with no contradiction; B7 adds no protocol change of its own" }
+stamp = { hash = "b3:bc343a596542a844", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "Stale via jstream-core#design only: C8b2 reworded core's Audio sources lead, and the wave added Preview streams and pairing; the daemon design cites core only for per-connection sessions and the no-backend placeholder outputs, unchanged, and its paired-devices text comes from the wave; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }

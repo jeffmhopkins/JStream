@@ -487,8 +487,8 @@ transparent. `LiveSources::audio` lists every running source's own audio
 (`Source::audio`) for *Audio sources*.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
-`jstream_sources::AudioTarget` of every audio-only source, or none while the source's
-audio is off (ADR-0028: off, the engine doesn't open its stream); `sync` runs beside the live
+`jstream_sources::AudioTarget` of every audio-only source, and each running source's own
+audio, or none while the source's audio is off (ADR-0028: off, the engine doesn't open its stream); `sync` runs beside the live
 sources' and wakes the program stage's thread when that set changes. When the program
 stage starts, its `AudioInputs` opens one mixer input per audio source that is on through
 `MixerControl` (D1's live API). A source's input opens muted and is listed in
