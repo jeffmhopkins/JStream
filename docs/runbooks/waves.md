@@ -27,7 +27,7 @@ There is one open wave per milestone group: `wave/m1` (M1a to M1d), `wave/m2` an
 | Delivers a roadmap item | The open wave for that item's `milestone` in `docs/progress.toml` |
 | Bumps `PROTOCOL_VERSION` | The earliest open wave, whatever its milestone ([Protocol versions](#protocol)) |
 | A fix, docs or tests with no roadmap item | The earliest open wave |
-| Exists to change CI, the review gate, the docs tooling, governance or the rules themselves (its own subject is `.github/`, `xtask/`, `REVIEW.md`, `CLAUDE.md` or `docs/RULES.md`) | `main` |
+| Exists to change CI, the review gate, the `xtask` commands, governance or the rules themselves (its own subject is `.github/`, `xtask/`, `REVIEW.md`, `CLAUDE.md` or `docs/RULES.md`) | `main` |
 | Opened by Dependabot | `main` |
 | An urgent fix the maintainer asks to land now | `main` |
 
@@ -118,7 +118,8 @@ conflict, so the wave owner hands out the numbers one at a time:
 2. **One bump holds the next number at a time.** That PR sets `minor` to the next number,
    along with every doc and schema snapshot that names it, and turns on auto-merge. The
    next ready bump may set its number too, but it keeps auto-merge off until the one
-   before it has merged.
+   before it has merged. Setting the number is a push, so the review gate runs one more
+   round on it.
 3. **The holder comes first.** When another PR lands in the wave and the holder conflicts,
    the holder's thread merges the wave in before anything else it is doing. The owner
    watches the holder and tells its thread what conflicts, and how to resolve them, as soon

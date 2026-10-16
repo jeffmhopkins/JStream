@@ -585,15 +585,23 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                 eprintln!("took {branch}'s stamp: {s}");
             }
             for path in &m.generated {
-                eprintln!("regenerated after a conflict in its @generated blocks: {path}");
+                if m.committed {
+                    eprintln!("regenerated after a conflict in its @generated blocks: {path}");
+                } else {
+                    eprintln!(
+                        "took {branch}'s side of the @generated blocks in {path}; run \
+                         `cargo xtask docs generate` once the files below are resolved"
+                    );
+                }
             }
             for (path, why) in &m.refused {
                 eprintln!("left for you: {path}: {why}");
             }
             if !m.committed {
                 eprintln!(
-                    "docs merge-main: stamp-only conflicts are resolved and staged; resolve the \
-                     files above by hand, `git commit`, then run `cargo xtask docs check`"
+                    "docs merge-main: stamp and @generated-block conflicts are resolved and \
+                     staged; resolve the files above by hand, run `cargo xtask docs generate` if \
+                     it named any @generated blocks, `git commit`, then run `cargo xtask docs check`"
                 );
                 return Ok(false);
             }
@@ -609,9 +617,11 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
                 eprintln!("stale: {s}");
             }
             eprintln!(
-                "docs merge-main: merged {} stamp conflict(s); {} stale section(s) to re-read, \
-                 then `cargo xtask docs verify <DOC#anchor> --by <who> --note \"<what you checked>\"`",
+                "docs merge-main: merged {} stamp conflict(s) and regenerated {} file(s); {} stale \
+                 section(s) to re-read, then `cargo xtask docs verify <DOC#anchor> --by <who> \
+                 --note \"<what you checked>\"`",
                 m.stamps.len(),
+                m.generated.len(),
                 m.stale.len()
             );
             Ok(true)

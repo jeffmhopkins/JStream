@@ -329,7 +329,7 @@ fn resolve(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
 
 /// Resolves every conflict in `text` (the conflicted contents of `path`) to the merged
 /// branch's side, provided each conflict on both sides lies strictly inside a
-/// `@generated` block. The caller then rewrites the blocks from the merged sources, so the
+/// `@generated` block that `docs generate` writes. The caller then rewrites the blocks from the merged sources, so the
 /// side taken doesn't matter. Returns the resolved text, or why the file is left alone.
 fn resolve_generated(path: &str, text: &str) -> Result<String, String> {
     if !is_tracked(path) {
@@ -337,15 +337,22 @@ fn resolve_generated(path: &str, text: &str) -> Result<String, String> {
     }
     let (ours, theirs, hunks) = sides(text)?;
     for (side, is_main) in [(&ours, false), (&theirs, true)] {
+        // Only blocks a generator owns: a conflict in any other block would keep the
+        // merged branch's side with nothing to rewrite it.
+        let names = [
+            super::generate::STATUS_BLOCK,
+            super::generate::INDEX_BLOCK,
+            super::progress::BLOCK,
+        ];
         let mut inside = Vec::new();
         let mut open = false;
         for line in side.lines() {
             let line = line.trim_end();
-            if line.starts_with("<!-- @generated end ") {
+            if names.iter().any(|n| line == super::generate::end(n)) {
                 open = false;
             }
             inside.push(open);
-            if line.starts_with("<!-- @generated begin ") {
+            if names.iter().any(|n| line == super::generate::begin(n)) {
                 open = true;
             }
         }
@@ -434,7 +441,9 @@ mod tests {
             "\n<<<<<<< HEAD\nOurs.\n=======\nMain.\n>>>>>>> m\n",
         );
         let marker = "# R\n\n<<<<<<< HEAD\n<!-- @generated begin progress -->\n=======\n>>>>>>> m\nx\n<!-- @generated end progress -->\n";
+        let unowned = text.replace("progress -->", "other -->");
         for (path, text) in [
+            ("README.md", unowned.as_str()),
             ("README.md", outside.as_str()),
             ("README.md", marker),
             ("a.rs", text.as_str()),

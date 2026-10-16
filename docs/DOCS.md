@@ -305,7 +305,7 @@ cargo xtask docs review ARCH \
     --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
 cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
-cargo xtask docs merge-main                    # merge origin/main; stamp-only conflicts take main's
+cargo xtask docs merge-main                    # merge origin/main; stamp and @generated conflicts take main's
 cargo xtask docs merge-main --from wave/m1     # the same for a PR into a wave (ADR-0055)
 cargo xtask docs migrate                       # move inline stamps to the ledger (below)
 ```
@@ -318,8 +318,10 @@ and a conflict usually leaves it stale, for a re-read. The result must parse, an
 rewritten in canonical form. In a doc, a conflict whose two sides are only inline `verified` lines
 inside `@section` blocks (either side may have none, as when `main` moved them to the
 ledger) takes main's side too. A conflict whose two sides lie wholly inside `@generated`
-blocks, such as two PRs each regenerating the README's progress table, takes main's side,
-and then every block is rewritten from the merged sources, as `docs generate` would. Any
+blocks that `docs generate` writes, such as two PRs each regenerating the README's progress
+table, takes main's side, and once every conflict is resolved every block is rewritten from
+the merged sources, as `docs generate` would. If another conflict keeps the merge open, the
+blocks still hold main's side until you run `docs generate` after resolving it. Any
 other conflict, including one in a file that also has stamp conflicts, is left exactly as
 git wrote it, and the merge stays open for you to finish by hand. When every conflict was
 resolved this way it commits the merge, runs

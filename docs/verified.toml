@@ -483,7 +483,7 @@ stamp = { hash = "b3:19aef49cc6131a9d", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:7baf4e16b6cfdff1", by = "agent:claude", note = "Whole #376 change to DOCS#verification and #notes re-read: per-input ledger stamps, the guarantee that a merge never leaves a section falsely fresh and a conflict usually leaves it stale, verify writing only changed inputs (removal-only and unchanged verifies record no note), and the last note on each entry covering the PR. docs-duty's verify, generate, migrate, merge-main and never-edit-the-ledger duties still hold" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:135623fb3325305f", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main line now says it resolves stamp and @generated-block conflicts; rest unchanged and matches DOCS#verification" }
+stamp = { hash = "b3:f084da70bc550b4e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "B1 on #419: DOCS#verification now says an open merge leaves @generated blocks on main's side until docs generate; the docs-duty merge-main line still holds (names both conflict kinds)" }
 
 ["CLAUDE#pr-loop"."body"]
 stamp = { hash = "b3:d756a751285910f0", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read the PR loop against ADR-0043: item 7 now lists the narrowed maintainer tier and says everything else is agent tier, proxy format cited from ADR-0043" }
@@ -2715,7 +2715,7 @@ stamp = { hash = "b3:ba285841b70c7e29", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:cecdd2bf0a8097e8", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/generate.rs"]
-stamp = { hash = "b3:0225a3d9dee611c2", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+stamp = { hash = "b3:f3a3a3cd043efa4d", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "B1/N3 on #419: merge-main bullet still accurate; resolve_generated now accepts only adr-status, adr-index and progress blocks, and mod.rs says to run docs generate when the merge stays open" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/govern.rs"]
 stamp = { hash = "b3:34cbbe36abdc6774", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
@@ -2730,16 +2730,16 @@ stamp = { hash = "b3:e9526047eb0b1865", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:cf8e0a09cd4967b1", by = "agent:claude", note = "Whole #376 change re-read (ADR-0053): ledger.rs stores one stamp per input (body, file:, dep:) in docs/verified.toml as a header, a stamp line and a trailing blank line, canonical and sorted; restamp writes only changed or new entries and drops removed ones, never rewriting body on a removal-only or unchanged verify (B6); the fixture test merges restamp-written ledgers with git and checks merge-main's main-side resolution leaves conflicts stale; check names changed inputs; migrate replaces rehash; merge-main takes main's ledger side and migrates; log reads ledger history. The bootstrap bullets still hold" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/merge.rs"]
-stamp = { hash = "b3:24b4a64ce931c56f", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main bullet now names @generated-block conflicts; matches resolve_generated + write_generated in merge.rs/mod.rs" }
+stamp = { hash = "b3:bb8a4e06934f629d", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "B1/N3 on #419: merge-main bullet still accurate; resolve_generated now accepts only adr-status, adr-index and progress blocks, and mod.rs says to run docs generate when the merge stays open" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/mod.rs"]
-stamp = { hash = "b3:57e7f4c4507e3915", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main bullet now names @generated-block conflicts; matches resolve_generated + write_generated in merge.rs/mod.rs" }
+stamp = { hash = "b3:a71467fbb2bd377a", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "B1/N3 on #419: merge-main bullet still accurate; resolve_generated now accepts only adr-status, adr-index and progress blocks, and mod.rs says to run docs generate when the merge stays open" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/parse.rs"]
 stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/progress.rs"]
-stamp = { hash = "b3:0047ff70349b6728", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+stamp = { hash = "b3:7de442ed32252572", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "B1/N3 on #419: merge-main bullet still accurate; resolve_generated now accepts only adr-status, adr-index and progress blocks, and mod.rs says to run docs generate when the merge stays open" }
 
 ["DOCS#dependency-lint"."body"]
 stamp = { hash = "b3:c5e5edb854632c87", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: lint_deps.rs gains native-code allowlist entries for Tauri's tree (tauri links guard, vswhom-sys build-time C++, Linux gtk-rs and WebKitGTK sys crates, objc2-exception-helper, iana-time-zone-haiku, defmt), all covered by the native-code bullet; no rule logic changed" }
@@ -2940,7 +2940,7 @@ stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:d31f38d9a62790ea", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }
 
 ["RUNBOOK-WAVES#current"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:135623fb3325305f", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "merge-main --from wave/<name> resolves stamp and @generated-block conflicts, per DOCS#verification and merge.rs" }
+stamp = { hash = "b3:f084da70bc550b4e", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "B1 on #419: --from sentence still holds; the open-merge caveat lives in DOCS#verification, which it defers to" }
 
 ["RUNBOOK-WAVES#landing"."body"]
 stamp = { hash = "b3:6ae91e98d6488857", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
@@ -2958,13 +2958,13 @@ stamp = { hash = "b3:3a71f5c50a47e8d9", by = "agent:claude", note = "Sync PRs no
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Sync PRs now auto-merge with mergeMethod MERGE, matching ADR-0055's sync-PR bullet and the ruleset allowing merge commits." }
 
 ["RUNBOOK-WAVES#protocol"."body"]
-stamp = { hash = "b3:664bcd0eb7f0da71", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "rewrote the queue: number to first ready bump, one holder with auto-merge, next may pre-set but auto-merge off, holder re-merges first; matches merge-main's generated-block handling" }
+stamp = { hash = "b3:7650e29b79071515", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "N4 on #419: item 2 now says setting the number is a push that costs one more review round; items 1 and 3 unchanged" }
 
 ["RUNBOOK-WAVES#protocol"."dep:docs/adr/0055-wave-branches.md#consequences"]
 stamp = { hash = "b3:27ef1830af9f4a1c", by = "agent:claude", note = "New. Keeps the queue order by routing every PROTOCOL_VERSION bump to the earliest wave." }
 
 ["RUNBOOK-WAVES#which-wave"."body"]
-stamp = { hash = "b3:c3caf732cc2853f0", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "main row now names the docs tooling (xtask/), which governance treats as protected; rest of the table unchanged" }
+stamp = { hash = "b3:1a6aeaec37c5f24f", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "N2 on #419: main-only row now says the xtask commands (xtask/) rather than calling the whole crate docs tooling; routing unchanged" }
 
 ["RUNBOOK-WAVES#which-wave"."dep:docs/adr/0055-wave-branches.md#decision"]
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
