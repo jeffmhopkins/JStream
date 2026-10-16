@@ -2730,7 +2730,7 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
 ["CRATE-jstream-youtube#purpose"."body"]
-stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: stale via platform#purpose only; Secret and OAuthTokenStore text unchanged; holds" }
+stamp = { hash = "b3:86f8b58afedd27a5", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Re-read the whole section after the wave/m1 merge (which re-stamped it on its side, E3c): ADR-0051 is the parent ADR for the optional API half, the §4 scopes and §5 quota notes still read as ADR-0041 rules kept by ADR-0051, and Not yet names the own-client settings from ADR-0051 §2" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "Dep: platform #purpose gained the Codecs::on_context and FrameSync::platform bullets and a new Not yet; youtube still uses jstream-platform only for Secret, so this section is unaffected" }
