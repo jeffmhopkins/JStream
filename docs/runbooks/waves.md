@@ -27,7 +27,7 @@ There is one open wave per milestone group: `wave/m1` (M1a to M1d), `wave/m2` an
 | Delivers a roadmap item | The open wave for that item's `milestone` in `docs/progress.toml` |
 | Bumps `PROTOCOL_VERSION` | The earliest open wave, whatever its milestone ([Protocol versions](#protocol)) |
 | A fix, docs or tests with no roadmap item | The earliest open wave |
-| Exists to change CI, the review gate, governance or the rules themselves (its own subject is `.github/`, `xtask/src/governance.rs`, `REVIEW.md`, `CLAUDE.md` or `docs/RULES.md`) | `main` |
+| Exists to change CI, the review gate, the `xtask` commands, governance or the rules themselves (its own subject is `.github/`, `xtask/`, `REVIEW.md`, `CLAUDE.md` or `docs/RULES.md`) | `main` |
 | Opened by Dependabot | `main` |
 | An urgent fix the maintainer asks to land now | `main` |
 
@@ -48,8 +48,8 @@ depends_on = ["docs/DOCS.md#verification"]
 -->
 
 A PR into a wave merges its wave, not `main`:
-`cargo xtask docs merge-main --from wave/m1`. It resolves stamp-only conflicts the same
-way and lists the sections to re-read and verify. Merge, never rebase.
+`cargo xtask docs merge-main --from wave/m1`. It resolves stamp conflicts and `@generated`
+block conflicts the same way and lists the sections to re-read and verify. Merge, never rebase.
 
 Everything else in [CLAUDE.md](../../CLAUDE.md#pr-loop) holds: auto-merge (squash) on once the
 PR leaves draft, every blocking finding answered, and `docs/progress.toml` updated with the
@@ -108,6 +108,23 @@ depends_on = ["docs/adr/0055-wave-branches.md#consequences"]
 -->
 
 Every PR that bumps `PROTOCOL_VERSION` goes into the earliest open wave, so bumps reach
-`main` in the order they were assigned. The queue still orders them: a PR whose bump is
-next turns on auto-merge only after the bump before it has merged into the wave. If the
-wave is cut first, the queue continues in the next wave.
+`main` in the order they were assigned. Two PRs that set the same `minor` merge without a
+conflict, so the wave owner hands out the numbers one at a time:
+
+1. **A number goes to the first ready bump.** A bump is ready when it is out of draft, its
+   review gate has passed, and everything it waits on (an ADR, a PR below it) has merged
+   into the wave. The owner keeps the order in the queue, but a PR that isn't ready doesn't
+   hold up the ones behind it. It gets the next free number once it is ready.
+2. **One bump holds the next number at a time.** That PR sets `minor` to the next number,
+   along with every doc and schema snapshot that names it, and turns on auto-merge. The
+   next ready bump may set its number too, but it keeps auto-merge off until the one
+   before it has merged. Setting the number is a push, so the review gate runs one more
+   round on it.
+3. **The holder comes first.** When another PR lands in the wave and the holder conflicts,
+   the holder's thread merges the wave in before anything else it is doing. The owner
+   watches the holder and tells its thread what conflicts, and how to resolve them, as soon
+   as it is dirty. `docs merge-main` resolves stamp conflicts and conflicts inside
+   `@generated` blocks such as the README's progress table, so these merges are usually
+   automatic.
+
+If the wave is cut first, the queue continues in the next wave.
