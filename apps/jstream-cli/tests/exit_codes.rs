@@ -89,6 +89,15 @@ fn each_failure_kind_has_its_exit_code() {
     );
     let stop = ["--mock", "--mock-output", "o", "output", "stop", "o"];
     assert_eq!(code(&cli(&stop)), Some(18));
+    // Pairing is the server's: an engine with none in front answers `unsupported`.
+    let out = cli(&["--mock", "pair"]);
+    assert_eq!(code(&out), Some(20));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("(unsupported)"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(code(&cli(&["--mock", "device", "list"])), Some(20));
 }
 
 #[test]

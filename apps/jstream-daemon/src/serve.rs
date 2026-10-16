@@ -10,7 +10,7 @@ use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::future::Future;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 #[cfg(any(windows, test))]
 use {
@@ -163,7 +163,8 @@ fn opener(
     })
 }
 
-/// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token`, with MCP's
+/// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token` and the
+/// devices paired in `device_file` (ADR-0044; in memory without one), with MCP's
 /// streamable-HTTP transport on, and the web UI's files from `ui_dir` when given. Each
 /// connection and each MCP session gets its own session (its own `client_id`); all of
 /// them share the engine.
@@ -171,12 +172,14 @@ pub async fn bind(
     engine: Arc<Engine>,
     port: u16,
     token: Token,
+    device_file: Option<PathBuf>,
     ui_dir: Option<&Path>,
 ) -> Result<Server, jstream_server::ServerError> {
     let connector: Connector = Arc::new(move || Box::new(engine.connect()));
     let mut config = ServerConfig::new(token);
     config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     config.mcp = true;
+    config.device_file = device_file;
     config.ui_dir = ui_dir.map(Path::to_path_buf);
     Server::bind(config, connector).await
 }
@@ -262,6 +265,7 @@ mod tests {
             engine(&options, Arc::new(AuditMemory::new())).expect("an engine"),
             0,
             token,
+            None,
             None,
         )
         .await
@@ -350,6 +354,7 @@ mod tests {
             0,
             token.clone(),
             None,
+            None,
         )
         .await
         .expect("binds");
@@ -358,6 +363,7 @@ mod tests {
             engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
             port,
             token,
+            None,
             None,
         )
         .await

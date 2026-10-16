@@ -28,7 +28,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
    │ jstream-ui (Leptos→WASM)   jstream-mcp (MCP tools)   jstream-cli   3rd party │
    └───────────────┬──────────────────────────────────────────────────────────────┘
                    │  Control trait: in-process (InProcessControl), or WebSocket + token
-                   │  (JSON messages, including video.snapshot's PNG; binary frames later: preview, meters)
+                   │  (JSON messages, including video.snapshot's PNG; binary frames: preview)
                    ▼
 ┌───────────────────────────── jstream-core :: Engine ─────────────────────────────┐
 │ command bus → state (rev N) → events      per-client undo · audit log · persist │
@@ -416,6 +416,7 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
+| Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot and `rev` under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
@@ -578,6 +579,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
+- **Pairing** (protocol 0.21, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
+  action `pairing.start` answers a one-time code (an action result, the one place it is
+  sent), which a device trades at `POST /api/v1/pair` for a device token of its own;
+  `device.list` and the action `device.revoke` manage the paired devices. They concern
+  whom a listener admits, so `jstream-server` answers them, and a session with no server
+  in front answers `unsupported`
+  ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
@@ -632,8 +640,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `scene.delete` or `source.delete` refused because something still refers to its
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
   [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
-- **Binary streams** (WebSocket binary frames): preview video and meters. Not designed
-  yet, except the meter frame's fields
+- **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
+  `preview.subscribe` opens a stream of the program mix for the calling session,
+  scaled down, at most `fps` pictures a second and only when the mix changes, in H.264
+  when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the
+  session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
+  keyframe, size, presentation time, `rev`) and the picture, and every hop that queues
+  frames drops up to the next keyframe when full, so a slow client still decodes what
+  it gets. The layout is in
+  [jstream-protocol › Design](../crates/jstream-protocol/README.md#design). Meters
+  travel in the JSON `meters.tick` event for now (protocol 0.19); a binary meter frame
+  would be another kind of the same frame. The meter fields
   ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
   (4× oversampled, BS.1770); per bus, also momentary, short-term and integrated loudness
   (LUFS). Loudness is computed only for the master bus and for subscribed buses and
@@ -647,7 +664,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the browser, where the token travels as a subprotocol because a page can't set
   `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)). `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
-  default, with the token required and `Origin`/`Host` validated
+  default, with the token (the control token, or a paired device's on loopback until TLS)
+  required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
   for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
@@ -674,7 +692,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
+  (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `history`, `item`, `kind`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far; `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -685,12 +703,15 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   about ten a second while the mixer runs, is kept the same way, as `meters`.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 178 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 183 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
+- **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
+  tool's `preview.subscribe` fails with `action_failed`; an agent looks with
+  `video.snapshot`.
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an
