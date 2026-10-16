@@ -745,8 +745,9 @@ status = "planned"
 id = "C9"
 milestone = "M2"
 title = "Media file source"
-status = "review"
+status = "hardware"
 prs = [245, 322]
+note = "media file hardware tests (#382)"
 
 [[item]]
 id = "W1"
