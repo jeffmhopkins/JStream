@@ -16,10 +16,11 @@ unsafe_allowed = false
 workspace = true
 
 [features]
-# Browser sources through CEF (ADR-0021, ADR-0046), Windows only. Off by default, as in
-# `jstream-browser`: building it downloads CEF and builds its C++ wrapper with CMake and
-# Ninja, and the daemon then needs `jstream-browser-helper.exe` and CEF's runtime files
-# next to it. Without it, `browser` sources show nothing.
+# Browser sources through CEF (ADR-0021, ADR-0048), Windows only. The daemon doesn't build
+# or link CEF: pages run in the sandboxed browser helper, which needs
+# `jstream-browser-helper.exe` (CEF's bootstrap exe renamed), its DLL and CEF's runtime
+# files next to `jstream-daemon.exe`. Off by default, as in `jstream-browser`, until those
+# are packaged (its README's open items). Without it, `browser` sources show nothing.
 cef = ["jstream-browser/cef"]
 # Compile-checks the CEF wiring without CEF (`jstream-browser`'s `dox`), for CI's clippy.
 # A binary built with it doesn't link.

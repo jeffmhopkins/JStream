@@ -26,8 +26,9 @@ blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 # CEF's C API for browser sources (ADR-0021, picked by spike S4; ADR-0046), pinned
 # exactly: the version carries the CEF build it was generated from (154.0.34), and its
 # sys crate's build script downloads that exact CEF distribution. No default features:
-# `sandbox` needs CEF's bootstrap layout, and `build-util`/`resources` are app-bundling
-# helpers. Only `jstream-browser`'s `cef` feature pulls it in.
+# `jstream-browser`'s `helper` feature turns `sandbox` on for CEF's bootstrap layout
+# (ADR-0048), and `build-util`/`resources` are app-bundling helpers. Only that feature
+# pulls it in.
 cef = { version = "=154.5.0", default-features = false }
 # Benchmarks (`benches/` in jstream-render, jstream-audio and jstream-encode), dev-only.
 # No default features: no `rayon` or `plotters`, so no HTML plots; the JSON estimates under

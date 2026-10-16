@@ -141,7 +141,8 @@ state machine. Contents:
 - **Drop counts** (`drops.rs`): the sources a `stats.tick` sums. `output.start`
   registers the capture cell, both encode sessions, each mixer input, the mix
   bus, and the packets the output thread drops (muxer rejects and what a stop's
-  drain abandons) and the publish link's, and a sampler thread
+  drain abandons), or the stop drops for it when it leaves that thread behind, and
+  the publish link's, and a sampler thread
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/audio.rs`,
@@ -165,7 +166,8 @@ state machine. Contents:
   pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
   stage-failure, late-tick, teardown, final-tick, link-loss, stalled-stop and
-  blocked-send stop tests run without one),
+  blocked-send stop tests, and the final tick's count of what a blocked send leaves
+  queued, run without one),
   `connect_rtmp` against a slow fake RTMP server on loopback, one that hangs up
   and is reconnected to, one that stops reading while a stop's deadline runs out, and
   one that reads only a trickle of one large tag,
@@ -691,7 +693,7 @@ What each stage contributes:
 | Audio encode session | the same input drops | `encode_blocks` |
 | Encode subscriber queue | `subscriber_drops` | `output_packets` |
 | Muxer | a packet the FLV tagger rejects | `output_packets` |
-| Stop drain | packets still queued when a stop's drain deadline passes, or when a send fails while stopping, dropped by the output thread | `output_packets` |
+| Stop drain | packets still queued when a stop's drain deadline passes, or when a send fails while stopping, dropped by the output thread, or by the stop when it leaves that thread behind | `output_packets` |
 | Publish link | tags the publish target dropped while its link was down (`LivePublish::dropped`; for RTMP, `ReconnectStats::dropped`), published by the output thread | `output_packets` |
 
 A render tick that falls a whole period or more behind the clock is not drawn late:
@@ -1040,7 +1042,14 @@ the target honoring the deadline (#138): it waits for a publishing output thread
 only until the deadline plus 500 ms (`OUTPUT_GRACE`), then returns without it and
 closes that thread's line to the publish watcher, so a send blocked in a target that
 ignores `stop_by` cannot hold `output.stop` either. The thread is detached and ends
-once that send returns; what it drops after that is not in the final `stats.tick`.
+once that send returns. Before the stop removes the output's drop source, it drops
+and counts the packets still queued for that thread itself (the two share the
+encoder subscriptions, each locked only to receive, never over a send), so the
+final `stats.tick` has them (#385). Each count takes the packets it counts off the
+queue, so none is counted twice. A lock held by whichever side is counting, and by
+the stop over its latch, keeps a count the thread makes either wholly in the final
+tick or wholly out of it. Only what is queued after the stop's count, and the tag the
+blocked send holds, are not in the final tick.
 A recording's output thread is always joined, so its file is renamed into place
 when the stop returns. `RtmpPublish` honors the deadline: every socket write's
 timeout is cut to the time left (`Transport::set_write_deadline`), so a peer that
@@ -1067,7 +1076,12 @@ thread takes it alone, and otherwise only its own inputs mutex and, under that, 
 drop ledger's, never the collection lock (see *Audio sources*).
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
-engine while that mutex is held. A stopping program stage detaches its mixer from the
+engine while that mutex is held. An output's two encoder subscriptions each sit
+behind a mutex its output thread takes only to receive or read their counters, never
+over a send. Whoever drops and counts what is still queued there (that thread, or the
+stop that has stopped waiting for it) first takes the output's abandon lock, then the
+video and the audio subscription's; the stop latches the output's drop source, taking
+the drop ledger, under it. A stopping program stage detaches its mixer from the
 audio routing under the collection lock, which is why it is never dropped while that
 lock is held, as its final `stats.tick` already requires. The master's meters are
 atomics the mixer thread writes and the sampler reads, with no lock. The snapshot compositor belongs to the snapshot
