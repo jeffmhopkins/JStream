@@ -50,9 +50,9 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `██████████` 100% | 9 | 0 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `███████░░░` 74% | 17 | 2 | 4 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 33% | 3 | 1 | 5 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `███░░░░░░░` 30% | 3 | 3 | 4 |
 
-97 of 112 items are merged; 5 of those still wait on a run on Windows hardware.
+97 of 113 items are merged; 5 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -182,7 +182,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U0 | Leptos UI skeleton | ✅ merged | #250 |
 | U2a | ADR-0044 pairing | ✅ merged | #248 |
 | U2 | Serve the UI | ✅ merged | #246, #247 |
-| U2b | Device pairing | ✅ merged | #265 |
+| U2b | Device pairing | ✅ merged | #265, #288 |
 | U3a | Scenes, sources, properties | ✅ merged | #256 |
 | U3b | Outputs and go-live panel | ✅ merged | #254 |
 | U3c | Mixer panel | ✅ merged | #308 |
@@ -206,13 +206,14 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 3 of 9 merged</summary>
+<summary><b>M3</b> Depth and reach: 3 of 10 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ✅ merged | #325 |
-| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned | #359 |
+| F6 | HEVC and AV1 encode | 🔍 in review | #364 |
+| X1 | Full 3D transforms and WGSL effect packs | 🔍 in review | #359, #368 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | 🔍 in review | #363, #375 |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
