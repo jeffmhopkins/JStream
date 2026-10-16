@@ -26,7 +26,8 @@ first cut defines its own wire types for them.
 Contents (a deliberately small first cut; [Design](#design) describes the whole model):
 - **Envelope** (`envelope.rs`): `ClientMessage` (`hello`, `request`) and `ServerMessage`
   (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`,
-  and `ActionResult`, the data an action may answer with (`pairing.start`'s code).
+  and `ActionResult`, the data an action may answer with (`pairing.start`'s code,
+  `youtube.sign_in`'s consent URL, a YouTube broadcast).
   `ClientMessage::parse` maps every parse failure to `malformed`.
 - **History** (`history.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
   `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
@@ -77,8 +78,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   read the YouTube account.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
-  Live API with an `other` value for anything newer, and `ActionResult`, what an action
-  returns beyond being accepted (the sign-in's consent URL, a broadcast).
+  Live API with an `other` value for anything newer.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
   [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)): `KindDescriptor`,
   `ParamDescriptor` and `ParamType`, the shapes that describe a source or filter kind's
@@ -732,7 +732,7 @@ After `welcome`, the server pushes every event to every client.
 ### YouTube
 
 JStream signs in to one Google account, once, with the full `youtube` scope
-([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) §4, kept by [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), and every
+([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md), keeping ADR-0041 §4), and every
 YouTube command is an action or a query (0.23). They are for the UI: the MCP server
 offers none of them, refuses a `youtube` output target and drops YouTube events, since
 YouTube is for people, not agents (ADR-0058 §3):

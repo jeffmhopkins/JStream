@@ -44,7 +44,7 @@ png.workspace = true
 # (ADR-0025, ADR-0026), and saved collection files in the engine tests.
 serde_json.workspace = true
 thiserror.workspace = true
-# Sign-in and the Live API for YouTube outputs and the YouTube commands (ADR-0041).
+# Sign-in and the Live API for YouTube outputs and the YouTube commands (ADR-0058).
 jstream-youtube.workspace = true
 # Spans around commands, outputs and sessions (R-RS-005).
 tracing.workspace = true

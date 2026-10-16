@@ -22,8 +22,8 @@ use crate::{
     IssueSeverity, RateControl, StreamHealth, StreamInfo, StreamStatus, VideoCodec, VideoEncoding,
     YoutubeAuth,
 };
-use crate::{DeviceId, DeviceInfo};
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
+use crate::{DeviceId, DeviceInfo};
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
