@@ -99,9 +99,10 @@ text needn't change when a release ages out.
 - Without a PipeWire daemon, ALSA serves input and output only. Desktop and application
   audio report `Unsupported` there.
 
-**5. Media clock.** The clock is `CLOCK_MONOTONIC` in nanoseconds
-([ADR-0014](0014-media-clock.md)), the clock PipeWire and V4L2 already stamp their data in,
-so mapping a timestamp onto the media clock is a unit change.
+**5. Media clock.** The clock is `CLOCK_MONOTONIC` ([ADR-0014](0014-media-clock.md)), the
+clock PipeWire and V4L2 already stamp their data in, read in the 100 ns ticks the Windows
+backend uses ([jstream-platform › clock unit](../../crates/jstream-platform/README.md#open-questions)),
+so mapping a timestamp onto the media clock is a division.
 
 **6. Video encode goes through VA-API.**
 - H.264 encode uses VA-API (Intel and AMD), loaded at run time. HEVC and AV1 follow the
