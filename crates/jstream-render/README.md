@@ -57,12 +57,15 @@ and calls this crate.
   `render_image` makes a new layer, and `render_into` redraws one the caller keeps
   (from `layer`). The depth bound and cycle handling are the caller's
   ([jstream-core › Snapshots](../jstream-core/README.md#design)).
-- `ResourceCache` keeps what a caller draws every frame (uploads and layers), keyed by
-  the caller's IDs, so a frame that shows what the last one showed allocates no
+- `ResourceCache` keeps what a caller draws every frame (uploads, imports of platform
+  frames, and layers), keyed by the caller's IDs, so a frame that shows what the last one showed allocates no
   texture. An image no frame references is freed only after the GPU has finished the
   last frame that used it, and the cache hands it back as `Reclaimed` so the caller
   picks the thread that drops it
-  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
+  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). `import` takes a
+  `GpuFrame` and a version: the same version reuses the import, a new one imports the
+  new frame and retires the old image, so the platform gets the old texture back only
+  after the frames that sampled it have finished.
 
 **Where it sits on the existing APIs.**
 
@@ -80,8 +83,10 @@ and calls this crate.
   edges ([Passes](#design)). An imported texture must be `Rgba8UnormSrgb` or
   `Bgra8UnormSrgb`, so the sampler decodes it to linear, and is read as straight
   alpha: exact for an opaque capture, a fringe at partly transparent edges. A
-  `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
-  before the submit that samples it. Staging stays the safe method on
+  `GpuFrame` keeps its `FrameSync`; `render` and `render_into` call `stage` once per
+  distinct hold before the submit that samples it, and end that submit by
+  transitioning each held texture to `PRESENT` (the `COMMON` state D3D11 expects on
+  D3D12), as `FrameSync::stage` requires. Staging stays the safe method on
   `jstream-platform`. This crate never calls wgpu-hal.
 - An `Image` draws only in the `Compositor` that made it. It carries that
   compositor's identity, and `render` refuses an item whose image came from another
@@ -182,9 +187,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    tests do.
 
 Both passes are one command buffer and one `queue.submit`. `FrameSync::stage` runs
-before that submit, for every distinct hold the scene samples. The output texture is
-the compositor's own, not a shared encode target, so nothing transitions it to
-`PRESENT`.
+before that submit, for every distinct hold the scene samples, and the command buffer
+ends with those textures transitioned to `PRESENT`. The output texture is the
+compositor's own, not a shared encode target, so nothing transitions it.
 
 ### Resources kept across frames
 
@@ -271,9 +276,11 @@ Adapter order when `OpenOptions` asks for software (`OpenOptions::headless`):
 
 When it asks for hardware (`OpenOptions::hardware`, the default, which the engine's
 render and snapshot threads, the tests and the benchmarks use; a software adapter can't
-composite 30 frames a second, #433): the high-performance adapter without
-`force_fallback_adapter` first, then the software adapter, then
-`RenderError::NoAdapter`. A machine with no GPU still runs, on lavapipe or WARP.
+composite 30 frames a second, #433): on Windows, a D3D12 hardware adapter first, since
+the platform's capture, interop and encoders are D3D11/D3D12 and wgpu's own pick on a
+Radeon 780M was Vulkan; then, everywhere, the high-performance adapter without
+`force_fallback_adapter`, then the software adapter, then `RenderError::NoAdapter`. A
+machine with no GPU still runs, on lavapipe or WARP.
 
 `Compositor::on_context` does not search. It uses the `GpuContext` it is given.
 
@@ -330,8 +337,11 @@ and the cache: a layer redrawn with `render_into` keeps its texture and shows on
 the newest composite; `render_into` refuses a layer the scene places, a wrong size
 and a non-layer; `rewrite_rgba8` keeps the texture and changes the pixels and refuses
 a layer; the cache reuses a texture per key, rewrites it for a new version and
-replaces it for a new size; an unused entry is handed back only after the frame fence
-(not while its frame is still being built). Alpha edges: a 2x1
+replaces it for a new size; an import is reused while its version holds, replaced
+by the next version's frame, staged on every submit that samples it, and the replaced
+one comes back after the fence (the staged submit also ends with the `PRESENT`
+transition, which runs on lavapipe too); an unused entry is handed back only after the
+frame fence (not while its frame is still being built). Alpha edges: a 2x1
 opaque-red-then-transparent upload drawn half a pixel off and at scale 2 keeps red
 at 255 where it is partly covered (straight filtering gave 187 on lavapipe); an
 imported sRGB texture is read as straight alpha. An image from another compositor on

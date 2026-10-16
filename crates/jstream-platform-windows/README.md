@@ -79,7 +79,8 @@ The code is ported from spikes S1 to S3. This first cut has:
   `WgcCapture::new()` is the CPU path, ARCH's fallback and the default
   ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 6).
   `WgcCapture::on_gpu(&GpuContext)` is the GPU path (steps 1 and 2), described after
-  this list:
+  this list, and `Capture::start_on(&GpuContext)` starts one capture on it whichever
+  constructor made the backend; the engine's program stage uses that:
   - **Targets:** the displays, then the top-level windows a user would pick: visible,
     titled, not owned by another window, not tool windows, not cloaked, and not this
     process's own. A display's `DeviceId` is `monitor:` and its GDI device name
@@ -126,9 +127,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     released too.
   - **Start:** a target that goes between the lookup and the start of the capture is
     `NotFound` (except a reused window handle), as for a target that was never there.
-  - **GPU path** (`on_gpu`, for a context `WindowsGpu` opened; another backend's is
-    `InvalidState`). The trait shapes stay as they are: the backend reaches the context
-    through this constructor (see [Open questions](#open-questions)).
+  - **GPU path** (`on_gpu` or `start_on`, for a context `WindowsGpu` opened; another
+    backend's is `InvalidState`).
     - **Device:** every capture uses the context's D3D11 device, so frames are on the
       context's adapter. A display driven by another adapter is still captured; WGC
       copies across adapters itself.
@@ -255,7 +255,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     with NV12 textures. It also creates a multithread-protected D3D11 device on the same
     adapter, and a fence shared between D3D11 and D3D12. The `AdapterId` carries the
     adapter's LUID and PCI vendor ID.
-  - **Capture** reaches the context's D3D11 device through `WgcCapture::on_gpu`, above.
+  - **Capture** reaches the context's D3D11 device through `WgcCapture::on_gpu` or
+    `Capture::start_on`, above.
   - **`encode_target`** allocates an NV12 texture with a shared NT handle on the D3D11
     side, opens it on D3D12, and wraps it as a `wgpu::Texture` through wgpu-hal (in the
     `COMMON` state, which wgpu calls `PRESENT`).
@@ -422,9 +423,9 @@ virtual-camera test also needs the `jstream-vcam-windows` DLL registered
 
 - **How the encoders reach the GPU context.** `Codecs::video_encoder` takes no
   `GpuContext`, but the encoders' D3D11 input needs the context's D3D11 device. Capture
-  kept the trait shapes: `WgcCapture::on_gpu(&GpuContext)` is a Windows constructor, so
-  the host that builds the backends picks the path. The encoders can do the same
-  (`MfCodecs::on_gpu`), or the trait can change so `video_encoder` takes
+  took a trait method with a default, `Capture::start_on(&GpuContext)`, so the engine
+  that opens the context picks the path per capture. The encoders can do the same, or
+  take a constructor (`MfCodecs::on_gpu`), or the trait can change so `video_encoder` takes
   `Option<&GpuContext>` (or `VideoEncoderConfig` names it). That is a `jstream-platform`
   API decision for E3c.
 - **Render times.** `AudioRenderBuffer::time` (when the first frame will play) is always

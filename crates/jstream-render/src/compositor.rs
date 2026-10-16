@@ -170,6 +170,7 @@ impl Compositor {
                 },
             );
         }
+        self.record_release(&mut encoder, scene);
         self.gpu.queue.submit([encoder.finish()]);
 
         let output = targets.output.clone();
@@ -260,6 +261,7 @@ impl Compositor {
                 label: Some("jstream-render-layer"),
             });
         self.record_composite(&mut encoder, view, scene);
+        self.record_release(&mut encoder, scene);
         self.gpu.queue.submit([encoder.finish()]);
         Ok(())
     }
@@ -527,6 +529,30 @@ impl Compositor {
                 .write_buffer(&self.vertex_buffer, 0, &self.vertices);
         }
         Ok(())
+    }
+
+    /// Ends the submit by handing every staged source texture back to the platform:
+    /// a transition to `PRESENT`, which on D3D12 is the `COMMON` state the platform's
+    /// other APIs expect a shared texture in ([`FrameSync::stage`]).
+    fn record_release(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene<'_>) {
+        let mut released: Vec<&wgpu::Texture> = Vec::new();
+        for draw in &self.draws {
+            let image = scene.items[draw.index].image;
+            if image.sync().is_some() && !released.contains(&image.texture()) {
+                released.push(image.texture());
+            }
+        }
+        if released.is_empty() {
+            return;
+        }
+        encoder.transition_resources(
+            std::iter::empty(),
+            released.into_iter().map(|texture| wgpu::TextureTransition {
+                texture,
+                selector: None,
+                state: wgpu::TextureUses::PRESENT,
+            }),
+        );
     }
 
     /// The composite pass: clear `target` (`Rgba16Float`) to the background and draw

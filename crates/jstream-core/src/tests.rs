@@ -2162,6 +2162,7 @@ mod cpu_pipeline {
     use jstream_control::{Control, EventStream};
     use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, PixelFormat, Timebase};
     use jstream_mux::flv::{FlvTag, TagType};
+    use jstream_platform::GpuContext;
     use jstream_platform::fake::{
         FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
     };
@@ -2245,9 +2246,9 @@ mod cpu_pipeline {
         let seen: Arc<Mutex<Vec<Option<SceneId>>>> = Arc::default();
         let draw: OpenDraw = {
             let seen = Arc::clone(&seen);
-            Arc::new(move || {
+            Arc::new(move |_: Option<&GpuContext>| {
                 let seen = Arc::clone(&seen);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(None)?;
                 let draw: DrawFn = Box::new(move |shot, size, capture, out| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -2697,9 +2698,9 @@ mod cpu_pipeline {
         let armed = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let armed = Arc::clone(&armed);
-            Arc::new(move || {
+            Arc::new(move |_: Option<&GpuContext>| {
                 let armed = Arc::clone(&armed);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(None)?;
                 let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
                     inner(shot, size, rgba, out)
@@ -3702,9 +3703,9 @@ mod cpu_pipeline {
         let working = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let working = Arc::clone(&working);
-            Arc::new(move || {
+            Arc::new(move |_: Option<&GpuContext>| {
                 if working.load(Ordering::Acquire) {
-                    cpu_draw()()
+                    cpu_draw()(None)
                 } else {
                     Err("no adapter".to_owned())
                 }
@@ -3859,9 +3860,9 @@ mod cpu_pipeline {
         let armed = Arc::new(AtomicBool::new(false));
         let draw: OpenDraw = {
             let armed = Arc::clone(&armed);
-            Arc::new(move || {
+            Arc::new(move |_: Option<&GpuContext>| {
                 let armed = Arc::clone(&armed);
-                let mut inner = (cpu_draw())()?;
+                let mut inner = (cpu_draw())(None)?;
                 let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
                     inner(shot, size, rgba, out)
@@ -4027,7 +4028,7 @@ mod cpu_pipeline {
     /// A draw that fills the program frame with one RGBA colour, so the test can tell
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
-        Arc::new(move || {
+        Arc::new(move |_: Option<&GpuContext>| {
             let draw: DrawFn = Box::new(move |_, size: FrameSize, _, out: &mut Vec<u8>| {
                 out.clear();
                 for _ in 0..size.width() as usize * size.height() as usize {

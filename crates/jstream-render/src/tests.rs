@@ -838,6 +838,63 @@ fn the_cache_frees_after_the_frame_fence() {
     assert_eq!(cache.drain().len(), 1);
 }
 
+/// An import is reused while its version holds and replaced by the next frame's, and
+/// the replaced one, which holds the old frame, waits for the fence like an upload.
+#[test]
+fn the_cache_imports_a_frame_per_version() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let count = Arc::new(AtomicUsize::new(0));
+    let frame_of = |compositor: &Compositor, rgba: [u8; 4]| {
+        let info = VideoFrameInfo {
+            size: FrameSize::new(2, 2).unwrap(),
+            format: PixelFormat::Rgba8,
+            color: ColorInfo {
+                range: jstream_media::ColorRange::Full,
+                ..ColorInfo::default()
+            },
+            pts: MediaTime::zero(Timebase::NANOS),
+        };
+        let texture = srgb_texture(compositor, 2, 2, rgba);
+        GpuFrame::new(texture, info, Arc::new(CountSync(Arc::clone(&count))))
+    };
+    let red = frame_of(&opened.compositor, [255, 0, 0, 255]);
+    let green = frame_of(&opened.compositor, [0, 255, 0, 255]);
+    let mut cache: ResourceCache<&str> = ResourceCache::new();
+    let mut freed = 0;
+    let mut show = |cache: &mut ResourceCache<&str>, version: u64, frame: &GpuFrame| {
+        cache.begin_frame();
+        let image = cache
+            .import(&opened.compositor, &"capture", version, frame)
+            .expect("import");
+        let texture = image.texture().clone();
+        let items = [item(image, Placement::IDENTITY, Crop::NONE, 1.0)];
+        let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &items);
+        freed += cache.end_frame(&opened.compositor).map_or(0, |f| f.len());
+        (texture, snapshot)
+    };
+    let (first, shot) = show(&mut cache, 1, &red);
+    near(&shot, 1, 1, [255, 0, 0, 255], 1);
+    let (again, _) = show(&mut cache, 1, &green);
+    assert_eq!(first, again, "the same version keeps its import");
+    let (next, shot) = show(&mut cache, 2, &green);
+    assert_ne!(first, next);
+    near(&shot, 1, 1, [0, 255, 0, 255], 1);
+    assert_eq!(
+        count.load(Ordering::SeqCst),
+        3,
+        "each submit stages its frame"
+    );
+    opened
+        .compositor
+        .device()
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    freed += cache.reclaim().map_or(0, |f| f.len());
+    assert_eq!((cache.live(), freed), (1, 1), "the old import comes back");
+}
+
 /// An image of equal-width vertical bands, one colour each, `height` rows tall.
 fn bands(
     compositor: &Compositor,

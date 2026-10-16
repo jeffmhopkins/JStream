@@ -123,7 +123,9 @@ state machine. Contents:
   thread's output size (the capture filling it with no scene, the program scaled from
   the canvas, a `display` source showing the capture), the program stage's output size
   following the canvas, captures converted to RGBA8 at their own size (NV12 with its
-  matrix and range) and only on ticks that show them and nested-scene layers reused
+  matrix and range) and only on ticks that show them, a GPU capture composited on the
+  platform context with no CPU conversion and its hold staged on each submit, and
+  nested-scene layers reused
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), the pipeline against the platform fakes
@@ -795,17 +797,25 @@ emits `stopping` and `stopped` as from `active`.
 The render thread reads the platform capture mailbox, composites the program mix of
 the render snapshot (see *Snapshots*) at 30 frames per second, repeats the last
 capture when the mailbox is empty, and reads the composite back as RGBA8 because this
-cut has no GPU encode target. It opens its compositor on a hardware adapter when the
-machine has one, and on the software adapter otherwise (`OpenOptions::hardware`): on
-WARP a 720p program ran at about 10 fps (#433). It draws at the canvas size the collection has when the
-program stage opens, rounded down to even sizes for NV12 (`output_size`), so every
-output encodes at the canvas, not the display (#433); a canvas change while outputs
-run takes effect when the stage next opens. The capture keeps the display's size and
-the compositor scales it. The thread keeps only the newest capture from the mailbox
-and converts it to RGBA8 (RGBA copied, BGRA swizzled, NV12, which Windows' capture
-delivers, converted with its frame's matrix and range) on a tick whose shot shows the
-capture, so a program without a `display` source converts nothing. Each tick first calls `RenderReader::adopt`, which
-compares one pointer with the published snapshot and, when a new one arrived, adopts
+cut has no GPU encode target. When the program stage opens it asks the platform for
+its GPU context (`GpuInterop::open_device`, D3D12 on the media adapter on Windows),
+starts the display capture on it (`Capture::start_on`), and opens the compositor on
+the same device (`Compositor::on_context`). The capture's frames are then textures on
+that device, which the compositor's cache imports by version, so a display reaches
+the composite with no CPU copy or conversion. Without a context (the fakes, a
+platform or driver with no interop) the compositor opens a hardware adapter itself,
+or the software adapter when there is none (`OpenOptions::hardware`): on WARP a 720p
+program ran at about 10 fps (#433). A capture that can't start on the context starts
+on the CPU path, and the compositor stays on the context. It draws at the canvas size
+the collection has when the program stage opens, rounded down to even sizes for NV12
+(`output_size`), so every output encodes at the canvas, not the display (#433); a
+canvas change while outputs run takes effect when the stage next opens. The capture
+keeps the display's size and the compositor scales it. The thread keeps only the
+newest capture from the mailbox and, on the CPU path, converts it to RGBA8 (RGBA
+copied, BGRA swizzled, NV12, which Windows' CPU capture delivers, converted with its
+frame's matrix and range) on a tick whose shot shows the capture, so a program
+without a `display` source converts nothing. Each tick first calls
+`RenderReader::adopt`, which compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
 the snapshot it held to the program stage's `jstream-collector` thread. The GPU images the
 cache frees go there too, and so does the input of an encoder session that has
@@ -1030,8 +1040,8 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one
-  captured display, a CPU readback into the encoder, and the platform fakes in the
-  test. Other sources show frames the host injects with `set_source_frame`.
+  captured display (on the GPU when the platform has interop), a CPU readback into the
+  encoder, and the platform fakes in the test. Other sources show frames the host injects with `set_source_frame`.
 
 <a id="runtime"></a>
 ## Runtime
@@ -1044,7 +1054,10 @@ The output pipeline (`src/runtime/`) is the part of
 [ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading) that is built.
 `output.start`, once the host has injected platform backends and a publish target
 (a recording output or a virtual camera needs none), starts it and emits `output.state_changed` from the
-control thread. The render thread calls the platform capture mailbox and, on each
+control thread. The stage opens the platform's GPU context when there is one and
+starts the capture and the compositor on it, so a display stays on the GPU until the
+readback (see the render thread in Design). The render thread calls the platform
+capture mailbox and, on each
 1/30 s tick, composites the program mix from the render snapshot (see *Snapshots* in
 Design) at the canvas size: the program scene and the scenes it nests, with every
 `display` source that has no stored frame showing the captured display. With no scene

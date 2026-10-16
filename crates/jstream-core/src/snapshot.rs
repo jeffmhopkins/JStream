@@ -805,13 +805,23 @@ impl Shot {
 }
 
 /// The pipeline's latest captured display, which `display` sources show on the render
-/// thread: tightly packed straight sRGB RGBA8 at `size`. `version` changes with every new
-/// frame, so an unchanged capture is not uploaded again.
+/// thread, at `size`. `version` changes with every new frame, so an unchanged capture is
+/// not uploaded or imported again.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CaptureFrame<'a> {
     pub(crate) version: u64,
     pub(crate) size: FrameSize,
-    pub(crate) rgba: &'a [u8],
+    pub(crate) pixels: CapturePixels<'a>,
+}
+
+/// Where a [`CaptureFrame`]'s pixels are.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum CapturePixels<'a> {
+    /// Tightly packed straight sRGB RGBA8, uploaded when the version changes.
+    Rgba(&'a [u8]),
+    /// A platform texture on the compositor's device (the GPU capture path), sampled
+    /// where it is, with no CPU copy.
+    Gpu(&'a jstream_platform::GpuFrame),
 }
 
 /// Draws the program mix of `shot` at `output`, over opaque black, between the caller's
@@ -850,14 +860,19 @@ pub(crate) fn compose(
     }
     let capture = match capture {
         Some(capture) if shot.shows_capture() => {
-            cache.upload(
-                compositor,
-                &GpuKey::Capture,
-                capture.version,
-                capture.size.width(),
-                capture.size.height(),
-                capture.rgba,
-            )?;
+            match capture.pixels {
+                CapturePixels::Rgba(rgba) => cache.upload(
+                    compositor,
+                    &GpuKey::Capture,
+                    capture.version,
+                    capture.size.width(),
+                    capture.size.height(),
+                    rgba,
+                )?,
+                CapturePixels::Gpu(frame) => {
+                    cache.import(compositor, &GpuKey::Capture, capture.version, frame)?
+                }
+            };
             true
         }
         _ => false,
@@ -1110,9 +1125,9 @@ pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{
-        CaptureFrame, FIRST_RETRY, Frame, GpuKey, MAX_NESTING, MAX_RETRY, OpenBackoff, Placed,
-        Shot, SourceFrameError, SourceRef, base64, compose, decode_base64, decode_png, draw,
-        encode_png, fit, is_no_adapter, schedule,
+        CaptureFrame, CapturePixels, FIRST_RETRY, Frame, GpuKey, MAX_NESTING, MAX_RETRY,
+        OpenBackoff, Placed, Shot, SourceFrameError, SourceRef, base64, compose, decode_base64,
+        decode_png, draw, encode_png, fit, is_no_adapter, schedule,
     };
     use jstream_media::FrameSize;
     use jstream_protocol::{Canvas, ProtocolError, QueryResult, Rev, SceneId, SourceId};
@@ -1436,7 +1451,7 @@ pub(crate) mod tests {
         let capture = CaptureFrame {
             version: 1,
             size,
-            rgba: &blue,
+            pixels: CapturePixels::Rgba(&blue),
         };
 
         let empty = Shot::default();

@@ -135,7 +135,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:112f148ae88f982d" }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:2a2c11deb9493655", by = "agent:claude", note = "Re-read: own device is hardware first with software fallback, matching OpenOptions::default" }
+stamp = { hash = "b3:761961127e607e14", by = "agent:claude", note = "Re-read one-scene compositor paragraph: added program stage on the context with Capture::start_on, import by version, PRESENT hand-back, D3D12 first on Windows; cache list names imports" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -153,13 +153,13 @@ stamp = { hash = "b3:1f10a420e9f6a9bc" }
 stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:2762181cde824085", by = "agent:claude", note = "Re-read: own device is software first except the engine; updated to hardware first for the engine's threads" }
+stamp = { hash = "b3:8c909bec1ecb9353", by = "agent:claude", note = "Re-read one-scene compositor paragraph: added program stage on the context with Capture::start_on, import by version, PRESENT hand-back, D3D12 first on Windows; cache list names imports" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:84ad0a8f8034bc13", by = "agent:claude", note = "Re-read: own device is software first except the engine; updated to hardware first for the engine's threads" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:071eeba73136670c" }
+stamp = { hash = "b3:5a98c55c7663b5fb", by = "agent:claude", note = "Re-read one-scene compositor paragraph: added program stage on the context with Capture::start_on, import by version, PRESENT hand-back, D3D12 first on Windows; cache list names imports" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:5641b05dca77952a" }
@@ -168,13 +168,13 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:bb5175d8f36e082d" }
+stamp = { hash = "b3:c3d904e063066e34", by = "agent:claude", note = "Re-read one-scene compositor paragraph: added program stage on the context with Capture::start_on, import by version, PRESENT hand-back, D3D12 first on Windows; cache list names imports" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:00e25d99d39c3bfc", by = "agent:claude", note = "Re-read: own device is software first except the engine; updated to hardware first for the engine's threads" }
+stamp = { hash = "b3:5c202dde14c4b11a", by = "agent:claude", note = "Re-read one-scene compositor paragraph: added program stage on the context with Capture::start_on, import by version, PRESENT hand-back, D3D12 first on Windows; cache list names imports" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:0edf4c378e3b8335" }
@@ -192,7 +192,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "Re-read: own device is software first except the engine; updated to hardware first for the engine's threads" }
+stamp = { hash = "b3:6a03f3281bbc8f28", by = "agent:claude", note = "Re-read one-scene compositor paragraph: added program stage on the context with Capture::start_on, import by version, PRESENT hand-back, D3D12 first on Windows; cache list names imports" }
 
 ["ARCH#mcp"."body"]
 stamp = { hash = "b3:9ca86438d4d9c457", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
@@ -882,7 +882,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:4e3e5143a4067a68", by = "agent:claude", note = "B1: vcam paragraph now names both fit cases (canvas changed after stage open, or odd edge rounded down by output_size)" }
+stamp = { hash = "b3:c0df291e318e08fc", by = "agent:claude", note = "Re-read render thread paragraph: rewritten for open_device + Capture::start_on + Compositor::on_context, cache import by version, CPU fallbacks; matches open_capture/start_capture/gpu_draw/Frames::convert_capture" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
@@ -945,7 +945,7 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:a165614228aedf88", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:fd636bda3fd6e4e7", by = "agent:claude", note = "Re-read after dropping a duplicate compositor-open log line in gpu_draw (Gpu::log_open already logs adapter and source); text unchanged and holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -963,13 +963,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:211c895e1ad53b28", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:9c92cd7cecb8662a", by = "agent:claude", note = "Re-read render thread paragraph: rewritten for open_device + Capture::start_on + Compositor::on_context, cache import by version, CPU fallbacks; matches open_capture/start_capture/gpu_draw/Frames::convert_capture" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:552e5c6151ade75e", by = "agent:claude", note = "Re-read Design: snapshots paragraph, render thread sizing at the canvas with lazy RGBA/BGRA/NV12 capture conversion, vcam fit only after a canvas change (#433)" }
+stamp = { hash = "b3:935c57f21f2660aa", by = "agent:claude", note = "Re-read render thread paragraph: rewritten for open_device + Capture::start_on + Compositor::on_context, cache import by version, CPU fallbacks; matches open_capture/start_capture/gpu_draw/Frames::convert_capture" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -987,7 +987,7 @@ stamp = { hash = "b3:c9688aabcb558c82" }
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:e694bb9fbdaed47b", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:c7eb74cbdd816051", by = "agent:claude", note = "Re-read Contents/Tests bullets: added the GPU capture composited on the platform context with staged hold; cut description now says the captured display is on the GPU with interop; matches pipeline.rs/snapshot.rs" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -1035,7 +1035,7 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:a165614228aedf88", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:fd636bda3fd6e4e7", by = "agent:claude", note = "Re-read after dropping a duplicate compositor-open log line in gpu_draw (Gpu::log_open already logs adapter and source); text unchanged and holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1053,13 +1053,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:211c895e1ad53b28", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:9c92cd7cecb8662a", by = "agent:claude", note = "Re-read Contents/Tests bullets: added the GPU capture composited on the platform context with staged hold; cut description now says the captured display is on the GPU with interop; matches pipeline.rs/snapshot.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:552e5c6151ade75e", by = "agent:claude", note = "Re-read Purpose: tests list now covers the output size following the canvas and capture conversion (#433)" }
+stamp = { hash = "b3:935c57f21f2660aa", by = "agent:claude", note = "Re-read Contents/Tests bullets: added the GPU capture composited on the platform context with staged hold; cut description now says the captured display is on the GPU with interop; matches pipeline.rs/snapshot.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
@@ -1083,7 +1083,7 @@ stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:993e780364d6f4d3" }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:934e43398b16a688", by = "agent:claude", note = "Re-read Runtime: render thread composites at the canvas size and scales the capture (#433)" }
+stamp = { hash = "b3:bf6e5a6da063ad9c", by = "agent:claude", note = "Re-read Runtime: added that the stage opens the platform GPU context and starts capture and compositor on it; rest unchanged by this diff" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
@@ -1095,7 +1095,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:a165614228aedf88", by = "agent:claude", note = "Re-read Runtime: render thread composites at the canvas size and scales the capture (#433)" }
+stamp = { hash = "b3:fd636bda3fd6e4e7", by = "agent:claude", note = "Re-read after dropping a duplicate compositor-open log line in gpu_draw (Gpu::log_open already logs adapter and source); text unchanged and holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1113,7 +1113,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:ec76a643a1a5e0b1", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#247): main's Startup/Listening text now names --ui-dir and the UI directory; P1's data-directory bullet (jstream-platform paths, portable marker), Dependencies entry and open question 5 are unaffected and still match logs.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:4e3e5143a4067a68", by = "agent:claude", note = "Re-read after core vcam wording (B1): daemon design names no output or camera size; holds" }
+stamp = { hash = "b3:c0df291e318e08fc", by = "agent:claude", note = "Re-read Live on Windows: backends list unchanged, still opens no device at creation; the GPU context is opened by the program stage at output.start, which this keeps true" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
@@ -1680,13 +1680,13 @@ stamp = { hash = "b3:4a6d6e6f01f968f4" }
 stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 
 ["CRATE-jstream-platform#gpu-frames"."body"]
-stamp = { hash = "b3:8ecd6b308600ee0b", by = "agent:claude", note = "Re-read: own-device open is hardware first with software fallback" }
+stamp = { hash = "b3:924126ba6684afbe", by = "agent:claude", note = "Re-read: render composites on the context and the program stage now starts capture via Capture::start_on; FrameSync PRESENT contract now honoured by render; edited" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
 stamp = { hash = "b3:70bf626d4367afd8", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main: stale only via ARCH#crate-map (main's jstream-effects row, P1's jstream-platform paths row); GPU frame design text untouched on both sides; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:2a2c11deb9493655", by = "agent:claude", note = "Re-read: own-device open is hardware first with software fallback" }
+stamp = { hash = "b3:761961127e607e14", by = "agent:claude", note = "Re-read: render composites on the context and the program stage now starts capture via Capture::start_on; FrameSync PRESENT contract now honoured by render; edited" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:9074e32b08b81d5b" }
@@ -1695,7 +1695,7 @@ stamp = { hash = "b3:9074e32b08b81d5b" }
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
+stamp = { hash = "b3:49f1c3c635de1f9d", by = "agent:claude", note = "Re-read Capture bullet and Not yet: Capture::start_on default refuses Unsupported; engine compositor now consumes GPU frames, encoders/vcam still don't" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:e204cadb57ccceae" }
@@ -1728,7 +1728,7 @@ stamp = { hash = "b3:f0a2d34cd26f9151" }
 stamp = { hash = "b3:4c383cdea1e1ca60" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/capture.rs"]
-stamp = { hash = "b3:9d77cc24947fd900" }
+stamp = { hash = "b3:58c61d36dded02b9", by = "agent:claude", note = "Re-read after a rustdoc link fix in Capture::start_on's doc; Capture bullet still matches" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/clock.rs"]
 stamp = { hash = "b3:34c4d1c416af47c3" }
@@ -1770,10 +1770,10 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:54752a7a73020412", by = "agent:claude", note = "Re-read Purpose and Tests against #424: H.264 CPU path now takes NV12, RGBA or BGRA and converts RGB with the capture converter (BT.709 limited, left-sited); test lists updated" }
+stamp = { hash = "b3:c1a03a701fac78ea", by = "agent:claude", note = "Re-read WgcCapture bullets: start_on starts a capture on the GPU path whichever constructor built the backend (start_with shared by start/start_on); InvalidState for a foreign context via CaptureGpu::of" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via jstream-platform#purpose's new Data folder bullet; this crate's portable-install mentions (key store, Moved registration) agree with paths' marker semantics; holds" }
+stamp = { hash = "b3:49f1c3c635de1f9d", by = "agent:claude", note = "Re-read WgcCapture bullets: start_on starts a capture on the GPU path whichever constructor built the backend (start_with shared by start/start_on); InvalidState for a foreign context via CaptureGpu::of" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:dfa8602587609b6c" }
@@ -1830,7 +1830,7 @@ stamp = { hash = "b3:bc308dcc158e28d4" }
 stamp = { hash = "b3:2843d6ac31fa1d3a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/wgc.rs"]
-stamp = { hash = "b3:2946612c32823272" }
+stamp = { hash = "b3:bb2c5a696b57c7ee", by = "agent:claude", note = "Re-read WgcCapture bullets: start_on starts a capture on the GPU path whichever constructor built the backend (start_with shared by start/start_on); InvalidState for a foreign context via CaptureGpu::of" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/clock.rs"]
 stamp = { hash = "b3:bcbc90e406de91b4" }
@@ -2073,7 +2073,7 @@ stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c594f42e1b065295" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:d1abc88b2167579d", by = "agent:claude", note = "Re-read adapter order: headless = software first, hardware (default) = GPU then software; edited" }
+stamp = { hash = "b3:5617c4a9780820d9", by = "agent:claude", note = "Re-read Passes/submit and Device selection: PRESENT transition for staged holds now recorded; D3D12 hardware first on Windows then the existing order; edited both" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -2082,7 +2082,7 @@ stamp = { hash = "b3:24c0e2f735f7e770" }
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:071eeba73136670c" }
+stamp = { hash = "b3:5a98c55c7663b5fb", by = "agent:claude", note = "Re-read Passes/submit and Device selection: PRESENT transition for staged holds now recorded; D3D12 hardware first on Windows then the existing order; edited both" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:5641b05dca77952a" }
@@ -2091,13 +2091,13 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:bb5175d8f36e082d" }
+stamp = { hash = "b3:c3d904e063066e34", by = "agent:claude", note = "Re-read Passes/submit and Device selection: PRESENT transition for staged holds now recorded; D3D12 hardware first on Windows then the existing order; edited both" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:00e25d99d39c3bfc", by = "agent:claude", note = "Re-read adapter order: headless = software first, hardware (default) = GPU then software; edited" }
+stamp = { hash = "b3:5c202dde14c4b11a", by = "agent:claude", note = "Re-read Passes/submit and Device selection: PRESENT transition for staged holds now recorded; D3D12 hardware first on Windows then the existing order; edited both" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:0edf4c378e3b8335" }
@@ -2115,19 +2115,19 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "Re-read adapter order: headless = software first, hardware (default) = GPU then software; edited" }
+stamp = { hash = "b3:6a03f3281bbc8f28", by = "agent:claude", note = "Re-read Passes/submit and Device selection: PRESENT transition for staged holds now recorded; D3D12 hardware first on Windows then the existing order; edited both" }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:eb2f076778f0cb9f", by = "agent:claude", note = "Re-read: Compositor::open is hardware first by default with software fallback; edited" }
+stamp = { hash = "b3:af589a9f377f21ed", by = "agent:claude", note = "Re-read: ResourceCache::import by version, render/render_into end the submit with a PRESENT transition for staged textures, D3D12-first hardware pick on Windows; edited" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
-stamp = { hash = "b3:8ecd6b308600ee0b", by = "agent:claude", note = "Re-read after ARCH gpu-pipeline wording fix; holds" }
+stamp = { hash = "b3:924126ba6684afbe", by = "agent:claude", note = "Re-read: ResourceCache::import by version, render/render_into end the submit with a PRESENT transition for staged textures, D3D12-first hardware pick on Windows; edited" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-render"]
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:2a2c11deb9493655", by = "agent:claude", note = "Re-read after ARCH gpu-pipeline wording fix; holds" }
+stamp = { hash = "b3:761961127e607e14", by = "agent:claude", note = "Re-read: ResourceCache::import by version, render/render_into end the submit with a PRESENT transition for staged textures, D3D12-first hardware pick on Windows; edited" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2139,7 +2139,7 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Cargo.toml only adds the criterion dev-dependency and the composite bench target" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:071eeba73136670c" }
+stamp = { hash = "b3:5a98c55c7663b5fb", by = "agent:claude", note = "Re-read: ResourceCache::import by version, render/render_into end the submit with a PRESENT transition for staged textures, D3D12-first hardware pick on Windows; edited" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:5641b05dca77952a" }
@@ -2148,13 +2148,13 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:bb5175d8f36e082d" }
+stamp = { hash = "b3:c3d904e063066e34", by = "agent:claude", note = "Re-read: ResourceCache::import by version, render/render_into end the submit with a PRESENT transition for staged textures, D3D12-first hardware pick on Windows; edited" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/gpu.rs"]
-stamp = { hash = "b3:00e25d99d39c3bfc", by = "agent:claude", note = "Re-read: Compositor::open is hardware first by default with software fallback; edited" }
+stamp = { hash = "b3:5c202dde14c4b11a", by = "agent:claude", note = "Re-read: ResourceCache::import by version, render/render_into end the submit with a PRESENT transition for staged textures, D3D12-first hardware pick on Windows; edited" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/image.rs"]
 stamp = { hash = "b3:0edf4c378e3b8335" }
@@ -2172,10 +2172,10 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "Re-read: Compositor::open is hardware first by default with software fallback; edited" }
+stamp = { hash = "b3:6a03f3281bbc8f28", by = "agent:claude", note = "Re-read: ResourceCache::import by version, render/render_into end the submit with a PRESENT transition for staged textures, D3D12-first hardware pick on Windows; edited" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:d8d1968b44b1c7f3", by = "agent:claude", note = "Re-read: tests and benches open hardware first, CI falls back to lavapipe/WARP; edited" }
+stamp = { hash = "b3:86253672e3146a1b", by = "agent:claude", note = "Re-read What is checked: added the cache import test (reuse per version, replace, stage per submit, fence return, PRESENT transition on lavapipe)" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
@@ -2187,7 +2187,7 @@ stamp = { hash = "b3:7db1a4e21a6cee80" }
 stamp = { hash = "b3:e2b28a2df72d9e17" }
 
 ["CRATE-jstream-render#testing"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:f121b882b503dcfd", by = "agent:claude", note = "Re-read: tests and benches open hardware first, CI falls back to lavapipe/WARP; edited" }
+stamp = { hash = "b3:6a03f3281bbc8f28", by = "agent:claude", note = "Re-read What is checked: added the cache import test (reuse per version, replace, stage per submit, fence return, PRESENT transition on lavapipe)" }
 
 ["CRATE-jstream-server#design"."body"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
@@ -2616,7 +2616,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via platform#purpose (Audio and FakeAudioIo lines); Secret and OAuthTokenStore text unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via jstream-platform#purpose's new paths/data-folder bullet; the token store seam it describes is unchanged; holds" }
+stamp = { hash = "b3:49f1c3c635de1f9d", by = "agent:claude", note = "Re-read: depends on jstream-platform purpose only for its dependency boundary; the Capture::start_on addition doesn't touch it" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:e3b27ea549009815" }

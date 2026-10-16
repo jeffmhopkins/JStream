@@ -10,13 +10,14 @@ use crate::compositor::Compositor;
 use crate::error::RenderError;
 use crate::image::Image;
 
-/// The images one compositor draws every frame: uploads of source frames, and the
-/// layers nested scenes are composited into. Each is keyed by an ID of the caller's
-/// (a source, a scene at a depth), so a frame that shows the same thing again reuses
-/// the texture instead of allocating one.
+/// The images one compositor draws every frame: uploads of source frames, imports of
+/// platform frames already on the GPU, and the layers nested scenes are composited
+/// into. Each is keyed by an ID of the caller's (a source, a scene at a depth), so a
+/// frame that shows the same thing again reuses the texture instead of allocating one.
 ///
-/// A frame runs [`Self::begin_frame`], then [`Self::upload`] or [`Self::layer`] for
-/// everything it draws, then submits its passes and calls [`Self::end_frame`]. An entry
+/// A frame runs [`Self::begin_frame`], then [`Self::upload`], [`Self::import`] or
+/// [`Self::layer`] for everything it draws, then submits its passes and calls
+/// [`Self::end_frame`]. An entry
 /// the frame did not touch is no longer referenced, so it is retired: kept until the
 /// GPU has finished every frame that used it (the frame fence, a
 /// `Queue::on_submitted_work_done` callback), then handed back by `end_frame` as
@@ -111,6 +112,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
         let frame = self.frame;
         let reuse = self.live.get(key).is_some_and(|entry| {
             entry.image.target().is_none()
+                && entry.image.sync().is_none()
                 && entry.image.width() == width
                 && entry.image.height() == height
         });
@@ -124,6 +126,36 @@ impl<K: Ord + Clone> ResourceCache<K> {
             return Ok(&entry.image);
         }
         let image = compositor.upload_rgba8(width, height, rgba)?;
+        Ok(self.replace(key, image, version))
+    }
+
+    /// The image for `key` sampling `frame`, a platform texture on this compositor's
+    /// device ([`Compositor::import_frame`]), and marks it used this frame. An entry
+    /// that imported the same `version` is reused; a new version imports the new frame,
+    /// and the old image, which holds the old frame, is retired like any other, so the
+    /// platform gets that texture back only after the GPU finished the frames that
+    /// sampled it.
+    ///
+    /// # Errors
+    /// As for [`Compositor::import_frame`]. The entry is left as it was.
+    pub fn import(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        version: u64,
+        frame: &jstream_platform::GpuFrame,
+    ) -> Result<&Image, RenderError> {
+        let frame_no = self.frame;
+        let reuse = self
+            .live
+            .get(key)
+            .is_some_and(|entry| entry.image.sync().is_some() && entry.version == version);
+        if reuse {
+            let entry = self.live.get_mut(key).ok_or_else(|| missing("an import"))?;
+            entry.used = frame_no;
+            return Ok(&entry.image);
+        }
+        let image = compositor.import_frame(frame)?;
         Ok(self.replace(key, image, version))
     }
 

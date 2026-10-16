@@ -53,10 +53,21 @@ impl Gpu {
         // Debug builds would otherwise require the Khronos validation layer, which CI
         // does not install. `with_env` still honours `WGPU_VALIDATION` and the other
         // `WGPU_*` flags when a developer sets them.
-        let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
-        desc.flags = wgpu::InstanceFlags::empty().with_env();
-        let instance = wgpu::Instance::new(desc);
-        let adapter = pick_adapter(&instance, options.software)?;
+        let instance = |backends: wgpu::Backends| {
+            let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+            desc.flags = wgpu::InstanceFlags::empty().with_env();
+            desc.backends = backends;
+            wgpu::Instance::new(desc)
+        };
+        // On Windows a hardware adapter is D3D12 first: the platform's capture, interop
+        // and encoders are D3D11/D3D12, and wgpu's own pick there was Vulkan (#433).
+        if cfg!(windows)
+            && !options.software
+            && let Ok(adapter) = request(&instance(wgpu::Backends::DX12), false)
+        {
+            return Self::from_adapter(adapter);
+        }
+        let adapter = pick_adapter(&instance(wgpu::Backends::all()), options.software)?;
         Self::from_adapter(adapter)
     }
 

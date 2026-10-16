@@ -749,10 +749,14 @@ src-over. The composite pass writes premultiplied linear light into `Rgba16Float
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter
-first; the software adapter is the fallback, so a machine with no GPU still runs. A nested scene is composited into an `Rgba16Float` layer that stays on the GPU
+first (D3D12 first on Windows); the software adapter is the fallback, so a machine with
+no GPU still runs. The engine's program stage opens that context, starts the display
+capture on it (`Capture::start_on`) and composites there, so steps 1 to 3 run with no
+CPU copy; a `GpuFrame` source is imported by version, staged on each submit that
+samples it, and handed back in `PRESENT` at the end of that submit. A nested scene is composited into an `Rgba16Float` layer that stays on the GPU
 and is placed in its parent: `render_image` makes a new one, and `render_into` redraws
 a layer the caller keeps, so a frame allocates no texture for it. The caller walks the
-nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads and layers from
+nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads, imports and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see
 [Threads › State to RT threads](#threading)). Still outside this crate: the render

@@ -120,6 +120,25 @@ impl Capture for WgcCapture {
     }
 
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        self.start_with(target, self.gpu.as_ref())
+    }
+
+    /// The GPU path on `context`, whichever path this backend was made for.
+    fn start_on(
+        &self,
+        target: &CaptureTarget,
+        context: &GpuContext,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        self.start_with(target, Some(&CaptureGpu::of(context)?))
+    }
+}
+
+impl WgcCapture {
+    fn start_with(
+        &self,
+        target: &CaptureTarget,
+        gpu: Option<&CaptureGpu>,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
         hold_mta_for_the_process()?;
         let mta = MtaUsage::new()?;
         let resolved = resolve(target)?;
@@ -128,11 +147,7 @@ impl Capture for WgcCapture {
                 what: "Windows.Graphics.Capture on this system".into(),
             });
         }
-        Ok(Box::new(WgcStream::start(
-            resolved,
-            self.gpu.as_ref(),
-            mta,
-        )?))
+        Ok(Box::new(WgcStream::start(resolved, gpu, mta)?))
     }
 }
 

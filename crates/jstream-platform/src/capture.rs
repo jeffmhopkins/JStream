@@ -46,6 +46,27 @@ pub trait Capture: Send + Sync {
     /// [`PlatformError::Unsupported`] when the backend can't capture that kind of
     /// target, and [`PlatformError::Os`] when the OS refuses.
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError>;
+
+    /// Starts capturing `target` on the GPU path: frames arrive as
+    /// [`VideoSurface::Gpu`] textures on `context`'s device,
+    /// which the platform's [`GpuInterop`](crate::GpuInterop) opened, so a compositor on
+    /// that device samples them without a CPU copy. The default refuses, for a backend
+    /// with no GPU path; the caller then starts a CPU capture with
+    /// [`start`](Self::start).
+    ///
+    /// # Errors
+    /// As for [`start`](Self::start), and [`PlatformError::Unsupported`] or
+    /// [`PlatformError::InvalidState`] when the backend can't capture onto `context`.
+    fn start_on(
+        &self,
+        target: &CaptureTarget,
+        context: &crate::GpuContext,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        let _ = (target, context);
+        Err(PlatformError::Unsupported {
+            what: "capture onto a GPU context".into(),
+        })
+    }
 }
 
 /// One running capture, read by the render thread.
