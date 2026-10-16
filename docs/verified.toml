@@ -2427,7 +2427,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:59d712432571a13c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: store.rs's Collection now keeps state.get's buses and properties.rs adds a ParamType::Bus reference select listing them. Edited the properties-form bullet (reference select of scenes, sources or buses, None for null = the program mix for a scope's audio) and the bus strip delete note (the engine refuses deleting a bus a waveform or spectrum draws; the mixer shows the reason and keeps the strip). The control design dep only gained the mock's bus.delete refusal, consistent with that." }
+stamp = { hash = "b3:c731a8e169a886ed", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Design against mixer.rs (BusStrip delete reads delete.plan with DeleteTarget::Bus, confirms with the plan_summary detail, applies the plan expecting its rev) and confirm.rs (doc comment only); rewrote the Mixer bullet that said the engine refuses deleting a drawn bus, and the Native builds bullet still holds. Tests: new a_drawn_bus_is_deleted_through_its_plan (mixer.rs) against MockEngine; cargo test -p jstream-ui --all-features passes" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:b2b0815752c7d7b0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: store.rs adds Collection.buses and properties.rs a bus picker; this section's design choices (Leptos, session, store, panels) are unchanged by them, and the control design dep only gained the mock's bus.delete refusal, which the UI shows as any refused edit. Holds." }
@@ -2460,10 +2460,10 @@ stamp = { hash = "b3:7f8188e6129a36ac", by = "agent:u3a-builder", note = "Re-rea
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/confirm.rs"]
-stamp = { hash = "b3:a465bc7057b65d15", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Design against mixer.rs (BusStrip delete reads delete.plan with DeleteTarget::Bus, confirms with the plan_summary detail, applies the plan expecting its rev) and confirm.rs (doc comment only); rewrote the Mixer bullet that said the engine refuses deleting a drawn bus, and the Native builds bullet still holds. Tests: new a_drawn_bus_is_deleted_through_its_plan (mixer.rs) against MockEngine; cargo test -p jstream-ui --all-features passes" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mixer.rs"]
-stamp = { hash = "b3:f1055b0baf7ed4b6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: Mixer bullet now names the protocol's MAX_BUSES for the Add bus limit; rest re-read" }
+stamp = { hash = "b3:4da8abe1fe6708f7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Design against mixer.rs (BusStrip delete reads delete.plan with DeleteTarget::Bus, confirms with the plan_summary detail, applies the plan expecting its rev) and confirm.rs (doc comment only); rewrote the Mixer bullet that said the engine refuses deleting a drawn bus, and the Native builds bullet still holds. Tests: new a_drawn_bus_is_deleted_through_its_plan (mixer.rs) against MockEngine; cargo test -p jstream-ui --all-features passes" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mod.rs"]
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
@@ -2490,7 +2490,7 @@ stamp = { hash = "b3:ddc503de3b1c1bfc", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:4dcd7fc3a18b6bdc", by = "agent:claude", note = "Re-read after merging wave/m2: the Mixer bullet notes it keeps its own copy rather than Studio's, Native builds names panels/mixer.rs, and the wave's store, selection and routing bullets are unaffected" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:646f54d6d77b149e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: store.rs's Collection now keeps state.get's buses, and properties.rs's form gains a bus reference select (ParamType::Bus) listing them. Edited the Store bullet, the properties-form bullet (reference select of scenes, sources or buses) and the bus strip delete note (refused while a waveform or spectrum draws the bus, reason shown by the mixer)." }
+stamp = { hash = "b3:c486914c40ae917b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Purpose against mixer.rs (bus delete now reads delete.plan via plan_bus_delete/apply_plan and shows Confirm) and confirm.rs (doc comment names the mixer's bus strips); updated the Panels line so confirm.rs is shared with the mixer. Tests: new a_drawn_bus_is_deleted_through_its_plan; cargo test -p jstream-ui --all-features passes" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -2520,10 +2520,10 @@ stamp = { hash = "b3:7f8188e6129a36ac", by = "agent:u3a-builder", note = "Re-rea
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/confirm.rs"]
-stamp = { hash = "b3:a465bc7057b65d15", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Purpose against mixer.rs (bus delete now reads delete.plan via plan_bus_delete/apply_plan and shows Confirm) and confirm.rs (doc comment names the mixer's bus strips); updated the Panels line so confirm.rs is shared with the mixer. Tests: new a_drawn_bus_is_deleted_through_its_plan; cargo test -p jstream-ui --all-features passes" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mixer.rs"]
-stamp = { hash = "b3:f1055b0baf7ed4b6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; mixer uses the protocol's MAX_BUSES, contents unchanged" }
+stamp = { hash = "b3:4da8abe1fe6708f7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Purpose against mixer.rs (bus delete now reads delete.plan via plan_bus_delete/apply_plan and shows Confirm) and confirm.rs (doc comment names the mixer's bus strips); updated the Panels line so confirm.rs is shared with the mixer. Tests: new a_drawn_bus_is_deleted_through_its_plan; cargo test -p jstream-ui --all-features passes" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mod.rs"]
 stamp = { hash = "b3:cd083cfe56f006fe", by = "agent:claude", note = "Re-read after merging wave/m2: the Panels bullet keeps the wave's list (store, scenes, sources, properties, confirm) and adds mixer.rs" }

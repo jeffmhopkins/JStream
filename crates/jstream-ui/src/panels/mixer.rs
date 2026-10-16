@@ -6,14 +6,19 @@
 //! it is let go (or on each key press), so a drag is one undo step. Hearing the fader
 //! while dragging needs live values (ADR-0032), which the protocol doesn't carry yet.
 //!
+//! Deleting a bus reads `delete.plan` first, as deleting a scene or source does, so the
+//! strip shows which `waveform` or `spectrum` settings drawing the bus it clears.
+//!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0028-audio-model-v2.md
 
 use crate::app::SessionContext;
+use crate::panels::confirm::{Confirm, Pending};
+use crate::store::plan_summary;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
-    Action, AudioFollow, Batch, BusId, BusInfo, BusMeter, Call, CallResult, Edit, Event, Finite32,
-    Loudness, MAX_BUSES, MAX_GAIN_DB, MIN_GAIN_DB, Query, QueryResult, Rev, SendInfo, SourceAudio,
-    SourceId, SourceKind, SourceMeter, gain_db_problem,
+    Action, AudioFollow, Batch, BusId, BusInfo, BusMeter, Call, CallResult, DeleteTarget, Edit,
+    Event, Finite32, Loudness, MAX_BUSES, MAX_GAIN_DB, MIN_GAIN_DB, Query, QueryResult, Rev,
+    SendInfo, SourceAudio, SourceId, SourceKind, SourceMeter, gain_db_problem,
 };
 use jstream_control::{Control, ControlError};
 use leptos::prelude::*;
@@ -152,6 +157,52 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
 pub async fn edit(control: &dyn Control, edit: Edit) -> Result<(), String> {
     control
         .call(Call::Batch(Batch::single(edit)))
+        .await
+        .map(drop)
+        .map_err(|error| describe(&error))
+}
+
+/// Reads the `delete.plan` for the bus `bus_id`, shown as `name`, as the confirmation
+/// asks it: the plan clears the settings that draw the bus, then deletes it.
+pub async fn plan_bus_delete(
+    control: &dyn Control,
+    bus_id: BusId,
+    name: &str,
+) -> Result<Pending, String> {
+    let call = Call::Query {
+        query: Query::DeletePlan {
+            target: DeleteTarget::Bus { bus_id },
+        },
+    };
+    let response = control.call(call).await.map_err(|error| describe(&error))?;
+    match response.result {
+        CallResult::Query {
+            result: QueryResult::DeletePlan { rev, edits },
+        } => Ok(Pending {
+            question: format!("Delete bus “{name}”?"),
+            detail: plan_summary(&edits),
+            rev,
+            edits,
+        }),
+        CallResult::Query { result } => Err(format!(
+            "the engine answered `delete.plan` with `{}`",
+            result.name()
+        )),
+        _ => Err("the engine answered a query with something else".into()),
+    }
+}
+
+/// Sends a confirmed plan as one batch, expecting the revision it was made at, so the
+/// engine refuses it if the state changed in between.
+pub async fn apply_plan(control: &dyn Control, plan: Pending) -> Result<(), String> {
+    let batch = Batch {
+        edits: plan.edits,
+        expected_rev: None,
+        idempotency_key: None,
+    }
+    .expecting(plan.rev);
+    control
+        .call(Call::Batch(batch))
         .await
         .map(drop)
         .map_err(|error| describe(&error))
@@ -970,12 +1021,41 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> impl IntoView {
             s.patch_bus(&patched, |b| b.name = renamed);
         });
     };
-    let delete = move |_| {
+    let pending = RwSignal::new(None::<Pending>);
+    let ask_delete = move |_| {
+        let Some(session) = panel.session.get() else {
+            return;
+        };
         let bus_id = id.get_value();
-        let patched = bus_id.clone();
-        panel.apply(Edit::BusDelete { bus_id }, move |s| {
-            s.buses.retain(|b| b.bus_id != patched);
-            s.sends.retain(|send| send.bus_id != patched);
+        let shown = bus.with_untracked(|b| b.as_ref().map(|b| b.name.clone()));
+        let name = shown.unwrap_or_else(|| bus_id.to_string());
+        spawn_local(async move {
+            match plan_bus_delete(&*session.control, bus_id, &name).await {
+                Ok(plan) => {
+                    pending.try_set(Some(plan));
+                }
+                Err(problem) => {
+                    panel.problem.try_set(Some(problem));
+                }
+            }
+        });
+    };
+    let confirm_delete = move |plan: Pending| {
+        let Some(session) = panel.session.get() else {
+            return;
+        };
+        let deleted = id.get_value();
+        spawn_local(async move {
+            let outcome = apply_plan(&*session.control, plan).await;
+            if outcome.is_ok() {
+                panel.snapshot.try_update(|snapshot| {
+                    if let Some(s) = snapshot.as_mut() {
+                        s.buses.retain(|b| b.bus_id != deleted);
+                        s.sends.retain(|send| send.bus_id != deleted);
+                    }
+                });
+            }
+            panel.problem.try_set(outcome.err());
         });
     };
     let master = move || panel.meters.with(|m| m.master);
@@ -1005,8 +1085,9 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> impl IntoView {
             <details class="routing">
                 <summary>"More"</summary>
                 <button on:click=begin_rename>"Rename"</button>
-                {(!is_master).then(|| view! { <button on:click=delete>"Delete"</button> })}
+                {(!is_master).then(|| view! { <button on:click=ask_delete>"Delete"</button> })}
             </details>
+            <Confirm pending=pending confirm=confirm_delete />
             {is_master.then(|| view! {
                 <p class="loudness" role="status">
                     {move || {
@@ -1089,15 +1170,18 @@ fn NewBusForm(panel: Panel) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{
-        FADER_STEPS, HOLD_TICKS, Hold, MeterBank, checked_gain, db_to_position, edit, format_gain,
-        format_lufs, format_true_peak, load, meter_fraction, next_bus_id, position_to_db,
+        FADER_STEPS, HOLD_TICKS, Hold, MeterBank, apply_plan, checked_gain, db_to_position, edit,
+        format_gain, format_lufs, format_true_peak, load, meter_fraction, next_bus_id,
+        plan_bus_delete, position_to_db,
     };
     use jstream_control::protocol::{
-        AudioFollow, BusId, BusMeter, Edit, Finite32, Hello, KindCategory, KindDescriptor,
-        Loudness, PROTOCOL_VERSION, SceneId, SourceId, SourceKind, SourceMeter,
+        AudioFollow, Batch, BusId, BusMeter, Call, CallResult, DeleteTarget, Edit, Finite32, Hello,
+        KindCategory, KindDescriptor, Loudness, PROTOCOL_VERSION, Query, QueryResult, Response,
+        SceneId, Settings, SourceId, SourceKind, SourceMeter, Welcome,
     };
-    use jstream_control::{Control, MockEngine};
+    use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
     use std::pin::pin;
+    use std::sync::Mutex;
     use std::task::{Context, Poll, Waker};
 
     /// Polls a future that is ready at once, as the mock's are.
@@ -1246,6 +1330,148 @@ mod tests {
             muted: None,
         };
         assert!(now(edit(&control, refused)).is_err());
+    }
+
+    /// The mock engine, answering `delete.plan` with `plan` at its current revision (the
+    /// mock doesn't plan; `jstream-graph`'s tests check the engine's plan) and keeping
+    /// every call it is sent.
+    struct Planning<C> {
+        inner: C,
+        plan: Vec<Edit>,
+        calls: Mutex<Vec<Call>>,
+    }
+
+    impl<C: Control> Control for Planning<C> {
+        fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+            self.inner.hello(hello)
+        }
+
+        fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+            self.calls.lock().expect("calls").push(call.clone());
+            let Call::Query {
+                query: Query::DeletePlan { .. },
+            } = call
+            else {
+                return self.inner.call(call);
+            };
+            Box::pin(async move {
+                let state = Call::Query {
+                    query: Query::StateGet,
+                };
+                let mut response = self.inner.call(state).await?;
+                let CallResult::Query {
+                    result: QueryResult::StateGet { rev, .. },
+                } = response.result
+                else {
+                    panic!("state.get answered with something else");
+                };
+                response.result = CallResult::Query {
+                    result: QueryResult::DeletePlan {
+                        rev,
+                        edits: self.plan.clone(),
+                    },
+                };
+                Ok(response)
+            })
+        }
+
+        fn events(&self) -> EventStream {
+            self.inner.events()
+        }
+    }
+
+    /// #461: a bus a waveform draws is deleted through `delete.plan`, not a plain
+    /// `bus.delete` the engine refuses: the strip asks with what the plan clears, then
+    /// sends the plan expecting its revision.
+    #[test]
+    fn a_drawn_bus_is_deleted_through_its_plan() {
+        let engine = MockEngine::new();
+        let vod = BusId::new("vod");
+        let draw = |bus: serde_json::Value| Edit::SourceSetSettings {
+            source_id: SourceId::new("wave"),
+            patch: [("audio", bus)].into_iter().collect(),
+        };
+        let delete = Edit::BusDelete {
+            bus_id: vod.clone(),
+        };
+        let control = Planning {
+            inner: connected(&engine),
+            plan: vec![draw(serde_json::Value::Null), delete.clone()],
+            calls: Mutex::new(Vec::new()),
+        };
+        now(edit(
+            &control,
+            Edit::BusCreate {
+                bus_id: vod.clone(),
+                name: "VOD".into(),
+            },
+        ))
+        .expect("bus");
+        let waveform = Edit::SourceCreate {
+            source_id: SourceId::new("wave"),
+            name: "Waveform".into(),
+            kind: SourceKind::Builtin {
+                kind: "waveform".into(),
+            },
+            settings: Settings::new(),
+            duplicated_from: None,
+        };
+        now(edit(&control, waveform)).expect("waveform");
+        now(edit(
+            &control,
+            draw(serde_json::json!({"type": "bus", "bus_id": "vod"})),
+        ))
+        .expect("draws vod");
+
+        // What the strip used to send: the engine refuses it.
+        assert!(now(edit(&control, delete.clone())).is_err());
+
+        let plan = now(plan_bus_delete(&control, vod.clone(), "VOD")).expect("plan");
+        let asked = control.calls.lock().expect("calls").last().cloned();
+        assert_eq!(
+            asked,
+            Some(Call::Query {
+                query: Query::DeletePlan {
+                    target: DeleteTarget::Bus {
+                        bus_id: vod.clone()
+                    },
+                },
+            })
+        );
+        assert_eq!(plan.question, "Delete bus “VOD”?");
+        assert_eq!(
+            plan.detail.as_deref(),
+            Some("This also clears 1 setting that refers to it.")
+        );
+        let rev = now(load(&control)).expect("load").rev;
+        assert_eq!(plan.rev, rev);
+        assert_eq!(plan.edits, control.plan);
+
+        // A plan made before another change is refused, and deletes nothing.
+        let renamed = Edit::BusRename {
+            bus_id: vod.clone(),
+            name: "Clips".into(),
+        };
+        now(edit(&control, renamed)).expect("rename");
+        assert!(now(apply_plan(&control, plan)).is_err());
+        assert!(now(load(&control)).expect("load").bus(&vod).is_some());
+
+        let plan = now(plan_bus_delete(&control, vod.clone(), "Clips")).expect("plan");
+        let rev = plan.rev;
+        now(apply_plan(&control, plan)).expect("the plan applies");
+        let sent = control.calls.lock().expect("calls").last().cloned();
+        assert_eq!(
+            sent,
+            Some(Call::Batch(
+                Batch {
+                    edits: control.plan.clone(),
+                    expected_rev: None,
+                    idempotency_key: None,
+                }
+                .expecting(rev)
+            ))
+        );
+        assert!(now(load(&control)).expect("load").bus(&vod).is_none());
     }
 
     #[test]
