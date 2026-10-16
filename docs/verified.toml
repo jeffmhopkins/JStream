@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:c770cb1be82c095d", by = "agent:youtube-sign-in", note = "Re-read jstream-youtube and jstream-sources rows: summaries now cite ADR-0058; nothing else changed" }
+stamp = { hash = "b3:2774237375aeacfd", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1: the apps/* row keeps this PR's daemon jstream-browser clause beside wave's rows (B7, Y4); checked against both apps' Cargo.toml" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -774,7 +774,7 @@ stamp = { hash = "b3:c470e006d8095daa" }
 stamp = { hash = "b3:3e63f714aef88590" }
 
 ["CRATE-jstream-browser#open-items"."body"]
-stamp = { hash = "b3:96f1e1c1344ffb05", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 against wave/m1: the File access item is gone since RequestPolicy now limits file pages to their folder, so two items block a host (sandbox, packaging); the wave's Hosts item from #290 (desktop creates a backend on its own media-adapter device, daemon doesn't) is kept; Compositing still holds after E3b, which imports capture frames but nothing reads Source::gpu_frame" }
+stamp = { hash = "b3:146deaabe75adbe6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (C8b2 file limits, Y4 preset): this PR's Hosts item (desktop and daemon each create a backend on a device they open) still matches serve.rs and #290's wiring; wave's other items unchanged" }
 
 ["CRATE-jstream-browser#open-items"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
@@ -783,7 +783,7 @@ stamp = { hash = "b3:64d21faa19974bc3" }
 stamp = { hash = "b3:1300403d18de6566" }
 
 ["CRATE-jstream-browser#purpose"."body"]
-stamp = { hash = "b3:e2c66926a525f32a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = '''C8b2: the seam paragraph adds denied_requests; the new RequestPolicy bullet matches request.rs scheme by scheme, with file: paths compared by name before canonicalize (other servers, drive-relative paths, \\.\ paths and reserved names like COM1 refused unopened), links resolved on both sides and every refusal counted; the fake bullet names FakePageState::request; the CEF bullet's OnBeforeResourceLoad hook matches handlers.rs (warn once, then debug, never the URL); the page check reports refused requests; C8's N5 intro says frames land on a device the host hands it, matching use_device, fake.rs and gpu.rs's warning''' }
+stamp = { hash = "b3:596754035fe308a2", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1 (C8b2 #289): the hardware check now also reports refused requests; this PR's 'once the engine hands out its device' clause kept, matching the Hosts item" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
 stamp = { hash = "b3:9ab86379e5804d87", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH browser-source (daemon now wires it too); purpose speaks of 'the host' generically and holds" }
@@ -825,7 +825,7 @@ stamp = { hash = "b3:8ac270a94f116ebd", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:c38bcef596eeb573", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1: stale only via the browser README's seam paragraph; helper main.rs, build.rs and manifest unchanged, text holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:crates/jstream-browser/README.md#purpose"]
-stamp = { hash = "b3:e2c66926a525f32a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2: stale only via the browser README's purpose (denied_requests, the RequestPolicy bullet, the host-device wording); the helper's sources and text are untouched; holds" }
+stamp = { hash = "b3:596754035fe308a2", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the browser Purpose's hardware-check sentence only (C8b2's refused requests plus this PR's device clause); the helper's purpose holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:1bfce7186129692b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the ARCH apps/* row only (daemon also links jstream-browser); this section names hosts generically and holds" }
@@ -1866,7 +1866,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:c770cb1be82c095d", by = "agent:youtube-sign-in", note = "Re-read for a dependency change that only swapped the ADR-0051 link for ADR-0058 (and, for protocol, marked YouTube UI-only); this section makes no YouTube or OAuth claim that changes" }
+stamp = { hash = "b3:2774237375aeacfd", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH crate-map (apps/* row, daemon links jstream-browser); the GPU frames text doesn't depend on it and holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "E3c over wave/m1's E3b text: encoders bullet (Codecs::on_context, wait for the last write's value, signal a release value the next stage waits for, drop the frame once the read is queued, FrameSync::platform) matches the Windows encoder; encoder adapter matching is LUID-only with vendor-ID matching not built; status sentence says the engine writes no encode targets yet. Dep: ARCH gpu-pipeline's new step-5 paragraph (D3D11 copy with fences both ways, open_on fallback, nothing writes targets) describes the same protocol this section types" }
