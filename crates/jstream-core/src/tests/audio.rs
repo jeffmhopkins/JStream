@@ -265,6 +265,54 @@ fn a_settings_change_reopens_the_input_and_stopping_clears_the_status() {
     assert_eq!(status(&engine, "mic"), None);
 }
 
+/// Sources that open through the browser backend, `browser` and its `youtube_chat`
+/// preset, are built again when the host gives the engine its backend after they
+/// exist (review B1 on #375).
+#[test]
+fn browser_presets_open_once_the_backend_arrives() {
+    use jstream_browser::PageLocation;
+    use jstream_browser::fake::FakeBrowser;
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            audio_source("page", "browser", Some(("url", "https://example.com/"))),
+            audio_source("chat", "youtube_chat", Some(("video", "dQw4w9WgXcQ"))),
+        ]),
+    )
+    .expect("sources");
+    // Long enough for both builds to fail for want of a backend.
+    thread::sleep(Duration::from_millis(200));
+
+    let browser = FakeBrowser::new();
+    let _engine = engine.with_browser(browser.clone());
+    assert!(
+        eventually(|| browser.pages().len() == 2),
+        "{:?}",
+        browser.pages().len()
+    );
+    let mut opened: Vec<String> = browser
+        .pages()
+        .iter()
+        .map(|page| match &page.spec().location {
+            PageLocation::Web(url) => url.to_string(),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    opened.sort();
+    assert_eq!(
+        opened,
+        [
+            "https://example.com/",
+            "https://www.youtube.com/live_chat?is_popout=1&v=dQw4w9WgXcQ"
+        ]
+    );
+}
+
 #[test]
 fn a_browser_page_is_recorded_alongside_the_defaults() {
     use jstream_browser::fake::FakeBrowser;

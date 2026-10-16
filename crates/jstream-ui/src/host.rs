@@ -2,9 +2,9 @@
 //! desktop app does.
 //!
 //! The desktop app (`apps/jstream-desktop`) runs a script before the UI's own that
-//! defines [`DESKTOP_GLOBAL`] as a frozen `{ url, token }`: its in-process engine's
-//! WebSocket URL and control token. In a browser the global is absent and the UI shows
-//! the connect form.
+//! defines [`DESKTOP_GLOBAL`] as a frozen `{ url, token, vcam }`: its in-process
+//! engine's WebSocket URL and control token, and whether its virtual camera can be
+//! used. In a browser the global is absent and the UI shows the connect form.
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
@@ -33,6 +33,15 @@ pub fn desktop() -> Option<HostEngine> {
             .as_string()
     };
     engine(field("url"), field("token"))
+}
+
+/// What the desktop app says about its virtual camera (the global's `vcam`), if the
+/// page runs in it: `registered`, `not_registered`, `moved` or `off`.
+pub fn desktop_vcam() -> Option<String> {
+    let global = Reflect::get(&window(), &JsValue::from_str(DESKTOP_GLOBAL)).ok()?;
+    Reflect::get(&global, &JsValue::from_str("vcam"))
+        .ok()?
+        .as_string()
 }
 
 /// The engine from the global's fields: both must be non-empty strings.

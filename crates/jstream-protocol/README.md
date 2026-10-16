@@ -35,18 +35,23 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
   `scene.reorder`, `scene.set_role`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
-  `item.set_visible`, `item.set_source`, `canvas.set_size`, `source.create`,
-  `source.rename`, `source.set_settings`, `source.duplicate`, `source.delete`,
-  `output.create`, `output.set_target`, `output.set_encoder`, `output.delete`,
-  `encoder.create`, `encoder.update`, `encoder.delete`, `source.set_audio`,
-  `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`,
-  `send.remove`), with `ItemTransform` (deprecated), `Crop`, `SourceKind` and
-  `SceneRole`;
+  `item.set_visible`, `item.set_source`, `item.set_opacity`, `item.set_blend`,
+  `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
+  `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
+  `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
+  `output.set_target`, `output.set_encoder`, `output.delete`, `encoder.create`,
+  `encoder.update`, `encoder.delete`, `source.set_audio`, `bus.create`, `bus.rename`,
+  `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`), with `ItemTransform`
+  (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch`, `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
+- **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
+  `FilterOwner` (tagged `type`; only `source` so far), `FilterChain` (`video`, `audio`),
+  `FilterInfo` and `FilterChains`, the chains `SourceInfo` reports, and
+  `MAX_CHAIN_FILTERS` (8).
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
@@ -100,10 +105,14 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.21 because of
-  pairing (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.22 because of
+  opacity, blend and filter chains (`item.set_opacity`, `item.set_blend`, the
+  `filter.*` edits, `SourceInfo.filters` and the `filter` entity kind,
+  [ADR-0023](../../docs/adr/0023-placements-references-and-clones.md),
+  [ADR-0026](../../docs/adr/0026-source-filter-chains.md)); 0.21 added pairing
+  (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
   `unsupported` error and the `device` entity kind,
-  [ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)); 0.20 added
+  [ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), 0.20
   the preview streams (`preview.subscribe`, `preview.unsubscribe` and the binary
   frame), 0.19 audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
   `audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
@@ -126,18 +135,22 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   encoder profiles), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
   URL, recording path and encoder profile checks, and `item.set_source` and
-  `duplicated_from`, included). The collection also holds a clone made with
-  `source.duplicate` and `item.set_source`, a `duplicated_from` naming a missing
-  source, and audio: a microphone with its fader, mute and sends, two buses (one
-  deleted again with its send), a renamed and faded bus, a duplicated microphone with a
-  send removed, and a disabled nested scene. The rejected batches cover the bus limit,
-  the master bus, fader ranges, and sources with no audio or no fader of their own.
+  `duplicated_from`, opacity, blend and filter checks, included). The collection also
+  holds a clone made with `source.duplicate` and `item.set_source`, a
+  `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a desktop
+  audio source with an audio chain of two gain filters, one disabled, and audio: a
+  microphone with its fader, mute and sends, two buses (one deleted again with its
+  send), a renamed and faded bus, a duplicated microphone with a send removed, and a
+  disabled nested scene. The rejected batches cover the bus limit, the master bus,
+  fader ranges, and sources with no audio or no fader of their own.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
-  the kinds an implementation must describe for the batch to apply (`mic`, with audio
-  and no video, and `webcam`, with video and no audio, neither with parameters, so every
-  implementation reports the same empty settings and audio defaults). It changes no
+  the kinds an implementation must describe for the batch to apply (`webcam`, with
+  video and no audio, and `desktop_audio` and `mic`, with audio and no video, none with
+  parameters, so every implementation reports the same empty settings and audio
+  defaults, and the audio filter kind `gain`, whose one parameter the batch always
+  sets). It changes no
   message, so it never changes `PROTOCOL_VERSION`.
 
 <a id="design"></a>
@@ -164,8 +177,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":20},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":20},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":22},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":22},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -237,7 +250,7 @@ and an undo can re-create a deleted object under its old ID. IDs are opaque stri
 Sources are shared instances, independent of scenes. `source.create` adds one, and
 `item.add` places an existing source by reference, so one source can appear in many
 scenes, or several times in one, as the same capture. `source.duplicate` makes a
-separate copy under a new ID, with the same kind and settings, and records the source it
+separate copy under a new ID, with the same kind, settings and filters, and records the source it
 copied in the copy's `duplicated_from`; `source.rename` renames one. An item placing a
 shared source is a **reference**, and one placing a copy is a **clone**
 ([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)). `item.set_source`
@@ -268,7 +281,7 @@ the item's own scene, where the move is a reorder. Grouping is a client-built ba
 each selected item into the group, bottom first.
 
 The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
-`item.set_visible`) take an
+`item.set_visible`, `item.set_opacity`) take an
 optional `scene_id`, fixed now so that keyframe scenes can arrive additively (ADR-0024
 §2). Absent, or the item's own scene, changes the item. Until keyframe scenes exist,
 any other existing scene is `invalid_argument` on `edits.N.scene_id`, and a missing one
@@ -359,9 +372,10 @@ never a type per kind.
   Earlier components may use these names: Win32 fails to open such a path, and elsewhere
   they are ordinary folders. An asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
-  scenes, and scene and source references in settings form one dependency graph. An
-  edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
-  `source.set_settings`) is
+  scenes, and scene and source references in settings (a filter's settings count as its
+  source's) form one dependency graph. An edit that would close a cycle (`item.add`,
+  `item.move`, `item.set_source`, `source.create`, `source.set_settings`, `filter.add`,
+  `filter.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
   scene `a`). Asset references are not edges.
 - **Deletes are refused while anything refers to the target**, with no cascading edit
@@ -370,13 +384,36 @@ never a type per kind.
   `scene` source shows the scene; either is refused while a setting refers to its
   target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
   `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
-  or the source whose setting refers to it (`settings.<param>`). `delete.plan` returns
+  or the source whose setting refers to it (`settings.<param>`, or
+  `filters.<filter_id>.<param>` for a filter's setting). `delete.plan` returns
   the batch that removes them with the target (see [Queries](#design)).
 
 `SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
 parameters), so a reader of 0.7 messages sees no change for those.
 
-Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`) is a `Finite32`:
+### Opacity, blend and filters
+
+All of this is added in 0.22. A placement has an `opacity`, an alpha multiplier from 0 to 1 (default 1), and a
+`BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
+`difference`, `exclusion`; default `normal`). `item.add` takes both, optional;
+`item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
+set them. Out of range is `invalid_argument` on `edits.N.opacity`, and every mode but
+`normal` is `invalid_argument` on `edits.N.blend` until the compositor draws it.
+`ItemInfo` reports both.
+
+A source has a video and an audio filter chain
+([ADR-0026](../../docs/adr/0026-source-filter-chains.md)). The `filter.*` edits address a
+filter by `owner` (`{"type":"source","source_id":…}`) and `filter_id`, unique within the
+owner: `filter.add { owner, chain, filter_id, kind, settings?, enabled?, index? }`,
+`filter.remove`, `filter.set_enabled { enabled }`, `filter.set_settings { patch }` (the
+rules of `source.set_settings`) and `filter.reorder { index }` within the chain. A
+source has a video chain if its kind produces video and an audio chain if it produces
+audio and is not a `scene` source; `kind` must be a `video_filter` or `audio_filter`
+kind for that chain (`invalid_argument` on `edits.N.kind`), and a chain holds at most
+8 filters (`edits.N.chain`). A missing filter is `not_found` with entity `filter`.
+`SourceInfo.filters { video, audio }` reports them, each omitted while empty.
+
+Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`, an opacity) is a `Finite32`:
 an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde
 would otherwise narrow an out-of-range JSON number such as `1e39` to infinity, which
 then serializes as `null` and no longer parses. So a
@@ -464,7 +501,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
-  its name, `SourceKind`, settings and, for an audio source, its `audio`.
+  its name, `SourceKind`, settings, filters and, for an audio source, its `audio`.
 - `bus.list`: the buses, ordered by ID (the master among them), and every send,
   ordered by bus and then by source, at a `rev` (0.19).
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
@@ -495,7 +532,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   everything that refers to it, as `edits` and the `rev` it was planned at, or
   `not_found` for a missing target. In order, the edits remove the items that place a
   deleted source, set every settings reference to a deleted object to `null` (one
-  `source.set_settings` per source, which keeps the source), delete the `scene` sources
+  `source.set_settings` per source, which keeps the source, and one
+  `filter.set_settings` per filter), delete the `scene` sources
   that show a deleted scene, and last delete the target. Deleting a scene deletes the
   `scene` sources that show it, and the cascade stops there, since deleting a source
   deletes no scene. A target nothing refers to plans just its own delete. The client
@@ -528,7 +566,8 @@ server in front answers `unsupported`. The code is a `SecretString`: it never pr
 and nothing but this answer carries it ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 An item is reported with its `source_id`, `placement` form, `transform`, `geometry`,
-`crop` and `visible`, and a source with its name, kind and settings: every property an
+`crop`, `visible`, `opacity` and `blend`, and a source with its name, kind, settings and
+filters: every property an
 edit sets, so a client can compute any edit, or its inverse, from what it read
 ([Item geometry](#design) says what `transform` and `geometry` hold for each form). The shapes (`SourceInfo`, `SceneInfo`, `ItemInfo`) mirror `jstream-graph`'s model,
 which produces them (`Graph::query`). As the model grows (settings, filters, effects)
@@ -547,6 +586,7 @@ itself a sequence of edits. Each `Edit` variant documents its inverse.
 **The edit set is closed under inversion.** Every property of the state has an edit
 that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_visible` and `item.set_crop` restore what `item.add` doesn't take,
+`item.set_opacity` and `item.set_blend` restore what they set,
 `canvas.set_size` restores the canvas, and `item.set_geometry` and
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
@@ -557,8 +597,10 @@ each item's restore, bottom to top. `item.move` and `scene.set_role` are each un
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings and its
 `duplicated_from`, then `source.set_audio` and `send.set` (or `send.remove` of the
-default master send) for whatever audio differs from the kind's defaults; undoing
-`item.set_source` is `item.set_source` back, and undoing
+default master send) for whatever audio differs from the kind's defaults, then a
+`filter.add` per filter; undoing a filter edit is its opposite (`filter.remove` and
+`filter.add` with the filter's place, switch and settings) or the previous value,
+undoing `item.set_source` is `item.set_source` back, and undoing
 `source.set_settings` is a patch of the old values. Undoing `bus.delete` is
 `bus.create`, `bus.set_fader` unless the fader was at its default, and a `send.set` for
 each send the bus had; `source.set_audio`, `bus.set_fader` and `send.set` are each
@@ -661,7 +703,7 @@ After `welcome`, the server pushes every event to every client.
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
   built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
   those meters exist, as later optional fields. Audience figures are `youtube.stats`
-  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)).
+  ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)).
 - `meters.tick {sources, buses}` is one reading of the audio levels (0.19), about ten
   a second while the mixer runs; an idle engine emits none. Each routed source and
   each bus has `peak` (the largest absolute sample since the previous tick) and `rms`
@@ -725,19 +767,22 @@ after 1.0:
   exists (the whole response fails, and `WsControl` ends the session). Whether that
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
-  than 0.13, which sends none, never reads it. 0.19 adds `bus` the same way: only an
-  error answering a bus or send edit (`bus.create`, `bus.rename`, `bus.set_fader`,
-  `bus.delete`, `send.set`, `send.remove`) names it. An older client's undo of its own
-  `source.delete` restores the source's sends, but if one's bus has since been deleted
-  by another client, the undo fails with `undo_conflict`, which names no entity. 0.21
-  adds `device` the same way: only an error answering `device.revoke` names it. The
-  encoder enums (`VideoCodec`,
+  than 0.13, which sends none, never reads it. 0.19 adds `bus` the same way: only an error answering a bus or send edit
+  (`bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`)
+  names it. An older client's undo of its own `source.delete` restores the source's
+  sends, but if one's bus has since been deleted by another client, the undo fails with
+  `undo_conflict`, which names no entity. 0.21 adds `device` the same way: only an error
+  answering `device.revoke` names it, and 0.22 adds `filter` on the same terms for the
+  filter edits. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
-- Every public enum is `#[non_exhaustive]`, so Rust clients must handle new variants too.
+- Every public enum is `#[non_exhaustive]`, so Rust clients must handle new variants
+  too, except `FilterChain`: an owner has a video and an audio chain and no other
+  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)), so code that picks a
+  chain matches it exhaustively.
 
 ### Item geometry
 
@@ -911,7 +956,7 @@ described above.
     `builtin` stays, its `kind` names a kind the engine describes (`kind.list`,
     `kind.describe`), and settings travel beside it as a map validated against that
     kind's descriptor ([Kinds and settings](#design)). No new `SourceKind` variants. Not
-    built yet: the `kind.changed` event, filter settings, `asset.list`, storing an
+    built yet: the `kind.changed` event, `asset.list`, storing an
     absolute path under a known root in relative form, and kind versions on stored
     settings, which come with persistence.
 12. **Deleting referenced objects.** Settled by

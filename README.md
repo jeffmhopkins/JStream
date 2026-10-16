@@ -20,13 +20,15 @@ OBS, built to be driven equally well by a human or an AI agent.
 - **Scenes, sources, effects**, 3D transforms and crop on a wgpu compositor
 - **Independent video and audio routing**: outputs are not tied to scenes, and audio runs
   through a bus-matrix mixer
-- **Full agentic control over MCP**: anything the UI can do, an agent can do
+- **Full agentic control over MCP**: anything the UI can do, an agent can do, except
+  YouTube's account features, which stay with the person
+  ([ADR-0058](docs/adr/0058-youtube-sign-in-with-a-jstream-client.md))
 - **Headless or desktop**: the engine is a library, embedded in a Tauri app or run as a
   daemon that serves the same web UI to any browser
 
 JStream is built to be driven by a person or by an AI agent. The engine is a library with
 one protocol; the web UI, the desktop app, the CLI and MCP are all clients of it, so
-nothing the UI can do is out of an agent's reach
+nothing the UI can do is out of an agent's reach, YouTube's account features aside
 ([ADR-0001](docs/adr/0001-library-first-engine.md),
 [ADR-0006](docs/adr/0006-mcp-full-access.md)). Windows comes first, and the headless
 engine and MCP come before the GUI ([ADR-0010](docs/adr/0010-headless-first-milestone.md)).
@@ -45,12 +47,12 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `█████████░` 89% | 16 | 1 | 1 |
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 86% | 30 | 4 | 1 |
-| [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
+| [M1c: Virtual camera](ROADMAP.md#m1) | `█████████░` 86% | 6 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 30% | 7 | 10 | 6 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 11% | 1 | 2 | 6 |
 
-77 of 111 items are merged; 8 of those still wait on a run on Windows hardware.
+78 of 112 items are merged; 9 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -141,7 +143,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M1c</b> Virtual camera: 5 of 6 merged</summary>
+<summary><b>M1c</b> Virtual camera: 6 of 7 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -150,6 +152,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | G3a | vcam producer (engine side) | ✅ merged | #194 |
 | G3b | VirtualCam output kind | 🧪 merged, Windows run pending: camera run on Windows 11 | #213, #297 |
 | G3c | --register-vcam | 🧪 merged, Windows run pending: registration check with UAC | #235 |
+| G3d | Virtual camera in the UI and the desktop app | 🧪 merged, Windows run pending: a camera run from the desktop app | #316 |
 | P1 | Portable Windows zip | ⏳ planned |  |
 
 </details>

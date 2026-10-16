@@ -224,6 +224,7 @@ fn handshake_list_and_call_round_trip() {
             "device",
             "encoder",
             "events",
+            "filter",
             "history",
             "item",
             "kind",
@@ -271,7 +272,7 @@ fn handshake_list_and_call_round_trip() {
                       "transform": {"position": {"x": 0.0, "y": 0.0},
                                     "scale": {"x": 1.0, "y": 1.0}, "rotation_deg": 0.0},
                       "crop": {"left": 0, "top": 0, "right": 0, "bottom": 0},
-                      "visible": true});
+                      "visible": true, "opacity": 1.0, "blend": "normal"});
     let sources = f.call_tool("source", json!({"op": {"type": "source.list"}}));
     assert_eq!(
         ok(&sources)["result"]["result"],
@@ -412,7 +413,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(21));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(22));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(

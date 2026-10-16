@@ -27,7 +27,9 @@ enforced_by = ["review"]
 applies_to = ["crates/**"]
 -->
 Every capability is first a command, query, event or stream in `jstream-protocol`.
-UI, MCP and CLI are built on the protocol, never beside it. There are no UI-only features.
+UI, MCP and CLI are built on the protocol, never beside it. There are no UI-only features,
+except YouTube's account features (the `youtube.*` commands, queries and events), which
+[ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) keeps from agents.
 
 <a id="R-ARCH-002"></a>
 ### R-ARCH-002: Crate layering
@@ -493,7 +495,8 @@ Protocol commands are named `noun.verb` in snake_case (`scene.create`). MCP tool
 match `^[a-zA-Z0-9_-]{1,128}$` ([Anthropic tool use](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use)),
 which rules out the protocol's `.`. So the tools are generated from the protocol and grouped
 by noun ([ARCH › MCP](ARCHITECTURE.md#mcp)): each command or query `noun.verb` is an `op` of
-the tool named after its noun (`scene`), and reaches exactly one tool. Tool names are
+the tool named after its noun (`scene`), and reaches exactly one tool. The one exception is
+the `youtube` noun, whose ops reach no tool ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). Tool names are
 unique. IDs are opaque strings.
 
 <a id="R-API-003"></a>

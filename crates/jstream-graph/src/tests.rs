@@ -2,11 +2,11 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    AudioFollow, BusId, Canvas, Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId,
-    EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, KindCategory,
-    KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor, ParamType,
-    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId,
-    SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
+    AudioFollow, BlendMode, BusId, Canvas, Crop, DeleteTarget, Edit, EncoderProfile,
+    EncoderProfileId, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform,
+    KindCategory, KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor,
+    ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget,
+    SceneId, SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -26,7 +26,8 @@ fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
 }
 
 /// The kinds the tests create: `color`, a video kind with a scalar, a reference of each
-/// sort, and an asset; and `tone`, an audio kind with no parameters.
+/// sort, and an asset; `tone`, an audio kind with no parameters; and the filter kinds
+/// `tint` (video, with a scene reference) and `gain` (audio).
 fn kinds() -> Vec<KindDescriptor> {
     vec![
         KindDescriptor {
@@ -72,6 +73,45 @@ fn kinds() -> Vec<KindDescriptor> {
             video: false,
             audio: true,
             params: vec![],
+        },
+        KindDescriptor {
+            kind_id: "tint".into(),
+            category: KindCategory::VideoFilter,
+            name: "Tint".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params: vec![
+                param(
+                    "amount",
+                    ParamType::Float {
+                        min: Some(0.0),
+                        max: Some(1.0),
+                        step: None,
+                        unit: None,
+                    },
+                    json!(1.0),
+                ),
+                param("mask", ParamType::Scene, Value::Null),
+            ],
+        },
+        KindDescriptor {
+            kind_id: "gain".into(),
+            category: KindCategory::AudioFilter,
+            name: "Gain".into(),
+            version: 1,
+            video: false,
+            audio: true,
+            params: vec![param(
+                "gain_db",
+                ParamType::Float {
+                    min: Some(-60.0),
+                    max: Some(24.0),
+                    step: None,
+                    unit: Some("dB".into()),
+                },
+                json!(0.0),
+            )],
         },
     ]
 }
@@ -138,6 +178,8 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
         source_id: SourceId::new(source),
         transform: None,
         geometry: None,
+        opacity: None,
+        blend: None,
     }
 }
 
@@ -1029,6 +1071,14 @@ mod property {
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
+        let filters: Vec<(String, String)> = state
+            .sources()
+            .flat_map(|s| {
+                s.filters()
+                    .all()
+                    .map(|(_, f)| (s.id().to_string(), f.id().to_string()))
+            })
+            .collect();
         let buses: Vec<String> = state.buses().map(|b| b.id().to_string()).collect();
         let urls = [
             "rtmp://a.example/live",
@@ -1092,7 +1142,26 @@ mod property {
                 ..ItemGeometry::covering_canvas(1, 1).expect("positive")
             }
         };
-        match rng.below(39) {
+        // Mostly in range; one in five above 1.
+        let opacity = |rng: &mut Rng| {
+            Finite32::new([0.0, 0.25, 0.5, 1.0, 1.5][rng.below(5)]).expect("finite")
+        };
+        // Mostly `normal`; one in three a mode that isn't drawn yet.
+        let blend = |rng: &mut Rng| {
+            [
+                jstream_protocol::BlendMode::Normal,
+                jstream_protocol::BlendMode::Normal,
+                jstream_protocol::BlendMode::Multiply,
+            ][rng.below(3)]
+        };
+        let mask = |rng: &mut Rng| match rng.below(3) {
+            0 => Value::Null,
+            _ => scene_ref(&scene(rng)),
+        };
+        let owner = |source: String| jstream_protocol::FilterOwner::Source {
+            source_id: SourceId::new(source),
+        };
+        match rng.below(43) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1216,6 +1285,8 @@ mod property {
                 source_id: SourceId::new(source(rng)),
                 transform: None,
                 geometry: Some(geometry(rng)),
+                opacity: (rng.below(2) == 0).then(|| opacity(rng)),
+                blend: (rng.below(4) == 0).then(|| blend(rng)),
             },
             24 => {
                 let profile_id = EncoderProfileId::new(pool(rng, "enc"));
@@ -1300,6 +1371,52 @@ mod property {
                 source_id: SourceId::new(source(rng)),
                 bus_id: bus(rng),
             },
+            38 => {
+                let item = item(rng);
+                Edit::ItemSetOpacity {
+                    scene_id: address(rng, &item),
+                    item_id: ItemId::new(item),
+                    opacity: opacity(rng),
+                }
+            }
+            39 => Edit::ItemSetBlend {
+                item_id: ItemId::new(item(rng)),
+                blend: blend(rng),
+            },
+            40 => Edit::FilterAdd {
+                owner: owner(source(rng)),
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new(pool(rng, "f")),
+                kind: "tint".into(),
+                settings: super::settings(&[("mask", mask(rng))]),
+                enabled: (rng.below(3) == 0).then_some(false),
+                index: (rng.below(2) == 0).then(|| index(rng)),
+            },
+            41 => {
+                let (source, filter) = rng
+                    .pick(&filters)
+                    .unwrap_or_else(|| (source(rng), pool(rng, "f")));
+                let filter_id = jstream_protocol::FilterId::new(filter);
+                let owner = owner(source);
+                match rng.below(4) {
+                    0 => Edit::FilterRemove { owner, filter_id },
+                    1 => Edit::FilterSetEnabled {
+                        owner,
+                        filter_id,
+                        enabled: rng.below(2) == 0,
+                    },
+                    2 => Edit::FilterSetSettings {
+                        owner,
+                        filter_id,
+                        patch: super::settings(&[("mask", mask(rng))]),
+                    },
+                    _ => Edit::FilterReorder {
+                        owner,
+                        filter_id,
+                        index: index(rng),
+                    },
+                }
+            }
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1379,6 +1496,8 @@ mod property {
             "item.set_visible",
             "item.set_crop",
             "item.set_source",
+            "item.set_opacity",
+            "item.set_blend",
             "source.create",
             "source.duplicate",
             "source.delete",
@@ -1391,6 +1510,11 @@ mod property {
             "encoder.create",
             "encoder.update",
             "encoder.delete",
+            "filter.add",
+            "filter.remove",
+            "filter.set_enabled",
+            "filter.set_settings",
+            "filter.reorder",
             "canvas.set_size",
             "source.set_audio",
             "bus.create",
@@ -2500,6 +2624,8 @@ fn removing_a_geometry_item_re_adds_it_with_its_geometry() {
             source_id: SourceId::new("cam"),
             transform: None,
             geometry: Some(boxed()),
+            opacity: None,
+            blend: None,
         }],
     );
     let applied = apply_ok(
@@ -2516,6 +2642,8 @@ fn removing_a_geometry_item_re_adds_it_with_its_geometry() {
             source_id: SourceId::new("cam"),
             transform: None,
             geometry: Some(boxed()),
+            opacity: None,
+            blend: None,
         }]
     );
 }
@@ -2533,6 +2661,8 @@ fn a_geometry_item_reads_its_geometry_and_a_transform_view() {
                 source_id: SourceId::new("cam"),
                 transform: None,
                 geometry: Some(boxed()),
+                opacity: None,
+                blend: None,
             },
         ],
     );
@@ -2629,6 +2759,8 @@ fn invalid_geometries_name_the_field() {
         source_id: SourceId::new("cam"),
         transform: Some(ItemTransform::IDENTITY),
         geometry: Some(boxed()),
+        opacity: None,
+        blend: None,
     };
     let (field, _) = invalid_reason(apply_err(&mut graph, vec![both]));
     assert_eq!(field, "edits.0.geometry");
@@ -2940,6 +3072,132 @@ fn reference_and_clone_convert_in_one_batch_each() {
         Some("cam_c")
     );
 }
+
+fn set_opacity(item: &str, opacity: f32) -> Edit {
+    Edit::ItemSetOpacity {
+        item_id: ItemId::new(item),
+        scene_id: None,
+        opacity: Finite32::new(opacity).expect("finite"),
+    }
+}
+
+fn set_blend(item: &str, blend: BlendMode) -> Edit {
+    Edit::ItemSetBlend {
+        item_id: ItemId::new(item),
+        blend,
+    }
+}
+
+fn item_info(graph: &Graph, item: &str) -> jstream_protocol::ItemInfo {
+    graph
+        .state()
+        .item(&ItemId::new(item))
+        .expect("invariant: the item exists")
+        .1
+        .to_info()
+}
+
+/// Opacity is checked to [0, 1], reported, and undone to the previous value; every blend
+/// mode but `normal` is refused, since the compositor doesn't draw it (ADR-0023 §1).
+#[test]
+fn opacity_and_blend_are_checked_reported_and_undone() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "i", "cam")]);
+    let info = item_info(&g, "i");
+    assert_eq!(
+        (info.opacity, info.blend),
+        (Finite32::ONE, BlendMode::Normal)
+    );
+    assert!(
+        g.state()
+            .item(&ItemId::new("i"))
+            .expect("exists")
+            .1
+            .effects()
+            .is_empty()
+    );
+
+    let applied = apply_ok(&mut g, vec![set_opacity("i", 0.25)]);
+    assert_eq!(applied.inverse.edits, vec![set_opacity("i", 1.0)]);
+    assert_eq!(item_info(&g, "i").opacity.get(), 0.25);
+    for edge in [0.0, 1.0] {
+        apply_ok(&mut g, vec![set_opacity("i", edge)]);
+    }
+    for bad in [-0.01, 1.01, 2.0] {
+        let (field, reason) = invalid_reason(apply_err(&mut g, vec![set_opacity("i", bad)]));
+        assert_eq!(field, "edits.0.opacity", "{bad}");
+        assert!(reason.contains("0 to 1"), "{reason}");
+    }
+    // The same addressing as every placement edit (ADR-0024 §2).
+    let elsewhere = Edit::ItemSetOpacity {
+        item_id: ItemId::new("i"),
+        scene_id: Some(SceneId::new("b")),
+        opacity: Finite32::ONE,
+    };
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![elsewhere]));
+    assert_eq!(field, "edits.0.scene_id");
+
+    let applied = apply_ok(&mut g, vec![set_blend("i", BlendMode::Normal)]);
+    assert_eq!(
+        applied.inverse.edits,
+        vec![set_blend("i", BlendMode::Normal)]
+    );
+    for mode in [
+        BlendMode::Additive,
+        BlendMode::Multiply,
+        BlendMode::Exclusion,
+    ] {
+        let (field, reason) = invalid_reason(apply_err(&mut g, vec![set_blend("i", mode)]));
+        assert_eq!(field, "edits.0.blend");
+        assert!(reason.contains(mode.as_str()), "{reason}");
+    }
+    assert!(matches!(
+        apply_err(&mut g, vec![set_blend("ghost", BlendMode::Normal)]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Item,
+            ..
+        }
+    ));
+}
+
+/// `item.add` takes an opacity and a blend mode, checked like the set edits, and
+/// `item.remove`'s inverse puts back an opacity other than 1.
+#[test]
+fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
+    let mut g = fixture();
+    let with = |opacity: f32, blend: BlendMode| Edit::ItemAdd {
+        scene_id: SceneId::new("a"),
+        item_id: ItemId::new("i"),
+        source_id: SourceId::new("cam"),
+        transform: None,
+        geometry: None,
+        opacity: Some(Finite32::new(opacity).expect("finite")),
+        blend: Some(blend),
+    };
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![with(1.5, BlendMode::Normal)]));
+    assert_eq!(field, "edits.0.opacity");
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![with(0.5, BlendMode::Screen)]));
+    assert_eq!(field, "edits.0.blend");
+    apply_ok(&mut g, vec![with(0.5, BlendMode::Normal)]);
+    assert_eq!(item_info(&g, "i").opacity.get(), 0.5);
+
+    let before = g.state().clone();
+    let removed = apply_ok(
+        &mut g,
+        vec![Edit::ItemRemove {
+            item_id: ItemId::new("i"),
+        }],
+    );
+    let Edit::ItemAdd { opacity, blend, .. } = &removed.inverse.edits[0] else {
+        panic!("not an item.add: {:?}", removed.inverse.edits);
+    };
+    assert_eq!(*opacity, Finite32::new(0.5));
+    assert_eq!(*blend, None, "`normal` is the default, so it is left out");
+    apply_ok(&mut g, removed.inverse.edits);
+    assert_eq!(g.state(), &before);
+}
+
+mod filters;
 
 fn tone_create(id: &str) -> Edit {
     Edit::SourceCreate {
