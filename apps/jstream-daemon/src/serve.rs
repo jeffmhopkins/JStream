@@ -130,6 +130,8 @@ fn cef_browser(
         }
     };
     config.log_file = logs.map(|dir| dir.join("cef.log"));
+    // CEF's own Ctrl-C handler would end the daemon without its graceful stop (#436).
+    config.on_console_stop = Some(console_stop);
     let gpu = gpu
         .open_device()
         .inspect_err(|error| {
@@ -271,7 +273,8 @@ pub fn shutdown_signal() -> io::Result<impl Future<Output = ()> + Send + 'static
     })
 }
 
-/// See the Unix version.
+/// See the Unix version. Once CEF has started, its console handler runs before tokio's,
+/// so Ctrl-C and Ctrl-Break then arrive through [`console_stop`] instead.
 #[cfg(windows)]
 pub fn shutdown_signal() -> io::Result<impl Future<Output = ()> + Send + 'static> {
     use tokio::signal::windows::{ctrl_break, ctrl_c};
@@ -281,8 +284,28 @@ pub fn shutdown_signal() -> io::Result<impl Future<Output = ()> + Send + 'static
         tokio::select! {
             _ = interrupt.recv() => {}
             _ = break_.recv() => {}
+            () = console_stopped() => {}
         }
     })
+}
+
+/// Ctrl-C or Ctrl-Break taken from CEF's console handler (`CefConfig::on_console_stop`).
+/// Static because a console handler has no context to carry it.
+#[cfg(any(windows, test))]
+static CONSOLE_STOP: tokio::sync::Notify = tokio::sync::Notify::const_new();
+
+/// Stops the daemon as Ctrl-C does: what CEF's console handler is replaced with. Called
+/// on the thread Windows starts for the console event; it only signals.
+#[cfg(any(all(windows, feature = "cef"), test))]
+fn console_stop() {
+    // `notify_one` keeps the wake-up when nothing waits yet.
+    CONSOLE_STOP.notify_one();
+}
+
+/// Completes once [`console_stop`] has been called.
+#[cfg(any(windows, test))]
+async fn console_stopped() {
+    CONSOLE_STOP.notified().await;
 }
 
 #[cfg(test)]
@@ -801,5 +824,17 @@ mod tests {
             ["use_device", "open", "open"]
         );
         drop(engine);
+    }
+
+    /// #436: with CEF running, Ctrl-C reaches the daemon only through `console_stop`,
+    /// which Windows may call before anything awaits the stop. The wake-up must be kept
+    /// for the shutdown future, or the daemon would never stop. (The Windows half, CEF's
+    /// handler put behind ours, is checked on hardware: see the issue's repro.)
+    #[tokio::test]
+    async fn console_stop_before_waiting_still_stops() {
+        super::console_stop();
+        tokio::time::timeout(std::time::Duration::from_secs(5), super::console_stopped())
+            .await
+            .expect("the console stop was lost");
     }
 }

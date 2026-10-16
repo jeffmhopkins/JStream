@@ -316,7 +316,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
 - **Signals.** The handlers are installed before the server binds, so a failure is a
   startup error (exit 1) rather than a daemon that can't be stopped gracefully. The
   signal future is `serve_with_shutdown`'s, which closes open connections with close
-  code 1001.
+  code 1001. On Windows, once CEF has started, Chromium's console handler would run
+  before tokio's and end the process without the graceful stop, so the daemon sets
+  `CefConfig::on_console_stop` to `console_stop`, which wakes the signal future through
+  a static `Notify` (a console handler has no context to carry one); its wake-up is kept
+  when nothing waits yet (#436).
 - **Output through writers, errors with `anyhow`.** Clippy denies `print!`
   ([R-RS-005](../../docs/RULES.md#R-RS-005)), so output goes through locked stdout and
   stderr handles. Output is best effort: with stdout closed the server still runs.

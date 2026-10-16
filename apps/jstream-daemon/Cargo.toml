@@ -42,8 +42,9 @@ jstream-browser.workspace = true
 # `OutputId`, for `--output`; `OutputKind`, for the publish opener.
 jstream-protocol.workspace = true
 jstream-server.workspace = true
-# The runtime the server runs on; `signal` for Ctrl-C (and SIGTERM on Unix).
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
+# The runtime the server runs on; `signal` for Ctrl-C (and SIGTERM on Unix), and `sync`
+# for Ctrl-C taken over from CEF's console handler on Windows.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "sync"] }
 # The startup log line, with the log file's path.
 tracing.workspace = true
 # The log subscriber: the libraries' `tracing` events, filtered by `--log-level` or

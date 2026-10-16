@@ -756,7 +756,7 @@ stamp = { hash = "b3:64d21faa19974bc3" }
 stamp = { hash = "b3:1300403d18de6566" }
 
 ["CRATE-jstream-browser#purpose"."body"]
-stamp = { hash = "b3:aa231c43fc78de6d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1 (#290 review N1): seam paragraph says use_device gets a device the host opens on the media adapter for now, not the engine's own; rest re-read against page.rs, audio.rs, fake.rs and cef/" }
+stamp = { hash = "b3:676db0043b8cb6be", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Added the Ctrl-C bullet: after cef::initialize the jstream-cef thread registers a console handler ahead of Chromium's that calls CefConfig::on_console_stop for Ctrl-C/Ctrl-Break; windows Win32_System_Console feature added; rest unchanged" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
 stamp = { hash = "b3:9ab86379e5804d87", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH browser-source (daemon now wires it too); purpose speaks of 'the host' generically and holds" }
@@ -765,7 +765,7 @@ stamp = { hash = "b3:9ab86379e5804d87", by = "agent:claude@session_01YKRrREb5gUV
 stamp = { hash = "b3:e7a418098a8ef546" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/Cargo.toml"]
-stamp = { hash = "b3:f8343546bd9692f3" }
+stamp = { hash = "b3:65c2850636801932", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Added the Ctrl-C bullet: after cef::initialize the jstream-cef thread registers a console handler ahead of Chromium's that calls CefConfig::on_console_stop for Ctrl-C/Ctrl-Break; windows Win32_System_Console feature added; rest unchanged" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/examples/page_check.rs"]
 stamp = { hash = "b3:cdb5d603e6278b06" }
@@ -780,7 +780,7 @@ stamp = { hash = "b3:4cd2645cc349307d" }
 stamp = { hash = "b3:e50e51e202fe75c8" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/mod.rs"]
-stamp = { hash = "b3:e3ccb60c7440a82a" }
+stamp = { hash = "b3:f222c69bd2c3a872", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Added the Ctrl-C bullet: after cef::initialize the jstream-cef thread registers a console handler ahead of Chromium's that calls CefConfig::on_console_stop for Ctrl-C/Ctrl-Break; windows Win32_System_Console feature added; rest unchanged" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/fake.rs"]
 stamp = { hash = "b3:b3446b76280e4cb9" }
@@ -795,7 +795,7 @@ stamp = { hash = "b3:e057d1998087d7f3" }
 stamp = { hash = "b3:c38bcef596eeb573", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1: stale only via the browser README's seam paragraph; helper main.rs, build.rs and manifest unchanged, text holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:crates/jstream-browser/README.md#purpose"]
-stamp = { hash = "b3:aa231c43fc78de6d" }
+stamp = { hash = "b3:676db0043b8cb6be", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after jstream-browser Purpose gained the Ctrl-C bullet: the helper's main, subsystem, manifest and feature gating are unchanged; the console handler is registered only in the host (browser) process" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:1bfce7186129692b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via the ARCH apps/* row only (daemon also links jstream-browser); this section names hosts generically and holds" }
@@ -1197,7 +1197,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:f7fee91e648a8988", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1: browser sources paragraph and deps match serve.rs and Cargo.toml; the Windows dox clippy now runs in after-review.yml" }
+stamp = { hash = "b3:a2f7405c9cbfc891", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Signals bullet now states that with CEF running Ctrl-C/Ctrl-Break arrive via CefConfig::on_console_stop -> console_stop -> static Notify into the signal future; tokio sync feature added for Notify; browser-sources bullet still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 into #219: stale via core#design only (wave's browser sources and E3b's capture text); daemon text names neither with_browser nor the GPU path beyond handing WindowsGpu and WgcCapture to with_backends; holds" }
@@ -1209,7 +1209,7 @@ stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7ab4accbf98f6662" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
-stamp = { hash = "b3:75c75e5a697ef09f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1: browser sources paragraph and deps match serve.rs and Cargo.toml; the Windows dox clippy now runs in after-review.yml" }
+stamp = { hash = "b3:42ef272e984e2608", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Signals bullet now states that with CEF running Ctrl-C/Ctrl-Break arrive via CefConfig::on_console_stop -> console_stop -> static Notify into the signal future; tokio sync feature added for Notify; browser-sources bullet still holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
@@ -1230,7 +1230,7 @@ stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:c2fb84ca05337d74", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1: browser sources paragraph and deps match serve.rs and Cargo.toml; the Windows dox clippy now runs in after-review.yml" }
+stamp = { hash = "b3:8226c58b609af084", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Signals bullet now states that with CEF running Ctrl-C/Ctrl-Break arrive via CefConfig::on_console_stop -> console_stop -> static Notify into the signal future; tokio sync feature added for Notify; browser-sources bullet still holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:5b73caa28ffd99e3" }
@@ -1260,7 +1260,7 @@ stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:c2fb84ca05337d74", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merged wave/m1: the run steps keep --ui-dir and add browser sources under cef; checked against serve.rs and main.rs" }
+stamp = { hash = "b3:8226c58b609af084", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #436: serve.rs still builds the engine, installs the stop signal handlers (now also the CEF console-stop path) and binds; the tests list still covers serve.rs unit tests" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:5b73caa28ffd99e3" }

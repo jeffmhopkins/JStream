@@ -62,6 +62,13 @@ without building CEF):
   `cache_path`, no persisted cookies) and warnings-only logging. Dropping the backend
   quits the loop once every page has closed, or after ten seconds, and shuts CEF down on
   that thread. A missing helper exe fails the first `open` with `BrowserError::Start`.
+- **Ctrl-C.** `cef::initialize` installs Chromium's console control handler in the host
+  process, which answers Ctrl-C by terminating the process at once with exit code 0,
+  and Windows asks the newest handler first, so it runs before the host's own (#436).
+  When `CefConfig::on_console_stop` is set, the `jstream-cef` thread registers a handler
+  of its own right after `initialize`: Ctrl-C and Ctrl-Break call that function and go
+  no further, and every other console event goes on to Chromium's handler. A console
+  handler has no context, so the function sits in a set-once static.
 - Every page is a windowless browser with shared textures on, painting at its spec's
   frame rate with a transparent background. Command-line switches let pages play sound
   without a click and turn off first-run and error dialogs. Pop-ups are blocked. The

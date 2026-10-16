@@ -12,6 +12,13 @@
 //! **Shutting down.** Dropping the backend asks the UI thread to quit its loop once every
 //! page has closed (or after [`CLOSE_GRACE`]), then waits for the thread: CEF must shut
 //! down on the thread that initialized it, after its browsers are gone.
+//!
+//! **Ctrl-C.** `cef::initialize` installs Chromium's console control handler in the host
+//! process, and Windows calls the newest handler first. Chromium's answers Ctrl-C by
+//! ending the session and terminating the process with exit code 0, before the host's
+//! own handler runs. So once CEF has started, [`CefConfig::on_console_stop`] (when set)
+//! is put ahead of it: Ctrl-C and Ctrl-Break call it instead, and the host stops as it
+//! chooses (#436).
 
 mod gpu;
 mod handlers;
@@ -48,6 +55,11 @@ pub struct CefConfig {
     /// CEF's log file, warnings and errors only; `None` leaves CEF's default
     /// (`debug.log` next to the exe).
     pub log_file: Option<PathBuf>,
+    /// What Ctrl-C and Ctrl-Break call once CEF has started, in place of Chromium's
+    /// console handler, which would end the process at once: a host with a graceful
+    /// stop sets it to start that stop. `None` leaves Chromium's handler in charge. It
+    /// runs on the thread Windows starts for the console event, so it must only signal.
+    pub on_console_stop: Option<fn()>,
 }
 
 impl CefConfig {
@@ -65,6 +77,7 @@ impl CefConfig {
             helper: dir.join(HELPER_EXE),
             cache_root: state_dir.join("cef"),
             log_file: None,
+            on_console_stop: None,
         })
     }
 }
@@ -222,6 +235,10 @@ fn run(config: &CefConfig, shared: &Arc<Shared>, ready: &mpsc::Sender<Result<(),
         )));
         return;
     }
+    // After `initialize`, which installed Chromium's console handler: ours must be newer.
+    if let Some(stop) = config.on_console_stop {
+        take_console_stop(stop);
+    }
     let _ = ready.send(Ok(()));
     tracing::info!(
         version = %String::from_utf8_lossy(::cef::sys::CEF_VERSION).trim_end_matches('\0'),
@@ -232,6 +249,39 @@ fn run(config: &CefConfig, shared: &Arc<Shared>, ready: &mpsc::Sender<Result<(),
     shared.device.set(None);
     ::cef::shutdown();
     tracing::info!("CEF stopped");
+}
+
+/// What [`console_handler`] calls: the first started backend's
+/// [`CefConfig::on_console_stop`]. A console handler gets no context, so this is the one
+/// way to reach it; it is set once, as CEF starts once per process.
+static CONSOLE_STOP: OnceLock<fn()> = OnceLock::new();
+
+/// Registers [`console_handler`] calling `stop`, after CEF's own handler so Windows asks
+/// ours first. Once per process; a failure is logged and leaves Chromium's handler.
+fn take_console_stop(stop: fn()) {
+    use windows::Win32::System::Console::SetConsoleCtrlHandler;
+    if CONSOLE_STOP.set(stop).is_err() {
+        return;
+    }
+    // SAFETY: `console_handler` is a plain `extern "system"` function that lives for
+    // the whole process and only reads `CONSOLE_STOP`, which is already set.
+    if let Err(error) = unsafe { SetConsoleCtrlHandler(Some(console_handler), true) } {
+        tracing::warn!(%error, "could not put the host's Ctrl-C handler ahead of CEF's");
+    }
+}
+
+/// The console handler registered after CEF's: Ctrl-C and Ctrl-Break go to the host's
+/// stop and stop there (`TRUE`), so Chromium's handler never sees them. Other events
+/// (closing the console, log-off, shutdown) go on to the older handlers (`FALSE`).
+unsafe extern "system" fn console_handler(ctrl_type: u32) -> windows::core::BOOL {
+    use windows::Win32::System::Console::{CTRL_BREAK_EVENT, CTRL_C_EVENT};
+    match (ctrl_type, CONSOLE_STOP.get()) {
+        (CTRL_C_EVENT | CTRL_BREAK_EVENT, Some(stop)) => {
+            stop();
+            true.into()
+        }
+        _ => false.into(),
+    }
 }
 
 impl BrowserBackend for CefBackend {
