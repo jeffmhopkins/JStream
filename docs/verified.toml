@@ -585,7 +585,7 @@ stamp = { hash = "b3:7b6e5ed3dd8380e8" }
 stamp = { hash = "b3:35328ace37395ff8" }
 
 ["CRATE-jstream-audio#purpose"."body"]
-stamp = { hash = "b3:c14e3114d974adb4", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240 squashed) into D6: main's text plus D6's set_activity_gain bullet and activity-gain line; holds against handle.rs and rt/mixer.rs" }
+stamp = { hash = "b3:7cd7339dee2956df", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#449. input.rs: the first stamp after a discontinuity flag (trust_next_stamp, spent by that stamp) restarts the drift segment at once when >20 ms off the line instead of being rejected until the 50-outlier run; new tests a_discontinuity_off_the_line_re_anchors_at_once and only_the_stamp_after_a_discontinuity_skips_outlier_rejection. handle.rs: InputStats::resets doc now names an off-line discontinuity. tests/no_alloc.rs: new DiscontinuityOffLine mic event at tick 1900 and an assert that mic.resets > 0. Body: the unit-test list now says an off-line discontinuity re-anchors at once and unflagged outliers still wait for the run; the API counter list, layering and sim.rs glitch case are unchanged." }
 
 ["CRATE-jstream-audio#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-audio"]
 stamp = { hash = "b3:308082ece28cb86f" }
@@ -615,7 +615,7 @@ stamp = { hash = "b3:a1c0f0586e004c59" }
 stamp = { hash = "b3:418e944950d88c36" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/handle.rs"]
-stamp = { hash = "b3:a7c82544adbbbe92" }
+stamp = { hash = "b3:f7ec553bb7bb8bec", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#449. input.rs: the first stamp after a discontinuity flag (trust_next_stamp, spent by that stamp) restarts the drift segment at once when >20 ms off the line instead of being rejected until the 50-outlier run; new tests a_discontinuity_off_the_line_re_anchors_at_once and only_the_stamp_after_a_discontinuity_skips_outlier_rejection. handle.rs: InputStats::resets doc now names an off-line discontinuity. tests/no_alloc.rs: new DiscontinuityOffLine mic event at tick 1900 and an assert that mic.resets > 0. Body: the unit-test list now says an off-line discontinuity re-anchors at once and unflagged outliers still wait for the run; the API counter list, layering and sim.rs glitch case are unchanged." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/lib.rs"]
 stamp = { hash = "b3:f37d5c5d3c4b273c" }
@@ -657,7 +657,7 @@ stamp = { hash = "b3:0b9d1aeb21625025" }
 stamp = { hash = "b3:7b96e0548bba48b1" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/input.rs"]
-stamp = { hash = "b3:ffc3e5d893199674" }
+stamp = { hash = "b3:d085c53043059921", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#449. input.rs: the first stamp after a discontinuity flag (trust_next_stamp, spent by that stamp) restarts the drift segment at once when >20 ms off the line instead of being rejected until the 50-outlier run; new tests a_discontinuity_off_the_line_re_anchors_at_once and only_the_stamp_after_a_discontinuity_skips_outlier_rejection. handle.rs: InputStats::resets doc now names an off-line discontinuity. tests/no_alloc.rs: new DiscontinuityOffLine mic event at tick 1900 and an assert that mic.resets > 0. Body: the unit-test list now says an off-line discontinuity re-anchors at once and unflagged outliers still wait for the run; the API counter list, layering and sim.rs glitch case are unchanged." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/mixer.rs"]
 stamp = { hash = "b3:f4c6231c788aae0b" }
@@ -687,13 +687,13 @@ stamp = { hash = "b3:3e63f714aef88590" }
 stamp = { hash = "b3:c06e0c67b9b83617" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/tests/no_alloc.rs"]
-stamp = { hash = "b3:0ebe67af161ddd4e" }
+stamp = { hash = "b3:195cd92a4c480cba", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#449. input.rs: the first stamp after a discontinuity flag (trust_next_stamp, spent by that stamp) restarts the drift segment at once when >20 ms off the line instead of being rejected until the 50-outlier run; new tests a_discontinuity_off_the_line_re_anchors_at_once and only_the_stamp_after_a_discontinuity_skips_outlier_rejection. handle.rs: InputStats::resets doc now names an off-line discontinuity. tests/no_alloc.rs: new DiscontinuityOffLine mic event at tick 1900 and an assert that mic.resets > 0. Body: the unit-test list now says an off-line discontinuity re-anchors at once and unflagged outliers still wait for the run; the API counter list, layering and sim.rs glitch case are unchanged." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/tests/sim.rs"]
 stamp = { hash = "b3:e5a6edbd7802a068" }
 
 ["CRATE-jstream-audio#realtime"."body"]
-stamp = { hash = "b3:044226cbcf228628", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph (input_push 1024 / 940-941 frames) holds against benches/mix.rs" }
+stamp = { hash = "b3:b3a83e22ad24e9e9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#449. input.rs: add_point now restarts the segment for the first stamp after a discontinuity flag when it is >20 ms off the line (a bool and the existing new_segment/fit.add path, no allocation, lock or log, so R-RT-001/R-RT-003 hold); the module docs say so. Body: the Drift fit bullet now states that this stamp is never rejected and restarts the segment at once, and the no_alloc paragraph lists the new off-line discontinuity event; ring, resampler, steering constants and the rest of the section are unchanged." }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:74397f35965002f4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging wave/m1 (#320 only adds the jstream-outputs crate-map row; merge-main took wave stamps that predate this PR): stale via ARCH#threading's Preview row only (not a real-time thread); section text is main's; holds" }
@@ -729,7 +729,7 @@ stamp = { hash = "b3:0b9d1aeb21625025" }
 stamp = { hash = "b3:7b96e0548bba48b1" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/input.rs"]
-stamp = { hash = "b3:ffc3e5d893199674" }
+stamp = { hash = "b3:d085c53043059921", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#449. input.rs: add_point now restarts the segment for the first stamp after a discontinuity flag when it is >20 ms off the line (a bool and the existing new_segment/fit.add path, no allocation, lock or log, so R-RT-001/R-RT-003 hold); the module docs say so. Body: the Drift fit bullet now states that this stamp is never rejected and restarts the segment at once, and the no_alloc paragraph lists the new off-line discontinuity event; ring, resampler, steering constants and the rest of the section are unchanged." }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/mixer.rs"]
 stamp = { hash = "b3:f4c6231c788aae0b" }
