@@ -54,9 +54,7 @@ impl DeviceSlot {
             // reference, and this one is never used to destroy anything.
             let d3d12 = unsafe { gpu.device().as_hal::<Dx12>() }.map(|d| d.raw_device().clone());
             if d3d12.is_none() {
-                tracing::warn!(
-                    "the engine's GPU device is not D3D12; browser pages can't deliver frames"
-                );
+                tracing::warn!("the GPU device is not D3D12; browser pages can't deliver frames");
             }
             Some((d3d12?, gpu.device().clone(), gpu.queue().clone()))
         });
