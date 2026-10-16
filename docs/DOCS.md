@@ -59,8 +59,8 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
-  that are only between stamps, moves inline stamps a branch from before ADR-0053 still
-  has, and lists the sections left stale.
+  that are only between stamps or only inside `@generated` blocks, moves inline stamps a branch from before ADR-0053 still
+  has, and lists the sections left stale with the notes the branch had written on each.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -245,7 +245,7 @@ verified against a change to it. The inputs, and their keys, are:
    Markdown files, metadata blocks are removed first. In workflow
    files (`.github/workflows/`), the commit SHA and version comment of `uses:` pins are
    ignored, so Dependabot pin bumps don't make the specifying doc stale
-   ([ADR-0018](adr/0018-ci-supply-chain-policy.md)). A file matched only through
+   ([ADR-0056](adr/0056-ci-supply-chain-policy-v2.md)). A file matched only through
    `#jstream-meta` entries contributes the hash of its **jstream view** instead, under the
    key `file:<path>#jstream-meta`: its
    `package.name`, its whole `[package.metadata.jstream]` table, and every entry of
@@ -305,7 +305,7 @@ cargo xtask docs review ARCH \
     --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
 cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
-cargo xtask docs merge-main                    # merge origin/main; stamp-only conflicts take main's
+cargo xtask docs merge-main                    # merge origin/main; stamp and @generated conflicts take main's
 cargo xtask docs merge-main --from wave/m1     # the same for a PR into a wave (ADR-0055)
 cargo xtask docs migrate                       # move inline stamps to the ledger (below)
 ```
@@ -317,11 +317,18 @@ conflict in the ledger takes main's side: a merge never leaves a section falsely
 and a conflict usually leaves it stale, for a re-read. The result must parse, and is
 rewritten in canonical form. In a doc, a conflict whose two sides are only inline `verified` lines
 inside `@section` blocks (either side may have none, as when `main` moved them to the
-ledger) takes main's side too. Any other conflict, including one in a file that also has
-stamp conflicts, is left exactly as git wrote it, and the merge stays open for you to
-finish by hand. When every conflict was a stamp conflict it commits the merge, runs
+ledger) takes main's side too. A conflict whose two sides lie wholly inside `@generated`
+blocks that `docs generate` writes, such as two PRs each regenerating the README's progress
+table, takes main's side, and once every conflict is resolved every block is rewritten from
+the merged sources, as `docs generate` would. If another conflict keeps the merge open, the
+blocks still hold main's side until you run `docs generate` after resolving it. Any
+other conflict, including one in a file that also has stamp conflicts, is left exactly as
+git wrote it, and the merge stays open for you to finish by hand. When every conflict was
+resolved this way it commits the merge, runs
 `docs migrate` and commits what that changed separately, and prints the sections that are
-now stale, for `docs verify` after a re-read.
+now stale, for `docs verify` after a re-read. Under each one it prints the notes this
+branch wrote on that section since its merge base, because the re-verify replaces them
+([Verification notes](#notes)).
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes
@@ -412,6 +419,10 @@ holds**. The note says what was checked and why it still holds, e.g.:
   of every entry whose input changed since the previous verify. An earlier note on such an
   entry survives only in git history (`docs log`), so the last note on each entry must
   cover the PR's whole change to that input: it is the one the reviewer reads.
+- After `docs merge-main`, each stale section needs its own note: what its earlier note
+  said about this PR's change, plus what the merge changed in that section's inputs.
+  `merge-main` prints the earlier notes under each stale section for this. One stock note
+  across every stale section, such as "rechecked after merging main", fails review.
 - A verify that only drops removed inputs, or finds no input changed, records no `by` or
   `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. Say in
   the PR what you re-read after removing a covered file.
@@ -588,7 +599,7 @@ section saying what is loosened or tightened, and why:
   also carry `reason = "…"`).
 
 **Pre-approved:** a Dependabot PR that only changes pinned `uses:` references is justified by
-[ADR-0018](adr/0018-ci-supply-chain-policy.md) and needs no label.
+[ADR-0056](adr/0056-ci-supply-chain-policy-v2.md) and needs no label.
 
 Agents and the maintainer may both apply the label. The weekly sweep lists every PR
 merged with it, so the maintainer can audit them

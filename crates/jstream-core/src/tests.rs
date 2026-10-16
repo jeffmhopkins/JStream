@@ -4159,10 +4159,10 @@ mod cpu_pipeline {
         );
     }
 
-    /// A canvas of another size than the program frame gets the frame fitted inside
-    /// it: a 64x36 frame on a 64x64 canvas is letterboxed in black.
+    /// The program is drawn at the canvas, not the display (#433): a 64x64 canvas over a
+    /// 64x36 display gives the camera whole 64x64 frames, with no letterbox.
     #[test]
-    fn a_virtual_camera_fits_the_program_into_the_canvas() {
+    fn a_virtual_camera_gets_the_program_at_the_canvas_size() {
         let fakes = fakes();
         let log = Arc::new(Mutex::new(VcamLog::default()));
         let (_engine, control, mut events) = vcam_engine(
@@ -4179,7 +4179,7 @@ mod cpu_pipeline {
         block_on(control.call(output_call("cam", false))).expect("output.stop");
         let log = log.lock().expect("vcam log");
         assert_eq!(log.starts[0].size, FrameSize::new(64, 64).expect("size"));
-        assert_eq!(log.pixels[0], ([0, 0, 0, 255], [30, 20, 10, 255]));
+        assert_eq!(log.pixels[0], ([30, 20, 10, 255], [30, 20, 10, 255]));
     }
 
     /// A virtual camera shares the program stage with a stream: both run at once, and

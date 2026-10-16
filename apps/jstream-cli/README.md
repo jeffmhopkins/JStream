@@ -27,7 +27,8 @@ Contents (a first cut):
   call: the handshake, queries, a batch of edits, actions, and the event stream
   ([Usage](#usage)).
 - **Running** (`run.rs`): opens a session through a connector (the engine's WebSocket
-  API through `jstream-control`'s `WsControl`, or the mock), runs the call, and writes
+  API through `jstream-control`'s `WsControl`, or the mock), runs the call (an edit
+  batch may first read `state.get`, to fit new capture items, see [Design](#design)), and writes
   human or `--json` output through the `Write` handles it is given (`mcp`, and
   `output set-key` for the stream key, also read the `BufRead` it is given).
 - **Exit codes** (`exit.rs`): one per failure kind, including one per protocol error code.
@@ -110,8 +111,12 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `output.set_encoder` and the `filter.*` edits need a JSON argument form the CLI
   doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
-  default encoder (MCP and the WebSocket API take them). `item.add` sends neither
-  placement, so its item is a legacy one; place it with `item.set_geometry <item-id>
+  default encoder (MCP and the WebSocket API take them). `item.add` of a
+  `display`, `window` or `webcam` source sends a `geometry` covering the canvas with
+  `fit`, so the whole capture is in frame; the canvas is the batch's latest
+  `canvas.set_size`, else `state.get`'s, which the CLI also reads for the kind of a
+  source the batch didn't create. Any other `item.add` sends neither placement, so its
+  item is a legacy one at 1:1. Place either with `item.set_geometry <item-id>
   <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
   batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
   are always sent neutral, since the engine refuses anything else until it draws 3D.
@@ -306,6 +311,17 @@ depends_on = ["crates/jstream-control/README.md#design"]
   while the transport keeps going until the MCP client closes stdin. Exiting instead
   would surface to the agent only as a crashed server. The proxy doesn't reconnect by
   itself ([open question 6](#design)).
+- **New capture items fit the canvas.** The protocol's placement for an `item.add`
+  that sends none is the legacy 1:1 one (ADR-0022), which shows only the top-left
+  corner of a display larger than the canvas. Changing that default would change the
+  wire meaning of an omitted field, so the CLI chooses instead: before sending a batch,
+  `fit_captures` gives each such `item.add` of a `display`, `window` or `webcam` source
+  `ItemGeometry::covering_canvas` (`fit`). The canvas is the batch's latest
+  `canvas.set_size` before the item; a source created earlier in the batch gives its
+  kind. Anything else comes from one `state.get`, read only when an item needs it. An
+  unknown source or a zero canvas is left for the engine to reject. MCP clients write
+  their own edits, so the protocol's `item.add` doc tells them to send the same
+  geometry.
 - **Errors are typed, not `anyhow`.** Each failure must map to its own exit code, so
   `CliError` keeps the `ControlError` (and its protocol code) instead of erasing it.
   `jstream-mcp` reports a failed read and a failed write as the same transport error,

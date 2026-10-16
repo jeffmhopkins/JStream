@@ -94,6 +94,8 @@ Edits (each is its protocol command name followed by its arguments):
   output.delete <output-id>
   An <rtmp-url> is the ingest server, rtmp://host[:port]/app or rtmps://...,
   without the stream key: set that with `output set-key`.
+  item.add fits a display, window or webcam source to the canvas, and places any
+  other source at 1:1; item.set_geometry in the same batch overrides either.
 
 Exit codes: 0 ok, 1 output error, 2 usage, 3 disconnected, 10-20 engine errors
 (see the README for the full table).

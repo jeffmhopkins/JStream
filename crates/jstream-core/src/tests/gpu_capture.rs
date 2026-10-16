@@ -293,6 +293,7 @@ fn path(backends: &Backends) -> (bool, bool) {
         GPU_OPEN_TIMEOUT,
         Arc::new(RenderHub::default()),
         Arc::new(Wanted::default()),
+        (1280, 720),
     );
     let mut opened = open_capture(&parts).expect("a capture starts on some path");
     let frame = opened

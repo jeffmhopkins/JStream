@@ -98,7 +98,7 @@ JStream/
 ├── tests/                  # cross-crate scenario + golden tests
 ├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
 ├── design/                 # UI design references (prototype source); not normative
-├── xtask/                  # docs, lint-deps, governance, gen-schema, golden, release
+├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), gen-schema, golden
 ├── docs/
 │   ├── ARCHITECTURE.md  RULES.md  DOCS.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
@@ -133,7 +133,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
-| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`. The **single owner** of the encoder and decoder traits. | no |
+| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, and `paths` (the data folder, ADR-0020). The **single owner** of the encoder and decoder traits. | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
@@ -961,6 +961,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 <a id="packaging"></a>
 ## Packaging
 <!-- @section
+covers = ["xtask/src/dist.rs", ".cargo/config.toml"]
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
 -->
 
@@ -976,8 +977,24 @@ From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin 
 link the C runtime statically and need only OS components (WebView2, Media Foundation,
 Direct3D 12).
 
-- **State:** in `%APPDATA%\JStream`, or beside the exe when a `portable` marker file is
-  present.
+- **State:** in `%APPDATA%\JStream`, or in a `data` folder beside the exe when a
+  `portable` marker file is present. Every host finds it through `jstream-platform`'s
+  `paths` module.
+- **Building the zip:** `cargo xtask dist`, on Windows with MSVC. It builds the web UI
+  for release with trunk (or takes a built one with `--ui-dir`), builds `jstream.exe`,
+  `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for release, and
+  fails if any of them imports a Visual C++ runtime DLL (`vcruntime`, `msvcp`). The
+  Universal CRT (`api-ms-win-crt-*`) is allowed: it is part of Windows 10 and 11, and
+  `jstream.exe` imports it even with `crt-static` (from a prebuilt static library built
+  with `/MD`, most likely WebView2's loader). It zips them in one folder,
+  `jstream-<git describe>-windows-x64`, with the UI in `ui` (where `jstream.exe` looks),
+  the licenses and a `README.txt`, into `target/dist`. `.cargo/config.toml` links the C
+  runtime statically for every MSVC build. A `RUSTFLAGS` variable replaces the config's
+  flags, so `dist` adds `crt-static` back to it. The zip is written by `dist` itself,
+  deflated, with fixed timestamps, so the same files make the same zip. The `dist` job in
+  `after-review.yml` builds it with the release UI its `dist-ui` job builds, names it
+  after the commit tested (`--revision`), and uploads it as an artifact, as is, on `main`
+  and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The CEF runtime and the browser helper join it when they exist.
 - **Virtual camera:** the app registers the COM media source from its own folder the first
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
   because Frame Server ignores per-user registration. The app can unregister the source and
