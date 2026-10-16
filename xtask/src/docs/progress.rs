@@ -17,7 +17,7 @@ pub(crate) const DATA: &str = "docs/progress.toml";
 /// The doc that carries the block.
 const TARGET: &str = "README.md";
 /// The name of the generated block.
-const BLOCK: &str = "progress";
+pub(crate) const BLOCK: &str = "progress";
 /// Each status, with the label the item table shows for it.
 const STATUSES: &[(&str, &str)] = &[
     ("done", "✅ merged"),
@@ -395,6 +395,28 @@ fn merged_from(subject: &str) -> Option<Merged> {
     Some(Merged { number, names })
 }
 
+/// The merged PRs in `git log --format=%B%x00` output: each commit's subject, and for a
+/// wave's landing squash (`chore(wave): land …`), the `* <subject> (#N)` lines of its
+/// body, which are the PRs the wave carried (docs/runbooks/waves.md#landing).
+fn merged_in(log: &str) -> Vec<Merged> {
+    let mut out = Vec::new();
+    for message in log.split('\0') {
+        let mut lines = message.trim_start_matches('\n').lines();
+        let Some(subject) = lines.next() else {
+            continue;
+        };
+        out.extend(merged_from(subject));
+        if subject.starts_with("chore(wave): land ") {
+            out.extend(
+                lines
+                    .filter_map(|l| l.strip_prefix("* "))
+                    .filter_map(merged_from),
+            );
+        }
+    }
+    out
+}
+
 /// What the merged history says is out of date in `p`, as Markdown list lines.
 fn stale(p: &Progress, merged: &[Merged]) -> Vec<String> {
     let numbers: BTreeSet<u64> = merged.iter().map(|m| m.number).collect();
@@ -453,17 +475,14 @@ pub(crate) fn report(root: &Path) -> Result<String> {
         .output()
         .context("running `git rev-parse`")?;
     let log = Command::new("git")
-        .args(["log", "--first-parent", "--format=%s", "HEAD"])
+        .args(["log", "--first-parent", "--format=%B%x00", "HEAD"])
         .current_dir(root)
         .output()
         .context("running `git log`")?;
     if !log.status.success() {
         bail!("`git log` failed: {}", String::from_utf8_lossy(&log.stderr));
     }
-    let merged: Vec<Merged> = String::from_utf8_lossy(&log.stdout)
-        .lines()
-        .filter_map(merged_from)
-        .collect();
+    let merged = merged_in(&String::from_utf8_lossy(&log.stdout));
     let mut out = String::new();
     if String::from_utf8_lossy(&shallow.stdout).trim() == "true" {
         out.push_str("Shallow clone: PRs merged before its first commit look unmerged.\n\n");
@@ -633,6 +652,13 @@ prs = [3, 3]
         assert!(m.names.contains("B10") && m.names.contains("ADR-0030"));
         assert!(!m.names.contains("protocol"));
         assert!(merged_from("Merge branch 'main'").is_none());
+        let landed = merged_in(
+            "chore(wave): land wave/m2 (#470)\n\n* feat: a (W1) (#315)\n\nbody\n\n\
+             * fix: a review round\n\n* feat: b (#466)\n\0\nfeat: c (#469)\n\n* feat: d (#1)\n\0\n",
+        );
+        let numbers: Vec<u64> = landed.iter().map(|m| m.number).collect();
+        assert_eq!(numbers, [470, 315, 466, 469]);
+        assert!(landed[1].names.contains("W1"));
 
         let p = parse(DATA_OK).expect("invariant: valid");
         let merged: Vec<Merged> = [

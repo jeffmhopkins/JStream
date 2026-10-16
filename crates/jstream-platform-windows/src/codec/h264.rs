@@ -1,9 +1,14 @@
-//! H.264 encoding through Media Foundation encoder MFTs, from CPU NV12 frames.
+//! H.264 encoding through Media Foundation encoder MFTs, from CPU NV12, RGBA or BGRA
+//! frames or from NV12 encode targets on the GPU.
 //!
-//! This is the CPU path: frames are copied into a Media Foundation memory buffer. ARCH's
-//! GPU pipeline feeds the encoder D3D11 textures instead; that arrives with the Windows
-//! `GpuInterop` implementation, and the CPU path stays as the fallback (ARCH › GPU
-//! pipeline, step 6).
+//! On the CPU path, frames are copied into a Media Foundation memory buffer as NV12, the
+//! encoder's input. RGBA and BGRA frames (the compositor's output) are converted to NV12
+//! on the way ([`Nv12Packer`]). On the GPU path (ARCH › GPU pipeline, step 5), opened
+//! through `MfCodecs`' `Codecs::on_context`, the MFT runs on the context's D3D11 device
+//! through a DXGI device manager, and each encode target is copied on the GPU into a
+//! texture from the MFT's own sample allocator (`EncodeGpu::copy`), so no frame touches
+//! the CPU. Only D3D11-aware hardware MFTs on the context's adapter take that path; the
+//! engine falls back to the CPU path without one (step 6).
 //!
 //! Hardware encoders are tried first and the OS software encoder after them, as
 //! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0031).
@@ -12,8 +17,13 @@
 
 use std::collections::VecDeque;
 
-use jstream_platform::media::{Codec, MediaTime, PixelFormat, Rounding, Timebase, VideoFrame};
+use jstream_platform::media::{
+    Codec, ColorInfo, FrameSize, MediaTime, PixelFormat, Rounding, Timebase, VideoFrame,
+    VideoFrameInfo,
+};
 use jstream_platform::{PlatformError, RateControl, VideoEncoderConfig};
+
+use crate::capture::convert::{RgbOrder, rgb_to_nv12};
 
 /// What the MFT is configured with, derived from a [`VideoEncoderConfig`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,17 +41,20 @@ pub(crate) struct Settings {
 /// Checks a configuration and derives the MFT settings.
 ///
 /// # Errors
-/// [`PlatformError::Unsupported`] for another codec, an input other than NV12, odd
-/// dimensions (NV12 halves them for chroma), a zero keyframe interval, a zero bit rate or
-/// a VBR peak below its mean.
+/// [`PlatformError::Unsupported`] for another codec, an input other than NV12, RGBA or
+/// BGRA, odd dimensions (NV12 halves them for chroma), a zero keyframe interval, a zero
+/// bit rate or a VBR peak below its mean.
 pub(crate) fn check(config: &VideoEncoderConfig) -> Result<Settings, PlatformError> {
     let unsupported = |what: String| Err(PlatformError::Unsupported { what });
     if config.codec != Codec::H264 {
         return unsupported(format!("{:?} from the H.264 encoder", config.codec));
     }
-    if config.input_format != PixelFormat::Nv12 {
+    if !matches!(
+        config.input_format,
+        PixelFormat::Nv12 | PixelFormat::Rgba8 | PixelFormat::Bgra8
+    ) {
         return unsupported(format!(
-            "H.264 from {:?} (the encoder takes NV12)",
+            "H.264 from {:?} (the encoder takes NV12, RGBA or BGRA)",
             config.input_format
         ));
     }
@@ -107,6 +120,73 @@ pub(crate) fn pack_nv12(frame: &VideoFrame, out: &mut [u8]) -> Result<(), Platfo
     Ok(())
 }
 
+/// Turns the encoder's input frames into the contiguous NV12 its MFT takes, reusing its
+/// buffers. NV12 is copied ([`pack_nv12`]). RGBA (what the engine's compositor produces)
+/// and BGRA are converted first, BT.709 limited range with left-sited chroma, the way
+/// display capture converts WGC's BGRA.
+#[derive(Debug)]
+pub(crate) struct Nv12Packer {
+    out: Vec<u8>,
+    /// The converted frame for RGB input; made at the first one.
+    converted: Option<VideoFrame>,
+}
+
+impl Nv12Packer {
+    /// A packer for frames of `size`, which must be even (as [`check`] requires).
+    pub(crate) fn new(size: FrameSize) -> Self {
+        Self {
+            out: vec![0; size.width() as usize * size.height() as usize * 3 / 2],
+            converted: None,
+        }
+    }
+
+    /// Packs `frame` and returns the NV12 bytes.
+    ///
+    /// # Errors
+    /// [`PlatformError::Unsupported`] for a format other than NV12, RGBA or BGRA, and
+    /// [`PlatformError::InvalidState`] when the frame's size isn't the packer's.
+    pub(crate) fn pack(&mut self, frame: &VideoFrame) -> Result<&[u8], PlatformError> {
+        let info = frame.info();
+        let order = match info.format {
+            PixelFormat::Nv12 => {
+                pack_nv12(frame, &mut self.out)?;
+                return Ok(&self.out);
+            }
+            PixelFormat::Rgba8 => RgbOrder::Rgba,
+            PixelFormat::Bgra8 => RgbOrder::Bgra,
+            other => {
+                return Err(PlatformError::Unsupported {
+                    what: format!("packing {other:?} as NV12"),
+                });
+            }
+        };
+        let converted = match &mut self.converted {
+            Some(c) if c.info().size == info.size => c,
+            slot => slot.insert(
+                VideoFrame::zeroed(VideoFrameInfo {
+                    size: info.size,
+                    format: PixelFormat::Nv12,
+                    color: ColorInfo::default(),
+                    pts: info.pts,
+                })
+                .map_err(|_| PlatformError::Unsupported {
+                    what: format!("NV12 at {}x{}", info.size.width(), info.size.height()),
+                })?,
+            ),
+        };
+        // One plane: `VideoFrame` checks the plane count of a packed format.
+        let Some(plane) = frame.plane(0) else {
+            return Err(PlatformError::InvalidState {
+                what: "NV12 packing",
+                state: "the RGB frame has no plane",
+            });
+        };
+        rgb_to_nv12(plane.data(), plane.stride(), order, converted)?;
+        pack_nv12(converted, &mut self.out)?;
+        Ok(&self.out)
+    }
+}
+
 /// The frames in flight: the time each was sent to the encoder with (100 ns units) and
 /// the `pts` it came with, so each packet gets back its frame's exact `pts` however the
 /// frame's time base rounds to 100 ns.
@@ -163,25 +243,32 @@ pub(crate) use encoder::MfH264Encoder;
 mod encoder {
     use std::time::{Duration, Instant};
 
-    use jstream_platform::media::{Codec, Packet, PixelFormat};
+    use jstream_platform::media::{Codec, Packet};
     use jstream_platform::{
-        CodecInfo, CodecRole, HardwarePreference, PlatformError, VideoEncoder, VideoEncoderConfig,
-        VideoSurface,
+        CodecInfo, CodecRole, GpuFrame, HardwarePreference, PlatformError, VideoEncoder,
+        VideoEncoderConfig, VideoSurface,
+    };
+    use windows::Win32::Graphics::Direct3D11::{
+        D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, ID3D11Texture2D,
     };
     use windows::Win32::Media::MediaFoundation::{
         CODECAPI_AVEncCommonMaxBitRate, CODECAPI_AVEncCommonMeanBitRate,
         CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVDefaultBPictureCount,
         CODECAPI_AVEncMPVGOPSize, CODECAPI_AVEncVideoForceKeyFrame, CODECAPI_AVLowLatencyMode,
-        ICodecAPI, IMFMediaEventGenerator, IMFMediaType, IMFTransform, METransformDrainComplete,
-        METransformHaveOutput, METransformNeedInput, MF_E_NO_EVENTS_AVAILABLE, MF_E_NOTACCEPTING,
+        ICodecAPI, IMF2DBuffer, IMFAttributes, IMFDXGIBuffer, IMFDXGIDeviceManager,
+        IMFMediaEventGenerator, IMFMediaType, IMFSample, IMFTransform, IMFVideoSampleAllocatorEx,
+        METransformDrainComplete, METransformHaveOutput, METransformNeedInput,
+        MF_E_NO_EVENTS_AVAILABLE, MF_E_NOTACCEPTING, MF_E_SAMPLEALLOCATOR_EMPTY,
         MF_EVENT_FLAG_NO_WAIT, MF_EVENT_TYPE, MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE,
         MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE,
         MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_MT_VIDEO_NOMINAL_RANGE, MF_MT_YUV_MATRIX,
-        MF_TRANSFORM_ASYNC, MF_TRANSFORM_ASYNC_UNLOCK, MFCreateMediaType, MFMediaType_Video,
-        MFNominalRange_16_235, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE,
-        MFT_ENUM_FLAG_LOCALMFT, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
-        MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
-        MFT_MESSAGE_NOTIFY_END_OF_STREAM, MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFVideoFormat_H264,
+        MF_SA_D3D11_AWARE, MF_SA_D3D11_BINDFLAGS, MF_TRANSFORM_ASYNC, MF_TRANSFORM_ASYNC_UNLOCK,
+        MFCreateAttributes, MFCreateDXGIDeviceManager, MFCreateMediaType,
+        MFCreateVideoSampleAllocatorEx, MFMediaType_Video, MFNominalRange_16_235,
+        MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_LOCALMFT,
+        MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT, MFT_MESSAGE_COMMAND_DRAIN,
+        MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_END_OF_STREAM,
+        MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_MESSAGE_SET_D3D_MANAGER, MFVideoFormat_H264,
         MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFVideoTransferMatrix_BT709,
         eAVEncCommonRateControlMode_CBR, eAVEncCommonRateControlMode_PeakConstrainedVBR,
         eAVEncH264VProfile_High,
@@ -189,12 +276,145 @@ mod encoder {
     use windows::Win32::System::Variant::VARIANT;
     use windows::core::{GUID, Interface};
 
-    use super::{InFlight, Settings, check, pack_nv12};
+    use super::{InFlight, Nv12Packer, Settings, check};
     use crate::codec::mf::{self, Found, MfRuntime, Mft, Output, PullMode, RetypeArgs};
     use crate::com::{OsResult, os_error};
+    use crate::gpu::EncodeGpu;
 
     /// How long `finish` waits for an asynchronous encoder to drain.
     const DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
+    /// Input textures on the GPU path: as many frames as the session queues ahead of
+    /// the encoder. When the MFT holds them all, a frame is refused as busy (and the
+    /// session drops and counts it).
+    const GPU_SAMPLES: u32 = 8;
+
+    /// What the encoder's frames are copied into.
+    enum Input {
+        /// Packs (and converts, for RGB input) each CPU frame for the MFT.
+        Cpu(Nv12Packer),
+        /// The MFT's input textures, for encode targets.
+        Gpu(GpuInput),
+    }
+
+    /// The GPU path's input: textures from a sample allocator on the context's D3D11
+    /// device, which encode targets are copied into.
+    struct GpuInput {
+        // COM objects drop before `gpu`, which keeps the wgpu device (and its driver)
+        // loaded until they are released.
+        allocator: IMFVideoSampleAllocatorEx,
+        _manager: IMFDXGIDeviceManager,
+        gpu: EncodeGpu,
+    }
+
+    impl GpuInput {
+        /// A sample holding a copy of `frame`, an encode target, queued on the GPU.
+        ///
+        /// # Errors
+        /// [`PlatformError::Busy`] when the MFT holds every input texture,
+        /// [`PlatformError::Unsupported`] for a frame that is not an encode target of the
+        /// encoder's context, and [`PlatformError::Os`] when MF or the driver fails.
+        fn sample(&self, frame: &GpuFrame) -> Result<IMFSample, PlatformError> {
+            // SAFETY: plain COM call on an initialised allocator.
+            let sample = match unsafe { self.allocator.AllocateSample() } {
+                Ok(sample) => sample,
+                Err(e) if e.code() == MF_E_SAMPLEALLOCATOR_EMPTY => {
+                    return Err(PlatformError::Busy {
+                        what: "H.264 encoder input textures",
+                    });
+                }
+                Err(e) => return Err(os_error("IMFVideoSampleAllocator::AllocateSample", &e)),
+            };
+            // SAFETY: plain COM calls on the allocator's sample, whose one buffer is a
+            // DXGI surface buffer on the context's D3D11 device. `GetResource` fills
+            // `raw` with an owned reference, which `from_raw` takes over.
+            let (buffer, texture, subresource) = unsafe {
+                let buffer = sample
+                    .GetBufferByIndex(0)
+                    .os("IMFSample::GetBufferByIndex")?;
+                let dxgi: IMFDXGIBuffer = buffer.cast().os("IMFDXGIBuffer")?;
+                let mut raw = std::ptr::null_mut();
+                dxgi.GetResource(&ID3D11Texture2D::IID, &mut raw)
+                    .os("IMFDXGIBuffer::GetResource")?;
+                let texture = ID3D11Texture2D::from_raw(raw);
+                let subresource = dxgi
+                    .GetSubresourceIndex()
+                    .os("IMFDXGIBuffer::GetSubresourceIndex")?;
+                (buffer, texture, subresource)
+            };
+            self.gpu.copy(frame, &texture, subresource)?;
+            // Some encoders check the buffer's length. Best effort: one without a 2D
+            // view keeps the length the allocator gave it.
+            if let Ok(view) = buffer.cast::<IMF2DBuffer>() {
+                // SAFETY: plain COM calls on the live buffer.
+                unsafe {
+                    if let Ok(len) = view.GetContiguousLength() {
+                        let _ = buffer.SetCurrentLength(len);
+                    }
+                }
+            }
+            Ok(sample)
+        }
+    }
+
+    /// The DXGI device manager on the context's D3D11 device.
+    fn device_manager(gpu: &EncodeGpu) -> Result<IMFDXGIDeviceManager, PlatformError> {
+        let mut token = 0u32;
+        let mut manager: Option<IMFDXGIDeviceManager> = None;
+        // SAFETY: valid out-pointers to locals.
+        unsafe { MFCreateDXGIDeviceManager(&mut token, &mut manager) }
+            .os("MFCreateDXGIDeviceManager")?;
+        let manager = manager.ok_or(PlatformError::Os {
+            call: "MFCreateDXGIDeviceManager",
+            code: None,
+            message: "returned no manager".into(),
+        })?;
+        // SAFETY: plain COM call; the device is live, multithread-protected and has
+        // video support, as the manager requires.
+        unsafe { manager.ResetDevice(gpu.device(), token) }
+            .os("IMFDXGIDeviceManager::ResetDevice")?;
+        Ok(manager)
+    }
+
+    /// A sample allocator for the MFT's current NV12 input type, on `manager`'s device.
+    /// Its textures have the encode targets' bind flags, which the adapter is known to
+    /// allocate in NV12.
+    fn allocator(
+        transform: &IMFTransform,
+        manager: &IMFDXGIDeviceManager,
+    ) -> Result<IMFVideoSampleAllocatorEx, PlatformError> {
+        let mut raw = std::ptr::null_mut();
+        // SAFETY: valid out-pointer; on success it holds an owned reference of the
+        // requested interface, which `from_raw` takes over. Then plain COM calls on live
+        // objects.
+        unsafe {
+            MFCreateVideoSampleAllocatorEx(&IMFVideoSampleAllocatorEx::IID, &mut raw)
+                .os("MFCreateVideoSampleAllocatorEx")?;
+            let allocator = IMFVideoSampleAllocatorEx::from_raw(raw);
+            allocator
+                .SetDirectXManager(manager)
+                .os("IMFVideoSampleAllocator::SetDirectXManager")?;
+            let mut attributes: Option<IMFAttributes> = None;
+            MFCreateAttributes(&mut attributes, 1).os("MFCreateAttributes")?;
+            let attributes = attributes.ok_or(PlatformError::Os {
+                call: "MFCreateAttributes",
+                code: None,
+                message: "returned no attribute store".into(),
+            })?;
+            attributes
+                .SetUINT32(
+                    &MF_SA_D3D11_BINDFLAGS,
+                    (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+                )
+                .os("IMFAttributes::SetUINT32 (MF_SA_D3D11_BINDFLAGS)")?;
+            let input = transform
+                .GetInputCurrentType(0)
+                .os("IMFTransform::GetInputCurrentType")?;
+            allocator
+                .InitializeSampleAllocatorEx(2, GPU_SAMPLES, &attributes, &input)
+                .os("IMFVideoSampleAllocatorEx::InitializeSampleAllocatorEx")?;
+            Ok(allocator)
+        }
+    }
 
     /// One H.264 encoder session on a Media Foundation encoder MFT.
     pub(crate) struct MfH264Encoder {
@@ -209,8 +429,7 @@ mod encoder {
         /// Inputs an asynchronous MFT has asked for and not yet received.
         need_input: u32,
         in_flight: InFlight,
-        /// Staging for one packed NV12 frame.
-        nv12: Vec<u8>,
+        input: Input,
         pending: Vec<Packet>,
         drained: bool,
         finished: bool,
@@ -219,30 +438,66 @@ mod encoder {
 
     // SAFETY: the session is owned and driven by one thread at a time (`&mut self` for
     // every call except `can_accept`, which reads a plain field). Media Foundation
-    // encoder MFTs are in-proc, free-threaded objects, and `MfRuntime` keeps the process
-    // MTA alive, so a thread that never initialised COM may call them as an implicit MTA
-    // member.
+    // encoder MFTs are in-proc, free-threaded objects, as are the GPU path's DXGI device
+    // manager and sample allocator, and `MfRuntime` keeps the process MTA alive, so a
+    // thread that never initialised COM may call them as an implicit MTA member. The
+    // GPU path's `EncodeGpu` is `Send + Sync`; its D3D11 device is multithread-protected.
     unsafe impl Send for MfH264Encoder {}
 
     impl MfH264Encoder {
-        /// Opens an H.264 encoder that takes NV12: a hardware MFT first (unless the
-        /// preference avoids hardware), then the software one (unless it requires
-        /// hardware). The first that accepts the configuration wins.
+        /// Opens an H.264 encoder that takes CPU frames (NV12, or RGBA or BGRA converted
+        /// by [`Nv12Packer`]): a hardware MFT first (unless the preference avoids
+        /// hardware), then the software one (unless it requires hardware). The first
+        /// that accepts the configuration wins.
         pub(crate) fn open(config: &VideoEncoderConfig) -> Result<Self, PlatformError> {
+            Self::open_with(config, None)
+        }
+
+        /// Opens an H.264 encoder that takes encode targets on `gpu`'s context: the
+        /// first D3D11-aware hardware MFT on its adapter that accepts the configuration
+        /// and the context's device.
+        ///
+        /// # Errors
+        /// [`PlatformError::Unsupported`] when the configuration avoids hardware or no
+        /// such MFT accepts it, and [`PlatformError::Os`] when MF fails.
+        pub(crate) fn open_on(
+            config: &VideoEncoderConfig,
+            gpu: &EncodeGpu,
+        ) -> Result<Self, PlatformError> {
+            if config.hardware == HardwarePreference::Avoid {
+                return Err(PlatformError::Unsupported {
+                    what: "H.264 from GPU frames with hardware avoided (only hardware \
+                           encoders read D3D11 textures)"
+                        .into(),
+                });
+            }
+            Self::open_with(config, Some(gpu))
+        }
+
+        fn open_with(
+            config: &VideoEncoderConfig,
+            gpu: Option<&EncodeGpu>,
+        ) -> Result<Self, PlatformError> {
             let settings = check(config)?;
             let rt = MfRuntime::start()?;
+            let manager = gpu.map(device_manager).transpose()?;
             let io = (
                 (MFMediaType_Video, MFVideoFormat_NV12),
                 (MFMediaType_Video, MFVideoFormat_H264),
             );
             let mut candidates = Vec::new();
-            if config.hardware != HardwarePreference::Avoid {
+            if let Some(gpu) = gpu {
+                let flags = MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER;
+                let on =
+                    mf::enumerate_on(MFT_CATEGORY_VIDEO_ENCODER, flags, io.0, io.1, gpu.luid())?;
+                candidates.extend(on.into_iter().map(|found| (found, true)));
+            } else if config.hardware != HardwarePreference::Avoid {
                 let flags = MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER;
                 for found in mf::enumerate(MFT_CATEGORY_VIDEO_ENCODER, flags, io.0, io.1)? {
                     candidates.push((found, true));
                 }
             }
-            if config.hardware != HardwarePreference::Require {
+            if gpu.is_none() && config.hardware != HardwarePreference::Require {
                 let flags =
                     MFT_ENUM_FLAG_SYNCMFT | MFT_ENUM_FLAG_LOCALMFT | MFT_ENUM_FLAG_SORTANDFILTER;
                 for found in mf::enumerate(MFT_CATEGORY_VIDEO_ENCODER, flags, io.0, io.1)? {
@@ -251,10 +506,20 @@ mod encoder {
             }
             let mut refusals = Vec::new();
             for (found, hardware) in candidates {
-                match Self::configure(&found, config, settings) {
-                    Ok((mft, events, output)) => {
-                        let size = config.size;
-                        let frame_bytes = size.width() as usize * size.height() as usize * 3 / 2;
+                let configured = Self::configure(&found, config, settings, manager.as_ref())
+                    .and_then(|(mft, events, output)| {
+                        let input = match (gpu, &manager) {
+                            (Some(gpu), Some(manager)) => Input::Gpu(GpuInput {
+                                allocator: allocator(&mft.transform, manager)?,
+                                _manager: manager.clone(),
+                                gpu: gpu.clone(),
+                            }),
+                            _ => Input::Cpu(Nv12Packer::new(config.size)),
+                        };
+                        Ok((mft, events, output, input))
+                    });
+                match configured {
+                    Ok((mft, events, output, input)) => {
                         return Ok(Self {
                             mft,
                             events,
@@ -269,7 +534,7 @@ mod encoder {
                             settings,
                             need_input: 0,
                             in_flight: InFlight::default(),
-                            nv12: vec![0; frame_bytes],
+                            input,
                             pending: Vec::new(),
                             drained: false,
                             finished: false,
@@ -282,8 +547,13 @@ mod encoder {
             Err(PlatformError::Unsupported {
                 what: if refusals.is_empty() {
                     format!(
-                        "H.264 encoding with {:?}: no matching encoder MFT is installed",
-                        config.hardware
+                        "H.264 encoding with {:?}{}: no matching encoder MFT is installed",
+                        config.hardware,
+                        if gpu.is_some() {
+                            " from D3D11 textures on the context's adapter"
+                        } else {
+                            ""
+                        }
                     )
                 } else {
                     format!(
@@ -296,11 +566,13 @@ mod encoder {
             })
         }
 
-        /// Activates and configures one candidate, and starts it streaming.
+        /// Activates and configures one candidate, on `manager`'s D3D11 device when
+        /// there is one, and starts it streaming.
         fn configure(
             found: &Found,
             config: &VideoEncoderConfig,
             s: Settings,
+            manager: Option<&IMFDXGIDeviceManager>,
         ) -> Result<(Mft, Option<IMFMediaEventGenerator>, Output), PlatformError> {
             let mft = found.activate()?;
             let transform = &mft.transform;
@@ -312,6 +584,21 @@ mod encoder {
                 // SAFETY: as above; an async MFT refuses every call until unlocked.
                 unsafe { attrs.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1) }
                     .os("MF_TRANSFORM_ASYNC_UNLOCK")?;
+            }
+            // The device goes in before the media types, as MF asks.
+            if let Some(manager) = manager {
+                // SAFETY: plain COM call on the transform's attributes.
+                if unsafe { attrs.GetUINT32(&MF_SA_D3D11_AWARE) }.unwrap_or(0) == 0 {
+                    return Err(PlatformError::Unsupported {
+                        what: "D3D11 textures (the MFT is not D3D11-aware)".into(),
+                    });
+                }
+                // SAFETY: plain COM call; the message's parameter is the manager's
+                // interface pointer, which the MFT takes its own reference to.
+                unsafe {
+                    transform.ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, manager.as_raw() as usize)
+                }
+                .os("IMFTransform::ProcessMessage (MFT_MESSAGE_SET_D3D_MANAGER)")?;
             }
             // Best effort: an encoder without ICodecAPI, or one that refuses a setting,
             // still encodes with its defaults and the media type's bit rate.
@@ -464,30 +751,52 @@ mod encoder {
                     what: "H.264 encoder",
                 });
             }
-            let frame = match frame {
-                VideoSurface::Cpu(f) => f,
-                _ => {
-                    return Err(PlatformError::Unsupported {
-                        what: "a non-CPU frame on the CPU H.264 path".into(),
-                    });
-                }
-            };
-            let info = frame.info();
-            if info.size != self.config.size || info.format != PixelFormat::Nv12 {
+            let info = *frame.info();
+            if info.size != self.config.size || info.format != self.config.input_format {
                 return Err(PlatformError::Unsupported {
                     what: format!(
-                        "a {:?} {}x{} frame (configured for NV12 {}x{})",
+                        "a {:?} {}x{} frame (configured for {:?} {}x{})",
                         info.format,
                         info.size.width(),
                         info.size.height(),
+                        self.config.input_format,
                         self.config.size.width(),
                         self.config.size.height()
                     ),
                 });
             }
-            pack_nv12(&frame, &mut self.nv12)?;
-            let time = self.in_flight.send(info.pts)?;
-            let sample = mf::sample_from(&self.nv12, time, self.settings.frame_hns)?;
+            let sample = match (&mut self.input, frame) {
+                (Input::Cpu(packer), VideoSurface::Cpu(frame)) => {
+                    let nv12 = packer.pack(&frame)?;
+                    let time = self.in_flight.send(info.pts)?;
+                    mf::sample_from(nv12, time, self.settings.frame_hns)?
+                }
+                (Input::Gpu(gpu), VideoSurface::Gpu(frame)) => {
+                    // Copied before the time is recorded: a busy encoder records nothing.
+                    let sample = gpu.sample(&frame)?;
+                    // The encode target goes back to its producer now; the copy is queued.
+                    drop(frame);
+                    let time = self.in_flight.send(info.pts)?;
+                    // SAFETY: plain COM calls on the live sample.
+                    unsafe {
+                        sample
+                            .SetSampleTime(time)
+                            .and_then(|()| sample.SetSampleDuration(self.settings.frame_hns))
+                    }
+                    .os("IMFSample::SetSampleTime")?;
+                    sample
+                }
+                (Input::Cpu(_), _) => {
+                    return Err(PlatformError::Unsupported {
+                        what: "a GPU frame on the CPU H.264 path".into(),
+                    });
+                }
+                (Input::Gpu(_), _) => {
+                    return Err(PlatformError::Unsupported {
+                        what: "a CPU frame on the GPU H.264 path".into(),
+                    });
+                }
+            };
             // SAFETY: plain COM call; the sample is a live object built above.
             match unsafe { self.mft.transform.ProcessInput(0, &sample, 0) } {
                 Ok(()) => {}
@@ -654,7 +963,7 @@ mod tests {
     };
     use jstream_platform::{HardwarePreference, PlatformError, RateControl, VideoEncoderConfig};
 
-    use super::{InFlight, check, hns, pack_nv12};
+    use super::{InFlight, Nv12Packer, check, hns, pack_nv12};
 
     fn config() -> VideoEncoderConfig {
         VideoEncoderConfig {
@@ -687,6 +996,20 @@ mod tests {
         assert_eq!(s.max_bitrate, Some(8_000_000));
     }
 
+    /// #424: the engine's pipeline hands the encoder the compositor's RGBA frames, and
+    /// every recording and stream on Windows failed to start when this was refused.
+    #[test]
+    fn takes_the_compositors_rgb_output() {
+        for format in [PixelFormat::Rgba8, PixelFormat::Bgra8] {
+            let mut c = config();
+            c.input_format = format;
+            assert_eq!(
+                check(&c).expect("accepted"),
+                check(&config()).expect("valid")
+            );
+        }
+    }
+
     #[test]
     fn refuses_what_the_path_cant_encode() {
         let refused =
@@ -695,7 +1018,10 @@ mod tests {
         c.codec = Codec::Aac;
         assert!(refused(c));
         let mut c = config();
-        c.input_format = PixelFormat::Bgra8;
+        c.input_format = PixelFormat::I420;
+        assert!(refused(c));
+        let mut c = config();
+        c.input_format = PixelFormat::P010;
         assert!(refused(c));
         let mut c = config();
         c.size = FrameSize::new(1921, 1080).expect("size");
@@ -746,6 +1072,83 @@ mod tests {
         );
         let mut wrong = vec![0; 5];
         assert!(pack_nv12(&frame, &mut wrong).is_err());
+    }
+
+    /// A `w`x`h` packed RGB frame of `format` whose pixel at (x, y) is `px(x, y)` as
+    /// `[r, g, b]`, rows padded to `stride` bytes with 0xEE.
+    fn rgb(
+        format: PixelFormat,
+        w: u32,
+        h: u32,
+        stride: usize,
+        px: impl Fn(u32, u32) -> [u8; 3],
+    ) -> VideoFrame {
+        let info = VideoFrameInfo {
+            size: FrameSize::new(w, h).expect("size"),
+            format,
+            color: ColorInfo::default(),
+            pts: MediaTime::zero(Timebase::NANOS),
+        };
+        let mut data = vec![0xEE; stride * h as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let [r, g, b] = px(x, y);
+                let o = y as usize * stride + x as usize * 4;
+                let bytes = match format {
+                    PixelFormat::Bgra8 => [b, g, r, 255],
+                    _ => [r, g, b, 255],
+                };
+                data[o..o + 4].copy_from_slice(&bytes);
+            }
+        }
+        VideoFrame::new(info, vec![Plane::new(data, stride)]).expect("frame")
+    }
+
+    fn packed(frame: &VideoFrame) -> Vec<u8> {
+        Nv12Packer::new(frame.info().size)
+            .pack(frame)
+            .expect("pack")
+            .to_vec()
+    }
+
+    /// #424: the compositor's RGBA reaches the MFT as BT.709 limited NV12.
+    #[test]
+    fn packs_rgba_and_bgra_as_nv12() {
+        // Black, white and mid grey: luma at the range's ends and middle, neutral chroma.
+        for (value, luma) in [(0, 16), (255, 235), (128, 126)] {
+            let out = packed(&rgb(PixelFormat::Rgba8, 4, 2, 16, |_, _| [value; 3]));
+            assert_eq!(&out[..8], &[luma; 8], "luma of {value}");
+            assert_eq!(&out[8..], &[128; 4], "chroma of {value}");
+        }
+        // Pure red, BT.709 limited range's reference value.
+        let out = packed(&rgb(PixelFormat::Rgba8, 2, 2, 8, |_, _| [255, 0, 0]));
+        assert_eq!(out, [63, 63, 63, 63, 102, 240]);
+        // BGRA of the same pixels, and padded rows, pack the same.
+        let px = |x: u32, y: u32| [(x * 40) as u8, (y * 60) as u8, (x * y * 10) as u8];
+        let tight = packed(&rgb(PixelFormat::Rgba8, 6, 4, 24, px));
+        assert_eq!(packed(&rgb(PixelFormat::Rgba8, 6, 4, 40, px)), tight);
+        assert_eq!(packed(&rgb(PixelFormat::Bgra8, 6, 4, 32, px)), tight);
+    }
+
+    #[test]
+    fn packer_refuses_what_it_cant_pack() {
+        let mut packer = Nv12Packer::new(FrameSize::new(4, 4).expect("size"));
+        // Another size than the packer's.
+        let frame = rgb(PixelFormat::Rgba8, 4, 2, 16, |_, _| [0; 3]);
+        assert!(packer.pack(&frame).is_err());
+        let i420 = VideoFrame::zeroed(VideoFrameInfo {
+            size: FrameSize::new(4, 4).expect("size"),
+            format: PixelFormat::I420,
+            color: ColorInfo::default(),
+            pts: MediaTime::zero(Timebase::NANOS),
+        })
+        .expect("frame");
+        assert!(matches!(
+            packer.pack(&i420),
+            Err(PlatformError::Unsupported { .. })
+        ));
+        // NV12 still packs.
+        assert_eq!(packer.pack(&nv12(4, 4, 8)).expect("pack").len(), 24);
     }
 
     #[test]

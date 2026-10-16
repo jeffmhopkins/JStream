@@ -29,7 +29,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 | Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager today, no store on macOS or Linux yet |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
 | Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
-| Paired device tokens (**in flight**, #265, #288) | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in a devices file; the browser's copy in a cookie |
+| Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie (**in flight**, #288) |
 | The program and preview video | What the user chose not to broadcast yet (the preview scene) | Engine memory, the virtual camera's shared textures, `video.snapshot` |
 | Local files | Asset paths and recording paths reach the file system | Wherever the user (or a token holder) points them |
 | The machine itself | Native plugins, decoders and a browser engine run inside or beside the engine | — |
@@ -45,7 +45,7 @@ No telemetry leaves the machine, and logs and crash reports stay local
 | Attacker | What they start with | In scope? |
 |---|---|---|
 | A web page in the user's own browser | JavaScript on a foreign origin; can try `ws://127.0.0.1:<port>` and DNS rebinding | Yes: it must get nothing |
-| A device on the LAN or internet | Network access to the machine | Yes: listeners bind `127.0.0.1` by default; remote access only through pairing (in flight) |
+| A device on the LAN or internet | Network access to the machine | Yes: listeners bind `127.0.0.1` by default; remote access only through pairing, whose device tokens are refused beyond loopback until there is TLS |
 | A page shown by a browser source | Arbitrary HTML and JavaScript, rendered by the engine's own helper | Yes: untrusted content ([ADR-0021](../adr/0021-browser-source.md)) |
 | A crafted file | A collection file, image, font or media file someone shares | Yes: parsing must not crash the engine or reach outside its asset roots |
 | A hostile streaming server or network | Controls the RTMP(S) or YouTube endpoint's replies | Yes: TLS is verified; its text is untrusted |
@@ -96,7 +96,10 @@ a stolen token, local denial of service.
   its port, or a configured extra), which defeats DNS rebinding; `Origin`, when present,
   must be that host or a configured extra, so a foreign page's WebSocket upgrade is
   refused; then the token, as a bearer token, a Basic password or a WebSocket
-  subprotocol ([R-SEC-002](../RULES.md#R-SEC-002)).
+  subprotocol ([R-SEC-002](../RULES.md#R-SEC-002)). The token may also be a paired
+  device's, accepted only on loopback until there is TLS, and `POST /api/v1/pair` is
+  the one request answered without one, only while a pairing code is open (see
+  [Pairing](#pairing)).
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
@@ -118,17 +121,21 @@ before authentication and calls in flight per connection are not capped (#354).
 depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md"]
 -->
 
-**In flight** (#265 for codes and device tokens, #288 for the pairing page and cookie).
-Until they merge, nothing can pair and nothing listens beyond loopback, although
-[R-SEC-002](../RULES.md#R-SEC-002) and SECURITY.md already describe the exceptions.
+**Built:** codes and device tokens ([`jstream-server`](../../crates/jstream-server/README.md#design)).
+`pairing.start` and device tokens work only while the server listens on loopback, since
+there is no TLS yet, so a paired device is a local client with its own revocable token.
+**In flight:** the browser pairing page and cookie (#288). Until it merges, no browser
+can pair, although [R-SEC-002](../RULES.md#R-SEC-002) and SECURITY.md already describe
+that exception.
 
 **Threats:** guessing a pairing code, a leaked device token, a cookie used cross-site,
 a device that should no longer have access.
 
-**Designed controls** ([ADR-0044](../adr/0044-pairing-remote-browsers.md),
-[ADR-0047](../adr/0047-browser-pairing-page-and-device-cookie.md)): one open code at a
-time, 40 bits, two minutes, void after five wrong attempts; 256-bit device tokens kept
-as digests, revocable, dropped after 30 days unused; the browser's copy only as a
+**Controls** ([ADR-0044](../adr/0044-pairing-remote-browsers.md),
+[ADR-0047](../adr/0047-browser-pairing-page-and-device-cookie.md); the cookie's arrive
+with #288): one open code at a time, 40 bits, two minutes, void after five wrong
+attempts; 256-bit device tokens kept as digests, revocable, dropped after 30 days
+unused; the browser's copy only as a
 `__Host-` cookie that is `Secure`, `HttpOnly` and `SameSite=Strict`, on a TLS listener,
 with `Sec-Fetch-Site` checked. A paired browser holds only its device token, and the
 cookie never carries the control token.

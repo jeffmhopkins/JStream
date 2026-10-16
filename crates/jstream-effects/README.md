@@ -37,8 +37,12 @@ docs show a full example.
 - Parameter types are the ones a shader can read: `bool`, `int` (with `min` and `max`
   inside `i32`), `float`, `enum` and `color`. Text, files and references have no uniform
   form. Every pack parameter is `live`. Each default must pass the protocol's own check.
-- A shader path is relative, with `/` separators, no `..`, and ends in `.wgsl`; a symlink
-  out of the pack folder is refused. The manifest is read up to 64 KiB, a shader up to
+- A shader path ends in `.wgsl` and follows the protocol's asset-path rules under the
+  `collection` root ([`jstream-protocol`](../jstream-protocol/README.md#design), the
+  Rejections bullet): relative, with `/` separators, and no empty or `..` segment, drive
+  letter, leading `/`, backslash or `:`, and its last component is not a DOS device name
+  (`con.wgsl` and `shaders/nul.wgsl` are refused). A symlink out of the pack folder is
+  refused. The manifest is read up to 64 KiB, a shader up to
   256 KiB, and a pack holds at most 64 effects of at most 64 parameters each.
 - **Versions** follow ADR-0025: `renames = { old = "new" }` comes with a version above 1,
   and `Effect::migrate` moves an older version's values to the new IDs. Settings from a

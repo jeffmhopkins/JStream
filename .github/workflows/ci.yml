@@ -4,7 +4,7 @@
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
-# Dependabot proposes updates (ADR-0018). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
+# Dependabot proposes updates (ADR-0056). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
 
 name: ci
 
@@ -104,7 +104,7 @@ jobs:
   # The web UI for wasm32 (ADR-0045): clippy over the browser WebSocket client and the UI,
   # then a trunk build. trunk and the wasm-bindgen CLI are downloaded at pinned versions
   # and checked against pinned SHA-256 sums; the wasm-bindgen CLI must match Cargo.lock.
-  # `ui-e2e` in after-review.yml pins the same versions: change both together.
+  # `ui-e2e` and `dist-ui` in after-review.yml pin the same versions: change them together.
   wasm:
     if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     runs-on: ubuntu-latest
