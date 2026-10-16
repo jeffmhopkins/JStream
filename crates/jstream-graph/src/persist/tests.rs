@@ -50,6 +50,25 @@ fn kinds() -> Vec<KindDescriptor> {
             },
         ],
     });
+    kinds.push(KindDescriptor {
+        kind_id: "scope".into(),
+        category: KindCategory::Source,
+        name: "Scope".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        params: vec![ParamDescriptor {
+            id: "audio".into(),
+            ty: ParamType::Bus,
+            default: Value::Null,
+            label: "Audio".into(),
+            description: None,
+            group: None,
+            advanced: false,
+            visible_if: None,
+            live: false,
+        }],
+    });
     kinds
 }
 
@@ -301,6 +320,36 @@ fn a_removed_master_send_round_trips() {
     assert_eq!(value["sends"], json!([]));
     let loaded = load(&json);
     assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(loaded.as_ref(), Ok(&graph));
+}
+
+/// #362: a source whose settings draw a bus loads: the buses are made before the
+/// sources, so the reference finds its bus.
+#[test]
+fn a_source_drawing_a_bus_round_trips() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let applied = graph.apply(
+        &[
+            Edit::BusCreate {
+                bus_id: BusId::new("vod"),
+                name: "VOD".into(),
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "wave".into(),
+                kind: SourceKind::Builtin {
+                    kind: "scope".into(),
+                },
+                settings: [("audio", json!({"type": "bus", "bus_id": "vod"}))]
+                    .into_iter()
+                    .collect(),
+                duplicated_from: None,
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let loaded = load(&graph.to_collection_json());
     assert_eq!(loaded.as_ref(), Ok(&graph));
 }
 

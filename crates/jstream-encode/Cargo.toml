@@ -20,4 +20,12 @@ jstream-platform.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 jstream-platform = { workspace = true, features = ["fake"] }
+# The GPU-frame tests make textures on a software adapter, so they need a backend: the
+# same pin and backends as jstream-render, for tests only.
+wgpu = { workspace = true, features = ["vulkan", "dx12", "metal"] }
+
+[[bench]]
+name = "session"
+harness = false

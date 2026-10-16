@@ -1,7 +1,9 @@
 //! Video sessions: one [`VideoEncoder`] fed with frames from a video mix.
 
-use jstream_platform::media::{MediaKind, Packet};
-use jstream_platform::{Codecs, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface};
+use jstream_platform::media::{MediaKind, Packet, PixelFormat};
+use jstream_platform::{
+    Codecs, GpuContext, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface,
+};
 
 use crate::session::{Core, Counters, Driver, InputHandle};
 use crate::{
@@ -54,6 +56,21 @@ impl Driver for VideoDriver {
 /// and joins the thread; call [`finish`](Self::finish) first for a clean end.
 pub struct VideoSession {
     core: Core<VideoDriver>,
+    path: VideoPath,
+}
+
+/// Which frames a [`VideoSession`]'s encoder takes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VideoPath {
+    /// GPU frames (`VideoSurface::Gpu`): NV12 encode targets on the context the session
+    /// was opened on ([`VideoSession::open_on`]), read without a CPU copy.
+    Gpu,
+    /// CPU frames (`VideoSurface::Cpu`).
+    Cpu {
+        /// Why the GPU context given to [`VideoSession::open_on`] was not used; `None`
+        /// when there was none.
+        fallback: Option<String>,
+    },
 }
 
 impl VideoSession {
@@ -68,13 +85,52 @@ impl VideoSession {
         config: VideoEncoderConfig,
         options: SessionOptions,
     ) -> Result<Self, EncodeError> {
-        check_kind(&config)?;
-        let encoder = codecs.video_encoder(&config).map_err(EncodeError::Open)?;
-        Self::start(encoder, config, options)
+        Self::open_on(codecs, None, config, options)
     }
 
-    /// Starts a session on an encoder that is already open, with the `config` it was
-    /// opened with.
+    /// Opens a video encoder that takes GPU frames on `context` when the platform has
+    /// one ([`Codecs::on_context`]), and otherwise one for CPU frames, as
+    /// [`open`](Self::open) does (ARCH › GPU pipeline, step 6). [`path`](Self::path)
+    /// says which, and why the context was not used. Without a context this is
+    /// [`open`](Self::open).
+    ///
+    /// Encode targets are NV12, so the GPU encoder is opened with `config` in NV12,
+    /// whatever its `input_format`; the CPU fallback is opened with `config` as given.
+    /// [`info`](Self::info) has the configuration that was opened.
+    ///
+    /// # Errors
+    /// As for [`open`](Self::open): only the CPU encoder's failure to open is an
+    /// error.
+    pub fn open_on(
+        codecs: &dyn Codecs,
+        context: Option<&GpuContext>,
+        config: VideoEncoderConfig,
+        options: SessionOptions,
+    ) -> Result<Self, EncodeError> {
+        check_kind(&config)?;
+        let fallback = match context.map(|context| codecs.on_context(context)) {
+            None => None,
+            Some(Ok(Some(gpu))) => {
+                let gpu_config = VideoEncoderConfig {
+                    input_format: PixelFormat::Nv12,
+                    ..config
+                };
+                match gpu.video_encoder(&gpu_config) {
+                    Ok(encoder) => {
+                        return Self::begin(encoder, gpu_config, options, VideoPath::Gpu);
+                    }
+                    Err(err) => Some(format!("no encoder takes GPU frames: {err}")),
+                }
+            }
+            Some(Ok(None)) => Some("the codec backend has no GPU path".into()),
+            Some(Err(err)) => Some(format!("the codec backend refused the GPU context: {err}")),
+        };
+        let encoder = codecs.video_encoder(&config).map_err(EncodeError::Open)?;
+        Self::begin(encoder, config, options, VideoPath::Cpu { fallback })
+    }
+
+    /// Starts a session on an encoder that is already open for CPU frames, with the
+    /// `config` it was opened with.
     ///
     /// # Errors
     /// [`EncodeError::WrongKind`] for an audio codec, and [`EncodeError::Spawn`] when the
@@ -83,6 +139,15 @@ impl VideoSession {
         encoder: Box<dyn VideoEncoder>,
         config: VideoEncoderConfig,
         options: SessionOptions,
+    ) -> Result<Self, EncodeError> {
+        Self::begin(encoder, config, options, VideoPath::Cpu { fallback: None })
+    }
+
+    fn begin(
+        encoder: Box<dyn VideoEncoder>,
+        config: VideoEncoderConfig,
+        options: SessionOptions,
+        path: VideoPath,
     ) -> Result<Self, EncodeError> {
         check_kind(&config)?;
         let info = StreamInfo {
@@ -95,7 +160,12 @@ impl VideoSession {
             info,
             &options,
         )?;
-        Ok(Self { core })
+        Ok(Self { core, path })
+    }
+
+    /// Which frames the encoder takes. Pushing the other kind fails the session.
+    pub fn path(&self) -> &VideoPath {
+        &self.path
     }
 
     /// A handle for the render side to push frames into.
@@ -193,6 +263,7 @@ impl std::fmt::Debug for VideoSession {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("VideoSession")
             .field("info", self.info())
+            .field("path", &self.path)
             .finish_non_exhaustive()
     }
 }
