@@ -40,7 +40,9 @@
 //! a `state.changed` this connection's call caused still follows that call's response.
 //! While [`REPLY_BACKLOG`] replies wait unsent, the task stops reading requests, so a
 //! client that sends requests without reading the answers is held back by the socket as
-//! before.
+//! before. The same goes for calls the engine hasn't answered yet: while
+//! [`MAX_IN_FLIGHT`] are in flight, the task reads nothing more until one completes, so a
+//! client can't pile up unbounded work in the session (#354).
 
 use crate::preview::{self, Frames};
 use axum::extract::ws::{CloseFrame, Message, WebSocket, close_code};
@@ -85,6 +87,14 @@ const EVENT_BUFFER: usize = 1024;
 /// How many replies may wait unsent before the connection stops reading requests, until
 /// the client reads some answers. Replies are never dropped, so this is what bounds them.
 const REPLY_BACKLOG: usize = 1024;
+
+/// How many calls may be in flight on one connection (forwarded to the session and not
+/// answered yet) before the connection stops reading, until one completes (#354).
+///
+/// Each one holds its parsed request, up to the 4 MiB message limit, so this bounds what
+/// a client that never waits for answers can make the server hold to 256 MiB, while a UI
+/// that pipelines its calls stays far below it.
+pub(crate) const MAX_IN_FLIGHT: usize = 64;
 
 /// The connection ended (the client went away or a send failed).
 struct Closed;
@@ -147,7 +157,7 @@ pub(crate) async fn run(
                     break Err(Closed);
                 }
             }
-            message = incoming.next(), if outbox.reads_requests() => {
+            message = incoming.next(), if outbox.reads_requests() && calls.len() < MAX_IN_FLIGHT => {
                 // `select!` picks among ready branches at random, so a message can be
                 // taken here although the shutdown is ready too. Once the server is
                 // shutting down nothing read is handled: a request is not answered

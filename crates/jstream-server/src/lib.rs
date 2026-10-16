@@ -3,7 +3,8 @@
 //! [`Connector`] that opens one session per connection, in-process or otherwise. Every
 //! upgrade request must carry the control token and pass the `Origin` and `Host` checks,
 //! and it listens on `127.0.0.1` unless told otherwise (R-SEC-002, ADR-0006). It bounds
-//! how many connections are open at once and how long a connection has to send its
+//! how many TCP and WebSocket connections are open at once, how many calls each
+//! WebSocket connection has in flight, and how long a connection has to send its
 //! upgrade request and complete its handshake. When the host turns it on
 //! (`ServerConfig::mcp`), it also serves MCP's streamable-HTTP transport at [`MCP_PATH`],
 //! behind the same checks, with one MCP session per `initialize`. When the host names a
@@ -72,6 +73,7 @@ const MAX_MESSAGE_BYTES: usize = 4 << 20;
 pub struct Server {
     listener: TcpListener,
     local_addr: SocketAddr,
+    max_tcp_connections: usize,
     header_read_timeout: Duration,
     app: Arc<App>,
     shutdown: watch::Sender<bool>,
@@ -148,6 +150,7 @@ impl Server {
         Ok(Server {
             listener,
             local_addr,
+            max_tcp_connections: config.max_tcp_connections,
             header_read_timeout: config.header_read_timeout,
             app,
             shutdown,
@@ -198,6 +201,7 @@ impl Server {
     {
         let Server {
             listener,
+            max_tcp_connections,
             header_read_timeout,
             app,
             shutdown,
@@ -223,7 +227,8 @@ impl Server {
         };
         // The peer address is only logged, never trusted: the gate decides on the headers.
         let service = router.into_make_service_with_connect_info::<Accepted>();
-        axum::serve(Limited::new(listener, header_read_timeout), service)
+        let listener = Limited::new(listener, max_tcp_connections, header_read_timeout);
+        axum::serve(listener, service)
             .with_graceful_shutdown(signal)
             .await
             .map_err(ServerError::Serve)?;
