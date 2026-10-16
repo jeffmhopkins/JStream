@@ -47,7 +47,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 86% | 30 | 3 | 2 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 35% | 8 | 10 | 5 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 35% | 8 | 11 | 4 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 11% | 1 | 1 | 7 |
 
 77 of 111 items are merged; 8 of those still wait on a run on Windows hardware.
@@ -196,7 +196,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | D8 | Master and output audio chains | ✅ merged | #249 |
 | D8p | Audio chain protocol fields | ⏳ planned |  |
 | C9 | Media file source | 🧪 merged, Windows run pending: media file hardware tests (#382) | #245, #322 |
-| W1 | Audio waveform and spectrum sources | ⏳ planned |  |
+| W1 | Audio waveform and spectrum sources | 🔍 in review | #460, #463, #466 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned |  |
 | K2 | Keyframe scenes: model and evaluator | 🔍 in review | #350 |
 
