@@ -101,8 +101,8 @@ and calls this crate.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's. Also not here: NV12 or
-P010 conversion, encode-target export, WGSL effect
-packs, the video filter chain runtime (the built-in filters' passes are here, see
+P010 conversion, encode-target export, loading WGSL effect packs
+(`jstream-effects`; this crate only draws them), the video filter chain runtime (the built-in filters' passes are here, see
 [Filters](#filters)), 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
 stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
 fields stay neutral until M3. The GPU pipeline's encode
@@ -327,12 +327,24 @@ kinds.
   sizes and the time, an optional aux image, and the filter's `Params` uniform) and
   colour helpers. `src` and `aux` always return premultiplied linear colour; an
   imported input is premultiplied after sampling. A pipeline is built on first use and
-  kept for the compositor's life.
+  kept for the compositor's life, keyed by the shader's label and source (up to four
+  sources per label, so a reloaded pack's old and new filters don't evict each other).
+  A shader wgpu refuses, by its own validation or a backend compiler's, is a
+  `RenderError`, not a panic: error scopes for both catch the build, and the refusal is
+  cached so it isn't recompiled every frame. An external filter's uniform bytes that
+  aren't a multiple of 16 (at least 16) are refused the same way.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
 - Each draw creates its two small uniform buffers, two views and a bind group, and each
   `apply_filter` its output layer. Pooling them is the chain runtime's job (V0); until
   then a filter costs those small allocations per frame.
+
+**External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
+whose WGSL arrives at run time: a label (the kind ID), WGSL appended to the prelude
+(exported as `FILTER_PRELUDE`, which packs validate against), and the `Params` bytes for
+a settings map. `VideoFilter::external(kind_id, filter, settings)` draws it as one
+replacing pass. [`jstream-effects`](../jstream-effects/README.md#purpose) implements it
+for each pack effect.
 
 **The kinds.** Each group documents its kinds here as it lands.
 
