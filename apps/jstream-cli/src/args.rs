@@ -7,7 +7,7 @@
 
 use crate::exit::CliError;
 use jstream_control::protocol::{
-    Action, Batch, Crop, Edit, Finite32, FitMode, IdempotencyKey, ItemGeometry, ItemId,
+    Action, Batch, Crop, DeviceId, Edit, Finite32, FitMode, IdempotencyKey, ItemGeometry, ItemId,
     ItemTransform, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole, Size,
     SourceId, SourceKind, Vec2,
 };
@@ -53,6 +53,11 @@ Commands:
                                    stdin; never from the command line
   output clear-key <output-id>     remove the output's stream key (action
                                    output.clear_key)
+  pair                             start pairing a device and print its one-time
+                                   code, open for 2 minutes (action pairing.start)
+  device list                      list the paired devices (query device.list)
+  device revoke <device-id>        revoke a paired device and close its
+                                   connections (action device.revoke)
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
   events [--count <n>]             print events as they arrive; stop after <n>
@@ -279,13 +284,18 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["output", "clear-key", id] => Command::Action(Action::OutputClearKey {
             output_id: OutputId::new(*id),
         }),
+        ["pair"] => Command::Action(Action::PairingStart),
+        ["device", "list"] => Command::Query(Query::DeviceList),
+        ["device", "revoke", id] => Command::Action(Action::DeviceRevoke {
+            device_id: DeviceId::new(*id),
+        }),
         ["edit", rest @ ..] => Command::Edit(parse_batch(rest)?),
         ["events", rest @ ..] => parse_events(rest)?,
         ["mcp"] => Command::Mcp,
         [word, ..] => {
             let known = [
                 "help", "version", "hello", "state", "scene", "source", "item", "output", "video",
-                "studio", "edit", "events", "mcp",
+                "studio", "edit", "events", "mcp", "pair", "device",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -637,8 +647,8 @@ mod tests {
     use super::{Command, Connection, Invocation, parse};
     use crate::exit::CliError;
     use jstream_control::protocol::{
-        Action, Batch, Crop, Edit, FitMode, IdempotencyKey, ItemId, OutputId, OutputKind, Query,
-        Rev, RtmpTarget, SceneId, SceneRole, SourceId, SourceKind,
+        Action, Batch, Crop, DeviceId, Edit, FitMode, IdempotencyKey, ItemId, OutputId, OutputKind,
+        Query, Rev, RtmpTarget, SceneId, SceneRole, SourceId, SourceKind,
     };
 
     fn args(line: &[&str]) -> Vec<String> {
@@ -750,6 +760,19 @@ mod tests {
             Command::Query(Query::StudioGet)
         );
         assert!(err(&["studio"]).starts_with("wrong arguments for `"));
+        assert_eq!(ok(&["pair"]).command, Command::Action(Action::PairingStart));
+        assert!(err(&["pair", "now"]).starts_with("wrong arguments for `"));
+        assert_eq!(
+            ok(&["device", "list"]).command,
+            Command::Query(Query::DeviceList)
+        );
+        assert_eq!(
+            ok(&["device", "revoke", "dev_1"]).command,
+            Command::Action(Action::DeviceRevoke {
+                device_id: DeviceId::new("dev_1")
+            })
+        );
+        assert!(err(&["device"]).starts_with("wrong arguments for `"));
     }
 
     #[test]

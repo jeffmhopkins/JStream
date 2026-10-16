@@ -91,6 +91,9 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `output start <id>`, `output stop <id>` | action `output.start`, `output.stop` |
 | `output set-key <id> [--key-file <path>]` | action `output.set_key`, with the key read from the file or stdin |
 | `output clear-key <id>` | action `output.clear_key` |
+| `pair` | action `pairing.start`: prints a one-time code to enter on the device |
+| `device list` | query `device.list` |
+| `device revoke <device-id>` | action `device.revoke` (also closes the device's connections) |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
 | `events [--count <n>]` | the event subscription |
 | `mcp` | serves MCP on stdin and stdout; each tool call is one protocol call (see **MCP** below) |
@@ -138,11 +141,14 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
-  and press Ctrl-D; the terminal shows what is typed). Surrounding whitespace, such as
-  a final newline, is dropped. Anything else after the output ID is a usage error that
-  doesn't repeat it. An empty key, an unreadable file, or input over 4096 bytes (no
-  stream key is that long; it is refused before it is buffered or sent) is a usage
-  error too, and the key is read before connecting. Neither the CLI nor the engine prints a key back: the
+  and press Ctrl-D; the terminal shows what is typed). A leading byte-order mark
+  (Windows PowerShell 5.1 writes one on a pipe; Notepad's "UTF-8 with BOM" starts a
+  file with one) and surrounding whitespace, such as a final newline, are dropped.
+  Anything else after the output ID is a usage error that doesn't repeat it. An empty
+  key, a key with a control or non-ASCII character (no streaming service issues one),
+  an unreadable file, or input over 4096 bytes (no stream key is that long; it is
+  refused before it is buffered or sent) is a usage error too, and the key is read
+  before connecting. Neither the CLI nor the engine prints a key back: the
   reply is `output.set_key accepted for <id> (<request>)`, and `output status` says
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
@@ -169,6 +175,15 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
+- **Pairing** ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): `pair`
+  prints `pairing code: XXXX-XXXX` and how long it stays open; the user enters it on the
+  device, which posts it to the server's `/api/v1/pair` for a device token of its own
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). The code is
+  printed because it is the answer, and is never logged. `device list` prints a table
+  of `ID`, `NAME` and when each was paired and last used (Unix seconds), or `no paired
+  devices`; `device revoke <id>` prints `device <id> revoked (<request>)`. The server
+  answers these calls, so the engine must be reached through `--url`; `--mock` answers
+  `unsupported` (exit 20).
 - **Errors** go to stderr. For people: `error: <message>`, with ` (<code>)` appended
   when it is an engine error (``error: scene `x` does not exist (not_found)``). With
   `--json` (found among the global options even when parsing fails): an object
@@ -230,7 +245,7 @@ for example:
 | 17 | `invalid_argument` |
 | 18 | `action_failed` |
 | 19 | `internal` |
-| 20 | an error code this CLI doesn't know (from a newer engine), and `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send |
+| 20 | an error code this CLI doesn't know (from a newer engine); `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send; and `unsupported`, which `pair` and `device` get from an engine with no server in front (`--mock`) |
 
 <a id="design"></a>
 ## Design
