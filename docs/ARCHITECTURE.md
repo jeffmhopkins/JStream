@@ -578,7 +578,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
-- **Pairing** (protocol 0.20, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
+- **Pairing** (protocol 0.21, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
   action `pairing.start` answers a one-time code (an action result, the one place it is
   sent), which a device trades at `POST /api/v1/pair` for a device token of its own;
   `device.list` and the action `device.revoke` manage the paired devices. They concern
