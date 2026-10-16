@@ -53,7 +53,9 @@ generated from the protocol's JSON Schema when a `Server` is built: every varian
 `Edit`, `Action` and `Query`, and each `HistoryOp`, is named `noun.verb`, and the tool
 named after its noun
 takes it as its `op` argument. A command added to the protocol becomes an op with no
-change here, and a new noun becomes a new tool. The generated list is in the snapshot
+change here, and a new noun becomes a new tool, except `youtube`, whose ops get no
+tool ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3; the
+exclusion lands with the YouTube commands). The generated list is in the snapshot
 below; its shape is:
 
 | Tool | Takes | Becomes |

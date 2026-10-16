@@ -5,7 +5,7 @@
 //! HEVC record ([`hevc`]), AV1 OBUs and their record ([`av1`]), and the AAC
 //! `AudioSpecificConfig` ([`aac`]).
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-mux/README.md#purpose, docs/adr/0031-source-types-and-decoding-scope.md, docs/adr/0051-youtube-without-a-required-oauth-client.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-mux/README.md#purpose, docs/adr/0031-source-types-and-decoding-scope.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md
 
 #![forbid(unsafe_code)]
 

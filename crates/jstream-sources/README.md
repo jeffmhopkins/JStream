@@ -117,7 +117,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   backend's failure is `SourceError::Browser`. Dropping the source closes the page.
 - `youtube_chat` ("YouTube chat"): a preset of `browser` that shows a live video's chat
   through YouTube's public popout chat page, with no sign-in and no Google OAuth client
-  (ADR-0051, proposed). `video` takes the video's ID or a `youtube.com/watch?v=`,
+  (ADR-0051 §1, kept by ADR-0058). `video` takes the video's ID or a `youtube.com/watch?v=`,
   `youtube.com/live/`, `youtube.com/live_chat?v=` or `youtu.be/` link (with or without
   `www.` or `m.`); the ID must be letters, digits, `-` and `_` only, so it can't reshape
   the page's URL, and anything else is refused naming `video`. Empty is a blank page. A

@@ -703,7 +703,7 @@ After `welcome`, the server pushes every event to every client.
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
   built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
   those meters exist, as later optional fields. Audience figures are `youtube.stats`
-  ([ADR-0051](../../docs/adr/0051-youtube-without-a-required-oauth-client.md)).
+  ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)).
 - `meters.tick {sources, buses}` is one reading of the audio levels (0.19), about ten
   a second while the mixer runs; an idle engine emits none. Each routed source and
   each bus has `peak` (the largest absolute sample since the previous tick) and `rms`

@@ -136,10 +136,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
 
 - Full 3D transforms; WGSL effect packs with hot reload.
 - YouTube with no required OAuth client: a stream key with Studio's auto-start, and chat
-  through a browser-source preset. With the user's own OAuth client, `jstream-youtube`
+  through a browser-source preset. Signed in through JStream's own OAuth client, `jstream-youtube`
   adds broadcasts, metadata, health, chat, sending chat as the channel, a featured chat
-  message shown on stream by a chat message source, and audience stats, all exposed
-  over MCP ([ADR-0051](docs/adr/0051-youtube-without-a-required-oauth-client.md)).
+  message shown on stream by a chat message source, and audience stats, for people in the
+  UI only, not agents ([ADR-0058](docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)).
 - Direct NVENC/AMF encoders where measurements justify them; HEVC/AV1 via enhanced RTMP.
 - WASM automation plugins.
 - CLAP audio effect filters, hosted out of process

@@ -157,11 +157,11 @@ snapshot and the graceful stop. That is what CI or a Linux machine can run.
 -->
 
 Going live to YouTube needs no sign-in and no Google OAuth client
-([ADR-0051](../adr/0051-youtube-without-a-required-oauth-client.md)): use a plain stream
+([ADR-0058](../adr/0058-youtube-sign-in-with-a-jstream-client.md)): use a plain stream
 key as above, with YouTube's RTMPS server URL from YouTube Studio, and turn on
 auto-start (and auto-stop) for the stream in YouTube Studio, so the broadcast goes live
-when data arrives and ends when it stops. The optional `youtube.*` flows (sign-in with
-the user's own OAuth client, then creating the broadcast and binding the output through
+when data arrives and ends when it stops. The optional `youtube.*` flows (sign-in through
+JStream's own OAuth client, then creating the broadcast and binding the output through
 the API) are added here once the daemon's YouTube wiring (roadmap item A6) and the
 YouTube setup flow (Y3, issue #223) have landed.
 

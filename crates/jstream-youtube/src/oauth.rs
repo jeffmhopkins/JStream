@@ -33,7 +33,7 @@ pub const REVOCATION_ENDPOINT: &str = "https://oauth2.googleapis.com/revoke";
 /// never starts with a token about to expire.
 pub const REFRESH_MARGIN: Duration = Duration::from_secs(60);
 
-/// A YouTube OAuth scope (ADR-0041 §4, kept by ADR-0051).
+/// A YouTube OAuth scope (ADR-0041 §4, kept by ADR-0058).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Scope {
     /// `youtube.readonly`: listing broadcasts and streams, and stream health.
@@ -116,7 +116,7 @@ impl OAuthClient {
     /// finish it with. `redirect_uri` is the loopback listener's
     /// ([`LoopbackRedirect::redirect_uri`](crate::LoopbackRedirect::redirect_uri)).
     ///
-    /// JStream asks for [`Scope::Manage`] once (ADR-0041 §4, kept by ADR-0051); Google has no incremental
+    /// JStream asks for [`Scope::Manage`] once (ADR-0041 §4, kept by ADR-0058); Google has no incremental
     /// authorization for installed apps, so a later scope means a new sign-in.
     ///
     /// # Errors
