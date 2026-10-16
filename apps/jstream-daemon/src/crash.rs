@@ -4,9 +4,10 @@
 //! daemon and protocol versions, the OS and architecture, the time, the process ID, the
 //! panicking thread's name, the panic's location and message, and a backtrace. It holds
 //! nothing else: no environment, no command line, no settings. Registered secrets (the
-//! control token) are replaced by `***` wherever they appear (R-SEC-001), and only their
-//! BLAKE3 digests are kept for that, never their text. The newest [`MAX_REPORTS`] reports
-//! are kept.
+//! control token, and every stream key and OAuth refresh token that passes through a
+//! [`Redacting`] credential store) are replaced by `***` wherever they appear
+//! (R-SEC-001), and only their BLAKE3 digests are kept for that, never their text. The
+//! newest [`MAX_REPORTS`] reports are kept.
 //!
 //! Native crashes (access violations, aborts) write no report yet: see
 //! apps/jstream-daemon/README.md#design.
@@ -14,6 +15,8 @@
 //! Docs: apps/jstream-daemon/README.md#design
 
 use crate::logs::{self, Utc};
+#[cfg(any(windows, test))]
+use jstream_platform::{OAuthTokenStore, PlatformError, Secret as StoredSecret, StreamKeyStore};
 use jstream_protocol::PROTOCOL_VERSION;
 use std::backtrace::Backtrace;
 use std::io::{self, Write};
@@ -43,7 +46,7 @@ type Secret = (usize, blake3::Hash);
 /// The secrets to redact from reports. Only their digests are kept.
 static SECRETS: Mutex<Vec<Secret>> = Mutex::new(Vec::new());
 
-/// Registers `value` (a control token, a stream key) to be replaced by `***` in crash
+/// Registers `value` (a control token, a stream key, a refresh token) to be replaced by `***` in crash
 /// reports. Empty values are ignored.
 pub fn register_secret(value: &str) {
     if value.is_empty() {
@@ -56,6 +59,73 @@ pub fn register_secret(value: &str) {
     if !secrets.contains(&secret) {
         secrets.push(secret);
     }
+}
+
+/// A credential store that registers every secret it stores or loads with the crash
+/// reports' redaction ([`register_secret`]), so a panic that quotes a stream key or a
+/// refresh token writes `***` in its place (#353). It wraps the daemon's key store, so
+/// a key is registered when `output.set_key` stores it and when the publish opener
+/// reads it, before anything could format it; [`OAuthTokenStore`] works the same way
+/// for a refresh token once the daemon signs in to YouTube. Only digests are kept.
+#[cfg(any(windows, test))]
+pub struct Redacting<S: ?Sized>(pub std::sync::Arc<S>);
+
+#[cfg(any(windows, test))]
+impl<S: StreamKeyStore + ?Sized> StreamKeyStore for Redacting<S> {
+    fn set(&self, output_id: &str, key: &StoredSecret) -> Result<(), PlatformError> {
+        register_secret(key.expose());
+        self.0.set(output_id, key)
+    }
+
+    fn get(&self, output_id: &str) -> Result<Option<StoredSecret>, PlatformError> {
+        let key = self.0.get(output_id)?;
+        if let Some(key) = &key {
+            register_secret(key.expose());
+        }
+        Ok(key)
+    }
+
+    fn clear(&self, output_id: &str) -> Result<(), PlatformError> {
+        self.0.clear(output_id)
+    }
+
+    fn is_set(&self, output_id: &str) -> Result<bool, PlatformError> {
+        self.0.is_set(output_id)
+    }
+}
+
+#[cfg(any(windows, test))]
+impl<S: OAuthTokenStore + ?Sized> OAuthTokenStore for Redacting<S> {
+    fn set(&self, account: &str, token: &StoredSecret) -> Result<(), PlatformError> {
+        register_secret(token.expose());
+        self.0.set(account, token)
+    }
+
+    fn get(&self, account: &str) -> Result<Option<StoredSecret>, PlatformError> {
+        let token = self.0.get(account)?;
+        if let Some(token) = &token {
+            register_secret(token.expose());
+        }
+        Ok(token)
+    }
+
+    fn clear(&self, account: &str) -> Result<(), PlatformError> {
+        self.0.clear(account)
+    }
+
+    fn is_set(&self, account: &str) -> Result<bool, PlatformError> {
+        self.0.is_set(account)
+    }
+}
+
+/// Whether `value` is registered, for tests.
+#[cfg(test)]
+pub(crate) fn is_registered(value: &str) -> bool {
+    let secret = (value.len(), blake3::hash(value.as_bytes()));
+    SECRETS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .contains(&secret)
 }
 
 /// Installs the panic hook that writes crash reports into `dir`, which must exist, and
@@ -249,17 +319,21 @@ fn write_report(dir: &Path, now: SystemTime, report: &str) -> io::Result<PathBuf
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_MESSAGE_BYTES, MAX_REPORTS, REPORT_PREFIX, Secret, redact, redacted_report,
-        register_secret, write_report,
+        MAX_MESSAGE_BYTES, MAX_REPORTS, REPORT_PREFIX, Redacting, Secret, is_registered, redact,
+        redacted_report, register_secret, write_report,
     };
+    use jstream_platform::fake::{MemoryKeyStore, MemoryTokenStore};
+    use jstream_platform::{OAuthTokenStore, Secret as StoredSecret, StreamKeyStore};
     use std::backtrace::Backtrace;
     use std::path::{Path, PathBuf};
     use std::process::Command;
+    use std::sync::Arc;
     use std::time::SystemTime;
 
-    /// A fake control token and a fake stream key: neither may reach a report.
+    /// A fake control token, stream key and refresh token: none may reach a report.
     const FAKE_TOKEN: &str = "f4ke-c0ntrol-t0ken-0123456789abcdef";
     const FAKE_STREAM_KEY: &str = "live_f4ke-stream-key-9876543210";
+    const FAKE_REFRESH_TOKEN: &str = "1//f4ke-refresh-t0ken-abcdef0123";
 
     /// Set in the child process that panics.
     const CHILD_ENV: &str = "JSTREAM_DAEMON_CRASH_TEST_DIR";
@@ -317,6 +391,67 @@ mod tests {
         assert!(!report.contains("s3cr"), "a prefix of the secret leaked");
     }
 
+    /// A stream key or refresh token is registered when a [`Redacting`] store stores it
+    /// or hands it out, and not when the store fails or holds nothing (#353).
+    #[test]
+    fn a_redacting_store_registers_what_it_stores_and_loads() {
+        let keys = MemoryKeyStore::new();
+        let loaded = "live_loaded-key-for-redaction-0001";
+        keys.set("out_a", &StoredSecret::new(loaded))
+            .expect("stored behind the wrapper's back");
+        let redacting = Redacting(Arc::new(keys.clone()));
+        assert_eq!(redacting.is_set("out_a").ok(), Some(true));
+        assert!(!is_registered(loaded), "is_set reads no secret");
+        let key = redacting.get("out_a").expect("read").expect("stored");
+        assert_eq!(key.expose(), loaded);
+        assert!(is_registered(loaded), "a loaded key is registered");
+        assert!(redacting.get("out_none").expect("read").is_none());
+
+        let stored = "live_stored-key-for-redaction-0002";
+        redacting
+            .set("out_b", &StoredSecret::new(stored))
+            .expect("stored");
+        assert!(is_registered(stored), "a stored key is registered");
+        assert_eq!(
+            keys.get("out_b")
+                .expect("read")
+                .map(|k| k.expose().to_owned()),
+            Some(stored.to_owned()),
+            "the key reached the inner store"
+        );
+        redacting.clear("out_b").expect("cleared");
+        assert!(keys.get("out_b").expect("read").is_none());
+
+        let unread = "live_unread-key-for-redaction-0003";
+        keys.set("out_c", &StoredSecret::new(unread))
+            .expect("stored");
+        keys.set_failing(true);
+        assert!(redacting.get("out_c").is_err());
+        assert!(!is_registered(unread), "a failed read registers nothing");
+        keys.set_failing(false);
+
+        let tokens = MemoryTokenStore::new();
+        let refresh = "1//refresh-token-for-redaction-0004";
+        tokens
+            .set("someone@example.com", &StoredSecret::new(refresh))
+            .expect("stored");
+        let redacting = Redacting(Arc::new(tokens));
+        let token = redacting
+            .get("someone@example.com")
+            .expect("read")
+            .expect("stored");
+        assert_eq!(token.expose(), refresh);
+        assert!(
+            is_registered(refresh),
+            "a loaded refresh token is registered"
+        );
+        let new = "1//refresh-token-for-redaction-0005";
+        redacting
+            .set("someone@example.com", &StoredSecret::new(new))
+            .expect("stored");
+        assert!(is_registered(new), "a stored refresh token is registered");
+    }
+
     #[test]
     fn old_reports_are_pruned_to_the_cap() {
         let dir = scratch("prune");
@@ -342,19 +477,34 @@ mod tests {
 
     /// The real hook, in a child process (this test binary again, running only this
     /// test), so the hook and the panic don't touch the other tests. The child registers
-    /// the fake token, has the fake stream key in its environment, and panics with a
-    /// message quoting both; the report has the facts and neither secret.
+    /// the fake token, loads the fake stream key and refresh token from credential stores
+    /// behind [`Redacting`] (the key's text comes from its environment, so only the store
+    /// registers it), and panics with a message quoting all three; the report has the
+    /// facts and no secret (#353).
     #[test]
     fn a_panic_writes_a_redacted_report() {
         if let Some(dir) = std::env::var_os(CHILD_ENV) {
             register_secret(FAKE_TOKEN);
-            register_secret(FAKE_STREAM_KEY);
+            let inner = MemoryKeyStore::new();
+            let from_env = std::env::var("JSTREAM_FAKE_STREAM_KEY").unwrap_or_default();
+            inner
+                .set("out_yt", &StoredSecret::new(from_env))
+                .expect("stored");
+            let keys = Redacting(Arc::new(inner));
+            let tokens = MemoryTokenStore::new();
+            tokens
+                .set("someone", &StoredSecret::new(FAKE_REFRESH_TOKEN))
+                .expect("stored");
+            let tokens = Redacting(Arc::new(tokens));
             super::install(PathBuf::from(dir));
             let _ = std::thread::Builder::new()
                 .name("crash-test-worker".to_owned())
-                .spawn(|| {
-                    let key = std::env::var("JSTREAM_FAKE_STREAM_KEY").unwrap_or_default();
-                    panic!("boom with token={FAKE_TOKEN} and key={key}");
+                .spawn(move || {
+                    let key = keys.get("out_yt").ok().flatten();
+                    let token = tokens.get("someone").ok().flatten();
+                    let key = key.as_ref().map_or("", StoredSecret::expose);
+                    let token = token.as_ref().map_or("", StoredSecret::expose);
+                    panic!("boom with token={FAKE_TOKEN} and key={key} and refresh={token}");
                 })
                 .expect("spawned")
                 .join();
@@ -399,13 +549,17 @@ mod tests {
             "{report}"
         );
         assert!(
-            report.contains("message: boom with token=*** and key=***\n"),
+            report.contains("message: boom with token=*** and key=*** and refresh=***\n"),
             "{report}"
         );
         assert!(report.contains("backtrace:\n"), "{report}");
         for text in [&report, &stderr.to_string()] {
             assert!(!text.contains(FAKE_TOKEN), "the token leaked: {text}");
             assert!(!text.contains(FAKE_STREAM_KEY), "the key leaked: {text}");
+            assert!(
+                !text.contains(FAKE_REFRESH_TOKEN),
+                "the refresh token leaked: {text}"
+            );
         }
         assert!(
             stderr.contains("error: panic in thread 'crash-test-worker'"),

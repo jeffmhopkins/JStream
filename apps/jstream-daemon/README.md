@@ -52,8 +52,10 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Crash reports** (`crash.rs`): the panic hook that writes a redacted report into the
   log directory ([Design](#design)).
 - **Tests** (`serve.rs`, `token.rs`, `args.rs`, `logs.rs`, `crash.rs` unit tests, the
-  crash hook in a child process; the publish opener and the live engine on the
-  platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
+  crash hook in a child process, with a stream key and a refresh token loaded through
+  `crash::Redacting`; the publish opener and the live engine on the platform fakes,
+  and the real `connect_rtmp` failing against loopback servers without naming the key,
+  in `serve.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI
   requests, and stopped with
   SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
@@ -223,7 +225,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   webcam; that start fails with the sink's reason on a Windows without
   `MFCreateVirtualCamera` (before Windows 11) or before `--register-vcam`),
   `WindowsCredentials` as its
-  stream key store (`with_key_store`), and a publish opener (`with_publish_opener`).
+  stream key store (`with_key_store`; `live` puts it behind `crash::Redacting`, so each
+  key is registered with the crash reports' redaction, [Crash reports](#design)), and a
+  publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
   starts. Elsewhere there are no backends yet, so outputs stay the placeholder state
   machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
@@ -383,8 +387,12 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   versions, OS and architecture, the UTC time, the process ID, the thread name, the
   panic's location and message (cut at 16 KiB), and a backtrace (`std`'s, always
   captured). It never writes the environment, the command line or settings. Secrets
-  registered with it (the control token, by `token.rs`) are replaced by `***` anywhere
-  in the report and in its stderr line ([R-SEC-001](../../docs/RULES.md#R-SEC-001));
+  registered with it are replaced by `***` anywhere in the report and in its stderr
+  line ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): the control token, by `token.rs`,
+  and every stream key the live engine stores or reads, since `serve::live` hands the
+  engine and the publish opener its key store behind `crash::Redacting`, which
+  registers each secret as it is stored or loaded (refresh tokens too, once the daemon
+  keeps an OAuth token store);
   only their length and BLAKE3 digest are kept, and the text is scanned for windows
   with that digest, so the hook holds no plaintext. It replaces the default hook,
   whose stderr line would quote the message unredacted. A panic in a tokio task writes

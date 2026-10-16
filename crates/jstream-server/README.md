@@ -398,6 +398,11 @@ alone.
   same way. The test
   `gate::tests::refusals_are_logged_without_the_token` checks this with a capturing
   subscriber, and `jstream-daemon`'s end-to-end test checks its stderr.
+- **Stream keys** pass through on their way to the engine and are never logged or sent
+  back ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): not in `output.set_key`'s answer,
+  the errors for a key of the wrong shape or a frame that doesn't parse, an event, or an
+  MCP tool result. The test `tests::stream_keys_are_never_echoed_or_logged` checks this
+  over a raw WebSocket and the MCP endpoint, with a capturing subscriber.
 - **Accepted connections** get an `info` span `connection` with a number (counting from
   1 per server) and the peer address, and log `connection accepted`. The session the
   `Connector` opens is created inside that span, so the engine's own `session` and

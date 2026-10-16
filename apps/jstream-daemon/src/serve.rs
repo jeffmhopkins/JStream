@@ -170,7 +170,9 @@ fn rtmp() -> Connect {
 }
 
 /// Makes `engine` live: it runs on `backends`, keeps stream keys in `keys`, and opens
-/// its publish target with [`opener`] on every `output.start`.
+/// its publish target with [`opener`] on every `output.start`. Both reach `keys`
+/// through [`crash::Redacting`](crate::crash::Redacting), so every key stored or read
+/// is redacted from crash reports (#353).
 ///
 /// The engine stores the opener, so the opener must not hold the engine strongly: that
 /// cycle would keep the engine, and its running pipeline, alive after the server and
@@ -183,6 +185,7 @@ pub fn live(
     keys: Arc<dyn StreamKeyStore>,
     connect: Connect,
 ) -> Arc<Engine> {
+    let keys: Arc<dyn StreamKeyStore> = Arc::new(crate::crash::Redacting(keys));
     let handle = Arc::new(OnceLock::new());
     let engine = Arc::new(
         engine
@@ -657,6 +660,136 @@ mod tests {
         drop(control);
         drop(engine);
         timely(async { while events.next().await.is_some() {} }).await;
+    }
+
+    /// What a [`tracing`] subscriber writes, kept in memory.
+    #[derive(Clone, Default)]
+    struct Written(Arc<Mutex<Vec<u8>>>);
+
+    impl std::io::Write for Written {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().expect("written").extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// R-SEC-001 for the RTMP opener (#353): with the real `connect_rtmp` behind the
+    /// opener, a start that can't reach the server, one the server hangs up on, and one
+    /// whose server answers garbage all fail with reasons, events and log lines that
+    /// never name the stream key. The key `output.set_key` stored is registered with the
+    /// crash reports' redaction on the way into the store.
+    #[tokio::test]
+    async fn a_failing_rtmp_publish_never_names_the_key() {
+        use std::io::Write as _;
+        use std::net::TcpListener;
+        const SECRET: &str = "live_RTMP-REDACT-ME-7f3a";
+
+        // A port nothing listens on: bound, then released.
+        let closed = TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port");
+        // Servers that hang up at once, and that answer the handshake with junk (an RTMP
+        // version of 255).
+        let serve = |reply: &'static [u8]| {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+            let addr = listener.local_addr().expect("an address");
+            std::thread::spawn(move || {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    let _ = stream.write_all(reply);
+                }
+            });
+            addr
+        };
+        let hang_up = serve(b"");
+        let garbage = serve(&[0xff; 64]);
+
+        let written = Written::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_ansi(false)
+            .with_writer({
+                let written = written.clone();
+                move || written.clone()
+            })
+            .finish();
+        let _logging = tracing::subscriber::set_default(subscriber);
+
+        let clock = FakeClock::new(Timebase::MICROS);
+        let connect: Connect = Arc::new(|url, key: &Secret| {
+            let publish: Box<dyn LivePublish> =
+                Box::new(jstream_core::connect_rtmp(url, key.expose())?);
+            Ok(publish)
+        });
+        let keys = MemoryKeyStore::new();
+        let engine = live(
+            Engine::new(),
+            backends(&clock).expect("fake backends"),
+            Arc::new(keys.clone()),
+            connect,
+        );
+        let _ = Engine::clone(&engine).with_cpu_compositor();
+        let control = session(&engine).await;
+        let mut events = control.events();
+        let mut seen = Vec::new();
+        for (id, addr) in [
+            ("closed", closed),
+            ("hang_up", hang_up),
+            ("garbage", garbage),
+        ] {
+            create(&control, id, &format!("rtmp://{addr}/live")).await;
+            timely(control.call(Call::Action {
+                action: Action::OutputSetKey {
+                    output_id: OutputId::new(id),
+                    key: SecretString::new(SECRET),
+                },
+            }))
+            .await
+            .expect("output.set_key");
+            let refused = timely(control.call(start(id)))
+                .await
+                .expect_err("nothing to publish to");
+            let why = reason(&refused);
+            assert!(why.starts_with("opening the publish target: "), "{why}");
+            seen.push(format!("{refused:?} {refused} {why}"));
+        }
+        assert!(
+            crate::crash::is_registered(SECRET),
+            "the stored key is registered for redaction"
+        );
+        assert_eq!(keys.len(), 3, "the keys reached the store");
+        drop(control);
+        drop(engine);
+        let drained = timely(async {
+            let mut drained = Vec::new();
+            while let Some(event) = events.next().await {
+                drained.push(event);
+            }
+            drained
+        })
+        .await;
+        assert!(
+            drained.iter().any(|e| matches!(
+                e,
+                Event::OutputStateChanged {
+                    state: OutputState::Failed,
+                    ..
+                }
+            )),
+            "the starts failed: {drained:?}"
+        );
+        seen.extend(drained.iter().map(|e| format!("{e:?}")));
+        let logged = String::from_utf8_lossy(&written.0.lock().expect("written")).into_owned();
+        assert!(
+            logged.contains("garbage"),
+            "the engine logged the starts: {logged}"
+        );
+        seen.push(logged);
+        for text in &seen {
+            assert!(!text.contains("REDACT-ME"), "the key leaked: {text}");
+        }
     }
 
     /// `--collection` loads the file and saves every change to it, so a second engine on
