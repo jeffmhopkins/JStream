@@ -454,9 +454,10 @@ fn is_dos_device_name(name: &str) -> bool {
 /// host. Nor may it contain `:` other than a drive letter's, or `?` or `*`, which
 /// Win32 never allows in a file name and which name an NT object path (`\??\UNC\…`,
 /// `\??\GLOBALROOT\Device\…`). Under every root, the last component must not name a
-/// DOS device, which Win32 opens in place of a file in any folder: a stem (the name before its first `.`,
-/// without trailing spaces, in any ASCII case) of `CON`, `PRN`, `AUX`, `NUL`,
-/// `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`.
+/// DOS device, which Win32 opens in place of a file in any folder: a stem (the name
+/// before its first `.`, without trailing spaces, in any ASCII case) of `CON`, `PRN`,
+/// `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or
+/// `CONOUT$`.
 pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
     if path.is_empty() {
         return Err("the asset path must not be empty".into());

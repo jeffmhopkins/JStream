@@ -15,6 +15,13 @@ unsafe_allowed = false
 [lints]
 workspace = true
 
+[features]
+# Platform tests against real hardware (docs/RULES.md#testing): the GPU capture path on
+# WGC and the DX12 device. Additive, off by default, and the tests are also `#[ignore]`d.
+# Run them on a Windows machine with a display and a DX12 GPU:
+# `cargo test -p jstream-core --features hw-tests --lib windows_gpu -- --ignored --nocapture`.
+hw-tests = []
+
 [dependencies]
 # The render snapshot the control side publishes and the render thread loads lock-free.
 arc-swap.workspace = true
@@ -54,3 +61,9 @@ jstream-protocol = { workspace = true, features = ["fixtures"] }
 # Decodes the preview stream's JPEGs in its tests; already in the tree for the image
 # source (`jstream-sources`).
 zune-jpeg.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+# The ignored hardware test of the GPU capture path (`src/tests/windows_gpu.rs`): the
+# engine on WGC capture and the platform's DX12 device. Tests only; the engine itself
+# never names a platform crate.
+jstream-platform-windows.workspace = true

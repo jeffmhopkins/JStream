@@ -2649,6 +2649,7 @@ dependencies = [
  "jstream-mux",
  "jstream-outputs",
  "jstream-platform",
+ "jstream-platform-windows",
  "jstream-protocol",
  "jstream-render",
  "jstream-sources",
