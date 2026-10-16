@@ -17,20 +17,20 @@ use jstream_platform::{
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND};
 use windows::Win32::Media::MediaFoundation::{
     IMF2DBuffer, IMFAttributes, IMFMediaBuffer, IMFMediaType, IMFSample, IMFSourceReader,
-    MF_E_INVALIDMEDIATYPE, MF_E_INVALIDSTREAMNUMBER, MF_E_TOPO_CODEC_NOT_FOUND,
-    MF_E_UNSUPPORTED_BYTESTREAM_TYPE, MF_E_UNSUPPORTED_FORMAT, MF_MT_AUDIO_NUM_CHANNELS,
-    MF_MT_AUDIO_SAMPLES_PER_SECOND, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE,
-    MF_MT_MAJOR_TYPE, MF_MT_MINIMUM_DISPLAY_APERTURE, MF_MT_SUBTYPE, MF_PD_DURATION,
-    MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, MF_SOURCE_READER_ALL_STREAMS,
-    MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, MF_SOURCE_READER_FIRST_AUDIO_STREAM,
-    MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_MEDIASOURCE,
-    MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED, MF_SOURCE_READERF_ENDOFSTREAM,
-    MF_SOURCE_READERF_ERROR, MFAudioFormat_Float, MFCreateAttributes, MFCreateMediaType,
-    MFCreateSourceReaderFromURL, MFMediaType_Audio, MFMediaType_Video, MFVideoArea,
-    MFVideoFormat_RGB32,
+    MF_E_INVALID_POSITION, MF_E_INVALIDMEDIATYPE, MF_E_INVALIDSTREAMNUMBER,
+    MF_E_TOPO_CODEC_NOT_FOUND, MF_E_UNSUPPORTED_BYTESTREAM_TYPE, MF_E_UNSUPPORTED_FORMAT,
+    MF_MT_AUDIO_NUM_CHANNELS, MF_MT_AUDIO_SAMPLES_PER_SECOND, MF_MT_DEFAULT_STRIDE,
+    MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_MAJOR_TYPE, MF_MT_MINIMUM_DISPLAY_APERTURE,
+    MF_MT_SUBTYPE, MF_PD_DURATION, MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS,
+    MF_SOURCE_READER_ALL_STREAMS, MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING,
+    MF_SOURCE_READER_FIRST_AUDIO_STREAM, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+    MF_SOURCE_READER_MEDIASOURCE, MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED,
+    MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READERF_ERROR, MFAudioFormat_Float,
+    MFCreateAttributes, MFCreateMediaType, MFCreateSourceReaderFromURL, MFMediaType_Audio,
+    MFMediaType_Video, MFVideoArea, MFVideoFormat_RGB32,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
-use windows::core::{GUID, HSTRING, Interface};
+use windows::core::{GUID, HRESULT, HSTRING, Interface};
 
 use super::convert::{self, Area};
 use crate::com::{Com, OsResult, os_error};
@@ -104,6 +104,7 @@ impl MediaDecoders for MfMediaDecoders {
             info,
             shape,
             format: config.video_format,
+            at_end: false,
             _mf: mf,
         }))
     }
@@ -349,6 +350,8 @@ struct MfMediaDecoder {
     /// The video's shape; `None` for a file with no video.
     shape: Option<Shape>,
     format: PixelFormat,
+    /// Seeked past the end: both streams read as ended until the next seek.
+    at_end: bool,
     /// Declared last, so the reader is released before Media Foundation shuts down.
     _mf: MfStarted,
 }
@@ -364,7 +367,7 @@ impl MediaDecoder for MfMediaDecoder {
     }
 
     fn next_video(&mut self) -> Result<Option<VideoFrame>, PlatformError> {
-        if self.shape.is_none() {
+        if self.shape.is_none() || self.at_end {
             return Ok(None);
         }
         loop {
@@ -411,6 +414,9 @@ impl MediaDecoder for MfMediaDecoder {
         let Some(audio) = self.info.audio else {
             return Ok(None);
         };
+        if self.at_end {
+            return Ok(None);
+        }
         loop {
             let mut flags = 0u32;
             let mut timestamp = 0i64;
@@ -461,9 +467,21 @@ impl MediaDecoder for MfMediaDecoder {
         let position = PROPVARIANT::from(hns);
         // SAFETY: plain COM call; GUID_NULL is 100 ns units, and `position` is a VT_I8
         // that lives for the duration of the call.
-        unsafe { self.reader.SetCurrentPosition(&GUID::zeroed(), &position) }
-            .os("IMFSourceReader::SetCurrentPosition")
+        match unsafe { self.reader.SetCurrentPosition(&GUID::zeroed(), &position) } {
+            Err(e) if past_end(e.code()) => self.at_end = true,
+            result => {
+                result.os("IMFSourceReader::SetCurrentPosition")?;
+                self.at_end = false;
+            }
+        }
+        Ok(())
     }
+}
+
+/// Whether `SetCurrentPosition` refused the time as past the end of the file, which
+/// the trait treats as the end of the stream rather than an error.
+fn past_end(code: HRESULT) -> bool {
+    code == MF_E_INVALID_POSITION
 }
 
 impl MfMediaDecoder {
@@ -608,4 +626,17 @@ fn with_picture<R>(
     let out = f(bytes, shape.stride);
     drop(locked);
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_seek_past_the_end_is_the_end_of_the_stream() {
+        // What `SetCurrentPosition` returns for a time beyond the duration (#421).
+        assert!(past_end(HRESULT(0xC00D_36E5_u32.cast_signed())));
+        assert!(!past_end(MF_E_INVALIDMEDIATYPE));
+        assert!(!past_end(HRESULT(0)));
+    }
 }
