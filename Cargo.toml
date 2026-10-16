@@ -96,6 +96,12 @@ leptos = { version = "0.8", default-features = false, features = ["csr"] }
 # no `bit-set`.
 proptest = { version = "~1.11", default-features = false, features = ["std"] }
 pulldown-cmark = { version = "0.13", default-features = false }
+# The FFT behind the spectrum source (C10): real-input, planned once per source, and
+# allocation-free per frame with caller-owned scratch. Pulls in `rustfft` and its small
+# `num-*`, `primal-check`, `strength_reduce` and `transpose` crates. No default features:
+# the scalar FFT is fast enough for one 2048-point transform a video frame, and leaves
+# out the SIMD paths.
+realfft = { version = "3.5", default-features = false }
 # SHA-256 and the OS random source for OAuth PKCE (`jstream-youtube`). Already in the tree
 # as rustls' crypto provider (R-DEP-006), so this adds no crate; no default features.
 ring = { version = "0.17", default-features = false }

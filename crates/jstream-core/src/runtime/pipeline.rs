@@ -61,8 +61,9 @@ use jstream_protocol::{
     RateControl as ProfileRate,
 };
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
+use jstream_sources::AudioScopes;
 
-use crate::audio::{MasterMetering, MixerHandles};
+use crate::audio::{MasterMetering, MixerHandles, ScopeTaps, TapFeed};
 use crate::audio_sources::{AudioInputs, Wanted};
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, DropGuard, DropSnapshot, FnDropSource, VideoEncodeDrops,
@@ -906,6 +907,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let audio = AudioInputs::start(
         mixer.control(),
         Arc::clone(&parts.audio),
+        Arc::clone(&parts.clock),
         Arc::clone(&parts.audio_sources),
         engine.drop_ledger(),
     )?;
@@ -975,13 +977,20 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             return Err(err);
         }
     };
+    let scope_taps = Arc::new(ScopeTaps::default());
     let mixer_thread = match spawn("jstream-mixer", {
         let clock = Arc::clone(&parts.clock);
         let stop = Arc::clone(&stop);
         let fail = fail_tx;
         let collector = mixer_collector;
+        let out = MixOut {
+            inputs: audio_inputs,
+            format,
+            scopes: engine.audio_scopes(),
+            taps: Arc::clone(&scope_taps),
+        };
         let mixing = Mixing { mixer, metering };
-        move || mixer_thread(mixing, clock, audio_inputs, format, stop, fail, &collector)
+        move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -1023,6 +1032,8 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
                 control: mixer_control,
                 master: program.bus.clone(),
                 meters: master_meters,
+                scopes: engine.audio_scopes(),
+                taps: scope_taps,
             });
             *lock(&program.detach_audio) = Some(detach);
             Ok(Arc::new(program))
@@ -1914,27 +1925,31 @@ fn push_each<T>(targets: &mut Vec<T>, mut push: impl FnMut(&T) -> bool, mut reti
     }
 }
 
+/// Where the mixer thread's blocks go.
+struct MixOut {
+    /// The encoder sessions the program hands the thread.
+    inputs: Receiver<AudioInput>,
+    /// The blocks' format.
+    format: AudioFormat,
+    /// What the `waveform` and `spectrum` sources draw: the program mix's scope gets
+    /// each block.
+    scopes: Arc<AudioScopes>,
+    /// The bus and source scopes, each fed its bus's or input's block.
+    taps: Arc<ScopeTaps>,
+}
+
 /// The mixer thread's boundary: a panic is caught and reported as fatal. The encoders
 /// then get no more audio, so the outputs cannot keep running.
 fn mixer_thread(
     mixing: Mixing,
     clock: Arc<dyn MediaClock>,
-    inputs: Receiver<AudioInput>,
-    format: AudioFormat,
+    out: &MixOut,
     stop: Arc<AtomicBool>,
     fail: Sender<PipelineEvent>,
     collector: &Collector,
 ) {
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
-        mixer_loop(
-            mixing,
-            clock.as_ref(),
-            &inputs,
-            format,
-            &stop,
-            &fail,
-            collector,
-        );
+        mixer_loop(mixing, clock.as_ref(), out, &stop, &fail, collector);
     }));
     if let Err(panic) = result {
         report(
@@ -1951,29 +1966,56 @@ struct Mixing {
     metering: MasterMetering,
 }
 
-/// Mixes on the media clock, meters the master, and pushes each block into every encoder session the
-/// program has handed it, letting go of one that has finished. A rejected block or a
-/// poll error is fatal: both mean the mixer and the encoder disagree about the format,
-/// which no retry fixes.
+/// Mixes on the media clock, meters the master, and pushes each block into the program
+/// mix's audio scope and each drawn bus's and source's block into its scope (pushes
+/// neither lock nor allocate, and the list of scopes is adopted lock-free), and into every encoder
+/// session the program has handed it, letting go of one that has finished. A rejected block or a poll error
+/// is fatal: both mean the mixer and the encoder disagree about the format, which no
+/// retry fixes.
 fn mixer_loop(
     Mixing {
         mut mixer,
         mut metering,
     }: Mixing,
     clock: &dyn MediaClock,
-    inputs: &Receiver<AudioInput>,
-    format: AudioFormat,
+    out: &MixOut,
     stop: &AtomicBool,
     fail: &Sender<PipelineEvent>,
     collector: &Collector,
 ) {
+    let MixOut {
+        inputs,
+        format,
+        scopes,
+        taps,
+    } = out;
+    let format = *format;
+    let scope = scopes.program();
+    let mut scope_taps = taps.reader();
     let samples_len = mixer.config().block_frames.saturating_mul(2);
     let mut samples = vec![0.0f32; samples_len];
+    // What a silent drawn source's scope gets.
+    let silence = vec![0.0f32; samples_len];
     let mut targets: Vec<AudioInput> = Vec::new();
     'mix: while !stop.load(Ordering::Relaxed) {
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
                 metering.process(&samples);
+                scope.push(format.sample_rate(), &samples);
+                let (drawn, replaced) = scope_taps.adopt();
+                for tap in drawn {
+                    let block = match tap.feed {
+                        TapFeed::Bus(bus) => mixer.bus_block(bus),
+                        TapFeed::Input(input) => mixer.input_block(input),
+                        TapFeed::Silence => Some(&silence[..]),
+                    };
+                    if let Some(block) = block {
+                        tap.scope.push(format.sample_rate(), block);
+                    }
+                }
+                if let Some(replaced) = replaced {
+                    collector.free(Garbage::Scopes(replaced));
+                }
                 targets.extend(inputs.try_iter());
                 let mut rejected = None;
                 // The mix itself does not allocate. `AudioInput::push` takes an owned
@@ -2004,6 +2046,7 @@ fn mixer_loop(
             }
         }
     }
+    collector.free(Garbage::Scopes(scope_taps.into_held()));
 }
 
 /// An output thread's encoder subscriptions, shared with the stop so that, when it

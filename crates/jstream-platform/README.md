@@ -91,6 +91,26 @@ Contents:
   `Codecs::on_context` returns the backend on a `GpuContext`, whose video encoders take
   that context's encode targets ([GPU frames](#gpu-frames)); `Ok(None)`, the default,
   when the backend has no GPU path.
+- **Media files** (`media_file.rs`,
+  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `MediaDecoders`
+  (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the
+  video pixel format, a `HardwarePreference`, and whether to decode audio too) as a
+  `MediaDecoder` (`Send`), which owns the whole file: the platform demuxes and decodes
+  it with its own APIs, unlike the packet-level `VideoDecoder`. `info()` gives a
+  `MediaInfo`: the first video stream (`MediaVideoInfo`: frame size and nominal frame
+  period) or `None`, the first audio stream as it decodes (`MediaAudioInfo`: its
+  format, the stream's own rate in a layout `jstream-media` has, interleaved `f32`,
+  never resampled) or `None` when there is none, it wasn't asked for or the platform
+  can't decode it, and the duration when the container says. `next_video()` and
+  `next_audio()` (an `AudioBuffer`) block while they decode the next frame or block of
+  their stream, in presentation order, and are `Ok(None)` at its end. Audio is the
+  stream's content only: a backend drops the encoder's priming and padding where it can
+  tell them. The caller reads
+  the two in step by time, since a backend holds what one stream demuxed while the
+  other is read. `seek(to)` moves both: video restarts at the key frame at or before
+  `to`, so the frames up to it may come out first, and audio at or before `to`. Times
+  are on the file's own timeline from its start, not the media clock; the `media`
+  source maps them onto the clock.
 - **Virtual camera:** `VcamSink` (`Send`): `start` with a `VcamFormat`, `publish`
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
@@ -109,8 +129,8 @@ Contents:
   Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
   contain a token. `jstream-youtube` keeps its Google refresh token here.
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
-  capture device, audio, codec and GPU-interop backends and its optional virtual-camera
-  sink.
+  capture device, audio, codec, GPU-interop and media-file backends and its optional
+  virtual-camera sink.
 - **Data folder** (`paths.rs`, [ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)):
   `paths::data_dir`, the one folder every host keeps its state in. It is a folder named
   `data` beside the exe when a file named `portable` sits there (so the app can run from
@@ -135,6 +155,11 @@ Contents:
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
   MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
+  `FakeMediaDecoders` (a path registered with `add` plays a `FakeClip`, synthetic RGBA
+  frames whose colour tells them apart, seeking to the key frame before as a real
+  decoder does, and with a `FakeAudio` blocks of one level each, which tells them
+  apart; any other path is `Unsupported`, and nothing is read from disk; its `stats`
+  count opens, seeks, frames and audio blocks),
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
   `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,

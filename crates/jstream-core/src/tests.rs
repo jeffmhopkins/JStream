@@ -1068,7 +1068,8 @@ fn output_start_publishes_fake_audio_and_video() {
     use jstream_mux::flv::TagType;
     use jstream_platform::Backends;
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
     use std::sync::Arc;
 
@@ -1084,6 +1085,7 @@ fn output_start_publishes_fake_audio_and_video() {
         audio: Arc::new(audio.clone()),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let publish = RecordingPublish::new();
@@ -1155,7 +1157,8 @@ fn output_stop_during_start_cancels_the_pipeline() {
 
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
     use jstream_platform::{Backends, Capture, CaptureTarget, PlatformError};
 
@@ -1222,6 +1225,7 @@ fn output_stop_during_start_cancels_the_pipeline() {
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()
@@ -1279,7 +1283,8 @@ fn output_publish_failure_settles_failed() {
     use jstream_mux::flv::FlvTag;
     use jstream_platform::Backends;
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
 
     use crate::{LivePublish, PublishError};
@@ -1321,6 +1326,7 @@ fn output_publish_failure_settles_failed() {
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()
@@ -1384,7 +1390,8 @@ fn output_start_returns_after_a_panicking_teardown() {
     use jstream_media::{ChannelLayout, FrameSize, Timebase};
     use jstream_mux::flv::FlvTag;
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
     use jstream_platform::{
         AudioInputHandler, AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget,
@@ -1498,6 +1505,7 @@ fn output_start_returns_after_a_panicking_teardown() {
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()
@@ -1568,7 +1576,8 @@ fn dropping_the_engine_stops_the_pipeline() {
     use jstream_mux::flv::FlvTag;
     use jstream_platform::Backends;
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
 
     use crate::{LivePublish, PublishError};
@@ -1603,6 +1612,7 @@ fn dropping_the_engine_stops_the_pipeline() {
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
         vcam: None,
     };
     let engine = Engine::new()
@@ -2172,7 +2182,8 @@ mod cpu_pipeline {
     use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, PixelFormat, Timebase};
     use jstream_mux::flv::{FlvTag, TagType};
     use jstream_platform::fake::{
-        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+        FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+        FakeVideoDevices,
     };
     use jstream_platform::{
         AudioDeviceInfo, AudioEncoder, AudioEncoderConfig, AudioInputHandler, AudioInputTarget,
@@ -2211,6 +2222,7 @@ mod cpu_pipeline {
             audio: Arc::new(audio.clone()),
             codecs: Arc::new(FakeCodecs),
             gpu: Arc::new(FakeGpuInterop),
+            media: Arc::new(FakeMediaDecoders::new()),
             vcam: None,
         };
         Fakes {
@@ -2229,6 +2241,7 @@ mod cpu_pipeline {
             audio: Arc::clone(&backends.audio),
             codecs: Arc::clone(&backends.codecs),
             gpu: Arc::clone(&backends.gpu),
+            media: Arc::clone(&backends.media),
             vcam: None,
         }
     }

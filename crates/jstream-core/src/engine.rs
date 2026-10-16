@@ -36,6 +36,7 @@ use jstream_protocol::{
     OutputKind, OutputState, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer,
     RequestId, Rev, RtmpTarget, SecretString, SourceId, YoutubeAuth,
 };
+use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -87,6 +88,9 @@ struct Shared {
     /// Where the collection is saved, if the host named a file. Taken before the
     /// collection lock, never while holding it, so the disk write happens outside it.
     collection_file: Mutex<Option<CollectionFile>>,
+    /// The latest audio of the program mix and of every bus a source draws: the mixer
+    /// thread pushes each block, and the `waveform` and `spectrum` sources draw it.
+    audio_scopes: Arc<AudioScopes>,
     /// The YouTube sign-in and Live API client, if the host gave a setup
     /// ([`Engine::with_youtube`]). On its own lock, taken only to clone the handle: no
     /// YouTube call runs under the collection lock.
@@ -97,6 +101,7 @@ struct Shared {
 
 impl Default for Engine {
     fn default() -> Self {
+        let audio_scopes = Arc::new(AudioScopes::new());
         Self {
             shared: Arc::new_cyclic(|shared: &Weak<Shared>| Shared {
                 state: Mutex::new({
@@ -104,12 +109,14 @@ impl Default for Engine {
                     state.graph = Graph::new().with_kinds(crate::kinds::builtin());
                     let host: Weak<dyn LiveHost> = shared.clone();
                     state.live = LiveSources::new(host);
+                    state.live.set_audio_scopes(Arc::clone(&audio_scopes));
                     state
                 }),
                 snapshots: SnapshotWorker::default(),
                 keys: Mutex::new(None),
                 audit: Audit::default(),
                 collection_file: Mutex::new(None),
+                audio_scopes,
                 youtube: Mutex::new(None),
                 previews: PreviewHub::default(),
             }),
@@ -319,10 +326,16 @@ impl Engine {
     /// life, starting it on each such start and stopping it on the stop.
     #[must_use]
     pub fn with_backends(mut self, mut backends: Backends) -> Self {
-        // Animated sources run on the platform's media clock from here on.
-        lock(&self.shared.state)
-            .live
-            .set_clock(Arc::clone(&backends.clock));
+        // Animated sources run on the platform's media clock from here on, and media
+        // files play through the platform's decoders.
+        {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state.live.set_clock(Arc::clone(&backends.clock));
+            state
+                .live
+                .set_media(Arc::clone(&backends.media), state.graph.state());
+        }
         let host = self.host();
         let vcam = backends.vcam.take();
         host.has_vcam.store(vcam.is_some(), Ordering::Release);
@@ -416,6 +429,18 @@ impl Engine {
     /// The ledger the pipeline's [`DropGuard`](crate::drops::DropGuard) removes from.
     pub(crate) fn drop_ledger(&self) -> Arc<Mutex<DropLedger>> {
         Arc::clone(&self.drops)
+    }
+
+    /// The scopes the mixer thread feeds: the program mix's, and one per bus a source
+    /// draws.
+    pub(crate) fn audio_scopes(&self) -> Arc<AudioScopes> {
+        Arc::clone(&self.shared.audio_scopes)
+    }
+
+    /// The scope the program mix's audio goes to.
+    #[cfg(test)]
+    pub(crate) fn audio_scope(&self) -> Arc<jstream_sources::AudioScope> {
+        Arc::clone(self.shared.audio_scopes.program())
     }
 
     /// A thread that emits `stats.tick` about once a second until `stop` is set.
@@ -1421,6 +1446,12 @@ impl Engine {
         lock(&self.shared.state).audio.status(source_id)
     }
 
+    /// The packets the mixer input of `source_id` has received, for tests.
+    #[cfg(test)]
+    pub(crate) fn audio_packets(&self, source_id: &SourceId) -> Option<u64> {
+        lock(&self.shared.state).audio.packets(source_id)
+    }
+
     /// Waits until the live sources have built everything asked of them, for tests.
     #[cfg(test)]
     pub(crate) fn settle_sources(&self) -> bool {
@@ -1432,6 +1463,14 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn set_source_clock(&self, clock: Arc<dyn jstream_platform::MediaClock>) {
         lock(&self.shared.state).live.set_clock(clock);
+    }
+
+    /// Plays `media` sources through `media`, for tests that give no full backends.
+    #[cfg(test)]
+    pub(crate) fn set_source_media(&self, media: Arc<dyn jstream_platform::MediaDecoders>) {
+        let mut state = lock(&self.shared.state);
+        let state = &mut *state;
+        state.live.set_media(media, state.graph.state());
     }
 
     /// Re-plans the program mix now, as the live sources' thread does when a frame is
@@ -2194,16 +2233,22 @@ impl State {
             frames,
             frame_versions,
             live,
+            audio,
             render,
             studio,
             ..
         } = self;
         let now = live.now();
+        live.begin_plan();
         let (shot, wake) =
             snapshot::plan_with(graph, studio.program(), &mut |id| match frames.get(id) {
                 Some(frame) => Some((frame.clone(), None)),
                 None => live.frame(id, now, frame_versions),
             });
+        live.end_plan();
+        if let Some(sound) = live.take_audio() {
+            audio.sync_live(sound);
+        }
         render.publish(shot);
         live.wake_at(wake);
     }
