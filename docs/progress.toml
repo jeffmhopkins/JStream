@@ -846,7 +846,9 @@ status = "planned"
 id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
-status = "planned"
+status = "review"
+prs = [481, 490]
+note = "ADR-0060 accepted (#481); crate part 1 (#490)"
 
 [[item]]
 id = "LNX2"
