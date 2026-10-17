@@ -270,7 +270,7 @@ fn inline_stamp(doc: &parse::Doc, section: &parse::Section) -> Option<usize> {
 /// ledger (ADR-0053). It also drops ledger stamps of sections that no longer need one.
 fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
     let note = check_stamp(by, note)?;
-    stamp_section(root, target, &|_, old, inputs| {
+    stamp_section(root, target, &|_, _, old, inputs| {
         Ok(ledger::restamp(old, inputs, by, note))
     })
 }
@@ -278,7 +278,8 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
 /// `docs verify <DOC#anchor> --by <who> --merge <text>`: the same after `docs merge-main`,
 /// for a section the merge left stale. Each rewritten entry keeps the note this branch had
 /// written on it before the merge and adds `text`, what the merge changed in the section's
-/// inputs (docs/DOCS.md#notes).
+/// inputs (docs/DOCS.md#notes). It refuses when the file of a rewritten input changed after
+/// the merge: the branch's earlier note doesn't cover that edit, so it needs `--note`.
 fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
     let text = check_stamp(by, text)?;
     let point = merge::last_merge(root)?.context(
@@ -286,20 +287,38 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<()> {
          first, or verify with --note)",
     )?;
     let branch = merge::branch_entries(root, &point)?;
-    stamp_section(root, target, &|key, old, inputs| {
-        Ok(ledger::restamp_merge(
-            old,
-            inputs,
-            branch.get(key),
-            by,
-            text,
-        ))
+    stamp_section(root, target, &|doc, key, old, inputs| {
+        let stamp = ledger::restamp_merge(old, inputs, branch.get(key), by, text);
+        let rewritten: Vec<(&String, String)> = stamp
+            .iter()
+            .filter(|(k, e)| old.and_then(|o| o.get(*k)) != Some(*e))
+            .map(|(k, _)| (k, merge::input_path(doc, k)))
+            .collect();
+        let mut paths: Vec<String> = rewritten.iter().map(|(_, p)| p.clone()).collect();
+        paths.sort();
+        paths.dedup();
+        let later = merge::changed_after(root, &point, &paths)?;
+        let refused: Vec<String> = rewritten
+            .iter()
+            .filter(|(_, p)| later.contains(p))
+            .map(|(k, p)| format!("{k} ({p})"))
+            .collect();
+        if !refused.is_empty() {
+            bail!(
+                "{key}: changed after the merge, so this branch's earlier note doesn't cover \
+                 it: {}; verify this section with --note, saying what this branch changed \
+                 and what the merge changed (docs/DOCS.md#notes)",
+                refused.join(", ")
+            );
+        }
+        Ok(stamp)
     })
 }
 
-/// The section's new stamp from its key, current stamp and current inputs.
-type Restamp<'a> =
-    dyn Fn(&str, Option<&ledger::Stamp>, &BTreeMap<String, String>) -> Result<ledger::Stamp> + 'a;
+/// The section's new stamp from its doc's path, its key, its current stamp and its current
+/// inputs.
+type Restamp<'a> = dyn Fn(&str, &str, Option<&ledger::Stamp>, &BTreeMap<String, String>) -> Result<ledger::Stamp>
+    + 'a;
 
 /// Writes the stamp `restamp` makes for `target` into the ledger, after the checks every
 /// verify makes.
@@ -342,7 +361,7 @@ fn stamp_section(root: &Path, target: &str, restamp: &Restamp<'_>) -> Result<()>
     let key = section_key(doc, anchor);
     let mut ledger = ledger::Ledger::read(root)?;
     let old = ledger.sections.get(&key);
-    let stamp = restamp(&key, old, &inputs)?;
+    let stamp = restamp(&doc.path, &key, old, &inputs)?;
     let changed = changed_entries(old, &stamp);
     ledger.sections.insert(key.clone(), stamp);
     let keep = stamped_sections(&l.docs);
@@ -1335,6 +1354,105 @@ mod tests {
         let second = "main's second a5 edit (#2) is outside it too";
         verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
         assert_eq!(note("file:src/a.rs"), joined(second));
+        assert!(work.diags("is stale").is_empty());
+    }
+
+    /// #525: `docs verify --merge` refuses a section when the file of an input it would
+    /// rewrite changed after the merge, committed or not, since the branch's earlier note
+    /// doesn't cover that edit; `--note` still verifies it. A change after the merge to a
+    /// file outside the rewritten inputs, or the `docs migrate` commit `merge-main` makes
+    /// right after the merge, doesn't refuse.
+    #[test]
+    fn verify_merge_refuses_inputs_changed_after_the_merge() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\ndepends_on = [\"D.md#d\"]\n-->\nText.\n";
+        let d = "<!-- @doc\nid = \"D\"\n-->\n<a id=\"d\"></a>\n## D\nDep.\n";
+        files.extend([
+            ("S.md", s),
+            ("D.md", d),
+            ("src/a.rs", "a1\n\n\n\n\na5\n"),
+            ("other.txt", "o\n"),
+        ]);
+        let (origin, work) = origin_and_clone("verify-merge-later", &files);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
+        verify(&work.0, "S#a", "agent:work", "the branch's a1 edit").expect("S verifies");
+        commit_all(&work, "work: a1");
+        origin.write("src/a.rs", "a1\n\n\n\n\na5 main\n");
+        origin.write("D.md", &d.replace("Dep.", "Dep, from main."));
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies on main");
+        commit_all(&origin, "main: a5 and D");
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        assert_eq!(m.stale, vec!["S#a".to_owned()], "{m:?}");
+        let refused = |what: &str| {
+            let err = verify_merge(&work.0, "S#a", "agent:work", "main's a5 and D edits")
+                .expect_err(what);
+            format!("{err:#}")
+        };
+
+        // A commit after the merge with the subject `merge-main` gives its `docs migrate`
+        // commit counts as part of the merge.
+        work.write("src/a.rs", "a1 work\n\n\n\n\na5 main\n\n");
+        work.git(&["add", "-A"]);
+        work.git(&["commit", "-q", "-m", merge::MIGRATE_SUBJECT]);
+        verify_merge(&work.0, "S#a", "agent:work", "main's a5 and D edits")
+            .expect("the migrate commit is part of the merge");
+        work.git(&["checkout", "-q", "--", ledger::PATH]);
+        // The rest of the branch's later work refuses each rewritten input it touched, by
+        // the file it lives in: a covered file committed after the merge, the dependency's
+        // doc edited without a commit.
+        work.write("src/a.rs", "a1 work later\n\n\n\n\na5 main\n\n");
+        commit_all(&work, "work: a1 again");
+        work.write("D.md", &d.replace("Dep.", "Dep, from main, and later."));
+        let err = refused("a.rs and D.md changed after the merge");
+        for want in [
+            "S#a",
+            "file:src/a.rs (src/a.rs)",
+            "dep:D.md#d (D.md)",
+            "--note",
+        ] {
+            assert!(err.contains(want), "{want}: {err}");
+        }
+        assert!(!err.contains("body"), "{err}");
+        // So does the section's own text, edited after the merge.
+        work.git(&["checkout", "-q", "--", "D.md"]);
+        work.write("S.md", &s.replace("Text.", "Text, later."));
+        let err = refused("S.md changed after the merge");
+        assert!(err.contains("body (S.md)"), "{err}");
+        assert!(work.diags("is stale").len() == 1, "nothing was written");
+        // `--note` covers the later edits.
+        verify(
+            &work.0,
+            "S#a",
+            "agent:work",
+            "a1 again, the text, and main's a5 and D",
+        )
+        .expect("--note verifies");
+        assert!(work.diags("is stale").is_empty());
+        commit_all(&work, "work: a1 and text after the merge");
+
+        // Accepted: back on the merge, with only a file outside the section changed since.
+        work.git(&["reset", "-q", "--hard", "HEAD~3"]);
+        work.write("other.txt", "o later\n");
+        commit_all(&work, "work: other");
+        verify_merge(&work.0, "S#a", "agent:work", "main's a5 and D edits")
+            .expect("nothing the section reads changed after the merge");
+        let entries = ledger::Ledger::read(&work.0)
+            .expect("invariant: parses")
+            .sections["S#a"]
+            .clone();
+        assert_eq!(
+            entries["file:src/a.rs"].note.as_deref(),
+            Some(
+                format!(
+                    "the branch's a1 edit{}main's a5 and D edits",
+                    ledger::MERGE_MARK
+                )
+                .as_str()
+            )
+        );
         assert!(work.diags("is stale").is_empty());
     }
 
