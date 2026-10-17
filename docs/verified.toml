@@ -3714,7 +3714,7 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#assets"."body"]
-stamp = { hash = "b3:ac2d20dd201b9d41", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the paired-device-tokens row is no longer in flight; it now says the digest lives in the devices file beside the token file and the device keeps its own copy, with only the browser cookie still in flight (#288); matches devices.rs and token.rs::device_file; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+stamp = { hash = "b3:e5e064defab31a15", by = "agent:acc756d9", note = "Stream keys row adds the proposed Linux store from ADR-0071, the Secret Service else a 0600 plaintext file, marked proposed since nothing is built; the Windows, macOS and other rows are unchanged" }
 
 ["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -3756,13 +3756,16 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:56b6301e2e6a132b" }
 
 ["THREAT-MODEL#secrets"."body"]
-stamp = { hash = "b3:af6cc0745d67f50d", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+stamp = { hash = "b3:b1b3bae6e4e6fc83", by = "agent:acc756d9", note = "New Proposed paragraph matches ADR-0071 decisions 2 to 5: plaintext-at-rest risk of the fallback file to anyone reading the account, its files or backups, and the mitigations 0600 file in a 0700 folder, the UI and startup warning, moving secrets into the keyring, and the later keyring-only setting. Controls on main are unchanged" }
 
 ["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
 
 ["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-004"]
 stamp = { hash = "b3:f3e3a293b719fe8d" }
+
+["THREAT-MODEL#secrets"."dep:docs/adr/0071-linux-secret-store.md"]
+stamp = { hash = "b3:76bc3422c784ca69", by = "agent:acc756d9", note = "New Proposed paragraph matches ADR-0071 decisions 2 to 5: plaintext-at-rest risk of the fallback file to anyone reading the account, its files or backups, and the mitigations 0600 file in a 0700 folder, the UI and startup warning, moving secrets into the keyring, and the later keyring-only setting. Controls on main are unchanged" }
 
 ["THREAT-MODEL#server"."body"]
 stamp = { hash = "b3:9d68f95562892706", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
