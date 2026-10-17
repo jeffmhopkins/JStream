@@ -201,19 +201,11 @@ struct Shared {
 unsafe impl Sync for Shared {}
 
 impl Shared {
-    /// Exclusive access to `rt`, for the watcher once the IOProc is stopped
-    /// ([`Capture::stop`]).
-    ///
-    /// # Safety
-    /// The IOProc must be disabled and not running (`Capture::stop` has returned).
-    #[allow(
-        clippy::mut_from_ref,
-        reason = "exclusivity is the caller's contract, above"
-    )]
-    unsafe fn rt(&self) -> &mut Rt {
-        // SAFETY: the caller guarantees no IOProc cycle can touch `rt` now, and the watcher
-        // is the only other user.
-        unsafe { &mut *self.rt.get() }
+    /// The IOProc's state, to be borrowed as `&mut` only by the one thread the protocol
+    /// above allows: the IOProc while `enabled`, or the watcher once [`Capture::stop`] has
+    /// returned.
+    fn rt(&self) -> *mut Rt {
+        self.rt.get()
     }
 }
 
@@ -243,7 +235,7 @@ unsafe extern "C-unwind" fn io_proc(
             // won't touch `rt` until this cycle ends (see `Shared`'s `Sync`). The list and
             // time stamp are the HAL's, valid for the call, so `cycle`'s contract holds.
             unsafe {
-                let (rt, time) = (shared.rt(), input_time.as_ref());
+                let (rt, time) = (&mut *shared.rt(), input_time.as_ref());
                 rt.cycle(input, time)
             }
         }));
@@ -495,7 +487,7 @@ impl Watch {
         self.map = plan.map.clone();
         self.stop();
         // SAFETY: the IOProc is stopped (`stop` above).
-        let rt = unsafe { self.shared.rt() };
+        let rt = unsafe { &mut *self.shared.rt() };
         prepare(rt, plan, target);
         if target != self.device {
             rt.positions.new_device();
@@ -633,7 +625,7 @@ pub(super) fn open(
             };
             if let Some(e) = error {
                 // SAFETY: the IOProc is stopped (`watch.stop()` above).
-                let rt = unsafe { watch.shared.rt() };
+                let rt = unsafe { &mut *watch.shared.rt() };
                 let _ = catch_unwind(AssertUnwindSafe(|| rt.handler.on_error(&e)));
             }
         })

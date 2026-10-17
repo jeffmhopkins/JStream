@@ -26,7 +26,7 @@ wrapped here behind safe APIs, with RAII types for what the system hands back
 Apple's frameworks are called through the objc2 framework crates, at the versions wgpu's
 Metal backend already uses (`objc2-foundation`, `-core-foundation`, `-core-media`,
 `-core-video`, `-video-toolbox`, `-audio-toolbox`, `-core-audio`, `-core-audio-types`,
-`-screen-capture-kit` and `-core-graphics` so far, with `objc2`, `block2` and `dispatch2`
+`-screen-capture-kit`, `-core-graphics` and `-security` so far, with `objc2`, `block2` and `dispatch2`
 for ScreenCaptureKit's classes, blocks and queues), and Mach time through `mach2`. They
 carry their generated bindings and link frameworks with `#[link]`, so the crate type-checks from any host with `cargo clippy -p jstream-platform-macos --target aarch64-apple-darwin`; linking and the
 macOS tests need a Mac. Everything that calls macOS is under `cfg(target_os = "macos")`.
@@ -105,6 +105,19 @@ It has:
   again, and nothing retries on its own. ScreenCaptureKit's `UserDeclined` maps to the same error.
   `screen_recording_granted` reads the state without prompting. A grant takes effect
   when JStream restarts.
+- **`MacosKeychain`** (`StreamKeyStore` and `OAuthTokenStore`): stream keys and OAuth
+  refresh tokens as generic-password items in the user's login keychain (ADR-0063 §9),
+  through `SecItemAdd`, `SecItemUpdate`, `SecItemCopyMatching` and `SecItemDelete`. Each
+  is named by a **`KeychainItem`**: the service `JStream/stream-key` or
+  `JStream/oauth-token`, so a key and a token for one ID never share an item, and the ID
+  as its account; an empty ID or one with a control character, and an empty secret, are
+  `Unsupported`. It is the login keychain, not the data-protection keychain, which needs
+  a signed app, and nothing syncs to iCloud. Setting updates the item, or adds it with a
+  label Keychain Access shows (`JStream stream key (<id>)`). `is_set` asks for no data,
+  so the secret isn't read. A value read back is a `Secret`; the framework's own copies
+  are released, not zeroed. A refused or dismissed access prompt (which an unsigned build
+  gets again after each rebuild) and a locked keychain get errors that say so; other
+  failures carry the framework's message. No error names the secret.
 - **`CoreAudioIo`** (`AudioIo`) checks the floor when created. **`devices`** lists
   the HAL's devices (`kAudioHardwarePropertyDevices`) under their persistent UID
   (`kAudioDevicePropertyDeviceUID`), once for each direction they have channels in, each
@@ -140,18 +153,18 @@ Not here yet, in roughly the order they follow:
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
 - AVFoundation webcams;
-- the Keychain stream-key and token store;
 - video decode and the media-file source.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on macOS) until its own
 ADR.
 
 Tests run on every platform where they can: the capture's target IDs, names, sizes, frame
-layouts and statuses, permission steps and error mapping are platform independent. The
-macOS ones (the clock, reading the release, encoding with VideoToolbox, which falls back
-to Apple's software encoder on a Mac without a hardware one, encoding AAC with
-AudioToolbox, opening the capture backend, and listing audio devices and their input
-formats) need no permission, so they run in the
-`macos` CI job. The `hw-tests` feature is for tests that need the Screen Recording,
+layouts and statuses, permission steps, the keychain item names and the error mapping are
+platform independent. The macOS ones (the clock, reading the release, encoding with
+VideoToolbox, which falls back to Apple's software encoder on a Mac without a hardware
+one, encoding AAC with AudioToolbox, opening the capture backend, round trips through
+the login keychain with uniquely named items, deleted afterwards, and listing audio
+devices and their input formats) need no permission, so they run in the `macos` CI
+job. The `hw-tests` feature is for tests that need the Screen Recording,
 Camera, Microphone or system audio recording permission (listing and capturing a display,
 the missing-permission error, and recording the default input), or the hardware encoders, which run by hand on a Mac.
