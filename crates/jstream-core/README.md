@@ -730,8 +730,12 @@ a layer of the cache (`GpuKey::Chain`, the last into `GpuKey::Filtered`) through
 `Compositor::apply_filter_into`, so a steady chain allocates no output texture.
 `claim_layers` keeps those layers for a mix that isn't due. A filter no shot runs any
 more is retired into the cache (`ResourceCache::retire_filter`) and dropped with the
-images it reclaims, on that thread's collector. A chain whose filter fails to draw
-draws nothing that frame, logged once per filter. A shot with a chain counts as
+images it reclaims, on that thread's collector. A chain whose filter fails (its layer
+can't be made, or it fails to draw) draws nothing that frame, logged once per filter
+until a frame it draws. Unlike a failed audio filter, which ADR-0026 bypasses, it
+doesn't show its unfiltered input, so a failing key or mask reveals nothing it hides.
+Each filter's layer key is made when the chain's shape changes, so a steady frame
+builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
 running transition. `video.snapshot` runs the chains on its own compositor, so a
 stateful kind (a video delay) starts empty there. The built-in video filter kinds are
