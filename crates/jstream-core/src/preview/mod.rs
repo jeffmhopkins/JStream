@@ -61,6 +61,7 @@ use jstream_protocol::{
 };
 use jstream_render::{Compositor, OpenOptions, ResourceCache};
 
+use crate::chain::Chains;
 use crate::lock;
 use crate::runtime::RenderSnapshot;
 use crate::snapshot::{self, GpuKey, LiveParams, Shot};
@@ -114,11 +115,12 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
             "preview compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
+        let mut chains = Chains::default();
         let draw: PreviewDraw = Box::new(move |shot, live, size, at, out| {
             cache.begin_frame();
             let output = snapshot::compose(
                 &mut compositor,
-                &mut cache,
+                (&mut cache, &mut chains),
                 (shot, at),
                 live,
                 None,
@@ -669,8 +671,9 @@ fn serve(
     if now < work.next_at {
         return Some(work.next_at);
     }
-    // A running transition changes the picture with time, not with the snapshot.
-    let changed = snapshot.shot().transitioning()
+    // A running transition changes the picture with time, not with the snapshot, and so
+    // can a video filter (a scroll, a video delay).
+    let changed = snapshot.shot().changes_with_time()
         || !work
             .shown
             .as_ref()
