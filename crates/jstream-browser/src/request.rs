@@ -12,8 +12,9 @@
 //!   `.home.arpa` or `.internal`. A page loaded from a local file, or from a local
 //!   address itself, is the user's own and may. The check reads the URL, whose host
 //!   Chromium has already canonicalised (an address such as `0x7f.1` arrives as
-//!   `127.0.0.1`). It can't see a public name that resolves to a local address (DNS
-//!   rebinding); that needs Chromium's own Private Network Access checks.
+//!   `127.0.0.1`). It can't see a public name that resolves to a local address, whether
+//!   fixed (`*.nip.io`) or by DNS rebinding; that needs Chromium's own Private Network
+//!   Access checks.
 //! - `data:` and `blob:` are allowed: they hold only what the page itself made.
 //! - `about:blank` and `about:srcdoc` are allowed; other `about:` pages are not.
 //! - `file:` is allowed only for a page loaded from a local file, and only for files in
@@ -209,7 +210,11 @@ fn local_v4(ip: Ipv4Addr) -> bool {
 }
 
 fn local_v6(ip: Ipv6Addr) -> bool {
-    if let Some(v4) = ip.to_ipv4_mapped() {
+    // `to_ipv4` reads both IPv4-mapped (`::ffff:a.b.c.d`) and the deprecated
+    // IPv4-compatible form (`::a.b.c.d`; Chromium writes `[::127.0.0.1]` as `[::7f00:1]`),
+    // so each is judged by its IPv4 address. `::` and `::1` are in `::/96` too, and stay
+    // local as 0.0.0.0/8.
+    if let Some(v4) = ip.to_ipv4() {
         return local_v4(v4);
     }
     let first = ip.segments()[0];
@@ -485,6 +490,9 @@ mod tests {
             "http://app.localhost/",
             "http://[::1]:4455/",
             "http://[::ffff:192.168.1.1]/",
+            "http://[::7f00:1]/",
+            "http://[::127.0.0.1]:8080/",
+            "http://[::c0a8:101]/",
             "http://[fd00::1]/",
             "http://[fe80::1]/",
             "http://0.0.0.0:80/",
@@ -506,6 +514,7 @@ mod tests {
             "http://100.128.0.1/",
             "http://8.8.8.8/",
             "http://[2606:4700::1111]/",
+            "http://[::808:808]/",
             // `@` inside the path isn't userinfo.
             "https://example.com/@127.0.0.1",
         ];
