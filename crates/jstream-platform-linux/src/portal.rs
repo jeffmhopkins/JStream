@@ -448,8 +448,8 @@ mod backend {
                     QUICK,
                 )?;
             }
-            // Read before the token, so a forget between the two is seen: the new token
-            // isn't stored, rather than stored under a source that was just forgotten.
+            // The forget count is read before the token, so a `forget_source` between the
+            // two is seen: the granted token isn't stored under the forgotten source.
             let forgets = self.tokens.forgets(grant);
             let mut h = Handshake::new(
                 pick,
