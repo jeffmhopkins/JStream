@@ -450,7 +450,7 @@ stamp = { hash = "b3:fbe7c61707faa7bd" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["ARCH#protocol"."file:crates/jstream-control/Cargo.toml"]
-stamp = { hash = "b3:07915c072e50c894" }
+stamp = { hash = "b3:a4460043fb366c98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Control protocol against the jstream-control Cargo.toml diff (serde_json added as a dev-dependency only). The section describes the wire protocol and transports (WsControl behind feature ws); nothing it states depends on jstream-control's dev-dependencies." }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
 stamp = { hash = "b3:7408907623c53a89", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Whole E2 change plus the merge: video_mix.create/update/delete and output.set_video_mix at protocol 0.28 with the refused delete and scene blocker; sessions never shared across mixes; video_mix.list at 0.28; video.snapshot now says it shows the program mix, not a video mix; the wave's hotkey, live and capture.targets text kept. Matches the protocol and control READMEs and code" }
@@ -1110,7 +1110,7 @@ stamp = { hash = "b3:fbe7c61707faa7bd" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/Cargo.toml"]
-stamp = { hash = "b3:07915c072e50c894" }
+stamp = { hash = "b3:a4460043fb366c98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against the Cargo.toml diff (serde_json added as a dev-dependency only). The section's dependency statements (futures-core default features off; ws feature deps per target, wasm32 never pulls tokio, native never pulls web-sys; no TLS feature; jstream-protocol fixtures dev-dependency) are unchanged; no normal dependency or feature changed." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:a421c4283dce201f", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
