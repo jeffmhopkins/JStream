@@ -1382,6 +1382,9 @@ stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01BL6HM3DJQvG
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
 stamp = { hash = "b3:31adea4c41afd5dd", by = "agent:claude-c8b1", note = "re-read the Browser sources bullet against serve.rs (cef_browser, browse) and Cargo.toml after merging #291: rewrote it and the cef feature comment for ADR-0048 (CEF only in the sandboxed helper, helper exe, DLL and runtime beside jstream-daemon.exe, daemon links no CEF, feature off until packaged); the rest of the section is the wave's, unchanged here" }
 
+["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/build.rs"]
+stamp = { hash = "b3:18b30244a610e71f", by = "agent:mac1-audio", note = "Merge of #583's round 1 fixes: Design now covers build.rs; the delay-load bullet still matches it" }
+
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
 
@@ -1411,6 +1414,12 @@ stamp = { hash = "b3:d6abcbe60557ece2", by = "agent:mac-mic", note = "Re-read Pu
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291) and this PR's serve.rs doc edit: serve.rs still builds a live engine on Windows that with the cef feature opens browser sources; the crate map's apps row now says the daemon always links jstream-browser, which matches its Cargo.toml" }
+
+["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/Info.plist"]
+stamp = { hash = "b3:cb54ca7d167b13cd", by = "agent:mac1-audio", note = "Merge of #583's round 1 fixes: Purpose now covers Info.plist and build.rs; re-read the build-script bullet against both, unchanged by output playback" }
+
+["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/build.rs"]
+stamp = { hash = "b3:18b30244a610e71f", by = "agent:mac1-audio", note = "Merge of #583's round 1 fixes: Purpose now covers Info.plist and build.rs; re-read the build-script bullet against both, unchanged by output playback" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
@@ -2187,7 +2196,7 @@ stamp = { hash = "b3:8011e2a0da78cf07", by = "agent:claude-vaapi", note = "Re-re
 stamp = { hash = "b3:5c91d1782279c741", by = "agent:claude", note = "Re-read Purpose against #516: the PipeWire stream now uses jstream_platform::mailbox and the VA-API upload jstream_platform::nv12 (Nv12Image moved there); edited both bullets. write_nv12's NV12 copy and format dispatch stay here and behave as before." }
 
 ["CRATE-jstream-platform-macos#purpose"."body"]
-stamp = { hash = "b3:a9e8ac60d17d14ff", by = "agent:mac-coreaudio-out", note = "Re-read Purpose for Core Audio output: CoreAudioIo::open_output plays on the default output (followed) or one output by UID, no permission; planned from the output streams' f32 virtual formats and the output preferred stereo pair, other channels silent; each cycle clears the output buffers then the handler fills a pre-allocated buffer in chunks with device positions from the output sample time and the expected play host time on MachClock; mismatched buffer lists play silence until the watcher re-plans; the watcher (now stream.rs, shared by both directions) moves defaults and ends with DeviceLost; not-yet list drops output streams; tests paragraph adds the unknown-output test and the hw-tests tone" }
+stamp = { hash = "b3:ca8be2e07fe1470f", by = "agent:mac1-audio", note = "Merge of #583's round 1 fixes: open_input plans the format through stream::format before the Microphone check, as the permission paragraph now says; the open_output paragraph is unchanged" }
 
 ["CRATE-jstream-platform-macos#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:a085b9a5e185315c", by = "agent:claude", note = "Re-read Purpose after jstream-platform's Purpose gained the shared mailbox and nv12 helpers and the crossbeam-utils dependency: nothing here names them yet, and the text still holds." }
@@ -2220,7 +2229,7 @@ stamp = { hash = "b3:a094ff78452ab132", by = "agent:claude-mac1-part3", note = "
 stamp = { hash = "b3:5a5800d9669c83b7", by = "agent:claude-mac1", note = "Re-read the whole section against part 2: VideoToolboxCodecs now lists encoders (VTCopyVideoEncoderList) and opens a VTCompressionSession (src/videotoolbox.rs) per vt_encoder_settings: real time, no reordering, High/Main/Main10 auto level, keyframe interval, ConstantBitRate with the average-plus-one-second-limit fallback for software encoders, CPU frames copied into the session's IOSurface-backed pool, forced keyframes, a catch_unwind output callback feeding a channel drained by poll, at most four frames in flight. annexb.rs's annexb_access_unit, cm_time_parts, media_time_from_cm and copy_rows are as described. The new objc2-core-foundation, -core-media, -core-video and -video-toolbox crates are named; the AAC converter and decode still report Unsupported; the not-yet list and the test paragraph (macOS encode tests run in the macos job without permission, hw-tests for the hardware encoder) match. Also checked ADR-0063 §6/§12, ADR-0061, ADR-0014, the crate-map row and ARCH threading" }
 
 ["CRATE-jstream-platform-macos#purpose"."file:crates/jstream-platform-macos/src/audio.rs"]
-stamp = { hash = "b3:fdf07d39d3395769", by = "agent:mac-coreaudio-out", note = "Re-read Purpose for Core Audio output: CoreAudioIo::open_output plays on the default output (followed) or one output by UID, no permission; planned from the output streams' f32 virtual formats and the output preferred stereo pair, other channels silent; each cycle clears the output buffers then the handler fills a pre-allocated buffer in chunks with device positions from the output sample time and the expected play host time on MachClock; mismatched buffer lists play silence until the watcher re-plans; the watcher (now stream.rs, shared by both directions) moves defaults and ends with DeviceLost; not-yet list drops output streams; tests paragraph adds the unknown-output test and the hw-tests tone" }
+stamp = { hash = "b3:3283c9e25c069198", by = "agent:mac1-audio", note = "Merge of #583's round 1 fixes: open_input plans the format through stream::format before the Microphone check, as the permission paragraph now says; the open_output paragraph is unchanged" }
 
 ["CRATE-jstream-platform-macos#purpose"."file:crates/jstream-platform-macos/src/audio/hal.rs"]
 stamp = { hash = "b3:f8450fa8765114cd", by = "agent:mac-coreaudio-out", note = "Re-read Purpose for Core Audio output: CoreAudioIo::open_output plays on the default output (followed) or one output by UID, no permission; planned from the output streams' f32 virtual formats and the output preferred stereo pair, other channels silent; each cycle clears the output buffers then the handler fills a pre-allocated buffer in chunks with device positions from the output sample time and the expected play host time on MachClock; mismatched buffer lists play silence until the watcher re-plans; the watcher (now stream.rs, shared by both directions) moves defaults and ends with DeviceLost; not-yet list drops output streams; tests paragraph adds the unknown-output test and the hw-tests tone" }
