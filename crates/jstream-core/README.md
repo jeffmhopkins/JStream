@@ -98,8 +98,9 @@ state machine. Contents:
   sends. While there is no audio-only source, the default microphone and desktop audio
   are recorded too, sent to master at unity (see *Audio sources* in
   [Design](#design)).
-- **Snapshot** (`snapshot.rs`): the program mix as the render thread, the preview
-  thread and `video.snapshot` draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
+- **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
+  thread draws them, and the program mix as the preview thread and `video.snapshot`
+  draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
   compositor.
 - **Studio** (`studio.rs`): which scene is on program, runtime state under the
@@ -112,16 +113,18 @@ state machine. Contents:
   encoder of its own), drawn on the engine's `jstream-preview` thread with its own
   compositor (see *Preview streams* in [Design](#design)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
-  one program stage: the render thread reads the platform capture mailbox of
-  each display and window the program mix shows (`runtime/captures.rs`, which starts
-  and stops them on a `jstream-capture` thread), composites the program mix from the render snapshot the control side publishes
-  (`runtime/render.rs`) and reads the frame back, and the mixer thread polls the media
-  clock. The render thread composites on the platform's GPU context when the interop
-  opens one, and samples the captured textures there with no CPU copy when the capture
-  backend can deliver them; otherwise it uses CPU frames, and its own device without a
-  context (see *Runtime*). Encode threads live in the encoder sessions, one per encoder
-  profile in use, shared by the outputs on that profile. Each output's own thread muxes
-  FLV and publishes it, or muxes MP4 and records it
+  one program stage: the render thread reads the platform capture mailbox of each
+  display and window the program mix or a video mix shows (`runtime/captures.rs`,
+  which starts and stops them on a `jstream-capture` thread), composites each video
+  mix the running outputs show, on its own ticks, from the render snapshot the control
+  side publishes (`runtime/render.rs`) and reads the frames back, and the mixer thread
+  polls the media clock. The render thread composites on the platform's GPU context
+  when the interop opens one, and samples the captured textures there with no CPU copy
+  when the capture backend can deliver them; otherwise it uses CPU frames, and its own
+  device without a context (see *Runtime*). Encode threads live in the encoder
+  sessions, one per video mix and encoder profile in use, shared by the outputs on
+  that pair. Each output's own thread muxes FLV and publishes it, or muxes MP4 and
+  records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
   (`runtime/vcam.rs`).
@@ -176,11 +179,13 @@ state machine. Contents:
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
-  thread's output size (the primary display's capture filling it with no scene, the
-  program scaled from the canvas, a `display` source showing its capture, the same for
-  a GPU capture of another size), the program stage's output size following the
-  canvas, captures converted to RGBA8 at their own size (NV12 with its matrix and
-  range), and nested-scene layers reused
+  thread's output size (the primary display's capture filling the canvas with no
+  scene, the program fitted from the canvas, a `display` source showing its capture,
+  the same for a GPU capture of another size), a mix of another aspect ratio
+  letterboxed and a `scene` mix drawing its own scene, the scene each mix plans and the
+  captures only a mix shows, the program stage's output size following the canvas,
+  captures converted to RGBA8 at
+  their own size (NV12 with its matrix and range), and nested-scene layers reused
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), an output starting a capture for each display and
@@ -208,8 +213,8 @@ state machine. Contents:
   (renamed into place on stop, refused when the file exists or the path is not
   absolute on this machine, no `.part` file left by a failed start), recording while
   streaming on one shared encoder session (and separate sessions on separate
-  profiles), a virtual camera publishing the program as BGRA at the canvas size
-  (fitted into a canvas of another size, started again after a stop, running beside
+  profiles, and on a half-rate video mix held to its rate without being starved), a
+  virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
   fake encoder and the mixer reported in `stats.tick`, render and mixer panics
@@ -577,38 +582,47 @@ sources holds *k* such textures. The graph already rejects cycles at every
 edit that adds nesting; if a copied shot had one, the scene source that closes it
 draws nothing.
 
-**The render snapshot.** `snapshot::plan` copies the program scene, the scenes it
-reaches, the frames they place and the passes that draw them (`schedule`, made once
-here) into an immutable `Shot`. The program scene is the one `scene.switch` put on
-program (*Program scene*). The engine re-plans after every applied batch, undo
+**The render snapshot.** `snapshot::plan` copies the program scene, the scene each
+`scene` video mix shows, the scenes they reach, the frames they place and the passes
+that draw them (`schedule`, made once here, once per root scene) into an immutable
+`Shot`. The program scene is the one `scene.switch` put on program (*Program scene*).
+A `program` or `preview` mix draws the program's passes (there is no preview scene
+until studio mode), and so does a mix the shot doesn't have, such as one deleted while
+an output still renders it. The engine re-plans after every applied batch, undo
 and redo, a `scene.switch` that moves program, every `set_source_frame`, a collection file's load, a live source's build
 and a live source's next frame (see *Live sources*), under the collection lock, and
 `RenderHub::publish` stores
 it through `arc-swap` as the next render generation only when it draws something new
-(the canvas, the scenes, their placements or the frames' versions differ). So a batch
-that changes nothing on program, or a frame for a source no program scene shows,
-publishes nothing. Each stored frame carries a version, so a cache re-uploads it only when it
+(the canvas, the scenes, their placements, the scene each mix shows or the frames'
+versions differ). So a batch that changes nothing on program or any mix, or a frame
+for a source no such scene shows, publishes nothing. Each stored frame carries a version, so a cache re-uploads it only when it
 changed. `video.snapshot` reads `rev`, the published snapshot and the live values
 together under the lock and hands them to the snapshot thread.
 
-`snapshot::compose` draws a `Shot`, with the live values over it, for the render,
-snapshot and preview threads through a `jstream-render`
-`ResourceCache` keyed by `GpuKey`: a source's upload (or the import of a `browser`
-page's texture, see *Live sources*), each capture's (an upload of a
-CPU frame, or an import of the platform's texture, `ResourceCache::import`), a nested
-scene's layer at its depth, and the program at the canvas size. An unchanged frame is not
-uploaded again, and each nested scene is redrawn into the layer it had
-(`render_into`), so a steady frame allocates no texture. Images no frame references
-are retired and freed after the GPU has finished with them. The program scene is drawn
-at the canvas: straight to the output when that is the canvas size (`video.snapshot`),
-else into a layer that a last pass scales to the output (the render thread draws at the
-encoder size, which is the canvas the stage opened with). Without a program scene the
-output is the primary display's capture scaled to fill it, or black.
+`snapshot::compose` draws one mix of a `Shot`, with the live values over it, for the
+render, snapshot and preview threads through a `jstream-render` `ResourceCache` keyed
+by `GpuKey`: a source's upload (or the import of a `browser` page's texture, see
+*Live sources*), each capture's (an upload of a CPU frame, or an import of the
+platform's texture, `ResourceCache::import`), a nested scene's layer at its depth, and
+the mix's scene at the canvas size. An unchanged frame is not uploaded again, and each
+nested scene is redrawn into the layer it had (`render_into`), so a steady frame
+allocates no texture. On a render tick, a mix that isn't due claims its layers without
+drawing (`snapshot::claim_layers`), so mixes at different rates keep theirs between
+the ticks they draw on. Images no frame references are retired and freed after the GPU
+has finished with them. The mix's scene is drawn at the canvas: straight to the output
+when that is the canvas size (`video.snapshot`, and the program at the program stage's
+size, which is the canvas the stage opened with), else into a layer that a last pass
+fits inside the output, centred, with black bars where the aspect ratios differ, never
+stretched ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md); the render
+thread draws at each mix's encoder size). Without a scene to draw, the primary
+display's capture is scaled to fill the canvas, which is fitted the same way, or the
+output is black.
 A `display` or `window` source with no stored frame shows what the pipeline captures
 for it on the render thread, and nothing in `video.snapshot`, which has no capture; a
-stored frame wins. The `Shot` lists what its passes capture (`Shot::captures`, a
-`jstream-sources` `CaptureSpec` each: a display or window by its capture-backend target
-ID, or the primary display), and sources with the same `target` share one capture.
+stored frame wins. The `Shot` lists what the passes of the program and of every mix
+capture (`Shot::captures`, a `jstream-sources` `CaptureSpec` each: a display or window
+by its capture-backend target ID, or the primary display), and sources with the same
+`target` share one capture, whichever mixes show them.
 Sharing is by `target` value: a `display` source with an empty `target` and one that
 names the primary display's ID capture the same monitor twice. A window source with no window chosen shows nothing. The capture is part of
 what the shot draws, so a new target publishes a new snapshot.
@@ -878,7 +892,11 @@ What each stage contributes:
 A render tick that falls a whole period or more behind the clock is not drawn late:
 the loop skips to the current tick, stamps the frame with it and counts the skipped
 ticks in `render_ticks`, so video stays on the clock that stamps audio
-([R-RT-004](../../docs/RULES.md#R-RT-004)). There is no separate output queue in front of the network. Underruns, device gaps and
+([R-RT-004](../../docs/RULES.md#R-RT-004)). Both render-thread counters count base
+ticks (1/30 s), whatever the video mixes' rates: `render_ticks` counts every skipped
+base tick, including ones on which no mix was due, and the capture mailbox is read
+only on ticks that draw, so when every running mix has a divisor above 1,
+`capture_frames` also counts the captures between its ticks, which no mix wanted. There is no separate output queue in front of the network. Underruns, device gaps and
 encoder gap-fill silence are not drops: the mixer plays silence for them, and the late
 or overwritten frames are already in `audio_frames`. A late plugin block is the same
 kind of audio drop ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md));
@@ -1000,9 +1018,11 @@ entries.
 **Encoder profiles.** An output's `encoder_profile` (collection state, set with
 `output.set_encoder`) picks the encoding its next start opens, or the protocol's
 `EncoderProfile::DEFAULT` when it has none. Running outputs share an encoder session
-when they have the same key: the profile ID and its settings as they were at start
-(the mix is always program until video mixes exist). So `encoder.update` or
-`output.set_encoder` on a running output changes nothing until it restarts, and an
+when they have the same key: the video mix (or none, for the program at the canvas
+size and base rate), its resolution and rate, and the profile ID and its settings, all
+as they were at start. So `encoder.update`, `output.set_encoder`, a mix's new
+resolution or rate, or `output.set_video_mix` on a running output changes nothing until
+it restarts, and an
 output started after the update opens a session of its own rather than joining one
 with stale settings. `output.status` reports, per running output, the profile, the
 other outputs on the same session and whether its video encoder is a hardware one,
@@ -1010,6 +1030,21 @@ plus the video sessions and hardware sessions open
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); it does not
 guess a hardware cap. A hardware session limit fails the start with the encoder's own
 error for now, not a session-limit code.
+
+**Video mixes.** The render thread keeps one frame per video mix the running sessions
+are fed from, each at its session's size, and counts base ticks (1/30 s). On a tick it
+composites only the mixes due on it (every `fps_divisor`th tick, counted from the last
+one it drew, so a tick an overrun skips delays a mix but can't starve it), all in one
+GPU frame, and pushes each due frame to that mix's sessions; a tick with nothing due
+draws nothing. A mix's session is opened at the mix's resolution with a frame period
+of `fps_divisor` base ticks, so its timestamps and keyframe interval follow its rate.
+A running output follows its mix's `input` live: the frame is drawn from the scene the
+render snapshot gives the mix on that tick, so a changed input (or a `scene.switch`,
+for a `program` mix) shows from the next frame. A mix deleted while an output still
+renders it (pointed elsewhere, then deleted, while running) draws the program until
+the output restarts. The render thread keeps every display and window that the
+program or any mix shows captured (`Shot::captures`), not only those of the mixes due
+on a tick, so a mix's captures are already running when it next draws.
 
 **YouTube.** `with_youtube(YoutubeSetup)` gives the engine a Google OAuth client
 (JStream's built-in one, empty for now, or a developer's override; without one
@@ -1240,10 +1275,11 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   mixer panic, a rejected mix block
   or a mixer poll error is fatal: the encoder would get no more audio.
 
-The render thread reuses each capture's buffer, its composite and readback buffers, and its GPU
-textures through the cache. Each tick allocates one frame-sized buffer, the frame the
-encoder session takes ownership of (`VideoInput::push` cannot hand buffers back), the
-item list `compose` fills once per tick, the cache key of each capture that names a
+The render thread reuses each capture's buffer, its composite and readback buffers, and
+its GPU textures through the cache. Each tick allocates, for every mix it draws, one
+frame-sized buffer per encoder session fed from that mix, the frame the session takes
+ownership of (`VideoInput::push` cannot hand buffers back), and the item list `compose`
+fills for that mix; then once per tick the cache key of each capture that names a
 display or window (a copy of its `target`), the frame-fence callback, the premultiplied
 copy of a CPU capture that changed, and on the GPU path an import (a bind group) the
 first time each of the platform's capture textures is shown. A virtual camera's tap
@@ -1466,9 +1502,9 @@ history, idempotency keys and the program scene are not saved (see *Program scen
   is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the
   live-value handover, and a GPU encode target. `output.start` is a cut of
-  [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with its
+  [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the video mixes with their
   captured displays and windows, a CPU readback into the encoder, and the platform
-  fakes in the test. The output is the primary display's size.
+  fakes in the test. Other sources show frames the host injects with `set_source_frame`.
 - Keeping a window source on its window across restarts (its target ID names a window
   handle, which a new session of the app doesn't keep).
 
@@ -1483,14 +1519,17 @@ The output pipeline (`src/runtime/`) is the part of
 [ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading) that is built.
 `output.start`, once the host has injected platform backends and a publish target
 (a recording output or a virtual camera needs none), starts it and emits `output.state_changed` from the
-control thread. The output is the canvas size the collection has when the stage opens
-(#433). On each 1/30 s tick the render thread adopts the render snapshot, reads the
-capture mailboxes, and composites the program mix (see *Snapshots* in Design) at the
-canvas size: the program scene and the scenes it nests, with every `display` and
-`window` source that has no stored frame showing its capture. With no scene it draws
-the primary display's capture filling the frame. A capture whose mailbox is empty
-repeats its last frame. It reads the frame back. This cut encodes that CPU readback, and the
-readback is counted (`OutputStats::readbacks`).
+control thread. The program is the canvas size the collection has when the stage
+opens (#433). On each 1/30 s base tick the render thread adopts the render snapshot,
+reads the capture mailboxes of every display and window the program or a mix shows,
+and composites each video mix due on that tick (see
+*Video mixes* in Design) from the render snapshot (see *Snapshots* in Design) at its
+encoder's size, the program at the canvas size: the mix's scene and the scenes it
+nests, with every `display` and `window` source that has no stored frame showing its
+capture. With no scene it draws the primary display's capture scaled to fill the
+canvas, fitted to the frame. A capture whose mailbox is empty repeats its last frame.
+It reads the frames back. This cut encodes that CPU readback, and the readback is
+counted (`OutputStats::readbacks`, one per mix drawn).
 
 **Capture path** (ARCH › GPU pipeline, step 6). Opening the program stage asks the
 platform's `GpuInterop` for its device. With one, the render thread's compositor opens on that
@@ -1534,11 +1573,13 @@ collection's buses, faders and sends into its mixer until it stops (see *Audio
 routing* in Design). Every running output shares that one program stage (capture,
 render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
-ones inside the encoder sessions: outputs with the same encoder profile share one
-session, and the render and mixer threads take a new session's inputs from a channel,
+ones inside the encoder sessions: outputs with the same video mix and encoder profile
+share one session, and the render and mixer threads take a new session's inputs from a channel,
 never a lock, and hand a finished session's input to the collector rather than drop
-it. While the stage has no session and no virtual camera it
-draws nothing but still adopts the latest render snapshot. Each output but a virtual
+it. While the stage has no session and no virtual camera, or no mix is due on a
+tick, it draws nothing but still adopts the latest render snapshot. A virtual camera
+is fed the program at the canvas size on every tick, so that feed is drawn while a
+camera runs even if no session is on it; its video mix doesn't apply yet. Each output but a virtual
 camera has its own output thread that muxes; a virtual camera's thread converts and
 publishes what the render thread sends it through a tap, which the render thread takes
 from a channel like a session's input and hands to the collector when it leaves. An output leaving a session others still use takes what is queued for
@@ -1553,7 +1594,8 @@ whole period behind the clock skips to the current tick and counts the skipped o
 `render_ticks`. None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
-values, GPU images, finished sessions' inputs, replaced lists of bus and source scopes) goes to the program stage's
+values, GPU images, finished sessions' inputs, the frame buffers of a mix no session
+needs any more, replaced lists of bus and source scopes) goes to the program stage's
 `jstream-collector` thread. `output.stop` during `starting` cancels that start and
 emits `stopped` only after the start has dropped its threads. The render and mixer
 threads catch a panic at their boundary ([R-RT-006](../../docs/RULES.md#R-RT-006)); a

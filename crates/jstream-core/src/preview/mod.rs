@@ -118,10 +118,11 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
                 &mut compositor,
                 &mut cache,
                 shot,
+                // A preview stream shows the program mix, never a video mix.
+                None,
                 live,
                 &snapshot::NoCaptures,
                 size,
-                true,
             );
             drop(cache.end_frame(&compositor));
             let output = output.map_err(|err| err.to_string())?;

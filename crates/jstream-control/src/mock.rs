@@ -37,7 +37,7 @@ use jstream_protocol::{
     OutputKind, OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query,
     QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
     SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceAudio, SourceId, SourceInfo,
-    SourceKind, Welcome, is_live_adjustable,
+    SourceKind, VideoMix, VideoMixId, VideoMixInfo, Welcome, is_live_adjustable,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -462,6 +462,10 @@ struct Collection {
     output_encoders: BTreeMap<OutputId, EncoderProfileId>,
     /// The encoder profiles, ordered by ID: name and encoding.
     encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
+    /// The video mix each output shows, for those that chose one.
+    output_mixes: BTreeMap<OutputId, VideoMixId>,
+    /// The video mixes, ordered by ID: name and mix.
+    video_mixes: BTreeMap<VideoMixId, (String, VideoMix)>,
     /// The hotkey bindings, ordered by chord.
     hotkeys: BTreeMap<Chord, Action>,
     /// The buses, ordered by ID, the master among them.
@@ -484,6 +488,8 @@ impl Default for Collection {
             outputs: BTreeMap::new(),
             output_encoders: BTreeMap::new(),
             encoders: BTreeMap::new(),
+            output_mixes: BTreeMap::new(),
+            video_mixes: BTreeMap::new(),
             buses: BTreeMap::from([audio::Bus::master()]),
             sends: BTreeMap::new(),
             audio_kinds: BTreeMap::new(),
@@ -924,6 +930,7 @@ impl State {
                     .collect(),
                 outputs: self.collection.output_infos(),
                 encoders: self.collection.encoder_infos(),
+                video_mixes: self.collection.video_mix_infos(),
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
                 hotkeys: self
@@ -943,6 +950,10 @@ impl State {
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,
                 encoders: self.collection.encoder_infos(),
+            },
+            Query::VideoMixList => QueryResult::VideoMixList {
+                rev: self.collection.rev,
+                video_mixes: self.collection.video_mix_infos(),
             },
             Query::CaptureTargets => QueryResult::CaptureTargets {
                 targets: vec![CaptureTargetInfo {
@@ -1201,6 +1212,19 @@ impl Collection {
                         at,
                         "scene_id",
                         format!("scene `{scene_id}` is shown by a scene source; delete it first"),
+                    ));
+                }
+                if self
+                    .video_mixes
+                    .values()
+                    .any(|(_, mix)| mix.scene() == Some(&scene_id))
+                {
+                    return Err(invalid(
+                        at,
+                        "scene_id",
+                        format!(
+                            "scene `{scene_id}` is shown by a video mix; point it elsewhere first"
+                        ),
                     ));
                 }
                 if self.is_referred_to(
@@ -1587,8 +1611,14 @@ impl Collection {
                 }];
                 if let Some(profile_id) = self.output_encoders.remove(&output_id) {
                     inverse.push(Edit::OutputSetEncoder {
-                        output_id,
+                        output_id: output_id.clone(),
                         profile_id: Some(profile_id),
+                    });
+                }
+                if let Some(mix_id) = self.output_mixes.remove(&output_id) {
+                    inverse.push(Edit::OutputSetVideoMix {
+                        output_id,
+                        mix_id: Some(mix_id),
                     });
                 }
                 inverse
@@ -1675,6 +1705,69 @@ impl Collection {
                     profile,
                 }]
             }
+            Edit::VideoMixCreate { mix_id, name, mix } => {
+                check_id(mix_id.as_str(), at, "mix_id")?;
+                if self.video_mixes.contains_key(&mix_id) {
+                    return Err(already_exists(EntityKind::VideoMix, mix_id.as_str()));
+                }
+                check_name(&name, at)?;
+                self.check_mix(&mix, at)?;
+                self.video_mixes.insert(mix_id.clone(), (name, mix));
+                vec![Edit::VideoMixDelete { mix_id }]
+            }
+            Edit::VideoMixUpdate { mix_id, name, mix } => {
+                if !self.video_mixes.contains_key(&mix_id) {
+                    return Err(not_found(EntityKind::VideoMix, mix_id.as_str()));
+                }
+                check_name(&name, at)?;
+                self.check_mix(&mix, at)?;
+                let Some((old_name, old_mix)) =
+                    self.video_mixes.insert(mix_id.clone(), (name, mix))
+                else {
+                    return Err(not_found(EntityKind::VideoMix, mix_id.as_str()));
+                };
+                vec![Edit::VideoMixUpdate {
+                    mix_id,
+                    name: old_name,
+                    mix: old_mix,
+                }]
+            }
+            Edit::VideoMixDelete { mix_id } => {
+                if !self.video_mixes.contains_key(&mix_id) {
+                    return Err(not_found(EntityKind::VideoMix, mix_id.as_str()));
+                }
+                if let Some((user, _)) = self.output_mixes.iter().find(|(_, id)| **id == mix_id) {
+                    return Err(invalid(
+                        at,
+                        "mix_id",
+                        format!(
+                            "video mix `{mix_id}` is used by output `{user}`; point it elsewhere first"
+                        ),
+                    ));
+                }
+                let Some((name, mix)) = self.video_mixes.remove(&mix_id) else {
+                    return Err(not_found(EntityKind::VideoMix, mix_id.as_str()));
+                };
+                vec![Edit::VideoMixCreate { mix_id, name, mix }]
+            }
+            Edit::OutputSetVideoMix { output_id, mix_id } => {
+                if !self.outputs.contains_key(&output_id) {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                }
+                let old = match mix_id {
+                    Some(id) => {
+                        if !self.video_mixes.contains_key(&id) {
+                            return Err(not_found(EntityKind::VideoMix, id.as_str()));
+                        }
+                        self.output_mixes.insert(output_id.clone(), id)
+                    }
+                    None => self.output_mixes.remove(&output_id),
+                };
+                vec![Edit::OutputSetVideoMix {
+                    output_id,
+                    mix_id: old,
+                }]
+            }
             edit @ (Edit::FilterAdd { .. }
             | Edit::FilterRemove { .. }
             | Edit::FilterSetEnabled { .. }
@@ -1716,6 +1809,20 @@ impl Collection {
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
+    }
+
+    /// Checks a video mix as the engine does: its own ranges, then that the scene it
+    /// shows exists.
+    fn check_mix(&self, mix: &VideoMix, at: usize) -> Result<(), ProtocolError> {
+        if let Some((name, reason)) = mix.problem() {
+            return Err(invalid(at, &format!("mix.{name}"), reason));
+        }
+        if let Some(scene_id) = mix.scene()
+            && !self.scenes.iter().any(|scene| &scene.id == scene_id)
+        {
+            return Err(not_found(EntityKind::Scene, scene_id.as_str()));
+        }
+        Ok(())
     }
 
     /// Removes the hotkey bindings whose action names `entity` `id`, which a delete has
@@ -1860,6 +1967,19 @@ impl Collection {
                 output_id: id.clone(),
                 kind: kind.clone(),
                 encoder_profile: self.output_encoders.get(id).cloned(),
+                video_mix: self.output_mixes.get(id).cloned(),
+            })
+            .collect()
+    }
+
+    /// Every video mix, ordered by ID, as queries report them.
+    fn video_mix_infos(&self) -> Vec<VideoMixInfo> {
+        self.video_mixes
+            .iter()
+            .map(|(id, (name, mix))| VideoMixInfo {
+                mix_id: id.clone(),
+                name: name.clone(),
+                mix: mix.clone(),
             })
             .collect()
     }
@@ -2439,10 +2559,10 @@ mod tests {
     use jstream_protocol::{
         Action, Batch, BlendMode, BusId, BusInfo, Call, CallResult, Canvas, ClientId, Crop, Edit,
         EncoderProfile, EncoderProfileId, EntityKind, Event, Finite32, Hello, HistoryCall,
-        HistoryDirection, HistoryOp, IdempotencyKey, ItemId, ItemTransform, OutputId, OutputInfo,
-        OutputKind, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query,
-        QueryResult, Rev, RtmpTarget, SceneId, SceneRole, SecretString, Settings, SourceId,
-        SourceKind, parity,
+        HistoryDirection, HistoryOp, IdempotencyKey, ItemId, ItemTransform, MixInput,
+        MixResolution, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION,
+        ProtocolError, ProtocolVersion, Query, QueryResult, Rev, RtmpTarget, SceneId, SceneRole,
+        SecretString, Settings, SourceId, SourceKind, VideoMix, VideoMixId, parity,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -2839,6 +2959,7 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                video_mixes,
                 buses,
                 sends,
                 hotkeys,
@@ -2850,6 +2971,7 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                video_mixes,
                 buses,
                 sends,
                 hotkeys,
@@ -2862,7 +2984,7 @@ mod tests {
     /// inverse edits `jstream-graph` builds: a removed item comes back at its index with
     /// its placement (in its own form, transform or geometry), crop and visibility, a
     /// deleted scene with its items and its position, a source with its settings and its
-    /// `duplicated_from`, an item's source, an output with its encoder profile, the encoder profiles, the canvas size,
+    /// `duplicated_from`, an item's source, an output with its encoder profile and video mix, the encoder profiles, the video mixes, the canvas size,
     /// a deleted bus with its fader and sends, a source's audio and sends as they were,
     /// the faders and sends set since, and the hotkey bindings that the deletes of scene
     /// `a` and output `yt` removed. Its
@@ -2924,6 +3046,19 @@ mod tests {
                 },
                 Edit::SourceDelete {
                     source_id: SourceId::new("b_src"),
+                },
+                // Mix `side` shows `b`, so it moves off it first; its inverse moves it back.
+                Edit::VideoMixUpdate {
+                    mix_id: VideoMixId::new("side"),
+                    name: "Moved".into(),
+                    mix: VideoMix {
+                        input: MixInput::Program,
+                        resolution: MixResolution {
+                            width: 320,
+                            height: 180,
+                        },
+                        fps_divisor: 1,
+                    },
                 },
                 Edit::SceneDelete {
                     scene_id: SceneId::new("b"),
@@ -2990,6 +3125,10 @@ mod tests {
                     name: "Draft".into(),
                     profile: EncoderProfile::DEFAULT,
                 },
+                Edit::OutputSetVideoMix {
+                    output_id: OutputId::new("yt"),
+                    mix_id: Some(VideoMixId::new("prog")),
+                },
                 Edit::OutputDelete {
                     output_id: OutputId::new("tw"),
                 },
@@ -3008,6 +3147,12 @@ mod tests {
                 Edit::EncoderDelete {
                     profile_id: EncoderProfileId::new("hq"),
                 },
+                Edit::VideoMixDelete {
+                    mix_id: VideoMixId::new("side"),
+                },
+                Edit::VideoMixDelete {
+                    mix_id: VideoMixId::new("prog"),
+                },
             ],
             expected_rev: None,
             idempotency_key: None,
@@ -3024,6 +3169,7 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                video_mixes: vec![],
                 buses: vec![BusInfo {
                     bus_id: BusId::master(),
                     name: "Master".into(),
@@ -4151,6 +4297,7 @@ mod tests {
                     output_id: OutputId::new("yt"),
                     kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
                     encoder_profile: None,
+                    video_mix: None,
                 }],
             })
         );

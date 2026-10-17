@@ -4,9 +4,10 @@ use crate::{Graph, Placement};
 use jstream_protocol::{
     AudioFollow, BlendMode, BusId, Canvas, Crop, DeleteTarget, Edit, EncoderProfile,
     EncoderProfileId, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform,
-    KindCategory, KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor,
-    ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget,
-    SceneId, SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
+    KindCategory, KindDescriptor, Media, MixInput, MixResolution, OutputId, OutputInfo, OutputKind,
+    ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer,
+    Rev, RtmpTarget, SceneId, SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
+    VideoMix, VideoMixId,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -646,6 +647,7 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
                     target: target("rtmps://a.rtmps.youtube.com:443/live2"),
                 },
                 encoder_profile: None,
+                video_mix: None,
             }],
         }
     );
@@ -751,6 +753,7 @@ fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
                     container: RecordContainer::Mp4,
                 },
                 encoder_profile: None,
+                video_mix: None,
             }],
         }
     );
@@ -1092,8 +1095,9 @@ mod property {
     use crate::Graph;
     use jstream_protocol::{
         Action, AudioFollow, BusId, Chord, Crop, DeleteTarget, Edit, EncoderProfile,
-        EncoderProfileId, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, OutputId,
-        RateControl, Rev, SceneId, SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
+        EncoderProfileId, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, MixInput,
+        MixResolution, OutputId, RateControl, Rev, SceneId, SceneRole, Settings, Size, SourceId,
+        SourceKind, Vec2, VideoMix, VideoMixId,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1131,6 +1135,7 @@ mod property {
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
+        let mixes: Vec<String> = state.video_mixes().map(|m| m.id().to_string()).collect();
         let filters: Vec<(String, String)> = state
             .sources()
             .flat_map(|s| {
@@ -1153,6 +1158,22 @@ mod property {
         let output = |rng: &mut Rng| rng.pick(&outputs).unwrap_or_else(|| pool(rng, "out"));
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let encoder = |rng: &mut Rng| rng.pick(&encoders).unwrap_or_else(|| pool(rng, "enc"));
+        let mix_id = |rng: &mut Rng| rng.pick(&mixes).unwrap_or_else(|| pool(rng, "mix"));
+        // A scene one time in two, often one that exists; an odd width one time in eight.
+        let mix = |rng: &mut Rng| VideoMix {
+            input: match rng.below(4) {
+                0 => MixInput::Program,
+                1 => MixInput::Preview,
+                _ => MixInput::Scene {
+                    scene_id: SceneId::new(scene(rng)),
+                },
+            },
+            resolution: MixResolution {
+                width: [1279, 640, 1280, 1920, 16, 3840, 720, 1080][rng.below(8)],
+                height: 720,
+            },
+            fps_divisor: u32::try_from(rng.below(4)).expect("fits") + 1,
+        };
         let bus = |rng: &mut Rng| {
             BusId::new(match rng.below(5) {
                 0 => pool(rng, "bus"),
@@ -1221,7 +1242,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(44) {
+        match rng.below(48) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1477,7 +1498,30 @@ mod property {
                     },
                 }
             }
-            42 => {
+            42 | 43 => {
+                let name = pool(rng, "name ");
+                if rng.below(2) == 0 {
+                    Edit::VideoMixCreate {
+                        mix_id: VideoMixId::new(pool(rng, "mix")),
+                        name,
+                        mix: mix(rng),
+                    }
+                } else {
+                    Edit::VideoMixUpdate {
+                        mix_id: VideoMixId::new(mix_id(rng)),
+                        name,
+                        mix: mix(rng),
+                    }
+                }
+            }
+            44 => Edit::OutputSetVideoMix {
+                output_id: OutputId::new(output(rng)),
+                mix_id: (rng.below(3) != 0).then(|| VideoMixId::new(mix_id(rng))),
+            },
+            45 => Edit::VideoMixDelete {
+                mix_id: VideoMixId::new(mix_id(rng)),
+            },
+            46 => {
                 let chord = Chord::new(["F1", "Ctrl+KeyA", "Shift+Ctrl+KeyA"][rng.below(3)]);
                 if rng.below(3) == 0 {
                     Edit::HotkeyClear { chord }
@@ -1587,6 +1631,10 @@ mod property {
             "encoder.create",
             "encoder.update",
             "encoder.delete",
+            "video_mix.create",
+            "video_mix.update",
+            "video_mix.delete",
+            "output.set_video_mix",
             "filter.add",
             "filter.remove",
             "filter.set_enabled",
@@ -3315,6 +3363,194 @@ fn reference_and_clone_convert_in_one_batch_each() {
             .item(&ItemId::new("i1"))
             .map(|(_, i)| i.source_id().as_str()),
         Some("cam_c")
+    );
+}
+
+fn mix_create(id: &str, input: MixInput) -> Edit {
+    Edit::VideoMixCreate {
+        mix_id: VideoMixId::new(id),
+        name: format!("Mix {id}"),
+        mix: VideoMix {
+            input,
+            resolution: MixResolution {
+                width: 1280,
+                height: 720,
+            },
+            fps_divisor: 1,
+        },
+    }
+}
+
+fn set_mix(output: &str, mix: Option<&str>) -> Edit {
+    Edit::OutputSetVideoMix {
+        output_id: OutputId::new(output),
+        mix_id: mix.map(VideoMixId::new),
+    }
+}
+
+/// Every mix edit undoes exactly, deleting an output that shows a mix restores its
+/// choice on undo, and a mix an output shows can't be deleted.
+#[test]
+fn video_mix_edits_invert() {
+    let mut graph = graph();
+    apply_ok(
+        &mut graph,
+        vec![
+            scene_create("a"),
+            output_create("yt", "rtmp://a.rtmp.youtube.com/live2"),
+            mix_create(
+                "side",
+                MixInput::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+            ),
+        ],
+    );
+    apply_ok(&mut graph, vec![set_mix("yt", Some("side"))]);
+    assert_eq!(
+        graph
+            .state()
+            .output(&OutputId::new("yt"))
+            .and_then(|o| o.video_mix())
+            .map(VideoMixId::as_str),
+        Some("side")
+    );
+    let (field, reason) = invalid_reason(apply_err(
+        &mut graph,
+        vec![Edit::VideoMixDelete {
+            mix_id: VideoMixId::new("side"),
+        }],
+    ));
+    assert_eq!(field, "edits.0.mix_id");
+    assert_eq!(
+        reason,
+        "video mix `side` is used by output `yt`; point it elsewhere first"
+    );
+    let updated = apply_ok(
+        &mut graph,
+        vec![Edit::VideoMixUpdate {
+            mix_id: VideoMixId::new("side"),
+            name: "Program".into(),
+            mix: VideoMix {
+                input: MixInput::Program,
+                resolution: MixResolution {
+                    width: 640,
+                    height: 360,
+                },
+                fps_divisor: 2,
+            },
+        }],
+    );
+    assert_eq!(
+        updated.inverse.edits,
+        vec![
+            mix_create(
+                "side",
+                MixInput::Scene {
+                    scene_id: SceneId::new("a"),
+                }
+            )
+            .into_update()
+        ]
+    );
+    let deleted = apply_ok(
+        &mut graph,
+        vec![Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        }],
+    );
+    assert_eq!(
+        deleted.inverse.edits.last(),
+        Some(&set_mix("yt", Some("side"))),
+        "{:?}",
+        deleted.inverse
+    );
+    apply_ok(
+        &mut graph,
+        vec![Edit::VideoMixDelete {
+            mix_id: VideoMixId::new("side"),
+        }],
+    );
+}
+
+trait IntoUpdate {
+    fn into_update(self) -> Edit;
+}
+
+impl IntoUpdate for Edit {
+    /// A `video_mix.create` as the `video_mix.update` that sets the same name and mix.
+    fn into_update(self) -> Edit {
+        match self {
+            Edit::VideoMixCreate { mix_id, name, mix } => {
+                Edit::VideoMixUpdate { mix_id, name, mix }
+            }
+            other => other,
+        }
+    }
+}
+
+/// A mix that shows a scene blocks the scene's delete, and `delete.plan` points the mix
+/// at the program instead, keeping its name, resolution and rate.
+#[test]
+fn a_mix_blocks_its_scenes_delete_and_the_plan_repoints_it() {
+    let mut graph = graph();
+    apply_ok(
+        &mut graph,
+        vec![
+            scene_create("a"),
+            scene_create("b"),
+            mix_create(
+                "side",
+                MixInput::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+            ),
+            mix_create(
+                "other",
+                MixInput::Scene {
+                    scene_id: SceneId::new("b"),
+                },
+            ),
+        ],
+    );
+    let error = apply_err(
+        &mut graph,
+        vec![Edit::SceneDelete {
+            scene_id: SceneId::new("a"),
+        }],
+    );
+    assert_eq!(
+        blockers(error),
+        vec![(
+            EntityKind::VideoMix,
+            "side".to_owned(),
+            "mix.input.scene_id".to_owned()
+        )]
+    );
+    let edits = plan(
+        &graph,
+        DeleteTarget::Scene {
+            scene_id: SceneId::new("a"),
+        },
+    );
+    assert_eq!(
+        edits,
+        vec![
+            mix_create("side", MixInput::Program).into_update(),
+            Edit::SceneDelete {
+                scene_id: SceneId::new("a"),
+            },
+        ]
+    );
+    apply_ok(&mut graph, edits);
+    assert_eq!(
+        graph
+            .state()
+            .video_mix(&VideoMixId::new("other"))
+            .and_then(|m| m.mix().scene())
+            .map(SceneId::as_str),
+        Some("b"),
+        "a mix showing another scene is untouched"
     );
 }
 

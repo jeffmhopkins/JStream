@@ -2377,11 +2377,11 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, size, capture, out| {
+                let draw: DrawFn = Box::new(move |shot, live, captures, frames| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .push(shot.program().cloned());
-                    inner(shot, live, size, capture, out)
+                    inner(shot, live, captures, frames)
                 });
                 Ok(draw)
             })
@@ -2996,9 +2996,9 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, live, captures, frames| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, live, size, rgba, out)
+                    inner(shot, live, captures, frames)
                 });
                 Ok(draw)
             })
@@ -4271,9 +4271,9 @@ mod cpu_pipeline {
             Arc::new(move |context| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, live, captures, frames| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, live, size, rgba, out)
+                    inner(shot, live, captures, frames)
                 });
                 Ok(draw)
             })
@@ -4351,6 +4351,87 @@ mod cpu_pipeline {
         assert_eq!(
             rec.map(|encoder| (encoder.profile_id, encoder.shared_with)),
             Some((Some(EncoderProfileId::new("hq")), vec![]))
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
+
+    /// An output on a video mix gets an encoder session of its own, not shared with the
+    /// program's, fed at the mix's rate: the recording on a half-rate mix gets at most
+    /// one frame per two base ticks, and isn't starved while the stream on program draws.
+    /// A mix an output shows can't be deleted.
+    #[test]
+    fn an_output_on_a_mix_encodes_it_at_its_rate() {
+        use jstream_protocol::{MixInput, MixResolution, VideoMix, VideoMixId};
+
+        let dir = TempDir::new("mix");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &dir.join("show.mp4"));
+        batch(
+            &control,
+            edits(vec![
+                Edit::VideoMixCreate {
+                    mix_id: VideoMixId::new("half"),
+                    name: "Half rate".into(),
+                    mix: VideoMix {
+                        input: MixInput::Program,
+                        resolution: MixResolution {
+                            width: 32,
+                            height: 18,
+                        },
+                        fps_divisor: 2,
+                    },
+                },
+                Edit::OutputSetVideoMix {
+                    output_id: OutputId::new("rec"),
+                    mix_id: Some(VideoMixId::new("half")),
+                },
+            ]),
+        )
+        .expect("mix edits");
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (_, rec, sessions, _) = encoder_status(&control, "rec");
+        assert_eq!(sessions, 2);
+        assert_eq!(rec.map(|encoder| encoder.shared_with), Some(vec![]));
+
+        let recorded = |engine: &Engine| {
+            engine
+                .output_stats_of(&OutputId::new("rec"))
+                .map_or(0, |stats| stats.video_subscriber.delivered)
+        };
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || video_tags(&publish) >= 90),
+            "the stream never got its frames"
+        );
+        let (full, half) = (video_tags(&publish) as u64, recorded(&engine));
+        // The pump moves the clock faster than a debug render thread draws, so most
+        // base ticks are skipped and both mixes are drawn on nearly every tick that is:
+        // the half-rate mix is held to at most one frame per two base ticks and never
+        // more than the program. However many ticks are skipped it gets at least about
+        // one frame for every two of the program's, so an overrun doesn't starve it. Its
+        // rate on ticks that aren't skipped is checked by
+        // `frames_draw_each_feed_once_on_its_ticks`.
+        let micros = jstream_platform::MediaClock::now(&fakes.clock).ticks();
+        let base = u64::try_from(micros / 33_333).expect("clock after zero");
+        assert!(
+            half + 6 >= full / 2 && half <= full + 2 && half <= base / 2 + 2,
+            "{half} recorded frames against {full} streamed over {base} base ticks"
+        );
+
+        let refused = batch(
+            &control,
+            edits(vec![Edit::VideoMixDelete {
+                mix_id: VideoMixId::new("half"),
+            }]),
+        );
+        assert_eq!(
+            refused.as_ref().err().and_then(code),
+            Some("invalid_argument")
         );
         block_on(control.call(output_call("rec", false))).expect("rec stop");
         block_on(control.call(output_call("yt", false))).expect("yt stop");
@@ -4437,10 +4518,12 @@ mod cpu_pipeline {
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
         Arc::new(move |_| {
-            let draw: DrawFn = Box::new(move |_, _, size: FrameSize, _, out: &mut Vec<u8>| {
-                out.clear();
-                for _ in 0..size.width() as usize * size.height() as usize {
-                    out.extend_from_slice(&rgba);
+            let draw: DrawFn = Box::new(move |_, _, _, frames| {
+                for frame in frames.iter_mut().filter(|frame| frame.due) {
+                    frame.out.clear();
+                    for _ in 0..frame.size.width() as usize * frame.size.height() as usize {
+                        frame.out.extend_from_slice(&rgba);
+                    }
                 }
                 Ok(None)
             });
@@ -4807,6 +4890,7 @@ fn output_edits_configure_the_collection() {
             output_id: OutputId::new("out_yt"),
             kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
             encoder_profile: None,
+            video_mix: None,
         }]
     );
     assert_eq!(
@@ -4831,6 +4915,7 @@ fn output_edits_configure_the_collection() {
                 output_id: OutputId::new("out_yt"),
                 kind: rtmp_output("rtmps://a.rtmps.youtube.com:443/live2"),
                 encoder_profile: None,
+                video_mix: None,
             }]
         ),
         other => panic!("not a state: {other:?}"),
