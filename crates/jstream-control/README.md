@@ -29,13 +29,14 @@ Contents (a first cut; [Design](#design) explains the choices):
   types that keep it dyn-compatible.
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
-- **Mock** (`mock.rs`, feature `mock`): `MockEngine` and `MockControl`, an in-memory
-  implementation for developing and testing clients without the engine, which
-  they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
+- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`):
+  `MockEngine` and `MockControl`, an in-memory implementation for developing and
+  testing clients without the engine, which they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
   implementation; its tests hold it to the mock's answers.
 - **WebSocket client** (feature `ws`): `WsControl`, the `Control` trait over the
   engine's WebSocket API, natively (`ws.rs`) and in the browser (`ws_web.rs`, `wasm32`);
-  `WsConfig` and the handshake pieces both share (`ws_config.rs`).
+  `WsConfig`, and the URL, token and end-reason helpers the browser client uses, kept
+  here so they test natively (`ws_config.rs`).
 - **Shared names** (`lib.rs`, no feature): `WS_PATH`, the API's path, and
   `WS_PROTOCOL` and `WS_TOKEN_PROTOCOL_PREFIX`, the subprotocols a browser offers;
   `jstream-server` uses the same constants, so client and server can't drift.
@@ -50,7 +51,7 @@ depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md
 
 ### The trait
 
-A `Control` value is one client session. Its three methods mirror the protocol's
+A `Control` value is one client session. Its four methods mirror the protocol's
 envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
 
 - `hello(Hello) -> Welcome`: the handshake. It fixes the session's `client_id`, which
@@ -139,42 +140,56 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
     naming a missing output, then a missing profile;
+  - an `opacity` outside 0 to 1 and a blend mode other than `normal`, in `item.add`,
+    `item.set_opacity` and `item.set_blend`;
+  - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
+    a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
+    `scene` source, a full chain and an index out of range. `source.duplicate` copies
+    the chains and `source.delete`'s inverse re-adds them; a reference in a filter's
+    settings blocks deleting its target, as a source's own does;
   - audio (`mock/audio.rs`, ADR-0028): each audio source's `SourceAudio` with its kind's
     defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
     or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
-    deleting the master, an empty `bus.set_fader`, sends from a `scene` source or a
+    deleting the master or a bus a source's settings refer to (a `bus` reference, as
+    a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
-  kinds, so it accepts any non-empty builtin kind; `MockEngine::with_kinds` only tells
-  it which kinds have audio, and whether video too, for their audio defaults (a kind it
-  wasn't told about has no audio). It stores settings as sent without
-  checking them or filling in defaults (a `null` in a `source.set_settings` patch
-  removes the entry), and doesn't follow settings references when it looks for cycles.
-  `kind.list`, `kind.describe` and `delete.plan` answer `internal`, and its refused
-  deletes carry no `blockers`;
+  kinds, so it accepts any non-empty builtin kind and any filter kind;
+  `MockEngine::with_kinds` only tells it which kinds have audio, and whether video too,
+  for their audio defaults (a kind it wasn't told about has no audio). It doesn't check
+  whether a builtin source has the chain a filter names, stores settings (a source's
+  and a filter's) as sent without checking them or filling in defaults (a `null` in a
+  patch removes the entry), and doesn't follow settings references when it looks for
+  cycles. `kind.list` answers with no kinds, `kind.describe` and `delete.plan` answer
+  `internal`, and its refused deletes carry no `blockers`;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
   scene), `output.list`, `encoder.list` and `bus.list` (ordered by ID), each at the
   current `rev`.
-  So it keeps everything an edit sets: the canvas, source names, kinds and settings,
-  each item's placement (its transform, or its geometry and the transform view of it),
-  crop and visibility, each scene's role and each item's scene after an `item.move`,
-  each output's kind, target and encoder profile, each profile, each source's audio,
-  and the buses and sends. `video.snapshot` is not one of those reads: the mock has no
-  compositor and answers it with `internal`, as it does for any protocol variant it
-  does not implement;
+  So it keeps everything an edit sets: the canvas, source names, kinds, settings and
+  filter chains, each item's placement (its transform, or its geometry and the
+  transform view of it), crop, visibility, opacity and blend, each scene's role and
+  each item's scene after an `item.move`, each output's kind, target and encoder
+  profile, each profile, each source's audio, and the buses and sends.
+  `video.snapshot` is not one of those reads: the mock has no compositor and answers
+  it with `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
   `output.status`, but it is not in the collection, so `output.list` and `state.get`
   don't report it and `output.set_key` answers `not_found` for it. It runs no
   encoders, so `output.status` reports no encoder session and zero sessions;
+- the pairing calls (`pairing.start`, `device.list`, `device.revoke`) answered with
+  `unsupported`, as the in-process engine answers them: only a server in front of a
+  session serves them
+  ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md));
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
-  `key`) for an empty, over-long or whitespace key; `output.clear_key` always succeeds.
+  `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII
+  characters; `output.clear_key` always succeeds.
   The keys live in memory, outside the collection: no `rev`, no event, kept when their
   output is deleted. `output.status` reports `key_set` from them, and
   `MockEngine::stream_key` lets a client test check what was stored. Unlike an
@@ -185,13 +200,14 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - per-client undo and redo (`history.undo`, `history.redo`,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Each batch is a step built
   from the same inverse edits `jstream-graph` returns: a removed item comes back at its
-  index with its placement in its own form (transform or geometry), crop and
-  visibility, a deleted scene at its position with its role and items, `item.move`
+  index with its placement in its own form (transform or geometry), crop, visibility,
+  opacity and blend, a deleted scene at its position with its role and items, `item.move`
   back to the item's previous scene and index, `scene.set_role` back to the previous
   role, a deleted source with its
-  settings and `duplicated_from`, `item.set_source` back to the item's previous source,
-  a deleted bus with its fader and sends, a deleted source's audio and sends, and each
-  audio edit back to the values it replaced; a placement, crop or
+  settings, `duplicated_from` and filters, each filter edit to the chain as it was,
+  `item.set_source` back to the item's previous source, a deleted bus with its fader
+  and sends, a deleted source's audio and sends, and each audio edit back to the values
+  it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
   back with its encoder profile, encoder profile edits undo to the profile as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
@@ -226,8 +242,9 @@ The mock re-implements these checks and reads rather than calling
 for dev-dependencies, so the dependency would need a layering change. The duplication
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
-its outputs, the exact answer to every read of it, and the exact error for batches
-rejected against it, RTMP URL, recording path and audio rejections included. The mock's
+its outputs and a filter chain, the exact answer to every read of it, and the exact
+error for batches rejected against it, RTMP URL, recording path, filter and audio
+rejections included. The mock's
 undo test tears that collection down in one batch and checks that undo gives back
 exactly the fixture's state, which `jstream-graph`'s inverse property test guarantees
 for the graph.
@@ -284,7 +301,11 @@ pulls `web-sys`.
 - **Failures are `Disconnected`.** An invalid URL (or a `wss://` one, natively), an
   unreachable engine, or a refused upgrade fails `connect`. Natively the reason names
   HTTP 401 for the token and 403 for `Origin` or `Host`; a browser doesn't tell the page
-  why an upgrade failed, so there the reason covers all three. When the socket closes, pending and later calls fail with
+  why an upgrade failed, so there the reason covers all three, and a URL the page's
+  Content Security Policy blocks too. The browser client ends the session on the
+  socket's `error` event as well as on `close`, because `error` is not always followed
+  by `close` (Chromium sends none when CSP refuses the URL); the first of the two sets
+  the reason. When the socket closes, pending and later calls fail with
   `Disconnected` carrying the reason (the server's close reason when it gave one), and
   every event stream ends after what it buffered. Dropping the `WsControl` closes the
   socket. Reconnecting is the caller's choice (a new session, then re-read the state),
@@ -292,8 +313,13 @@ pulls `web-sys`.
 
 The native client's end-to-end tests live in `jstream-server`, which runs a
 `MockEngine` behind a real server on a loopback port and drives it with this client.
-The browser client has no automated test yet: it type-checks in CI's `wasm32` build,
-and the URL and token handling it shares are unit-tested natively (`ws_config.rs`).
+The browser client is tested end to end through the web UI: Playwright drives
+`jstream-ui` in Chromium against a mock daemon, connecting, failing to connect (a
+refused upgrade, and a URL the page's policy blocks) and calling the engine
+([jstream-ui end-to-end tests](../jstream-ui/tests/e2e/README.md#tests)). It also
+type-checks in CI's `wasm32` build, and the URL and token handling and the choice of
+the reason a session ended with, which it shares, are unit-tested natively
+(`ws_config.rs`).
 
 ### Open questions
 
@@ -313,8 +339,9 @@ and the URL and token handling it shares are unit-tested natively (`ws_config.rs
    `jstream-server` works around it by mapping session IDs back to wire IDs
    ([jstream-server › Design](../jstream-server/README.md#design)).
 3. **Browser client.** Settled and built: `web-sys`'s `WebSocket` on `wasm32`, with the
-   token in a subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). A
-   browser test (wasm-bindgen-test against a server) is still open.
+   token in a subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). It is
+   tested end to end through the web UI (above); a test of the client on its own
+   (wasm-bindgen-test against a server) is still open.
 4. **TLS.** `wss://` needs a TLS feature of `tokio-tungstenite` (rustls with ring) and
    its wiring. `ring` is already on the lint-deps native-code allowlist, for
    `jstream-outputs`' RTMPS, so that part needs no further governance change.

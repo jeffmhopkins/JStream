@@ -15,7 +15,7 @@ pub enum MediaKind {
 
 /// A compressed format. The baseline set follows docs/adr/0031-source-types-and-decoding-scope.md:
 /// H.264 video and AAC audio, from OS encoders. HEVC and AV1 are the video codecs enhanced
-/// RTMP carries (docs/adr/0041-youtube-interaction-scope-v3.md).
+/// RTMP carries (docs/adr/0058-youtube-sign-in-with-a-jstream-client.md).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Codec {

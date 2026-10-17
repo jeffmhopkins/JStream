@@ -55,6 +55,9 @@ pub(crate) enum Command {
         ring: Arc<FrameRing>,
         shared: Arc<InputShared>,
         chain: Box<Chain>,
+        /// The input's monitor block ([`Mixer::input_block`](super::mixer::Mixer::input_block)):
+        /// `block_frames` frames, allocated here so the mixer thread never does.
+        block: Box<[[f32; 2]]>,
     },
     Remove(u64),
     AddBus {
@@ -197,6 +200,7 @@ impl ControlPlane {
             ring: Arc::clone(&ring),
             shared: Arc::clone(&shared),
             chain: Box::new(Chain::new(engine)?),
+            block: vec![[0.0; 2]; self.block_frames].into_boxed_slice(),
         };
         if self.tx.try_send(queued).is_err() {
             return Err(AudioError::CommandQueueFull);

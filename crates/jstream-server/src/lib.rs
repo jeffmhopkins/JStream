@@ -9,17 +9,24 @@
 //! behind the same checks, with one MCP session per `initialize`. When the host names a
 //! directory (`ServerConfig::ui_dir`), it serves the web UI's files from it at every
 //! other path, behind the same checks, with a browser's `Basic` credentials carrying the
-//! token. Layer 4.
+//! token. It pairs devices (ADR-0044): `pairing.start` opens a one-time code, a device
+//! trades it for its own device token at [`PAIR_PATH`], the one request answered without
+//! a token, and a device token then gets in wherever the control token does, while the
+//! server listens on loopback. The server answers `pairing.start`, `device.list` and
+//! `device.revoke` itself, on every connection and MCP session. Layer 4.
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-server/README.md#purpose, crates/jstream-server/README.md#design, docs/adr/0006-mcp-full-access.md
 
 #![forbid(unsafe_code)]
 
+mod admitted;
 mod config;
+mod devices;
 mod error;
 mod gate;
 mod listener;
 mod mcp;
+mod pair;
 mod preview;
 mod session;
 #[cfg(test)]
@@ -30,15 +37,17 @@ pub use config::{ServerConfig, Token};
 pub use error::ServerError;
 pub use jstream_control::WS_PATH;
 pub use mcp::MCP_PATH;
+pub use pair::PAIR_PATH;
 
+use admitted::Admitted;
 use axum::Router;
 use axum::extract::ws::{WebSocketUpgrade, rejection::WebSocketUpgradeRejection};
 use axum::extract::{ConnectInfo, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
-use gate::Gate;
-use gate::Refusal;
+use devices::Devices;
+use gate::{Credential, Gate, Refusal};
 use jstream_control::{Control, WS_PROTOCOL};
 use listener::{Accepted, Limited};
 use mcp::Mcp;
@@ -83,6 +92,23 @@ struct App {
     mcp: Option<Mcp>,
     /// The web UI's files, when `ServerConfig::ui_dir` is set.
     ui: Option<Ui>,
+    /// The paired devices and the open pairing code (ADR-0044).
+    devices: Arc<Devices>,
+    /// Whether the server listens on a loopback address, the only place pairing is
+    /// offered and device tokens are accepted until it has TLS.
+    loopback: bool,
+}
+
+impl App {
+    /// A new session from the connector, admitted by `credential`.
+    fn open(&self, credential: Credential) -> Box<dyn Control> {
+        Box::new(Admitted::new(
+            (self.connector)(),
+            credential,
+            Arc::clone(&self.devices),
+            self.loopback,
+        ))
+    }
 }
 
 impl Server {
@@ -90,9 +116,13 @@ impl Server {
     ///
     /// An extra host without a port (or with an invalid one) is refused with
     /// [`ServerError::InvalidHost`] before anything is opened, since it could never match.
+    /// A zero connection limit or timeout is refused the same way, with
+    /// [`ServerError::InvalidLimit`].
     pub async fn bind(config: ServerConfig, connector: Connector) -> Result<Server, ServerError> {
+        config.check_limits()?;
         gate::check_extra_hosts(&config.extra_hosts)?;
         let ui = config.ui_dir.as_deref().map(Ui::new).transpose()?;
+        let devices = Arc::new(Devices::load(config.device_file.clone())?);
         let bind_error = |source| ServerError::Bind {
             addr: config.bind,
             source,
@@ -100,12 +130,10 @@ impl Server {
         let listener = TcpListener::bind(config.bind).await.map_err(bind_error)?;
         let local_addr = listener.local_addr().map_err(bind_error)?;
         let (shutdown, stopping) = watch::channel(false);
-        let mcp = config
-            .mcp
-            .then(|| Mcp::new(&config, Arc::clone(&connector)));
+        let mcp = config.mcp.then(|| Mcp::new(&config));
         let app = Arc::new(App {
             connector,
-            gate: Gate::new(&config, local_addr),
+            gate: Gate::new(&config, local_addr, Arc::clone(&devices)),
             shutdown: stopping,
             connections: AtomicU64::new(0),
             slots: Arc::new(Semaphore::new(
@@ -114,6 +142,8 @@ impl Server {
             handshake_timeout: config.handshake_timeout,
             mcp,
             ui,
+            devices,
+            loopback: local_addr.ip().is_loopback(),
         });
         Ok(Server {
             listener,
@@ -159,7 +189,9 @@ impl Server {
 
     /// Serves until `signal` completes, then stops accepting connections and closes the
     /// open ones (close code 1001), which makes their clients' calls fail with
-    /// `Disconnected`.
+    /// `Disconnected`. Returns once every WebSocket connection has finished closing, so a
+    /// host that exits afterwards doesn't cut a close short: that takes at most about
+    /// `CLOSE_TIMEOUT` (2 s), for a client that stopped reading.
     pub async fn serve_with_shutdown<F>(self, signal: F) -> Result<(), ServerError>
     where
         F: Future<Output = ()> + Send + 'static,
@@ -171,7 +203,9 @@ impl Server {
             shutdown,
             ..
         } = self;
-        let mut router = Router::new().route(WS_PATH, get(upgrade));
+        let mut router = Router::new()
+            .route(WS_PATH, get(upgrade))
+            .route(PAIR_PATH, any(pair::handle));
         if app.mcp.is_some() {
             router = router.route(MCP_PATH, any(mcp::handle));
         }
@@ -179,16 +213,32 @@ impl Server {
             router = router.fallback(ui::handle);
         }
         let router = router.with_state(app);
-        let signal = async move {
-            signal.await;
-            shutdown.send_replace(true);
+        let shutdown = Arc::new(shutdown);
+        let signal = {
+            let shutdown = Arc::clone(&shutdown);
+            async move {
+                signal.await;
+                shutdown.send_replace(true);
+            }
         };
         // The peer address is only logged, never trusted: the gate decides on the headers.
         let service = router.into_make_service_with_connect_info::<Accepted>();
         axum::serve(Limited::new(listener, header_read_timeout), service)
             .with_graceful_shutdown(signal)
             .await
-            .map_err(ServerError::Serve)
+            .map_err(ServerError::Serve)?;
+        // axum doesn't wait for upgraded connections: they run in their own tasks, each
+        // holding a receiver of `shutdown` until it has sent its close and finished the
+        // closing handshake (bounded by `CLOSE_TIMEOUT`). Without this wait, a host that
+        // drops its runtime once this returns would cut those closes short (#294). The
+        // bound only guards against a receiver held elsewhere by mistake.
+        if tokio::time::timeout(session::CLOSE_TIMEOUT * 2, shutdown.closed())
+            .await
+            .is_err()
+        {
+            tracing::warn!("stopped without waiting for every connection to close");
+        }
+        Ok(())
     }
 }
 
@@ -206,9 +256,22 @@ async fn upgrade(
     upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
 ) -> Response {
     let peer = accepted.peer;
-    if let Err(refusal) = app.gate.admit(&headers, peer) {
-        return refusal.into_response();
-    }
+    let credential = match app.gate.admit(&headers, peer) {
+        Ok(credential) => credential,
+        Err(refusal) => return refusal.into_response(),
+    };
+    // A device's connection closes when the device is revoked. One revoked since the
+    // gate admitted it is refused as its token would be now.
+    let revoked = match credential.device() {
+        Some(id) => match app.devices.watch(id) {
+            Some(watch) => Some(watch),
+            None => {
+                Refusal::Token.log(peer);
+                return Refusal::Token.into_response();
+            }
+        },
+        None => None,
+    };
     let upgrade = match upgrade {
         Ok(upgrade) => upgrade,
         Err(rejection) => {
@@ -229,8 +292,11 @@ async fn upgrade(
     let span = tracing::info_span!("connection", id = number, peer = %peer);
     // Opened inside the span, so a session span the connector creates nests under it.
     let control = span.in_scope(|| {
-        tracing::info!("connection accepted");
-        (app.connector)()
+        match credential.device() {
+            Some(device_id) => tracing::info!(device_id = %device_id, "connection accepted"),
+            None => tracing::info!("connection accepted"),
+        }
+        app.open(credential)
     });
     let shutdown = app.shutdown.clone();
     // A browser client offers `jstream` beside the token's subprotocol and fails the
@@ -240,7 +306,7 @@ async fn upgrade(
         .max_message_size(MAX_MESSAGE_BYTES)
         .on_upgrade(move |socket| {
             async move {
-                session::run(socket, control, shutdown, hello_by).await;
+                session::run(socket, control, shutdown, revoked, hello_by).await;
                 drop(slot);
             }
             .instrument(span)

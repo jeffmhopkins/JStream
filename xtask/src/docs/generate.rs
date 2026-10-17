@@ -11,7 +11,7 @@ use super::parse::{Diag, Doc};
 /// The name of the status banner block in every ADR.
 pub(crate) const STATUS_BLOCK: &str = "adr-status";
 /// The name of the table block in the ADR index.
-const INDEX_BLOCK: &str = "adr-index";
+pub(crate) const INDEX_BLOCK: &str = "adr-index";
 /// The generated ADR index.
 pub(crate) const INDEX_PATH: &str = "docs/adr/README.md";
 /// Where ADRs live; only these are listed in the index.

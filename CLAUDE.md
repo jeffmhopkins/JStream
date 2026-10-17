@@ -41,8 +41,13 @@ depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
   `docs migrate`, which moves inline stamps from before ADR-0053 there and never moves a
   stale one, and `docs merge-main`, which only keeps main's committed entries).
 - To bring `main` into your branch, run `cargo xtask docs merge-main`. It resolves
-  conflicts between stamps and leaves every other conflict to you. Then re-read and
-  verify each section it lists as stale.
+  conflicts between stamps or inside `@generated` blocks, and leaves every other conflict
+  to you. Then re-read and
+  verify each section it lists as stale, each with its own note: keep what the earlier
+  note it prints said about your change and add what the merge changed
+  ([DOCS › notes](docs/DOCS.md#notes)). A PR into a wave branch merges its wave instead:
+  `cargo xtask docs merge-main --from wave/<name>`. Which branch a PR targets, and how waves
+  land, is in [docs/runbooks/waves.md](docs/runbooks/waves.md).
 
 <a id="pr-loop"></a>
 ## The PR loop (you are a builder)
@@ -65,7 +70,7 @@ depends_on = ["REVIEW.md#output", "REVIEW.md#rounds"]
 5. A `needs-human` label means the maintainer decides. Stop arguing that point.
 6. **Dependabot PRs** (author `dependabot[bot]`): enable auto-merge (squash) on them,
    and handle CI failures as if they were your own PRs. Action-pin-only bumps are
-   pre-approved governance ([ADR-0018](docs/adr/0018-ci-supply-chain-policy.md)).
+   pre-approved governance ([ADR-0056](docs/adr/0056-ci-supply-chain-policy-v2.md)).
 7. **Writing an ADR:** set its `tier` per [R-GOV-005](docs/RULES.md#R-GOV-005). For
    `maintainer` (product scope, licensing, security and privacy posture, public
    compatibility promises, spending, or the tier rules themselves): open it as `proposed`,
@@ -100,6 +105,6 @@ Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo de
 `cargo xtask docs generate` (rewrites `@generated` blocks, e.g. ADR status banners),
 `cargo xtask docs log <DOC[#anchor]>` (history from git), `cargo xtask docs review <DOC>`
 (doc-level TTL review), `cargo xtask docs merge-main` (merges `origin/main`, resolving
-stamp-only conflicts),
+stamp and `@generated`-block conflicts),
 `cargo xtask lint-deps` and `cargo xtask governance --base origin/main` (lists your
 governance changes).
