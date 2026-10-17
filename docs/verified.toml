@@ -4218,7 +4218,7 @@ stamp = { hash = "b3:5670e6a5758601b2" }
 stamp = { hash = "b3:8042c8d8d5117226" }
 
 ["THREAT-MODEL#plugins"."body"]
-stamp = { hash = "b3:0d4613df179815ac", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#343: reworded the WASM gap: a plugin could still retarget an output but can no longer take the old key along, since the engine removes it on a new server (a_stream_key_never_follows_its_output_to_another_server). Other plugin gaps untouched." }
+stamp = { hash = "b3:0e1606ed49fc1a35", by = "agent:vcam-optin-561", note = "re-read: WASM gap now points at proposed ADR-0069 and its recommendation; table's roadmap id corrected from W1 to WA1 (W1 is the audio waveform item in progress.toml); CLAP and WGSL rows unchanged" }
 
 ["THREAT-MODEL#plugins"."dep:docs/RULES.md#R-SEC-003"]
 stamp = { hash = "b3:e62d5f1a75c6baa0" }

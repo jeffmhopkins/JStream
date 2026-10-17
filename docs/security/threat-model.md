@@ -215,7 +215,7 @@ depends_on = ["docs/RULES.md#R-SEC-003", "docs/adr/0035-clap-plugins-out-of-proc
 | Kind | Trust | On main | Boundary |
 |---|---|---|---|
 | CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`) and the mixer's side; the host process is not built (#281 in flight) | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
-| WASM automation plugins | Untrusted | Nothing (W1) | wasmtime, no filesystem or network unless declared and granted ([R-SEC-003](../RULES.md#R-SEC-003)) |
+| WASM automation plugins | Untrusted | Nothing (WA1) | wasmtime, no filesystem or network unless declared and granted ([R-SEC-003](../RULES.md#R-SEC-003)) |
 | WGSL effect packs | Untrusted GPU code | Nothing (X1); only built-in shaders | naga validation ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)) |
 
 What the engine reads back from a CLAP host is already checked: the block's magic,
@@ -230,6 +230,9 @@ non-finite samples turned to silence.
   calls a plugin may make, so a sandboxed plugin could still retarget an output (it
   can't take the old key along: #343 removes it on a new server).
   R-SEC-003 names an enforcing test in a crate that doesn't exist yet.
+  [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md) (proposed, awaiting the
+  maintainer) sets out the options and recommends epoch deadlines, a memory cap, capability
+  classes on a scoped `Control`, and people-only installs and grants.
 - WGSL (#349): validation doesn't bound run time; a hanging shader resets the GPU, and
   device loss isn't handled.
 
@@ -324,7 +327,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #346 | MCP | Remote text reaches agents unbounded and unmarked | Medium |
 | #347 | Browser | No permission policy; no stance on loopback and LAN requests | Medium |
-| #348 | WASM | No CPU, memory or API-scope limits decided | Medium |
+| #348 | WASM | No CPU, memory or API-scope limits decided | Medium; options in [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md) (proposed) |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #353 | Secrets | `rtmp://` cleartext; crash reports miss a YouTube-bound key and the access token | Low |
