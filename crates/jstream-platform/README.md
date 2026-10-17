@@ -55,7 +55,11 @@ Contents:
   `CaptureDecoder` rejected (`frames_undecodable`, always 0 for display capture).
   `Capture::on_context` returns the backend on a `GpuContext`'s device, whose captures
   deliver `Gpu` frames, or `None` (the default) when it has no GPU path; the engine
-  then keeps CPU frames.
+  then keeps CPU frames. `Capture::start_for` starts a capture for one source, named by
+  its ID, so a backend that keeps a grant per source (the ScreenCast portal's restore
+  token, [ADR-0060](../../docs/adr/0060-linux-platform-support.md) §3) keeps each
+  source's apart, and `Capture::forget_source` drops it when the source is deleted; by
+  default the first is `start` and the second does nothing.
 - **Video capture devices** (webcams and capture cards,
   [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input

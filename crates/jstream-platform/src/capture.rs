@@ -49,6 +49,30 @@ pub trait Capture: Send + Sync {
     /// target, and [`PlatformError::Os`] when the OS refuses.
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError>;
 
+    /// Starts capturing `target` for one source, named by `source` (its ID in the
+    /// collection), so a backend that keeps a grant per source keeps each source's apart:
+    /// the ScreenCast portal's restore token, which reopens the screen or window that
+    /// source was given without asking again (ADR-0060 §3). The default ignores `source`
+    /// and calls [`start`](Capture::start).
+    ///
+    /// # Errors
+    /// As [`start`](Capture::start).
+    fn start_for(
+        &self,
+        target: &CaptureTarget,
+        source: &str,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        let _ = source;
+        self.start(target)
+    }
+
+    /// Forgets what the backend keeps for `source`, such as its restore token, once the
+    /// source is deleted. The default keeps nothing, so has nothing to forget. Best
+    /// effort: a grant that can't be removed is never used again.
+    fn forget_source(&self, source: &str) {
+        let _ = source;
+    }
+
     /// This backend on `context`'s device: its captures deliver `VideoSurface::Gpu`
     /// frames that render samples without a CPU copy (README › GPU frames). `Ok(None)`,
     /// the default, when the backend has no GPU path; the engine then keeps this

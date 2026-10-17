@@ -126,6 +126,7 @@ pub use backend::PortalCapture;
 
 #[cfg(target_os = "linux")]
 mod backend {
+    use std::collections::HashMap;
     use std::fs;
     use std::io::Write;
     use std::os::fd::OwnedFd;
@@ -150,18 +151,52 @@ mod backend {
     use crate::pipewire::stream::{Shared, VideoStream};
     use crate::{PipeWire, Session, SessionKind};
 
-    /// The portal's restore tokens, one per kind of pick: in memory, and in files in a
-    /// folder when one is given, so a grant survives restarts (ADR-0060 §3).
+    /// The portal's restore tokens, one per grant: in memory, and in files in a folder
+    /// when one is given, so a grant survives restarts (ADR-0060 §3).
     #[derive(Debug, Default)]
     struct RestoreTokens {
         dir: Option<PathBuf>,
-        memory: Mutex<[Option<String>; 2]>,
+        memory: Mutex<HashMap<String, String>>,
     }
 
-    fn slot(pick: PortalPick) -> usize {
-        match pick {
-            PortalPick::Display => 0,
-            PortalPick::Window => 1,
+    /// Whose grant a token restores: the last pick of a kind, for
+    /// [`Capture::start`], or one source's, for [`Capture::start_for`], so two sources
+    /// capturing different windows each reopen their own.
+    #[derive(Clone, Copy, Debug)]
+    enum Grant<'a> {
+        Pick(PortalPick),
+        Source(PortalPick, &'a str),
+    }
+
+    /// The longest source ID whose token is kept in a file; a longer one (no JStream ID
+    /// is) keeps its token in memory only, so the file name stays well under 255 bytes.
+    const MAX_FILED_SOURCE: usize = 96;
+
+    impl Grant<'_> {
+        /// The token's key in memory and its file name without `.token`. A source's ID
+        /// is written in hex, so any ID makes a plain file name in the folder.
+        fn key(self) -> String {
+            let kind = |pick| match pick {
+                PortalPick::Display => "display",
+                PortalPick::Window => "window",
+            };
+            match self {
+                Self::Pick(pick) => format!("screencast-{}", kind(pick)),
+                Self::Source(pick, id) => {
+                    let mut key = format!("screencast-{}-source-", kind(pick));
+                    for b in id.bytes() {
+                        key.push_str(&format!("{b:02x}"));
+                    }
+                    key
+                }
+            }
+        }
+
+        fn filed(self) -> bool {
+            match self {
+                Self::Pick(_) => true,
+                Self::Source(_, id) => !id.is_empty() && id.len() <= MAX_FILED_SOURCE,
+            }
         }
     }
 
@@ -172,21 +207,22 @@ mod backend {
     }
 
     impl RestoreTokens {
-        fn file(&self, pick: PortalPick) -> Option<PathBuf> {
-            let name = match pick {
-                PortalPick::Display => "screencast-display.token",
-                PortalPick::Window => "screencast-window.token",
-            };
-            self.dir.as_ref().map(|d| d.join(name))
+        fn file(&self, grant: Grant<'_>) -> Option<PathBuf> {
+            if !grant.filed() {
+                return None;
+            }
+            self.dir
+                .as_ref()
+                .map(|d| d.join(format!("{}.token", grant.key())))
         }
 
-        fn get(&self, pick: PortalPick) -> Option<String> {
+        fn get(&self, grant: Grant<'_>) -> Option<String> {
             if let Ok(m) = self.memory.lock()
-                && let Some(t) = &m[slot(pick)]
+                && let Some(t) = m.get(&grant.key())
             {
                 return Some(t.clone());
             }
-            let text = read_private(&self.file(pick)?)?;
+            let text = read_private(&self.file(grant)?)?;
             let token = text.trim();
             plausible(token).then(|| token.to_owned())
         }
@@ -195,14 +231,14 @@ mod backend {
         /// failure costs only a prompt next time. The token goes to a fresh file created
         /// 0600, renamed over the old one, so the file is only ever the user's whatever
         /// mode or owner an old one had, and a reader never sees half a token.
-        fn put(&self, pick: PortalPick, token: &str) {
+        fn put(&self, grant: Grant<'_>, token: &str) {
             if !plausible(token) {
                 return;
             }
             if let Ok(mut m) = self.memory.lock() {
-                m[slot(pick)] = Some(token.to_owned());
+                m.insert(grant.key(), token.to_owned());
             }
-            let (Some(dir), Some(file)) = (&self.dir, self.file(pick)) else {
+            let (Some(dir), Some(file)) = (&self.dir, self.file(grant)) else {
                 return;
             };
             let mut tmp = file.clone().into_os_string();
@@ -224,6 +260,21 @@ mod backend {
             });
             if written.is_err() {
                 let _ = fs::remove_file(&tmp);
+            }
+        }
+
+        /// Forgets `source`'s tokens, both kinds, in memory and on disk. The pick-kind
+        /// tokens `start` uses are kept: they belong to no source.
+        fn forget(&self, source: &str) {
+            for pick in [PortalPick::Display, PortalPick::Window] {
+                let grant = Grant::Source(pick, source);
+                if let Ok(mut m) = self.memory.lock() {
+                    m.remove(&grant.key());
+                }
+                if let Some(file) = self.file(grant) {
+                    // Missing is the usual case: the source never captured this kind.
+                    let _ = fs::remove_file(file);
+                }
             }
         }
     }
@@ -263,7 +314,8 @@ mod backend {
 
     impl PortalCapture {
         /// A capture backend for `session`. A headless session lists no targets.
-        /// Restore tokens are kept in memory only, so each run prompts once per kind.
+        /// Restore tokens are kept in memory only, so each run prompts once per kind of
+        /// pick and once per source.
         pub fn new(session: Session) -> Self {
             Self {
                 session,
@@ -294,6 +346,106 @@ mod backend {
                 }
                 _ => None,
             }
+        }
+
+        /// Starts a capture of `target`, restoring `source`'s grant when one is named,
+        /// else the last grant of that kind.
+        fn open(
+            &self,
+            target: &CaptureTarget,
+            source: Option<&str>,
+        ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+            let Some(pick) = Self::pick(target) else {
+                let (kind, id) = match target {
+                    CaptureTarget::Display(id) => ("display", id.as_str()),
+                    CaptureTarget::Window(id) => ("window", id.as_str()),
+                    _ => ("capture target", ""),
+                };
+                return Err(PlatformError::NotFound {
+                    kind,
+                    id: id.to_owned(),
+                });
+            };
+            let grant = match source {
+                Some(id) => Grant::Source(pick, id),
+                None => Grant::Pick(pick),
+            };
+            if self.session.kind == SessionKind::Headless {
+                return Err(PlatformError::Unsupported {
+                    what: "screen capture in a session with no display".into(),
+                });
+            }
+            // A missing PipeWire fails before the user is shown a picker.
+            let pw = PipeWire::load()?;
+            let mut bus = Bus::session()?;
+            // The first call starts the portal if it isn't running; then its owner is
+            // known, and only that connection's replies and signals count, so another
+            // process on the session bus can't answer for it.
+            let get_all = "org.freedesktop.DBus.Properties.GetAll";
+            let info = bus.call(PortalInfo::query(), None, get_all, QUICK)?;
+            let owner = bus.call(
+                handshake::portal_owner_query(),
+                Some(BUS),
+                "org.freedesktop.DBus.GetNameOwner",
+                QUICK,
+            )?;
+            let portal = owner
+                .msg
+                .body
+                .first()
+                .and_then(crate::dbus::Value::as_str)
+                .filter(|name| name.starts_with(':'))
+                .map(str::to_owned)
+                .ok_or_else(|| no_answer(get_all, "the portal's bus name has no owner"))?;
+            if info.msg.sender.as_deref() != Some(portal.as_str()) {
+                return Err(no_answer(get_all, "the reply didn't come from the portal"));
+            }
+            let info = PortalInfo::from_reply(&info.msg.body)?;
+            for rule in [
+                match_rule(DESTINATION, REQUEST, "Response"),
+                match_rule(DESTINATION, SESSION, "Closed"),
+            ] {
+                bus.call(
+                    add_match(&rule),
+                    Some(BUS),
+                    "org.freedesktop.DBus.AddMatch",
+                    QUICK,
+                )?;
+            }
+            let mut h = Handshake::new(
+                pick,
+                info,
+                bus.unique_name(),
+                &portal,
+                self.tokens.get(grant),
+            )?;
+            let (granted, fd) = match run(&mut bus, &mut h) {
+                Ok(done) => done,
+                Err(e) => {
+                    close(&mut bus, h.session());
+                    return Err(e);
+                }
+            };
+            if let Some(token) = &granted.restore_token {
+                self.tokens.put(grant, token);
+            }
+            let shared = Arc::new(Shared::new());
+            let node = granted.streams[0].node_id;
+            let video = match VideoStream::connect(pw.library(), fd, node, Arc::clone(&shared)) {
+                Ok(v) => v,
+                Err(e) => {
+                    close(&mut bus, Some(&granted.session));
+                    return Err(e);
+                }
+            };
+            let watcher = Watcher::spawn(bus, granted.session, portal, Arc::clone(&shared))?;
+            Ok(Box::new(PortalStream {
+                video: Some(video),
+                watcher: Some(watcher),
+                shared,
+                pick,
+                _pw: pw,
+            }))
         }
     }
 
@@ -368,93 +520,19 @@ mod backend {
         }
 
         fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
-            let Some(pick) = Self::pick(target) else {
-                let (kind, id) = match target {
-                    CaptureTarget::Display(id) => ("display", id.as_str()),
-                    CaptureTarget::Window(id) => ("window", id.as_str()),
-                    _ => ("capture target", ""),
-                };
-                return Err(PlatformError::NotFound {
-                    kind,
-                    id: id.to_owned(),
-                });
-            };
-            if self.session.kind == SessionKind::Headless {
-                return Err(PlatformError::Unsupported {
-                    what: "screen capture in a session with no display".into(),
-                });
-            }
-            // A missing PipeWire fails before the user is shown a picker.
-            let pw = PipeWire::load()?;
-            let mut bus = Bus::session()?;
-            // The first call starts the portal if it isn't running; then its owner is
-            // known, and only that connection's replies and signals count, so another
-            // process on the session bus can't answer for it.
-            let get_all = "org.freedesktop.DBus.Properties.GetAll";
-            let info = bus.call(PortalInfo::query(), None, get_all, QUICK)?;
-            let owner = bus.call(
-                handshake::portal_owner_query(),
-                Some(BUS),
-                "org.freedesktop.DBus.GetNameOwner",
-                QUICK,
-            )?;
-            let portal = owner
-                .msg
-                .body
-                .first()
-                .and_then(crate::dbus::Value::as_str)
-                .filter(|name| name.starts_with(':'))
-                .map(str::to_owned)
-                .ok_or_else(|| no_answer(get_all, "the portal's bus name has no owner"))?;
-            if info.msg.sender.as_deref() != Some(portal.as_str()) {
-                return Err(no_answer(get_all, "the reply didn't come from the portal"));
-            }
-            let info = PortalInfo::from_reply(&info.msg.body)?;
-            for rule in [
-                match_rule(DESTINATION, REQUEST, "Response"),
-                match_rule(DESTINATION, SESSION, "Closed"),
-            ] {
-                bus.call(
-                    add_match(&rule),
-                    Some(BUS),
-                    "org.freedesktop.DBus.AddMatch",
-                    QUICK,
-                )?;
-            }
-            let mut h = Handshake::new(
-                pick,
-                info,
-                bus.unique_name(),
-                &portal,
-                self.tokens.get(pick),
-            )?;
-            let (granted, fd) = match run(&mut bus, &mut h) {
-                Ok(done) => done,
-                Err(e) => {
-                    close(&mut bus, h.session());
-                    return Err(e);
-                }
-            };
-            if let Some(token) = &granted.restore_token {
-                self.tokens.put(pick, token);
-            }
-            let shared = Arc::new(Shared::new());
-            let node = granted.streams[0].node_id;
-            let video = match VideoStream::connect(pw.library(), fd, node, Arc::clone(&shared)) {
-                Ok(v) => v,
-                Err(e) => {
-                    close(&mut bus, Some(&granted.session));
-                    return Err(e);
-                }
-            };
-            let watcher = Watcher::spawn(bus, granted.session, portal, Arc::clone(&shared))?;
-            Ok(Box::new(PortalStream {
-                video: Some(video),
-                watcher: Some(watcher),
-                shared,
-                pick,
-                _pw: pw,
-            }))
+            self.open(target, None)
+        }
+
+        fn start_for(
+            &self,
+            target: &CaptureTarget,
+            source: &str,
+        ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+            self.open(target, Some(source))
+        }
+
+        fn forget_source(&self, source: &str) {
+            self.tokens.forget(source);
         }
     }
 
@@ -559,7 +637,7 @@ mod backend {
     mod tests {
         use std::os::unix::fs::PermissionsExt;
 
-        use super::{PortalPick, RestoreTokens, plausible};
+        use super::{Grant, MAX_FILED_SOURCE, PortalPick, RestoreTokens, plausible};
 
         #[test]
         fn restore_tokens_persist_per_pick() {
@@ -570,11 +648,11 @@ mod backend {
                 dir: Some(dir.clone()),
                 ..RestoreTokens::default()
             };
-            assert_eq!(tokens.get(PortalPick::Display), None);
-            tokens.put(PortalPick::Display, "3f2a-uuid");
-            tokens.put(PortalPick::Window, "bad token\n");
+            assert_eq!(tokens.get(Grant::Pick(PortalPick::Display)), None);
+            tokens.put(Grant::Pick(PortalPick::Display), "3f2a-uuid");
+            tokens.put(Grant::Pick(PortalPick::Window), "bad token\n");
             assert_eq!(
-                tokens.get(PortalPick::Window),
+                tokens.get(Grant::Pick(PortalPick::Window)),
                 None,
                 "implausible tokens are refused"
             );
@@ -583,15 +661,21 @@ mod backend {
                 dir: Some(dir.clone()),
                 ..RestoreTokens::default()
             };
-            assert_eq!(again.get(PortalPick::Display).as_deref(), Some("3f2a-uuid"));
+            assert_eq!(
+                again.get(Grant::Pick(PortalPick::Display)).as_deref(),
+                Some("3f2a-uuid")
+            );
             let mode = std::fs::metadata(dir.join("screencast-display.token"))
                 .expect("written")
                 .permissions()
                 .mode();
             assert_eq!(mode & 0o777, 0o600, "only the user can read a token");
             // A replacement token wins, in memory and on disk.
-            again.put(PortalPick::Display, "next");
-            assert_eq!(again.get(PortalPick::Display).as_deref(), Some("next"));
+            again.put(Grant::Pick(PortalPick::Display), "next");
+            assert_eq!(
+                again.get(Grant::Pick(PortalPick::Display)).as_deref(),
+                Some("next")
+            );
 
             // A token file others can read is refused, and the next write makes it
             // private again, though it already existed.
@@ -603,11 +687,11 @@ mod backend {
                 ..RestoreTokens::default()
             };
             assert_eq!(
-                fresh.get(PortalPick::Window),
+                fresh.get(Grant::Pick(PortalPick::Window)),
                 None,
                 "a readable file is refused"
             );
-            fresh.put(PortalPick::Window, "private");
+            fresh.put(Grant::Pick(PortalPick::Window), "private");
             let mode = std::fs::metadata(&file)
                 .expect("there")
                 .permissions()
@@ -617,7 +701,10 @@ mod backend {
                 dir: Some(dir.clone()),
                 ..RestoreTokens::default()
             };
-            assert_eq!(reread.get(PortalPick::Window).as_deref(), Some("private"));
+            assert_eq!(
+                reread.get(Grant::Pick(PortalPick::Window)).as_deref(),
+                Some("private")
+            );
             assert!(!dir.join("screencast-window.token.tmp").exists());
 
             // A symlink is never followed.
@@ -633,18 +720,98 @@ mod backend {
                 ..RestoreTokens::default()
             };
             assert_eq!(
-                linked.get(PortalPick::Display),
+                linked.get(Grant::Pick(PortalPick::Display)),
                 None,
                 "a symlink is refused"
             );
             let _ = std::fs::remove_dir_all(&dir);
 
             let memory = RestoreTokens::default();
-            memory.put(PortalPick::Window, "w");
-            assert_eq!(memory.get(PortalPick::Window).as_deref(), Some("w"));
-            assert_eq!(memory.get(PortalPick::Display), None);
+            memory.put(Grant::Pick(PortalPick::Window), "w");
+            assert_eq!(
+                memory.get(Grant::Pick(PortalPick::Window)).as_deref(),
+                Some("w")
+            );
+            assert_eq!(memory.get(Grant::Pick(PortalPick::Display)), None);
             assert!(!plausible(""));
             assert!(!plausible(&"x".repeat(300)));
+        }
+
+        #[test]
+        fn restore_tokens_are_kept_per_source_and_forgotten_with_it() {
+            let dir = std::env::temp_dir().join(format!(
+                "jstream-portal-source-tokens-{}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&dir);
+            let tokens = RestoreTokens {
+                dir: Some(dir.clone()),
+                ..RestoreTokens::default()
+            };
+            let chat = Grant::Source(PortalPick::Window, "chat");
+            let game = Grant::Source(PortalPick::Window, "game");
+            tokens.put(chat, "chat-window");
+            tokens.put(game, "game-window");
+            tokens.put(Grant::Pick(PortalPick::Window), "last-pick");
+            assert_eq!(tokens.get(chat).as_deref(), Some("chat-window"));
+            assert_eq!(tokens.get(game).as_deref(), Some("game-window"));
+            assert_eq!(
+                tokens.get(Grant::Source(PortalPick::Display, "chat")),
+                None,
+                "a source's window grant is not its display grant"
+            );
+            assert_eq!(
+                tokens.get(Grant::Source(PortalPick::Window, "new")),
+                None,
+                "a new source gets the picker, not the last pick"
+            );
+
+            // Each source's token is in its own private file, named in hex, so an ID
+            // with a path separator stays in the folder.
+            let file = dir.join("screencast-window-source-63686174.token");
+            let mode = std::fs::metadata(&file)
+                .expect("written")
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+            let odd = Grant::Source(PortalPick::Display, "../up");
+            tokens.put(odd, "odd");
+            assert!(
+                dir.join("screencast-display-source-2e2e2f7570.token")
+                    .exists()
+            );
+
+            // A restart reads them back.
+            let again = RestoreTokens {
+                dir: Some(dir.clone()),
+                ..RestoreTokens::default()
+            };
+            assert_eq!(again.get(game).as_deref(), Some("game-window"));
+            assert_eq!(again.get(odd).as_deref(), Some("odd"));
+
+            // Deleting a source forgets its tokens, in memory and on disk, and nothing
+            // else.
+            again.forget("chat");
+            assert_eq!(again.get(chat), None);
+            assert!(!file.exists());
+            assert_eq!(again.get(game).as_deref(), Some("game-window"));
+            assert_eq!(
+                again.get(Grant::Pick(PortalPick::Window)).as_deref(),
+                Some("last-pick")
+            );
+            again.forget("never-captured");
+
+            // A very long ID keeps its token in memory only.
+            let long = "s".repeat(MAX_FILED_SOURCE + 1);
+            let long = Grant::Source(PortalPick::Window, &long);
+            again.put(long, "long");
+            assert_eq!(again.get(long).as_deref(), Some("long"));
+            let fresh = RestoreTokens {
+                dir: Some(dir.clone()),
+                ..RestoreTokens::default()
+            };
+            assert_eq!(fresh.get(long), None);
+            let _ = std::fs::remove_dir_all(&dir);
         }
     }
 }
