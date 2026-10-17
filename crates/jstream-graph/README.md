@@ -27,21 +27,14 @@ codes, so the engine passes them to clients unchanged.
   collection state, and `Graph::new()` describes none.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
-<<<<<<< ours
-  keyed by ID, the `buses`, keyed by ID and always holding the master, the `sends`,
-  keyed by bus and source, and the master stage's filter `Chains` (`State::master`,
-  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). Each `Output`
-  has its own `Chains` too; only their audio chains hold filters so far.
-||||||| base
-  keyed by ID, the `buses`, keyed by ID and always holding the master, and the `sends`,
-  keyed by bus and source.
-=======
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
-  holding the master, the `sends`, keyed by bus and source, and the `hotkeys`: each
+  holding the master, the `sends`, keyed by bus and source, the `hotkeys`: each
   `Chord` bound to the protocol `Action` it fires
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
-  §3). A binding always names objects that exist.
->>>>>>> theirs
+  §3), and the master stage's filter `Chains` (`State::master`,
+  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). A binding
+  always names objects that exist. Each `Output` has its own `Chains` too; only their
+  audio chains hold filters so far.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -153,7 +146,8 @@ the batch **touched**.
   source: video if its kind produces video, audio if it produces audio and it is not a
   `scene` source; the master and an output that carries audio: audio only, ADR-0027),
   that the chain has room, that the kind is a filter kind of that chain (`kind`), that
-  a master or output filter's settings refer to no scene or source, the settings
+  a master or output filter's settings hold no reference (a scene, source, bus or asset),
+  the settings
   exactly as a source's, and the index; it is undone by `filter.remove`. `filter.remove` is undone by the
   `filter.add` that puts the filter back where it was, with its switch and settings;
   `filter.set_enabled`, `filter.set_settings` (a patch, `null` resets) and
@@ -181,7 +175,7 @@ the batch **touched**.
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
   with `invalid_argument`, in edit order. The `OutputDelete` inverse also restores the
-  output's encoder profile and video mix.
+  output's encoder profile and video mix, and then its filters.
 - **Encoder profiles** (`encoder.rs`): `encoder.create` and `encoder.update` check the
   profile with the protocol's `EncoderProfile::problem` (`invalid_argument`, field
   `profile.<field>`) and the name; `encoder.delete` is refused with `invalid_argument`
@@ -285,28 +279,15 @@ and `visible`, and its `opacity` and `blend` only when they differ from 1 and
 `builtin` source's settings follow, ADR-0025, `duplicated_from` as stored, even
 when it names a deleted source, and `filters`, omitted while both chains are empty: each
 filter with its `kind_version` and settings, and `enabled` only when false), outputs ordered by ID (each with its
-<<<<<<< ours
-`encoder_profile`, omitted for the default, and its `filters` as a source's), encoder
-profiles (`encoders`) ordered by ID, omitted when there are none, `buses` (omitted while
-the master is the only one and at its defaults) and `sends`, written whenever there is a
-send or a source with a channel of its own (so an empty list means every master send
-was removed) and omitted otherwise, and the `master` with its `filters`, omitted while
-it has none. A source's `audio` is saved
-||||||| base
-`encoder_profile`, omitted for the default), encoder profiles (`encoders`) ordered by
-ID, omitted when there are none, `buses` (omitted while the master is the only one and
-at its defaults) and `sends`, written whenever there is a send or a source with a
-channel of its own (so an empty list means every master send was removed) and omitted
-otherwise. A source's `audio` is saved
-=======
-`encoder_profile`, omitted for the default, and its `video_mix`, omitted for the
-program), encoder profiles (`encoders`) ordered by ID, omitted when there are none,
-video mixes (`video_mixes`) ordered by ID, omitted when there are none, `buses` (omitted while the master is the only one and
-at its defaults) and `sends`, written whenever there is a send or a source with a
-channel of its own (so an empty list means every master send was removed) and omitted
-otherwise, and the `hotkeys` ordered by chord, omitted when there are none (so no
-`schema_version` bump: an older file has none). A source's `audio` is saved
->>>>>>> theirs
+`encoder_profile`, omitted for the default, its `filters` as a source's, and its
+`video_mix`, omitted for the program), encoder profiles (`encoders`) ordered by ID,
+omitted when there are none, video mixes (`video_mixes`) ordered by ID, omitted when
+there are none, `buses` (omitted while the master is the only one and at its defaults)
+and `sends`, written whenever there is a send or a source with a channel of its own (so
+an empty list means every master send was removed) and omitted otherwise, the `master`
+with its `filters`, omitted while it has none, and the `hotkeys` ordered by chord,
+omitted when there are none (so no `schema_version` bump: an older file has neither).
+A source's `audio` is saved
 only where it differs from its kind's defaults. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
@@ -323,22 +304,11 @@ the engine's; this crate does no I/O.
   buses (the master renamed or faded as saved), which a source's settings may refer to,
   then sources (each after the sources its settings refer to), then every source's
   filters, then items in their placement form with their crop and visibility, opacity
-<<<<<<< ours
-  and blend, then encoder profiles, then outputs with their profiles and filters, then
-  the master's filters, then each source's audio and the sends (with a `send.remove` of a default master send the file
-  doesn't list; a file without `sends`, such as one saved before sends existed, keeps
-  every default master send). A
-||||||| base
-  and blend, then encoder profiles, then outputs with their profiles, then each
-  source's audio and the sends (with a `send.remove` of a default master send the file
-  doesn't list; a file without `sends`, such as one saved before sends existed, keeps
-  every default master send). A
-=======
-  and blend, then encoder profiles, then video mixes, then outputs with their profiles
-  and mixes, then each source's audio and the sends (with a `send.remove` of a default
-  master send the file doesn't list; a file without `sends`, such as one saved before
-  sends existed, keeps every default master send), then hotkeys (`` hotkey `F1` ``). A
->>>>>>> theirs
+  and blend, then encoder profiles, then video mixes, then outputs with their profiles,
+  mixes and filters, then the master's filters, then each source's audio and the sends
+  (with a `send.remove` of a default master send the file doesn't list; a file without
+  `sends`, such as one saved before sends existed, keeps every default master send),
+  then hotkeys (`` hotkey `F1` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
@@ -392,45 +362,23 @@ works out itself. The
 seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
-<<<<<<< ours
-scene `b` made a group, a clone, a `duplicated_from` naming a missing source,
-opacities, a desktop audio source with two gain filters, one disabled, a gain filter
-each on the master and the recording output, and the fixture's buses, sends and source
-audio, less the virtual camera the parity collection gained later) plus a source whose
-||||||| base
-scene `b` made a group, a clone, a `duplicated_from` naming a missing source,
-opacities, a desktop audio source with two gain filters, one disabled, and the
-fixture's buses, sends and source audio, less the virtual camera the parity collection
-gained later) plus a source whose
-=======
 two video mixes that two outputs show, scene `b` made a group, a clone, a
 `duplicated_from` naming a missing source, opacities, a desktop audio source with two
-gain filters, one disabled, and the fixture's buses, sends and source audio, less the
-virtual camera and the hotkeys the parity collection
-gained later) plus a source whose
->>>>>>> theirs
+gain filters, one disabled, a gain filter each on the master and the recording output,
+and the fixture's buses, sends and source audio, less the virtual camera and the
+hotkeys the parity collection gained later) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); a file without `encoders` or any
-<<<<<<< ours
-`encoder_profile` (as saved before profiles existed) loading with none; a file
-without `sends`, `buses` or source `audio` (as saved before audio existed) keeping
-its audio sources' master sends at 0 dB; a file without `master` or any output's
-`filters` (as saved before their chains existed) loading with those chains empty and
-the sources' filters intact; a removed master send's round trip; a profile's
-round trip; a virtual camera's round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
-||||||| base
-`encoder_profile` (as saved before profiles existed) loading with none; a file
-without `sends`, `buses` or source `audio` (as saved before audio existed) keeping
-its audio sources' master sends at 0 dB; a removed master send's round trip; a profile's
-round trip; a virtual camera's round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
-=======
 `encoder_profile` (as saved before profiles existed) loading with none, and one without
-`video_mixes` or any `video_mix` likewise; a file without `sends`, `buses` or source `audio` (as saved before audio existed) keeping
-its audio sources' master sends at 0 dB; a removed master send's round trip; a profile's
-round trip; a virtual camera's round trip; hotkeys' round trip, and a file whose binding names a missing scene refused; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
->>>>>>> theirs
+`video_mixes` or any `video_mix` likewise; a file without `sends`, `buses` or source
+`audio` (as saved before audio existed) keeping its audio sources' master sends at
+0 dB; a file without `master` or any output's `filters` (as saved before their chains
+existed) loading with those chains empty and the sources' filters intact; a removed
+master send's round trip; a profile's round trip; a virtual camera's round trip;
+hotkeys' round trip, and a file whose binding names a missing scene refused; a clone's
+link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile or mix, and a mix naming a missing
 scene, among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an

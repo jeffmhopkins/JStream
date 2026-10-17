@@ -486,7 +486,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:72716bb61357096a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the filter bullet cites ADR-0026 at protocol 0.22 and ADR-0027 at protocol 0.29, with SourceInfo.filters, OutputInfo.filters and state.get's master, followed by K1's hotkey bullet; matches version.rs at 0.29, the regenerated snapshots and the mock's checks." }
+stamp = { hash = "b3:17b0ff26c897e8af", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "File only: the protocol README's handshake example now shows minor 29 (B5); this section's filter-owner bullet citing ADR-0027 at protocol 0.29 still matches." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:99f984e9f9fdc9dc", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the filter bullet cites ADR-0026 at protocol 0.22 and ADR-0027 at protocol 0.29, with SourceInfo.filters, OutputInfo.filters and state.get's master, followed by K1's hotkey bullet; matches version.rs at 0.29, the regenerated snapshots and the mock's checks." }
@@ -1179,7 +1179,7 @@ stamp = { hash = "b3:80b7b5ce5c1e2e0d", by = "agent:claude@session_01MjzPr23VZGb
 stamp = { hash = "b3:60d1d7f2937b2bff", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the master chain and output-tap item now says refused settings keep the old ones until the next routing sync (N14, matching filters.rs and the 'not applied' warn lines in audio.rs), and the tap paragraph says outputs on one video session (mix and profile) share one master-bus audio encode after E2's EncodeKey; deps are control's video-mix/filter undo text, protocol's 0.29 owners and ARCH protocol's 0.29 citation." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:657d8f171ea02a72", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the master chain and output-tap item now says refused settings keep the old ones until the next routing sync (N14, matching filters.rs and the 'not applied' warn lines in audio.rs), and the tap paragraph says outputs on one video session (mix and profile) share one master-bus audio encode after E2's EncodeKey; deps are control's video-mix/filter undo text, protocol's 0.29 owners and ARCH protocol's 0.29 citation." }
+stamp = { hash = "b3:7d3e0a517d425f93", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Dep only: protocol design's handshake example moved from minor 28 to 29 (B5); core design's master chain, output taps and per-video-session master-bus encode text is unaffected." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d6ccac4e141c6220", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read: the master chain and output-tap item now says refused settings keep the old ones until the next routing sync (N14, matching filters.rs and the 'not applied' warn lines in audio.rs), and the tap paragraph says outputs on one video session (mix and profile) share one master-bus audio encode after E2's EncodeKey; deps are control's video-mix/filter undo text, protocol's 0.29 owners and ARCH protocol's 0.29 citation." }
@@ -1809,10 +1809,10 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:6c1b99c4b8c63792" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:7e473aad75418cdc", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read after merging E2/K1: Output carries filters and video_mix, State master and hotkeys; output.delete's inverse re-adds the video mix then the filters (apply.rs); Touched has VideoMix and Filter(FilterOwner, ..); the file saves outputs' filters before video_mix and master after sends, the rebuild doc names outputs with profile, mix and filters then the master's filters; the property test's filter-on-master/output case moved to 47 of 49. Text holds." }
+stamp = { hash = "b3:d9489dbfb672244a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B4: re-read the whole section after resolving the five conflict blocks 2f19b6d left in it. State now lists video_mixes, buses, sends, hotkeys and the master's Chains, and each Output's Chains; the file lists per output encoder_profile, filters and video_mix, then video_mixes, master and hotkeys (persist/mod.rs order); the rebuild runs video mixes, outputs with profiles, mixes and filters, the master's filters, audio and sends, then hotkeys; the fixture text has the two mixes and the master and recording-output gains; the test list has the no-mix file, the no-filters file and hotkeys' round trip. The filter checks now say no reference of any kind (N13), and the OutputDelete inverse restores the mix and then the filters. Dep: protocol design's 0.29 handshake example." }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:657d8f171ea02a72", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read after merging E2/K1: Output carries filters and video_mix, State master and hotkeys; output.delete's inverse re-adds the video mix then the filters (apply.rs); Touched has VideoMix and Filter(FilterOwner, ..); the file saves outputs' filters before video_mix and master after sends, the rebuild doc names outputs with profile, mix and filters then the master's filters; the property test's filter-on-master/output case moved to 47 of 49. Text holds." }
+stamp = { hash = "b3:7d3e0a517d425f93", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B4: re-read the whole section after resolving the five conflict blocks 2f19b6d left in it. State now lists video_mixes, buses, sends, hotkeys and the master's Chains, and each Output's Chains; the file lists per output encoder_profile, filters and video_mix, then video_mixes, master and hotkeys (persist/mod.rs order); the rebuild runs video mixes, outputs with profiles, mixes and filters, the master's filters, audio and sends, then hotkeys; the fixture text has the two mixes and the master and recording-output gains; the test list has the no-mix file, the no-filters file and hotkeys' round trip. The filter checks now say no reference of any kind (N13), and the OutputDelete inverse restores the mix and then the filters. Dep: protocol design's 0.29 handshake example." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2364,7 +2364,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:657d8f171ea02a72", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Re-read the 0.29 changes: the owners paragraph now opens 'From 0.29', state.get lists master after hotkeys (missing from a pre-0.29 server parses as empty), output.list names video_mix and filters (0.29), the master/output reference refusal names bus and asset too (N13); query.rs doc says older than 0.29; protocol.snap, examples.snap regenerated at 0.29." }
+stamp = { hash = "b3:7d3e0a517d425f93", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B5: the handshake example's hello and welcome now carry minor 29, matching version.rs and examples.snap; the rest of the section as verified in e2f4dcb: owners paragraph from 0.29, state.get with hotkeys then master, output.list with video_mix and filters, the reference refusal naming scene, source, bus and asset." }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
