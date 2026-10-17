@@ -493,6 +493,12 @@ mod tests {
             resolve_generated("README.md", &text).expect("generated-only"),
             "# R\n\n<!-- @generated begin progress -->\n| a |\n8 left.\n<!-- @generated end progress -->\n\nAfter.\n"
         );
+        // The UI features summary is generator-owned too.
+        let ui = text.replace("progress -->", "ui-summary -->");
+        assert_eq!(
+            resolve_generated("docs/UI-FEATURES.md", &ui).expect("generated-only"),
+            "# R\n\n<!-- @generated begin ui-summary -->\n| a |\n8 left.\n<!-- @generated end ui-summary -->\n\nAfter.\n"
+        );
         let outside = text.replace(
             "\nAfter.\n",
             "\n<<<<<<< HEAD\nOurs.\n=======\nMain.\n>>>>>>> m\n",

@@ -85,6 +85,10 @@ fn count(
                 .map_or("", |s| s.trim_end_matches('\u{fe0f}'));
             match STATUSES.iter().position(|s| *s == status) {
                 Some(i) => counts[i] += 1,
+                None if status.is_empty() => problems.push((
+                    k,
+                    format!("the row has no `{STATUS_COLUMN}` (the `{BLOCK}` block counts it)"),
+                )),
                 None => problems.push((
                     k,
                     format!(
@@ -285,6 +289,15 @@ mod tests {
             [
                 "docs/UI-FEATURES.md:41: status `done` is not one of ✅ 🟡 ⬜ 🔒 ⏸ (the `ui-summary` block counts them)"
             ]
+        );
+        let short = doc(&format!(
+            "{SUMMARY}{}",
+            AREAS.replace("| HD-01 | Menu | Rows. | ⬜ | |", "| HD-01 | Menu |")
+        ));
+        let msgs: Vec<String> = check(&[short]).into_iter().map(|d| d.msg).collect();
+        assert_eq!(
+            msgs,
+            ["the row has no `Status` (the `ui-summary` block counts it)"]
         );
         let stale = doc(&format!("{SUMMARY}{AREAS}"));
         let msgs: Vec<String> = check(&[stale]).into_iter().map(|d| d.msg).collect();
