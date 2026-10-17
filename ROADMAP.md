@@ -31,7 +31,7 @@ Two tracks run in parallel.
   changes in covered workflow files, so Dependabot bumps don't stale REVIEW#output. It
   replaces every `bootstrap` hash with a real one.
 - `xtask lint-deps` (layers, `unsafe` declarations, `links=` allowlist, workspace deps),
-  `xtask governance` (must encode ADR-0018's pre-approval for Dependabot pin-only PRs).
+  `xtask governance` (must encode ADR-0056's pre-approval for Dependabot pin-only PRs).
 - `jstream-types`, `jstream-media`, first cut of `jstream-protocol` (edit/action
   classification, schema snapshot tests), `jstream-control`.
 
@@ -135,9 +135,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
 -->
 
 - Full 3D transforms; WGSL effect packs with hot reload.
-- `jstream-youtube`: OAuth, broadcasts, metadata, health, chat, sending chat as the
-  channel, a featured chat message shown on stream by a chat message source, and audience
-  stats, all exposed over MCP ([ADR-0041](docs/adr/0041-youtube-interaction-scope-v3.md)).
+- YouTube with no required OAuth client: a stream key with Studio's auto-start, and chat
+  through a browser-source preset. Signed in through JStream's own OAuth client, `jstream-youtube`
+  adds broadcasts, metadata, health, chat, sending chat as the channel, a featured chat
+  message shown on stream by a chat message source, and audience stats, for people in the
+  UI only, not agents ([ADR-0058](docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)).
 - Direct NVENC/AMF encoders where measurements justify them; HEVC/AV1 via enhanced RTMP.
 - WASM automation plugins.
 - CLAP audio effect filters, hosted out of process

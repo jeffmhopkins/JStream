@@ -14,7 +14,9 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::JoinHandle;
 
-use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, Timebase};
+use jstream_media::{
+    ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Rounding, Timebase,
+};
 use jstream_platform::{
     Capture, CaptureStats, CaptureStream, CaptureTarget, DeviceId, GpuFrame, PlatformError,
     VideoSurface,
@@ -288,8 +290,8 @@ impl RenderCaptures {
                         slot.warned_format = true;
                         tracing::warn!(
                             capture = ?spec,
-                            "capture frame is neither CPU RGBA or BGRA nor an RGBA or BGRA \
-                             texture on the compositor's device"
+                            "capture frame is neither a CPU RGBA, BGRA or NV12 frame nor an \
+                             RGBA or BGRA texture on the compositor's device"
                         );
                     }
                 }
@@ -402,39 +404,108 @@ fn add(total: &mut CaptureStats, stats: CaptureStats) {
     total.frames_skipped = total.frames_skipped.saturating_add(stats.frames_skipped);
 }
 
-/// Copies a CPU RGBA8 or BGRA8 capture into `out` as tightly packed RGBA8, reusing its
-/// allocation, and returns its size. `None`, leaving `out` as it was, when the frame is
-/// not usable.
-fn rgba_from_surface(surface: &VideoSurface, out: &mut Vec<u8>) -> Option<FrameSize> {
+/// Converts a CPU capture into `out` as RGBA8, reusing its allocation, and returns its
+/// size. RGBA8 is copied, BGRA8 swizzled and NV12 (what Windows' display capture
+/// delivers) converted with its frame's matrix and range. `None`, leaving `out` as it
+/// was, when the frame is not one of those.
+pub(crate) fn rgba_from_surface(surface: &VideoSurface, out: &mut Vec<u8>) -> Option<FrameSize> {
     let VideoSurface::Cpu(frame) = surface else {
         return None;
     };
     let info = frame.info();
-    if !matches!(info.format, PixelFormat::Rgba8 | PixelFormat::Bgra8) {
-        return None;
-    }
     let width = info.size.width() as usize;
-    let height = info.size.height() as usize;
-    let len = width.checked_mul(height).and_then(|n| n.checked_mul(4))?;
-    let row_len = width * 4;
-    for y in 0..height {
-        match frame.row(0, y as u32) {
-            Some(row) if row.len() >= row_len => {}
-            _ => return None,
-        }
-    }
-    out.resize(len, 0);
-    for y in 0..height {
-        let row = frame.row(0, y as u32)?;
-        let dst = &mut out[y * row_len..(y + 1) * row_len];
-        match info.format {
-            PixelFormat::Rgba8 => dst.copy_from_slice(&row[..row_len]),
-            _ => {
-                for (d, s) in dst.chunks_exact_mut(4).zip(row[..row_len].chunks_exact(4)) {
-                    d.copy_from_slice(&[s[2], s[1], s[0], s[3]]);
+    let height = info.size.height();
+    let row_len = width.checked_mul(4)?;
+    let len = row_len.checked_mul(height as usize)?;
+    match info.format {
+        PixelFormat::Rgba8 | PixelFormat::Bgra8 => {
+            if (0..height).any(|y| frame.row(0, y).is_none_or(|row| row.len() < row_len)) {
+                return None;
+            }
+            out.resize(len, 0);
+            for (y, dst) in (0..height).zip(out.chunks_exact_mut(row_len)) {
+                let row = &frame.row(0, y)?[..row_len];
+                if info.format == PixelFormat::Rgba8 {
+                    dst.copy_from_slice(row);
+                } else {
+                    for (d, s) in dst.chunks_exact_mut(4).zip(row.chunks_exact(4)) {
+                        d.copy_from_slice(&[s[2], s[1], s[0], s[3]]);
+                    }
                 }
             }
         }
+        PixelFormat::Nv12 => {
+            let chroma_len = width.div_ceil(2) * 2;
+            let rows_ok = (0..height).all(|y| frame.row(0, y).is_some_and(|r| r.len() >= width))
+                && (0..height.div_ceil(2))
+                    .all(|y| frame.row(1, y).is_some_and(|r| r.len() >= chroma_len));
+            if !rows_ok {
+                return None;
+            }
+            let yuv = Yuv::new(info.color);
+            out.resize(len, 0);
+            for (y, dst) in (0..height).zip(out.chunks_exact_mut(row_len)) {
+                let luma = frame.row(0, y)?;
+                let chroma = frame.row(1, y / 2)?;
+                for (x, d) in dst.chunks_exact_mut(4).enumerate() {
+                    let c = (x / 2) * 2;
+                    d.copy_from_slice(&yuv.rgba(luma[x], chroma[c], chroma[c + 1]));
+                }
+            }
+        }
+        _ => return None,
     }
     Some(info.size)
+}
+
+/// YCbCr to R'G'B' for one matrix and range, in 16.16 fixed point.
+struct Yuv {
+    /// Luma: offset, then scale.
+    y: (i32, i32),
+    /// Chroma scale.
+    c: i32,
+    /// Cr to R, Cb to G, Cr to G, Cb to B.
+    cr_r: i32,
+    cb_g: i32,
+    cr_g: i32,
+    cb_b: i32,
+}
+
+impl Yuv {
+    fn new(color: ColorInfo) -> Self {
+        let (kr, kb) = match color.space {
+            ColorSpace::Bt601 => (0.299, 0.114),
+            ColorSpace::Bt2020 => (0.2627, 0.0593),
+            _ => (0.2126, 0.0722),
+        };
+        let kg = 1.0 - kr - kb;
+        let fixed = |v: f64| (v * 65_536.0).round() as i32;
+        let (y, c) = match color.range {
+            ColorRange::Full => ((0, fixed(1.0)), fixed(1.0)),
+            ColorRange::Limited => ((16, fixed(255.0 / 219.0)), fixed(255.0 / 224.0)),
+        };
+        Self {
+            y,
+            c,
+            cr_r: fixed(2.0 * (1.0 - kr)),
+            cb_g: fixed(2.0 * kb * (1.0 - kb) / kg),
+            cr_g: fixed(2.0 * kr * (1.0 - kr) / kg),
+            cb_b: fixed(2.0 * (1.0 - kb)),
+        }
+    }
+
+    /// One opaque RGBA8 pixel.
+    fn rgba(&self, y: u8, cb: u8, cr: u8) -> [u8; 4] {
+        // 16.16 fixed point throughout; each product stays well inside i64.
+        let l = i64::from((i32::from(y) - self.y.0) * self.y.1);
+        let cb = (i64::from(i32::from(cb) - 128) * i64::from(self.c)) >> 16;
+        let cr = (i64::from(i32::from(cr) - 128) * i64::from(self.c)) >> 16;
+        let channel = |v: i64| ((v + (1 << 15)) >> 16).clamp(0, 255) as u8;
+        [
+            channel(l + cr * i64::from(self.cr_r)),
+            channel(l - cb * i64::from(self.cb_g) - cr * i64::from(self.cr_g)),
+            channel(l + cb * i64::from(self.cb_b)),
+            255,
+        ]
+    }
 }

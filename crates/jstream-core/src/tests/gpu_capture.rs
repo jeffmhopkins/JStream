@@ -266,6 +266,7 @@ fn backends(clock: &FakeClock, gpu: Arc<dyn GpuInterop>, mode: GpuMode) -> Backe
         gpu,
         vcam: None,
         video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
+        media: Arc::new(jstream_platform::fake::FakeMediaDecoders::new()),
     }
 }
 
@@ -296,6 +297,7 @@ fn path(backends: &Backends) -> (bool, bool) {
         GPU_OPEN_TIMEOUT,
         Arc::new(RenderHub::default()),
         Arc::new(Wanted::default()),
+        (1280, 720),
     );
     let opened = open_capture(&parts).expect("a capture path");
     let mut stream = start_capture(&opened.backends, &CaptureSpec::Display(None))

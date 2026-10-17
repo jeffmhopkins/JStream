@@ -41,7 +41,7 @@ use crate::runtime::RenderSnapshot;
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
 
-/// Straight opacity. The graph does not store it yet, and the compositor's default is 1.
+/// Straight opacity 1: how the program layer is scaled onto a differently sized output.
 const OPAQUE: f32 = 1.0;
 
 /// How many levels of scene sources the program mix draws below the program scene, on
@@ -213,6 +213,8 @@ struct Placed {
     source: SourceRef,
     placement: Placement,
     crop: Crop,
+    /// The item's straight alpha multiplier (ADR-0023), in [0, 1].
+    opacity: f32,
 }
 
 /// The program mix, copied out of the collection so it can be drawn without the
@@ -399,6 +401,7 @@ impl Planner<'_, '_> {
                     source,
                     placement: placement(item.placement()),
                     crop: crop(item.crop()),
+                    opacity: item.opacity().get(),
                 });
             }
         }
@@ -456,6 +459,7 @@ struct Layer {
     image: GpuKey,
     placement: Placement,
     crop: Crop,
+    opacity: f32,
 }
 
 /// The composites a frame makes for the scene `program`, in order: every nested scene
@@ -510,6 +514,7 @@ fn visit(
             image,
             placement: placed.placement,
             crop: placed.crop,
+            opacity: placed.opacity,
         });
     }
     path.remove(id);
@@ -926,6 +931,7 @@ pub(crate) fn compose(
     }
     let Some((program, nested)) = shot.passes.split_last() else {
         let image = fallback.as_ref().and_then(|key| cache.get(key));
+        // Scaled to fill the output, which follows the canvas, not the display.
         let items: Vec<Item<'_>> = image
             .into_iter()
             .map(|image| {
@@ -984,7 +990,7 @@ fn fill_items<'a>(items: &mut Vec<Item<'a>>, cache: &'a ResourceCache<GpuKey>, p
             image: cache.get(&layer.image)?,
             placement: layer.placement,
             crop: layer.crop,
-            opacity: OPAQUE,
+            opacity: layer.opacity,
             visible: true,
         })
     }));
@@ -1206,6 +1212,7 @@ pub(crate) mod tests {
             source,
             placement,
             crop: Crop::NONE,
+            opacity: super::OPAQUE,
         }
     }
 
@@ -1423,6 +1430,44 @@ pub(crate) mod tests {
         }
         for (x, y) in [(10, 10), (310, 190), (330, 170), (650, 350), (900, 600)] {
             assert_eq!(at(&rgba, x, y), RED, "({x}, {y})");
+        }
+    }
+
+    /// An item's opacity multiplies its alpha, and the result blends in linear light: half
+    /// green over red is 0.5 of each in linear light, sRGB 188. A nested scene's opacity
+    /// applies to the scene as a whole, and an item at 0 draws nothing.
+    #[test]
+    fn opacity_blends_items_and_nested_scenes_in_linear_light() {
+        let faded = |placed: Placed, opacity: f32| Placed { opacity, ..placed };
+        // The 16x9 frames are scaled to the canvas; a nested scene's layer is canvas-sized.
+        let left = Placement::Legacy(LegacyTransform {
+            scale: [60.0, 120.0],
+            ..LegacyTransform::IDENTITY
+        });
+        let right = Placement::Legacy(LegacyTransform {
+            position: [960.0, 0.0],
+            scale: [0.5, 1.0],
+            rotation_deg: 0.0,
+        });
+        let shot = shot(vec![
+            (
+                "program",
+                vec![
+                    fill("red"),
+                    faded(placed(SourceRef::Frame(SourceId::new("green")), left), 0.5),
+                    faded(nest("a", right), 0.5),
+                    faded(fill("green"), 0.0),
+                ],
+            ),
+            ("a", vec![fill("green")]),
+        ]);
+        let Some(rgba) = snap(&shot) else { return };
+        let half = [188, 188, 0, 255];
+        for (x, y) in [(100, 360), (1100, 360)] {
+            let pixel = at(&rgba, x, y);
+            for (got, want) in pixel.iter().zip(half) {
+                assert!(got.abs_diff(want) <= 1, "({x}, {y}): {pixel:?}");
+            }
         }
     }
 

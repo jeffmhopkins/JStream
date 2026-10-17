@@ -3,7 +3,8 @@
 //! `InProcessControl` session per connection, so `jstream-cli --url …` and
 //! `jstream-cli mcp` can drive it, and MCP over streamable HTTP on the same port, one
 //! session per MCP session (ADR-0001: the app only wires the engine to its
-//! interfaces). It creates or reuses the user-only control token file (ADR-0006), logs
+//! interfaces). It creates or reuses the user-only control token file (ADR-0006), keeps
+//! the paired devices' token digests in a user-only file beside it (ADR-0044), logs
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
 //! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
 //! pipeline on the Windows backends and publishes over RTMP(S), after checking that
@@ -25,6 +26,7 @@ mod logs;
 mod register;
 mod serve;
 mod token;
+mod youtube;
 
 use anyhow::Context;
 use args::{Invocation, Options};
@@ -226,6 +228,11 @@ fn run(options: Options) -> Result<(), Failure> {
     // arguments (R-SEC-001).
     let audit = AuditFile::open(&logs)
         .with_context(|| format!("could not open the audit log in `{}`", logs.display()))?;
+    // Before the token: a client file that can't be used stops the start here.
+    let youtube = youtube::client(options.youtube_client.as_deref().map(Path::new), |name| {
+        std::env::var(name).ok()
+    })
+    .map_err(|message| Failure::Failed(anyhow::anyhow!(message)))?;
     // Checked before the token or collection file is written, so a mistyped
     // `--ui-dir` leaves nothing behind. `Server::bind` checks it again.
     if let Some(dir) = options.ui_dir.as_deref()
@@ -240,9 +247,10 @@ fn run(options: Options) -> Result<(), Failure> {
         .context("could not start the async runtime")?;
     runtime.block_on(async {
         let stop = serve::shutdown_signal().context("could not install the Ctrl-C handler")?;
-        let engine = serve::engine(&options, Arc::new(audit))?;
+        let engine = serve::engine(&options, Arc::new(audit), youtube)?;
         let ui_dir = options.ui_dir.as_deref().map(Path::new);
-        let server = serve::bind(engine, options.port, token, ui_dir)
+        let device_file = token::device_file(&path);
+        let server = serve::bind(engine, options.port, token, Some(device_file), ui_dir)
             .await
             .map_err(anyhow::Error::from)?;
         let shown = path.display();

@@ -7,30 +7,33 @@
 //! `stats.tick` and the state events, and each interface stops the output it started.
 //! The test then checks what the sink received, the recorded MP4, and the audit log.
 //!
-//! The built binary has no backends off Windows, so this runs the same pieces in
-//! process instead (`tests/daemon.rs` covers the binary itself). The fake clock is
-//! pumped ahead of real time and the compositor runs on the CPU, so no device, GPU or
-//! network is needed (R-TEST-004): the sink is a minimal RTMP server on loopback.
+//! The built binary has no backends off Windows, so this runs the daemon's own engine
+//! wiring in process instead: `jstream_daemon::live` and its `rtmp` connect, the ones
+//! `serve.rs` runs on the Windows backends, here on the fakes (`tests/daemon.rs` covers
+//! the binary itself). The fake clock is pumped ahead of real time and the compositor
+//! runs on the CPU, so no device, GPU or network is needed (R-TEST-004): the sink is a
+//! minimal RTMP server on loopback.
 
 use futures_util::StreamExt;
 use jstream_control::protocol::{
-    Action, Call, CallResult, Event, Hello, OutputId, OutputKind, OutputState, PROTOCOL_VERSION,
-    Query, QueryResult, RtmpTarget, SecretString,
+    Action, Call, CallResult, Event, Hello, OutputId, OutputState, PROTOCOL_VERSION, Query,
+    QueryResult, SecretString,
 };
 use jstream_control::{Control, EventStream, WsConfig, WsControl};
-use jstream_core::{AuditFile, Engine, LivePublish, OpenPublish, PublishError, connect_rtmp};
+use jstream_core::{AuditFile, Engine};
+use jstream_daemon::live::{live, rtmp};
 use jstream_media::{ChannelLayout, FrameSize, Timebase};
+use jstream_platform::Backends;
 use jstream_platform::fake::{
-    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
-    MemoryKeyStore,
+    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+    FakeVideoDevices, MemoryKeyStore,
 };
-use jstream_platform::{Backends, StreamKeyStore};
 use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock, Weak, mpsc};
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -50,7 +53,7 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 // ---------------------------------------------------------------------------------------
-// The engine, as the daemon builds a live one, on the fakes
+// The daemon's live engine, on the fakes
 
 /// The fake devices, and the pump that moves them: a microsecond clock, a 64x36 display
 /// and a stereo 48 kHz microphone.
@@ -76,6 +79,7 @@ impl Fakes {
             codecs: Arc::new(FakeCodecs),
             gpu: Arc::new(FakeGpuInterop),
             vcam: None,
+            media: Arc::new(FakeMediaDecoders::new()),
         }
     }
 
@@ -95,47 +99,6 @@ impl Fakes {
         });
         (stop, pump)
     }
-}
-
-/// The engine the daemon serves on Windows (`serve::live`), on `backends`: stream keys
-/// in `keys`, and on each `output.start` an opener that reads the output's URL from the
-/// collection and its key from the store and connects with `connect_rtmp`. The opener
-/// holds the engine weakly, as the daemon's does. The render thread composites on the
-/// CPU, so no adapter is needed.
-fn live_engine(backends: Backends, keys: Arc<dyn StreamKeyStore>, audit: AuditFile) -> Arc<Engine> {
-    let handle: Arc<OnceLock<Weak<Engine>>> = Arc::new(OnceLock::new());
-    let open: OpenPublish = {
-        let handle = Arc::clone(&handle);
-        let keys = Arc::clone(&keys);
-        Arc::new(move |output_id: &OutputId| {
-            let engine = handle
-                .get()
-                .and_then(Weak::upgrade)
-                .ok_or_else(|| PublishError::new("the engine is shutting down"))?;
-            let Some(OutputKind::Rtmp {
-                target: RtmpTarget::Generic { url },
-            }) = engine.output_kind(output_id)
-            else {
-                return Err(PublishError::new("not a generic RTMP output"));
-            };
-            let key = keys
-                .get(output_id.as_str())
-                .map_err(|error| PublishError::new(error.to_string()))?
-                .ok_or_else(|| PublishError::new("no stream key"))?;
-            let publish: Box<dyn LivePublish> = Box::new(connect_rtmp(&url, key.expose())?);
-            Ok(publish)
-        })
-    };
-    let engine = Arc::new(
-        Engine::new()
-            .with_audit(Arc::new(audit))
-            .with_key_store(keys)
-            .with_backends(backends)
-            .with_publish_opener(open)
-            .with_cpu_compositor(),
-    );
-    let _ = handle.set(Arc::downgrade(&engine));
-    engine
 }
 
 /// Binds the server on a free loopback port with MCP on, as `serve::bind` does.
@@ -580,7 +543,19 @@ async fn streams_and_records_on_the_fakes_driven_over_websocket_and_mcp() {
     let fakes = Fakes::new();
     let keys = Arc::new(MemoryKeyStore::new());
     let audit = AuditFile::open(&dir).expect("the audit log opens");
-    let engine = live_engine(fakes.backends(), Arc::clone(&keys) as _, audit);
+    // The daemon's own wiring (`jstream_daemon::live`, which `serve.rs` runs on the
+    // Windows backends), here on the fakes.
+    let engine = live(
+        Engine::new().with_audit(Arc::new(audit)),
+        fakes.backends(),
+        Arc::clone(&keys) as _,
+        rtmp(),
+    );
+    // Then the CPU compositor, so no adapter is needed. It must come after `live`: a
+    // bare engine has no media host for it to set. Clones share the media host, so
+    // this sets it on `engine` too, and the opener's weak handle stays the one `live`
+    // made.
+    let _ = Engine::clone(&engine).with_cpu_compositor();
     let server = bind(Arc::clone(&engine)).await;
     let ws_url = server.ws_url();
     let authority = server.local_addr().to_string();
@@ -602,11 +577,13 @@ async fn streams_and_records_on_the_fakes_driven_over_websocket_and_mcp() {
     .expect("welcome");
     let mut events = control.events();
 
-    // MCP builds the show: a scene with a display source, then the two outputs.
+    // MCP builds the show: the display's size as the canvas (the outputs encode at the
+    // canvas), a scene with a display source, then the two outputs.
     let mut mcp = Mcp::initialize(&authority);
     mcp.call(
         "batch",
         r#"{"edits":[
+            {"type":"canvas.set_size","width":64,"height":36},
             {"type":"scene.create","scene_id":"main","name":"Main"},
             {"type":"source.create","source_id":"screen","name":"Screen","kind":{"type":"builtin","kind":"display"}},
             {"type":"item.add","scene_id":"main","item_id":"screen_1","source_id":"screen"}
@@ -768,7 +745,9 @@ async fn streams_and_records_on_the_fakes_driven_over_websocket_and_mcp() {
     drop(engine);
     let audit = std::fs::read_to_string(dir.join("audit.jsonl")).expect("the audit log");
     assert!(
-        audit.contains("\"edits\":[\"scene.create\",\"source.create\",\"item.add\"]"),
+        audit.contains(
+            "\"edits\":[\"canvas.set_size\",\"scene.create\",\"source.create\",\"item.add\"]"
+        ),
         "{audit}"
     );
     assert!(audit.contains("output.start"), "{audit}");

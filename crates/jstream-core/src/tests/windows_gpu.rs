@@ -109,6 +109,7 @@ fn backends(capture: WgcCapture) -> Backends {
         audio: Arc::new(audio),
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(WindowsGpu::new()),
+        media: Arc::new(jstream_platform::fake::FakeMediaDecoders::new()),
         vcam: None,
         video_devices: Arc::new(FakeVideoDevices::new(audio_clock)),
     }

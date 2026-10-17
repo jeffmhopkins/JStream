@@ -17,8 +17,9 @@ mod format;
 mod mjpeg;
 #[cfg(any(windows, test))]
 mod pairing;
+// `MfStarted` is shared with the media-file reader.
 #[cfg(windows)]
-mod source;
+pub(crate) mod source;
 #[cfg(windows)]
 mod stream;
 

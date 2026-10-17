@@ -69,16 +69,5 @@ impl SourceKind for Described {
 
 /// The described-only built-in kinds, with the settings B4 gave them.
 pub(crate) fn described() -> Vec<Described> {
-    vec![
-        Described(KindDescriptor {
-            params: vec![param(
-                "file",
-                "Media file",
-                asset(&["mp4", "mkv", "mov", "webm", "mp3", "wav", "flac", "ogg"]),
-                Value::Null,
-            )],
-            ..kind("media", "Media file", true, true)
-        }),
-        Described(kind("webcam", "Webcam", true, false)),
-    ]
+    vec![Described(kind("webcam", "Webcam", true, false))]
 }

@@ -29,7 +29,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 | Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager today, no store on macOS or Linux yet |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
 | Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
-| Paired device tokens (**in flight**, #265, #288) | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in a devices file; the browser's copy in a cookie |
+| Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie (**in flight**, #288) |
 | The program and preview video | What the user chose not to broadcast yet (the preview scene) | Engine memory, the virtual camera's shared textures, `video.snapshot` |
 | Local files | Asset paths and recording paths reach the file system | Wherever the user (or a token holder) points them |
 | The machine itself | Native plugins, decoders and a browser engine run inside or beside the engine | — |
@@ -45,7 +45,7 @@ No telemetry leaves the machine, and logs and crash reports stay local
 | Attacker | What they start with | In scope? |
 |---|---|---|
 | A web page in the user's own browser | JavaScript on a foreign origin; can try `ws://127.0.0.1:<port>` and DNS rebinding | Yes: it must get nothing |
-| A device on the LAN or internet | Network access to the machine | Yes: listeners bind `127.0.0.1` by default; remote access only through pairing (in flight) |
+| A device on the LAN or internet | Network access to the machine | Yes: listeners bind `127.0.0.1` by default; remote access only through pairing, whose device tokens are refused beyond loopback until there is TLS |
 | A page shown by a browser source | Arbitrary HTML and JavaScript, rendered by the engine's own helper | Yes: untrusted content ([ADR-0021](../adr/0021-browser-source.md)) |
 | A crafted file | A collection file, image, font or media file someone shares | Yes: parsing must not crash the engine or reach outside its asset roots |
 | A hostile streaming server or network | Controls the RTMP(S) or YouTube endpoint's replies | Yes: TLS is verified; its text is untrusted |
@@ -96,12 +96,17 @@ a stolen token, local denial of service.
   its port, or a configured extra), which defeats DNS rebinding; `Origin`, when present,
   must be that host or a configured extra, so a foreign page's WebSocket upgrade is
   refused; then the token, as a bearer token, a Basic password or a WebSocket
-  subprotocol ([R-SEC-002](../RULES.md#R-SEC-002)).
+  subprotocol ([R-SEC-002](../RULES.md#R-SEC-002)). The token may also be a paired
+  device's, accepted only on loopback until there is TLS, and `POST /api/v1/pair` is
+  the one request answered without one, only while a pairing code is open (see
+  [Pairing](#pairing)).
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
-- Limits: 4 MiB messages and MCP bodies, 32 WebSocket connections, 16 MCP sessions,
-  10 s to send headers and finish the handshake, a bounded event outbox.
+- Limits: 4 MiB messages and MCP bodies, 128 open TCP connections of any kind
+  (authenticated or not), 32 WebSocket connections, 64 calls in flight per connection,
+  16 MCP sessions, 10 s to send headers and finish the handshake, a bounded event
+  outbox.
 - On Unix the token file is created `0600` and refused if group or others can read it.
 
 **Accepted:** the token is full access with no tiers ([ADR-0006](../adr/0006-mcp-full-access.md)).
@@ -109,8 +114,9 @@ It doesn't expire or rotate; deleting the file and restarting makes a new one. A
 can be given the control token through the `Basic` prompt, and then holds it as a cached,
 ambient credential until it is closed.
 
-**Gaps:** the Windows token file only inherits its folder's ACL (#344); connections
-before authentication and calls in flight per connection are not capped (#354).
+**Gaps:** the Windows token file only inherits its folder's ACL (#344); failed tokens
+are not throttled, which only matters for log noise, since 256 bits can't be guessed
+(#354).
 
 <a id="pairing"></a>
 ## Pairing and remote browsers
@@ -118,17 +124,21 @@ before authentication and calls in flight per connection are not capped (#354).
 depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md"]
 -->
 
-**In flight** (#265 for codes and device tokens, #288 for the pairing page and cookie).
-Until they merge, nothing can pair and nothing listens beyond loopback, although
-[R-SEC-002](../RULES.md#R-SEC-002) and SECURITY.md already describe the exceptions.
+**Built:** codes and device tokens ([`jstream-server`](../../crates/jstream-server/README.md#design)).
+`pairing.start` and device tokens work only while the server listens on loopback, since
+there is no TLS yet, so a paired device is a local client with its own revocable token.
+**In flight:** the browser pairing page and cookie (#288). Until it merges, no browser
+can pair, although [R-SEC-002](../RULES.md#R-SEC-002) and SECURITY.md already describe
+that exception.
 
 **Threats:** guessing a pairing code, a leaked device token, a cookie used cross-site,
 a device that should no longer have access.
 
-**Designed controls** ([ADR-0044](../adr/0044-pairing-remote-browsers.md),
-[ADR-0047](../adr/0047-browser-pairing-page-and-device-cookie.md)): one open code at a
-time, 40 bits, two minutes, void after five wrong attempts; 256-bit device tokens kept
-as digests, revocable, dropped after 30 days unused; the browser's copy only as a
+**Controls** ([ADR-0044](../adr/0044-pairing-remote-browsers.md),
+[ADR-0047](../adr/0047-browser-pairing-page-and-device-cookie.md); the cookie's arrive
+with #288): one open code at a time, 40 bits, two minutes, void after five wrong
+attempts; 256-bit device tokens kept as digests, revocable, dropped after 30 days
+unused; the browser's copy only as a
 `__Host-` cookie that is `Secure`, `HttpOnly` and `SameSite=Strict`, on a TLS listener,
 with `Sec-Fetch-Site` checked. A paired browser holds only its device token, and the
 cookie never carries the control token.
@@ -177,7 +187,8 @@ makes Windows contact a remote host.
 - Image formats are sniffed from their bytes; each decoder has a memory limit; files are
   capped at 256 MiB, 16384 pixels a side and 1 GiB decoded. The image and font
   decoders are memory-safe Rust.
-- Recordings must be absolute paths without `..`, are written to a `.part` file created
+- Recordings must be absolute paths without `..`, not UNC, device or NT object paths,
+  and with no `:` but a drive letter's. They are written to a `.part` file created
   new, and never replace an existing file.
 - Fuzz targets cover the protocol, source and output kind settings, collection loading,
   AMF0, H.264, HEVC, AV1, AAC and the muxers (`fuzz/`).
@@ -307,7 +318,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #352 | Files | Image and font decoders unfuzzed; no fuzzing in CI | Low |
 | #353 | Secrets | `rtmp://` cleartext, crash-report redaction, redaction test scope | Low |
-| #354 | Server | No cap before authentication or on calls per connection | Low |
+| #354 | Server | Failed tokens are not throttled (log noise) | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #242 | Virtual camera | A user-writable registered DLL runs in Frame Server | Medium |

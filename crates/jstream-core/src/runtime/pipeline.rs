@@ -31,14 +31,16 @@
 //! the publish target, so a peer that has stopped reading cannot hold `output.stop`.
 //! The stop waits for a publishing output thread only until that deadline plus
 //! [`OUTPUT_GRACE`]: a publish target that blocks in a send without honouring the
-//! deadline is left to its thread, which ends once the send returns (#138).
+//! deadline is left to its thread, which ends once the send returns (#138). The stop
+//! then drops and counts what is still queued for that thread itself, so the final
+//! `stats.tick` has it (#385).
 
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, Weak};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -57,11 +59,12 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
-    RateControl as ProfileRate,
+    RateControl as ProfileRate, VideoCodec,
 };
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
+use jstream_sources::AudioScopes;
 
-use crate::audio::{MasterMetering, MixerHandles};
+use crate::audio::{MasterMetering, MixerHandles, ScopeTaps, TapFeed};
 use crate::audio_sources::{AudioInputs, Wanted};
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, DropGuard, DropSnapshot, FnDropSource, VideoEncodeDrops,
@@ -134,6 +137,9 @@ pub(crate) fn cpu_draw() -> OpenDraw {
                     Some(CaptureImage::Rgba { size: at, rgba }) if at == size => {
                         out.extend_from_slice(rgba);
                     }
+                    Some(CaptureImage::Rgba { size: own, rgba }) => {
+                        scale_nearest(own, rgba, size, out);
+                    }
                     _ => out.resize(size.width() as usize * size.height() as usize * 4, 0),
                 }
                 Ok(None)
@@ -141,6 +147,21 @@ pub(crate) fn cpu_draw() -> OpenDraw {
         );
         Ok(draw)
     })
+}
+
+/// A capture of `own` size scaled to fill `size`, nearest neighbour, appended to `out`:
+/// what the GPU path's scale looks like closely enough for tests.
+fn scale_nearest(own: FrameSize, rgba: &[u8], size: FrameSize, out: &mut Vec<u8>) {
+    let (cw, ch) = (own.width() as usize, own.height() as usize);
+    let (w, h) = (size.width() as usize, size.height() as usize);
+    out.reserve(w * h * 4);
+    for y in 0..h {
+        let row = (y * ch / h) * cw;
+        for x in 0..w {
+            let at = (row + x * cw / w) * 4;
+            out.extend_from_slice(&rgba[at..at + 4]);
+        }
+    }
 }
 
 /// A fake Annex-B encoder does not emit SPS/PPS. FLV and MP4 still need a decoder
@@ -594,6 +615,11 @@ pub(crate) struct Running {
     output_drops: Arc<AtomicU64>,
     /// Tags the publish target dropped while its link was down, as it last reported.
     link_drops: Arc<AtomicU64>,
+    /// The output thread's encoder subscriptions, while the thread holds them. The drop
+    /// counts what is queued there itself when it stops waiting for the thread (#385).
+    /// Weak, so a thread that ended unsubscribes at once. Empty for a camera, which has
+    /// no encoder queues.
+    queues: Weak<Queues>,
     drop_guard: Option<DropGuard>,
     /// Its failure channel's place in the program, given up once its thread is gone.
     registration: Option<Registration>,
@@ -656,13 +682,12 @@ impl Running {
 }
 
 impl Running {
-    /// Joins the output thread. A publishing one is waited for only until `by`: past
-    /// that it is blocked in a publish target that ignores the stop deadline, so it is
-    /// detached and ends on its own once that call returns. What it drops after this
-    /// is not in the run's final counts.
-    fn join_output(&mut self, by: Instant) {
+    /// Joins the output thread, and says whether it ended. A publishing one is waited
+    /// for only until `by`: past that it is blocked in a publish target that ignores
+    /// the stop deadline, so it is detached and ends on its own once that call returns.
+    fn join_output(&mut self, by: Instant) -> bool {
         let Some(handle) = self.output.take() else {
-            return;
+            return true;
         };
         let ended = self.output_done.take().is_none_or(|done| {
             !matches!(
@@ -679,6 +704,7 @@ impl Running {
             );
             drop(handle);
         }
+        ended
     }
 }
 
@@ -698,10 +724,26 @@ impl Drop for Running {
             encoders.finish();
         }
         self.cut.store(true, Ordering::Release);
-        self.join_output(deadline + OUTPUT_GRACE);
+        let ended = self.join_output(deadline + OUTPUT_GRACE);
         self.output_fail.close();
-        // After the thread stops, so the latch sees its final counters.
+        // A thread left behind has not counted what is still queued for it, and won't
+        // before the latch below. The stop drops and counts that itself, and latches
+        // while it still holds the queues, so a count the thread makes is either wholly
+        // in the latch or covers only packets queued after it (#385).
+        let queues = if ended { None } else { self.queues.upgrade() };
+        let abandoned = queues
+            .as_ref()
+            .map(|queues| queues.abandon(false, false, &self.output_drops));
+        // After the thread stops, or after the count above, so the latch sees the
+        // final counters.
         self.drop_guard.take();
+        if let Some((left, held)) = abandoned {
+            drop(held);
+            tracing::warn!(
+                packets = left,
+                "dropped the packets still queued for the output thread left behind"
+            );
+        }
         self.registration.take();
         self.program.take();
     }
@@ -732,6 +774,9 @@ pub(crate) struct Parts {
     open_timeout: Duration,
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
+    /// The collection's canvas (width, height) when the program stage opens: the output
+    /// size follows it ([`output_size`]).
+    canvas: (u32, u32),
 }
 
 pub(crate) fn parts_from(
@@ -740,8 +785,10 @@ pub(crate) fn parts_from(
     open_timeout: Duration,
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
+    canvas: (u32, u32),
 ) -> Parts {
     Parts {
+        canvas,
         clock: Arc::clone(&backends.clock),
         capture: Arc::clone(&backends.capture),
         audio: Arc::clone(&backends.audio),
@@ -849,13 +896,10 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
 /// mixer threads, and waits for the compositor to open. On failure everything opened
 /// is dropped again.
 pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Program>, String> {
+    let size = output_size(parts.canvas)?;
     // `context` is bound first, so on an early return it drops last, after the stream,
     // as in the render loop.
-    let OpenedCapture {
-        context,
-        size,
-        backends,
-    } = open_capture(&parts)?;
+    let OpenedCapture { context, backends } = open_capture(&parts)?;
     let captures = captures::spawn(backends, parts.clock.timebase())?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
@@ -864,6 +908,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let audio = AudioInputs::start(
         mixer.control(),
         Arc::clone(&parts.audio),
+        Arc::clone(&parts.clock),
         Arc::clone(&parts.audio_sources),
         engine.drop_ledger(),
     )?;
@@ -933,13 +978,20 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             return Err(err);
         }
     };
+    let scope_taps = Arc::new(ScopeTaps::default());
     let mixer_thread = match spawn("jstream-mixer", {
         let clock = Arc::clone(&parts.clock);
         let stop = Arc::clone(&stop);
         let fail = fail_tx;
         let collector = mixer_collector;
+        let out = MixOut {
+            inputs: audio_inputs,
+            format,
+            scopes: engine.audio_scopes(),
+            taps: Arc::clone(&scope_taps),
+        };
         let mixing = Mixing { mixer, metering };
-        move || mixer_thread(mixing, clock, audio_inputs, format, stop, fail, &collector)
+        move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -981,6 +1033,8 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
                 control: mixer_control,
                 master: program.bus.clone(),
                 meters: master_meters,
+                scopes: engine.audio_scopes(),
+                taps: scope_taps,
             });
             *lock(&program.detach_audio) = Some(detach);
             Ok(Arc::new(program))
@@ -1024,7 +1078,7 @@ pub(crate) fn launch(
     let origin = program.origin()?;
     // Set once the start has succeeded; until then a recording is provisional.
     let keep = Arc::new(AtomicBool::new(false));
-    let info = stream_info(program.size, origin, &encoders.key.1);
+    let info = stream_info(program.size, origin, &encoders.key.1)?;
     let publishing = matches!(destination, Destination::Publish(_));
     let sink = Sink::open(destination, &info, Arc::clone(&keep))?;
     let stop = Arc::new(AtomicBool::new(false));
@@ -1037,8 +1091,12 @@ pub(crate) fn launch(
     // Subscribe before a new session is fed, so its first packets (the first video
     // keyframe among them) are not encoded before the output thread is listening. A
     // session already running gives this output a keyframe on request.
-    let video_sub = encoders.video.subscribe();
-    let audio_sub = encoders.audio.subscribe();
+    let queues = Arc::new(Queues {
+        video: Mutex::new(encoders.video.subscribe()),
+        audio: Mutex::new(encoders.audio.subscribe()),
+        abandon: Mutex::new(()),
+    });
+    let shared_queues = Arc::downgrade(&queues);
     program.attach(&encoders);
     let (started_tx, started_rx) = mpsc::channel();
     let output_fail = FailLine::new(fail_tx);
@@ -1056,8 +1114,7 @@ pub(crate) fn launch(
             let _done = done_tx;
             output_loop(OutputJob {
                 sink,
-                video: video_sub,
-                audio: audio_sub,
+                queues,
                 stats,
                 output_drops: own,
                 link_drops: link,
@@ -1085,6 +1142,7 @@ pub(crate) fn launch(
         stats,
         output_drops,
         link_drops,
+        queues: shared_queues,
         drop_guard: None,
         registration: Some(registration),
         program: Some(program),
@@ -1148,6 +1206,7 @@ pub(crate) fn launch_vcam(
         stats: PipelineStats::new(),
         output_drops,
         link_drops: Arc::new(AtomicU64::new(0)),
+        queues: Weak::new(),
         drop_guard: None,
         registration: Some(registration),
         program: Some(program),
@@ -1177,17 +1236,23 @@ fn frame_period(clock: Timebase) -> Result<MediaTime, String> {
         .map_err(|err| format!("frame period on the media clock: {err}"))
 }
 
-/// The capture backends, the output's size and the platform's GPU context when the
-/// render thread composites on it.
+/// The size the program stage renders and encodes at: the canvas, rounded down to even
+/// sizes (NV12, the encoders' input, halves both for chroma), and at least 2x2. Each
+/// capture keeps its own size and is scaled by its item's placement (#433).
+fn output_size((width, height): (u32, u32)) -> Result<FrameSize, String> {
+    let even = |edge: u32| (edge & !1).max(2);
+    FrameSize::new(even(width), even(height)).map_err(|err| format!("output size: {err}"))
+}
+
+/// The capture backends, and the platform's GPU context when the render thread
+/// composites on it.
 pub(crate) struct OpenedCapture {
-    pub(crate) size: FrameSize,
     pub(crate) backends: captures::Backends,
     pub(crate) context: Option<GpuContext>,
 }
 
-/// Picks the capture path (ARCH › GPU pipeline, step 6), and sizes the output as the
-/// primary display (else the first target). Nothing is captured yet: the render thread
-/// starts what its snapshots capture ([`RenderCaptures`]).
+/// Picks the capture path (ARCH › GPU pipeline, step 6). Nothing is captured yet: the
+/// render thread starts what its snapshots capture ([`RenderCaptures`]).
 ///
 /// The GPU path needs the platform's GPU interop to open a device and the capture
 /// backend to deliver frames on it ([`Capture::on_context`]). Its streams' frames are
@@ -1197,7 +1262,6 @@ pub(crate) struct OpenedCapture {
 /// capture does not start, captures deliver CPU frames and the render thread still
 /// composites on the platform's device. Each fallback is logged.
 pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
-    let size = output_size(parts.capture.as_ref())?;
     let context = match parts.gpu.open_device() {
         Ok(context) => Some(context),
         Err(err) => {
@@ -1209,7 +1273,6 @@ pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
         .as_ref()
         .and_then(|context| gpu_capture(parts.capture.as_ref(), context));
     Ok(OpenedCapture {
-        size,
         backends: captures::Backends {
             cpu: Arc::clone(&parts.capture),
             gpu,
@@ -1233,23 +1296,13 @@ fn gpu_capture(capture: &dyn Capture, context: &GpuContext) -> Option<Arc<dyn Ca
     }
 }
 
-/// The primary display's size, else the first target's: the output's size.
-fn output_size(capture: &dyn Capture) -> Result<FrameSize, String> {
-    let targets = capture
-        .targets()
-        .map_err(|err| format!("listing capture targets: {err}"))?;
-    let index = targets
-        .iter()
-        .position(|target| target.primary)
-        .or_else(|| targets.first().map(|_| 0));
-    let Some(index) = index else {
-        return Err("no capture target".into());
-    };
-    let info = targets.into_iter().nth(index).ok_or("no capture target")?;
-    let Some(size) = info.size else {
-        return Err(format!("capture target `{}` has no size", info.name));
-    };
-    Ok(size)
+/// The codec `profile` encodes video in. HEVC and AV1 map here once the protocol's
+/// `VideoCodec` names them; the encoders (`MfCodecs`) and the FLV sink already take them.
+fn video_codec(profile: &EncoderProfile) -> Result<Codec, String> {
+    match profile.video.codec {
+        VideoCodec::H264 => Ok(Codec::H264),
+        _ => Err("the encoder profile's video codec is not one this engine knows".into()),
+    }
 }
 
 /// The video encoder settings for `profile` at `size` and the base frame rate.
@@ -1268,7 +1321,7 @@ fn video_config(size: FrameSize, profile: &EncoderProfile) -> Result<VideoEncode
         _ => HardwarePreference::Avoid,
     };
     Ok(VideoEncoderConfig {
-        codec: Codec::H264,
+        codec: video_codec(profile)?,
         size,
         input_format: PixelFormat::Rgba8,
         frame_period: period,
@@ -1319,12 +1372,17 @@ fn mixer_latency(clock: &dyn MediaClock, mixer: &Mixer) -> Result<MediaTime, Str
         .map_err(|err| format!("mixer latency: {err}"))
 }
 
-fn stream_info(size: FrameSize, origin: MediaTime, profile: &EncoderProfile) -> StreamInfo {
+fn stream_info(
+    size: FrameSize,
+    origin: MediaTime,
+    profile: &EncoderProfile,
+) -> Result<StreamInfo, String> {
     let video_kbps = match profile.video.rate_control {
         ProfileRate::Cbr { kbps } | ProfileRate::Vbr { kbps, .. } => kbps,
         _ => 0,
     };
-    StreamInfo {
+    Ok(StreamInfo {
+        codec: video_codec(profile)?,
         size,
         origin,
         frame_rate: f64::from(FRAME_DEN) / f64::from(FRAME_NUM),
@@ -1333,7 +1391,7 @@ fn stream_info(size: FrameSize, origin: MediaTime, profile: &EncoderProfile) -> 
         sample_rate: SAMPLE_RATE,
         sps: &SPS,
         pps: &PPS,
-    }
+    })
 }
 
 struct RenderJob {
@@ -1659,27 +1717,31 @@ fn push_each<T>(targets: &mut Vec<T>, mut push: impl FnMut(&T) -> bool, mut reti
     }
 }
 
+/// Where the mixer thread's blocks go.
+struct MixOut {
+    /// The encoder sessions the program hands the thread.
+    inputs: Receiver<AudioInput>,
+    /// The blocks' format.
+    format: AudioFormat,
+    /// What the `waveform` and `spectrum` sources draw: the program mix's scope gets
+    /// each block.
+    scopes: Arc<AudioScopes>,
+    /// The bus and source scopes, each fed its bus's or input's block.
+    taps: Arc<ScopeTaps>,
+}
+
 /// The mixer thread's boundary: a panic is caught and reported as fatal. The encoders
 /// then get no more audio, so the outputs cannot keep running.
 fn mixer_thread(
     mixing: Mixing,
     clock: Arc<dyn MediaClock>,
-    inputs: Receiver<AudioInput>,
-    format: AudioFormat,
+    out: &MixOut,
     stop: Arc<AtomicBool>,
     fail: Sender<PipelineEvent>,
     collector: &Collector,
 ) {
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
-        mixer_loop(
-            mixing,
-            clock.as_ref(),
-            &inputs,
-            format,
-            &stop,
-            &fail,
-            collector,
-        );
+        mixer_loop(mixing, clock.as_ref(), out, &stop, &fail, collector);
     }));
     if let Err(panic) = result {
         report(
@@ -1696,29 +1758,56 @@ struct Mixing {
     metering: MasterMetering,
 }
 
-/// Mixes on the media clock, meters the master, and pushes each block into every encoder session the
-/// program has handed it, letting go of one that has finished. A rejected block or a
-/// poll error is fatal: both mean the mixer and the encoder disagree about the format,
-/// which no retry fixes.
+/// Mixes on the media clock, meters the master, and pushes each block into the program
+/// mix's audio scope and each drawn bus's and source's block into its scope (pushes
+/// neither lock nor allocate, and the list of scopes is adopted lock-free), and into every encoder
+/// session the program has handed it, letting go of one that has finished. A rejected block or a poll error
+/// is fatal: both mean the mixer and the encoder disagree about the format, which no
+/// retry fixes.
 fn mixer_loop(
     Mixing {
         mut mixer,
         mut metering,
     }: Mixing,
     clock: &dyn MediaClock,
-    inputs: &Receiver<AudioInput>,
-    format: AudioFormat,
+    out: &MixOut,
     stop: &AtomicBool,
     fail: &Sender<PipelineEvent>,
     collector: &Collector,
 ) {
+    let MixOut {
+        inputs,
+        format,
+        scopes,
+        taps,
+    } = out;
+    let format = *format;
+    let scope = scopes.program();
+    let mut scope_taps = taps.reader();
     let samples_len = mixer.config().block_frames.saturating_mul(2);
     let mut samples = vec![0.0f32; samples_len];
+    // What a silent drawn source's scope gets.
+    let silence = vec![0.0f32; samples_len];
     let mut targets: Vec<AudioInput> = Vec::new();
     'mix: while !stop.load(Ordering::Relaxed) {
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
                 metering.process(&samples);
+                scope.push(format.sample_rate(), &samples);
+                let (drawn, replaced) = scope_taps.adopt();
+                for tap in drawn {
+                    let block = match tap.feed {
+                        TapFeed::Bus(bus) => mixer.bus_block(bus),
+                        TapFeed::Input(input) => mixer.input_block(input),
+                        TapFeed::Silence => Some(&silence[..]),
+                    };
+                    if let Some(block) = block {
+                        tap.scope.push(format.sample_rate(), block);
+                    }
+                }
+                if let Some(replaced) = replaced {
+                    collector.free(Garbage::Scopes(replaced));
+                }
                 targets.extend(inputs.try_iter());
                 let mut rejected = None;
                 // The mix itself does not allocate. `AudioInput::push` takes an owned
@@ -1749,12 +1838,44 @@ fn mixer_loop(
             }
         }
     }
+    collector.free(Garbage::Scopes(scope_taps.into_held()));
+}
+
+/// An output thread's encoder subscriptions, shared with the stop so that, when it
+/// stops waiting for a thread blocked in a send, it can drop and count what is queued
+/// itself (#385). Each is locked only for a receive, never over a send, so a thread
+/// blocked in a send leaves them free.
+struct Queues {
+    video: Mutex<Subscription>,
+    audio: Mutex<Subscription>,
+    /// Held by whichever side drops and counts what is queued, until its count is in
+    /// `output_drops`; the stop also holds it over its latch. So a count the thread
+    /// makes is either wholly in the latch or wholly after it, and then covers only
+    /// packets queued after the stop's count. (No packet is counted twice in any case:
+    /// each count takes what it counts off the queue.)
+    abandon: Mutex<()>,
+}
+
+impl Queues {
+    /// Drops the packets still queued on both streams, adds how many to `drops`, and
+    /// returns that count with the lock still held. A stream already `done` is skipped.
+    fn abandon(
+        &self,
+        video_done: bool,
+        audio_done: bool,
+        drops: &AtomicU64,
+    ) -> (u64, MutexGuard<'_, ()>) {
+        let held = lock(&self.abandon);
+        let left = discard(&lock(&self.video), video_done)
+            .saturating_add(discard(&lock(&self.audio), audio_done));
+        drops.fetch_add(left, Ordering::Relaxed);
+        (left, held)
+    }
 }
 
 struct OutputJob {
     sink: Sink,
-    video: Subscription,
-    audio: Subscription,
+    queues: Arc<Queues>,
     stats: Arc<PipelineStats>,
     output_drops: Arc<AtomicU64>,
     link_drops: Arc<AtomicU64>,
@@ -1777,7 +1898,8 @@ struct OutputJob {
 /// the stop's deadline (`drain_by`, [`STOP_DRAIN`] after the stop began), and tells the
 /// publish target that deadline. When the deadline
 /// passes, or a send fails while stopping, it drops the packets still queued, counts
-/// them in `output_drops`, and finishes the target, which past the deadline closes
+/// them in `output_drops` (unless the stop, done waiting, has counted them already), and
+/// finishes the target, which past the deadline closes
 /// without its goodbye. A failure while stopping is logged, not reported: the output
 /// is already on its way to `stopped`. An output leaving encoder sessions that other
 /// outputs still use is `cut` instead of waiting for the streams to end: it sends what
@@ -1785,8 +1907,7 @@ struct OutputJob {
 fn output_loop(job: OutputJob) {
     let OutputJob {
         mut sink,
-        video,
-        audio,
+        queues,
         stats,
         output_drops,
         link_drops,
@@ -1838,7 +1959,9 @@ fn output_loop(job: OutputJob) {
         let leaving = cut.load(Ordering::Acquire);
         let mut got = false;
         if !video_done {
-            match video.recv_timeout(Duration::from_millis(2)) {
+            // Bound first, so the lock is not held over the send.
+            let received = lock(&queues.video).recv_timeout(Duration::from_millis(2));
+            match received {
                 Ok(Some(packet)) => {
                     got = true;
                     if let Err(err) = sink.forward(&packet, &output_drops) {
@@ -1852,8 +1975,16 @@ fn output_loop(job: OutputJob) {
                 }
             }
         }
+        // Checked again between the two sends, so a target that ignores the deadline
+        // keeps the thread past it by one send at most, inside `OUTPUT_GRACE`, and
+        // what is left is still counted before the stop reads the final drops.
+        if drain.is_some_and(|deadline| Instant::now() >= deadline) {
+            abandoned = true;
+            break;
+        }
         if failed.is_none() && !audio_done {
-            match audio.recv_timeout(Duration::from_millis(2)) {
+            let received = lock(&queues.audio).recv_timeout(Duration::from_millis(2));
+            match received {
                 Ok(Some(packet)) => {
                     got = true;
                     if let Err(err) = sink.forward(&packet, &output_drops) {
@@ -1867,8 +1998,11 @@ fn output_loop(job: OutputJob) {
                 }
             }
         }
-        *lock(&stats.video_subscriber) = video.stats();
-        *lock(&stats.audio_subscriber) = audio.stats();
+        // One lock at a time.
+        let video_stats = lock(&queues.video).stats();
+        let audio_stats = lock(&queues.audio).stats();
+        *lock(&stats.video_subscriber) = video_stats;
+        *lock(&stats.audio_subscriber) = audio_stats;
         if failed.is_none()
             && let Err(err) = sink.poll()
         {
@@ -1891,8 +2025,8 @@ fn output_loop(job: OutputJob) {
         }
     }
     if abandoned {
-        let left = discard(&video, video_done).saturating_add(discard(&audio, audio_done));
-        output_drops.fetch_add(left, Ordering::Relaxed);
+        let (left, held) = queues.abandon(video_done, audio_done, &output_drops);
+        drop(held);
         tracing::warn!(
             packets = left,
             "stop did not drain the output in time; dropped the packets still queued"
@@ -1934,11 +2068,16 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 
 #[cfg(test)]
 mod tests {
-    use super::{catch_up, push_each, video_config};
-    use jstream_media::{FrameSize, MediaTime, Timebase};
-    use jstream_platform::{HardwarePreference, RateControl};
+    use super::{catch_up, output_size, push_each, stream_info, video_config};
+    use crate::runtime::captures::rgba_from_surface;
+    use jstream_media::{
+        Codec, ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane,
+        Timebase, VideoFrame, VideoFrameInfo,
+    };
+    use jstream_platform::{HardwarePreference, RateControl, VideoSurface};
     use jstream_protocol::{
         EncoderProfile, HardwarePreference as ProfileHardware, RateControl as ProfileRate,
+        VideoCodec,
     };
 
     /// Every target is pushed once; exactly the ones that refuse are taken out and
@@ -1997,6 +2136,112 @@ mod tests {
         assert_eq!(config.hardware, HardwarePreference::Prefer);
         profile.video.rate_control = ProfileRate::Unknown;
         assert!(video_config(size, &profile).is_err());
+
+        let mut profile = EncoderProfile::DEFAULT;
+        assert_eq!(
+            video_config(size, &profile).expect("h264").codec,
+            Codec::H264
+        );
+        profile.video.codec = VideoCodec::Unknown;
+        assert!(video_config(size, &profile).is_err());
+        assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());
+    }
+
+    /// #433: the program renders and encodes at the canvas, rounded down to even sizes
+    /// for NV12, whatever the display's size.
+    #[test]
+    fn the_output_size_follows_the_canvas() {
+        let size = |w, h| FrameSize::new(w, h).expect("size");
+        assert_eq!(output_size((1280, 720)), Ok(size(1280, 720)));
+        assert_eq!(output_size((1281, 721)), Ok(size(1280, 720)));
+        assert_eq!(output_size((1, 1)), Ok(size(2, 2)));
+    }
+
+    fn frame(
+        format: PixelFormat,
+        w: u32,
+        h: u32,
+        color: ColorInfo,
+        planes: Vec<Plane>,
+    ) -> VideoSurface {
+        let info = VideoFrameInfo {
+            size: FrameSize::new(w, h).expect("size"),
+            format,
+            color,
+            pts: MediaTime::zero(Timebase::NANOS),
+        };
+        VideoSurface::Cpu(VideoFrame::new(info, planes).expect("frame"))
+    }
+
+    /// An NV12 capture of 2x2 blocks: white, black, red and a mid grey, BT.709 limited
+    /// range (what Windows' display capture delivers), rows padded.
+    fn nv12_blocks() -> VideoSurface {
+        let luma = [235, 235, 16, 16, 63, 63, 126, 126, 0xEE, 0xEE];
+        let chroma = [128, 128, 128, 128, 102, 240, 128, 128, 0xEE, 0xEE];
+        let mut y = Vec::new();
+        y.extend_from_slice(&luma);
+        y.extend_from_slice(&luma);
+        frame(
+            PixelFormat::Nv12,
+            8,
+            2,
+            ColorInfo::default(),
+            vec![Plane::new(y, 10), Plane::new(chroma.to_vec(), 10)],
+        )
+    }
+
+    /// #433: a capture converts at its own size whatever the output's, and NV12 is
+    /// converted with its matrix and range.
+    #[test]
+    fn captures_convert_to_rgba_at_their_own_size() {
+        let mut out = Vec::new();
+        let size = rgba_from_surface(&nv12_blocks(), &mut out).expect("NV12");
+        assert_eq!(size, FrameSize::new(8, 2).expect("size"));
+        assert_eq!(out.len(), 8 * 2 * 4);
+        let px = |x: usize| &out[x * 4..x * 4 + 4];
+        assert_eq!(px(0), [255, 255, 255, 255]);
+        assert_eq!(px(2), [0, 0, 0, 255]);
+        let red = px(4);
+        assert!(red[0] >= 253 && red[1] <= 2 && red[2] <= 2, "red {red:?}");
+        assert_eq!(px(6), [128, 128, 128, 255]);
+        assert_eq!(&out[32..], &out[..32], "both rows share the chroma");
+
+        // Full range: luma as is.
+        let full = ColorInfo {
+            space: ColorSpace::Bt709,
+            range: ColorRange::Full,
+        };
+        let grey = frame(
+            PixelFormat::Nv12,
+            2,
+            2,
+            full,
+            vec![Plane::new(vec![200; 4], 2), Plane::new(vec![128; 2], 2)],
+        );
+        rgba_from_surface(&grey, &mut out).expect("NV12 full");
+        assert_eq!(&out[..4], [200, 200, 200, 255]);
+
+        // BGRA is swizzled; another format is refused and leaves `out` alone.
+        let bgra = frame(
+            PixelFormat::Bgra8,
+            1,
+            1,
+            ColorInfo::default(),
+            vec![Plane::new(vec![1, 2, 3, 4], 4)],
+        );
+        rgba_from_surface(&bgra, &mut out).expect("BGRA");
+        assert_eq!(out, [3, 2, 1, 4]);
+        let i420 = VideoSurface::Cpu(
+            VideoFrame::zeroed(VideoFrameInfo {
+                size: FrameSize::new(2, 2).expect("size"),
+                format: PixelFormat::I420,
+                color: ColorInfo::default(),
+                pts: MediaTime::zero(Timebase::NANOS),
+            })
+            .expect("frame"),
+        );
+        assert_eq!(rgba_from_surface(&i420, &mut out), None);
+        assert_eq!(out, [3, 2, 1, 4]);
     }
 
     fn us(ticks: i64) -> MediaTime {
