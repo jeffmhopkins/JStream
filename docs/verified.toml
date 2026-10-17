@@ -276,7 +276,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:bcf5059924ff7b21", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:a054a6de381d4a36", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:4988f0034f41e2bc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:340acdb9358d89b0", by = "agent:youtube-sign-in", note = "Re-read: noun list now says youtube.* are UI-only with no tool, and youtube.* events are not returned to agents (ADR-0058 §3); R-API-002 carries the matching exception; the jstream-mcp README design says the same; access bullet unchanged" }
@@ -291,10 +291,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:9ce5bf1045fb545e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:4f4dc3f3b2a0055f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:25a6f1dd968818a6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#343: tools.snap changed only in the output.set_target and output.delete descriptions generated from the protocol doc comments; re-read the MCP section (tool grouping, describe_api, snapshot): unchanged and holds. jstream-mcp tests (tool snapshot) pass." }
+stamp = { hash = "b3:4dd7743f3ad9cf67", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -309,16 +309,16 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:ae9d3ba4e1a2def4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: the noun list is the wave's, and the bullet says youtube.* ops get no tool, an output edit with a youtube target is refused and youtube.* events stay out of the feed, as jstream-mcp's README, tools.rs and events.rs do; tools.snap is 221,216 bytes after the merge (the wave's 219,024 plus the youtube output target), so about 220 KB; holds" }
+stamp = { hash = "b3:96054a75d6fe8543", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#packaging"."body"]
 stamp = { hash = "b3:02c79a16bdcca620", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m1 sync: P1's State and Building-the-zip bullets (dist.rs, .cargo/config.toml, after-review dist job) stand beside #298's sandboxed helper (bootstrap exe renamed plus the DLL, same certificate if signed); now that the helper exists, the zip bullet says it and the CEF runtime are not in the zip yet, which matches dist.rs (it ships no helper); holds" }
@@ -1740,10 +1740,10 @@ stamp = { hash = "b3:d5931f8e252cd9f7", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:d3586a31945acf3a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging wave/m1 (#320, #400): body identical to what was verified at 7438ea7 and the round 5 review; the wave's changes are outside it; holds" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:50219b1fac367d89", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:3eb32865933a40b5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:a054a6de381d4a36", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:4988f0034f41e2bc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1770,19 +1770,19 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:ae9d3ba4e1a2def4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool row; youtube.* ops are an unknown op in any tool (no_youtube_tool_and_no_youtube_op); an output edit with a youtube target is refused with invalid_argument at edits.N.kind.target or edits.N.target, in a group tool or batch, while generic targets pass (youtube_targets_are_refused); youtube.* events are dropped before numbering (youtube_events_are_not_kept); describe_api still returns the whole schema; ARCH#mcp says the same; holds" }
+stamp = { hash = "b3:96054a75d6fe8543", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: openWorldHint now true for output, source (browser url loads any web page) and batch (derived from its editing nouns), and the remote-text paragraph says code and description are each at most 512 chars and the whole reason is untrusted, matching tools.rs/server.rs and tools.snap. annotations_follow_what_each_tool_can_do, output_tool_marks_remote_rejection_text, instructions_mark_remote_text_and_tools_carry_annotations pass." }
 
 ["CRATE-jstream-mcp#purpose"."body"]
-stamp = { hash = "b3:18f14fc86f4276c6", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:b45335dabc2bb2bd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-mcp#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
@@ -1800,16 +1800,16 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:de2a4ba7a332d9e0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:1732340432002e33", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:8b6e58c79e283b8f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:ae9d3ba4e1a2def4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:289ce18fad61b884", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 with ADR-0058 §3: no youtube tool and no Server::with_youtube; tools.rs leaves the PEOPLE_ONLY youtube.* ops out of every tool and refuses output.create/output.set_target with a youtube target (refuse_youtube_targets), events.rs drops youtube.* events, tests.rs checks both; purpose says agents get full control except YouTube's account features; the wave's tools are untouched; holds" }
+stamp = { hash = "b3:96054a75d6fe8543", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the Tools bullet now says OPEN_WORLD is output and source (a browser source loads any http/https page) and that batch is open-world too, matching tools.rs; other contents unchanged. annotations_follow_what_each_tool_can_do passes." }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:0ea9b2cb7b6d167a", by = "agent:youtube-sign-in", note = "Re-read for ADR-0058: the ADR-0051 link moved to ADR-0058 (which keeps ADR-0051 §1, and ADR-0041 §2-5 through it); no claim here depends on the user-supplied client or on MCP access to YouTube" }
