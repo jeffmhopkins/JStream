@@ -119,10 +119,10 @@ pub(crate) type DrawFn = Box<
 /// (or a variant) so the pipeline runs without an adapter.
 pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, String> + Send + Sync>;
 
-/// A CPU stand-in for [`gpu_draw`]: it copies the first capture the shot places, when
-/// that is an RGBA8 frame at the output size, or fills black, which is what the GPU path
-/// draws for a collection with no scene. It ignores the scenes. Tests use it to run the
-/// pipeline without a wgpu adapter
+/// A CPU stand-in for [`gpu_draw`]: it copies the first capture the shot places when
+/// that is an RGBA8 frame, scaled nearest-neighbour to the output size, or fills black,
+/// which is what the GPU path draws for a collection with no scene. It ignores the
+/// scenes. Tests use it to run the pipeline without a wgpu adapter
 /// ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|_: Option<&GpuContext>| {

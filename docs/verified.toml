@@ -369,7 +369,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:4f4dc3f3b2a0055f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after the #346 round-1 fixes: the annotations bullet now names output, source and batch as open-world and says the whole output.start reason is untrusted, matching tools.rs, server.rs and the regenerated tools.snap (still about 220 KB). cargo test -p jstream-mcp passes." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:7483c13a69e45823", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: noun list adds capture to wave's list (device, filter, pairing, preview); tools.snap has 23 tools and the mcp tests expect them" }
+stamp = { hash = "b3:6302d9acaaba594d", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: the noun list adds capture beside the wave's device, filter, pairing and preview; tools.snap has 23 tools with capture read-only and the mcp tests expect them. Latest wave merge: tools.snap regenerated for the output tool's record path doc (DOS device names, #505), which this section doesn't restate; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -465,7 +465,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:36ad2b81cb919daf", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: Queries bullet keeps wave's bus delete.plan target (0.24) and lists capture.targets at 0.25 (placeholder); matches the protocol README and query.rs" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:178b725c0556dca1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#503 changes Record.path's doc text, its snapshot, one parity case, the mock's path check and the protocol README record paragraph; ARCH's protocol section names the record kind and versions only, no path rules, so it still holds" }
+stamp = { hash = "b3:c2cac6704f92d70a", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Queries bullet lists bus.list (0.19) and capture.targets (0.25 placeholder) beside the wave's bus delete.plan target (0.24); matches query.rs, the protocol README and the mock. Latest wave merge only changes the record-path text in the protocol README, mock.rs and protocol.snap, which this section doesn't restate; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: protocol adds the bus parameter type/reference and DeleteTarget::Bus at 0.20 (kind.rs, settings.rs, query.rs, command.rs, version.rs, snapshots), and the mock (mock.rs, mock/audio.rs) refuses bus.delete while a setting refers to the bus; jstream-control and jstream-protocol READMEs updated. Edited the Queries bullet (delete.plan of a bus) and the Errors bullet (bus.delete blockers, 0.20); the rest of the section still holds." }
@@ -486,13 +486,13 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:01160ec4345d7b87", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#503 changes Record.path's doc text, its snapshot, one parity case, the mock's path check and the protocol README record paragraph; ARCH's protocol section names the record kind and versions only, no path rules, so it still holds" }
+stamp = { hash = "b3:9c305ab3fe289992", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Queries bullet lists bus.list (0.19) and capture.targets (0.25 placeholder) beside the wave's bus delete.plan target (0.24); matches query.rs, the protocol README and the mock. Latest wave merge only changes the record-path text in the protocol README, mock.rs and protocol.snap, which this section doesn't restate; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:a07a7c34823ac6d5", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: Queries bullet keeps wave's bus delete.plan target (0.24) and lists capture.targets at 0.25 (placeholder); matches the protocol README and query.rs" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:079ac6c2e69e823f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#503 changes Record.path's doc text, its snapshot, one parity case, the mock's path check and the protocol README record paragraph; ARCH's protocol section names the record kind and versions only, no path rules, so it still holds" }
+stamp = { hash = "b3:8d9f05c2343095f3", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Queries bullet lists bus.list (0.19) and capture.targets (0.25 placeholder) beside the wave's bus delete.plan target (0.24); matches query.rs, the protocol README and the mock. Latest wave merge only changes the record-path text in the protocol README, mock.rs and protocol.snap, which this section doesn't restate; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: re-read; a pub const and a doc tweak to bus.create, no wire change, holds" }
@@ -1113,7 +1113,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:36ad2b81cb919daf", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: the mock's capture.targets bullet (one 1920x1080 primary display, MOCK_DISPLAY) still matches mock.rs; ARCH#protocol now lists capture.targets at 0.25; holds" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:178b725c0556dca1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#503: the mock's recording-path check now refuses a DOS device file name with graph's fixed reason, last after the file-name check as in the graph; 'jstream-graph's platform-independent rule and reasons' and the parity paragraph (recording path rejections included) still describe it" }
+stamp = { hash = "b3:c2cac6704f92d70a", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: the mock bullet says capture.targets answers one made-up 1920x1080 primary display with ID MOCK_DISPLAY, matching mock.rs and capture_targets_lists_one_primary_display; latest wave merge: mock.rs's record_path_problem also refuses DOS device names, as the design's path-validation text says it mirrors jstream-graph; holds" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs refuses bus.delete while a setting holds a bus reference, as the graph does; mock.rs adds a_bus_a_source_draws_cannot_be_deleted. Edited the audio checks bullet to list it. ARCH#protocol's new bus delete.plan/blockers text is consistent: the mock still answers delete.plan with internal and its refusals carry no blockers, as stated here." }
@@ -1146,7 +1146,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:36ad2b81cb919daf", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: mock.rs import list now unions C3's capture types with wave's BlendMode and Finite32; lib.rs still exports MOCK_DISPLAY; holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:178b725c0556dca1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "mock.rs gains is_dos_device_name and a DOS-device refusal at the end of record_path_problem (#503); the Mock bullet (in-memory implementation, InProcessControl held to its answers) and the crate contents are unchanged" }
+stamp = { hash = "b3:c2cac6704f92d70a", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: lib.rs re-exports MOCK_DISPLAY and mock.rs answers capture.targets (import list unions the wave's BlendMode and Finite32); latest wave merge adds the mock's DOS-device-name record-path check (#505), which the purpose doesn't detail; holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:2833ff28112a7fd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#362: mock/audio.rs's delete_bus now refuses a bus a source's settings refer to (Reference::Bus), and mock.rs adds the test a_bus_a_source_draws_cannot_be_deleted; the trait, errors, mock, WebSocket client and shared-name contents listed here are unchanged, so the section holds." }
@@ -1170,7 +1170,7 @@ stamp = { hash = "b3:9b9081e2ee4b6396", by = "agent:claude@session_01JxutE3HYspW
 stamp = { hash = "b3:0717ea080685e3f9", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: Snapshots says the encoder size is the canvas (#433) and keeps C3's per-target sharing; Live sources keeps wave's begin_plan/show and sound paragraph and C3's Look::Capture; capture.targets bullet sits beside the YouTube one; matches engine.rs, live.rs, snapshot.rs" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:8ed3b588261081f3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Dep change is protocol Design's record-path paragraph gaining the DOS device name refusal (#503); core's session, envelope and dev-dependency text (parity fixture) does not describe path rules and still holds" }
+stamp = { hash = "b3:28d413447b4ca431", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Snapshots (Shot::captures, sharing by target value, a window source with no window shows nothing), Live sources (Look::Capture before frame), the capture.targets bullet (no lock, action_failed), Outputs (each capture's mailbox read and converted per capture, from runtime/captures.rs and pipeline.rs) and the per-tick allocation list (copied capture keys) match the code. wave/m1-2 merges: encoder size is the canvas (#433), wave's begin_plan/show and sound paragraph kept, YouTube bullet beside capture.targets; latest merge only touches protocol#design's record-path text (DOS device names), which this section doesn't restate" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:503576cd8341ac38", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: Snapshots says the encoder size is the canvas (#433) and keeps C3's per-target sharing; Live sources keeps wave's begin_plan/show and sound paragraph and C3's Look::Capture; capture.targets bullet sits beside the YouTube one; matches engine.rs, live.rs, snapshot.rs" }
@@ -1239,7 +1239,7 @@ stamp = { hash = "b3:8078f1ceecf5dc1b", by = "agent:claude@session_01JxutE3HYspW
 stamp = { hash = "b3:34786b062fea845c", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: Snapshots says the encoder size is the canvas (#433) and keeps C3's per-target sharing; Live sources keeps wave's begin_plan/show and sound paragraph and C3's Look::Capture; capture.targets bullet sits beside the YouTube one; matches engine.rs, live.rs, snapshot.rs" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:39d552c3ab220554", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: Snapshots says the encoder size is the canvas (#433) and keeps C3's per-target sharing; Live sources keeps wave's begin_plan/show and sound paragraph and C3's Look::Capture; capture.targets bullet sits beside the YouTube one; matches engine.rs, live.rs, snapshot.rs" }
+stamp = { hash = "b3:4a4aa1b0ca7f304f", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Snapshots (Shot::captures, sharing by target value, a window source with no window shows nothing), Live sources (Look::Capture before frame), the capture.targets bullet (no lock, action_failed), Outputs (each capture's mailbox read and converted per capture, from runtime/captures.rs and pipeline.rs) and the per-tick allocation list (copied capture keys) match the code. wave/m1-2 merges: encoder size is the canvas (#433), wave's begin_plan/show and sound paragraph kept, YouTube bullet beside capture.targets; latest merge only touches protocol#design's record-path text (DOS device names), which this section doesn't restate" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1359,7 +1359,7 @@ stamp = { hash = "b3:8078f1ceecf5dc1b", by = "agent:claude@session_01JxutE3HYspW
 stamp = { hash = "b3:34786b062fea845c", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: Runtime bullet says each display and window the program shows is captured; test list now says the output follows the canvas and captures convert at their own size incl. NV12 (#433 ported into runtime/captures.rs rgba_from_surface); preview/mod.rs composes with NoCaptures; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:39d552c3ab220554", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: Runtime bullet says each display and window the program shows is captured; test list now says the output follows the canvas and captures convert at their own size incl. NV12 (#433 ported into runtime/captures.rs rgba_from_surface); preview/mod.rs composes with NoCaptures; holds" }
+stamp = { hash = "b3:4a4aa1b0ca7f304f", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: Engine::capture_targets (engine.rs), Look and Captures in snapshot.rs and live.rs (Look::Capture), RenderCaptures with its jstream-capture thread and 2 s retry (runtime/captures.rs), new tests in tests/cpu_pipeline/captures.rs, display/window cases in tests/sources.rs, the WGC capture.targets test in windows_gpu.rs; tests.rs's stop-during-start test now holds in GpuInterop::open_device. wave/m1-2 merges: runtime bullet and test list now say the output follows the canvas and captures convert at their own size incl. NV12 (#433), vcam test is main's (#457), preview/mod.rs composes with NoCaptures; pipeline.rs doc wording (N10). Purpose text holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1440,7 +1440,7 @@ stamp = { hash = "b3:8078f1ceecf5dc1b", by = "agent:claude@session_01JxutE3HYspW
 stamp = { hash = "b3:34786b062fea845c", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: launch_program sizes the output from the canvas (output_size) and open_capture no longer lists targets; each capture keeps its own size and converts RGBA/BGRA/NV12 in captures.rs; the no-scene fallback scales to the output; text says so" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:39d552c3ab220554", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: launch_program sizes the output from the canvas (output_size) and open_capture no longer lists targets; each capture keeps its own size and converts RGBA/BGRA/NV12 in captures.rs; the no-scene fallback scales to the output; text says so" }
+stamp = { hash = "b3:4a4aa1b0ca7f304f", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: runtime/captures.rs is new: RenderCaptures compares the shot's captures each tick, starts and stops streams on the jstream-capture thread over channels the render thread never waits on, keeps a failed capture's last frame and retries 2 s later on the media clock (start failure or DeviceLost), tries the GPU path first and warns only when the CPU path then starts, and warns once per failing streak; mod.rs re-exports for tests. wave/m1-2 merges: #433 ported, so launch_program sizes the output from the canvas, open_capture lists no targets, and each capture keeps its own size and converts RGBA/BGRA/NV12 in captures.rs; cpu_draw's doc now says it scales (review N10). The Captures and output-size text matches" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1791,7 +1791,7 @@ stamp = { hash = "b3:6c1b99c4b8c63792" }
 stamp = { hash = "b3:ba7c5f041c14ba26", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the Outputs bullet to list the DOS device file-name refusal (#503: NUL, CON, PRN, AUX, COM0-9/COM1-3 superscripts, LPT likewise, CONIN$/CONOUT$, any case, any extension), matching target.rs's new is_dos_device_name mirror of check_asset_path's rule; dep on protocol Design re-read, consistent" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:8ed3b588261081f3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the Outputs bullet to list the DOS device file-name refusal (#503: NUL, CON, PRN, AUX, COM0-9/COM1-3 superscripts, LPT likewise, CONIN$/CONOUT$, any case, any extension), matching target.rs's new is_dos_device_name mirror of check_asset_path's rule; dep on protocol Design re-read, consistent" }
+stamp = { hash = "b3:28d413447b4ca431", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: stale through protocol#design (capture.targets, added in the 0.25 placeholder) and ARCH#data-model (display/window built); latest wave merge: protocol#design's record path text adds DOS device names, which graph's own README now describes (#505); holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2337,7 +2337,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:8ed3b588261081f3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the record output paragraph: path must not end in a DOS device name, by the asset path last-component rule (#503); protocol.snap's Record.path description and the parity fixture's new nul.mp4 rejection match it; no wire type or version change" }
+stamp = { hash = "b3:28d413447b4ca431", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: capture.targets entry (kind, target, name, size, primary omitted when false, no rev, action_failed, Added in 0.25 placeholder) matches query.rs and fixtures; envelope example shows minor 25; examples.snap and protocol.snap regenerated. Latest wave merge: record path text and protocol.snap's OutputKind doc add DOS device names (#505); body matches output.rs" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2358,7 +2358,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:a07a7c34823ac6d5", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: capture.targets entry now says Added in 0.25 and sits before device.list; envelope example shows minor 25; examples.snap and protocol.snap regenerated; matches query.rs and fixtures.rs" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:079ac6c2e69e823f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the record output paragraph: path must not end in a DOS device name, by the asset path last-component rule (#503); protocol.snap's Record.path description and the parity fixture's new nul.mp4 rejection match it; no wire type or version change" }
+stamp = { hash = "b3:8d9f05c2343095f3", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: capture.targets entry (kind, target, name, size, primary omitted when false, no rev, action_failed, Added in 0.25 placeholder) matches query.rs and fixtures; envelope example shows minor 25; examples.snap and protocol.snap regenerated. Latest wave merge: record path text and protocol.snap's OutputKind doc add DOS device names (#505); body matches output.rs" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:549b61736a9ab391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: named MAX_BUSES in Audio; schema diff is only bus.create's description; rest re-read" }
@@ -3171,7 +3171,7 @@ stamp = { hash = "b3:76adf5189c309802", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:49ac7db53389c207", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "wave/m1-2 merge: registry builds display and window beside wave's browser, chat, media, waveform and spectrum; webcam is the only described kind; source.rs keeps capture() with wave's painter/gpu_frame/audio; README bullets say so" }
+stamp = { hash = "b3:d13bce3dd43d8222", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: capture.rs adds the display and window kinds with a target setting and CaptureSpec, error.rs adds SourceError::Captured, source.rs adds Source::capture, tests/sources.rs covers both kinds and the setting; wave/m1-2 merge: registry.rs builds them beside browser, chat, media, waveform and spectrum, describe.rs leaves webcam the only described kind, lib.rs and the README list the union; capture() sentence rewrapped. Text matches" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:9c0564dcd6f7ef05", by = "agent:youtube-sign-in", note = "Re-read for a dependency change that only swapped the ADR-0051 link for ADR-0058 (and, for protocol, marked YouTube UI-only); this section makes no YouTube or OAuth claim that changes" }
