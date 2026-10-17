@@ -26,8 +26,8 @@ wrapped here behind safe APIs, with RAII types for what the system hands back
 Apple's frameworks are called through the objc2 framework crates, at the versions wgpu's
 Metal backend already uses (`objc2-foundation`, `-core-foundation`, `-core-media`,
 `-core-video`, `-video-toolbox`, `-audio-toolbox` and `-core-audio-types` so far), and
-Mach time through `mach2`. They carry their generated bindings and link frameworks with `#[link]`, so the crate type-checks from any host with
-`cargo clippy -p jstream-platform-macos --target aarch64-apple-darwin`; linking and the
+Mach time through `mach2`. They carry their generated bindings and link frameworks with
+`#[link]`, so the crate type-checks from any host with `cargo clippy -p jstream-platform-macos --target aarch64-apple-darwin`; linking and the
 macOS tests need a Mac. Everything that calls macOS is under `cfg(target_os = "macos")`.
 On other targets the crate builds just its platform-independent helpers, which are tested
 on every platform.
@@ -102,6 +102,7 @@ ADR.
 
 Tests run on every platform where they can. The macOS ones (the clock, reading the
 release, encoding with VideoToolbox, which falls back to Apple's software encoder on a
-Mac without a hardware one, and encoding AAC with AudioToolbox) need no permission, so they run in the `macos` CI job. The
+Mac without a hardware one, and encoding AAC with AudioToolbox) need no permission, so
+they run in the `macos` CI job. The
 `hw-tests` feature is for tests that need the Screen Recording, Camera, Microphone or
 system audio recording permission, or the hardware encoders, which run by hand on a Mac.

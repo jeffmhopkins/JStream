@@ -22,6 +22,7 @@ workspace = true
 fake = []
 
 [dependencies]
+crossbeam-utils.workspace = true
 jstream-media.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true

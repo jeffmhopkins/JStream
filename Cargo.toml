@@ -39,6 +39,10 @@ criterion = { version = "~0.7", default-features = false, features = ["cargo_ben
 # Lock-free bounded queues for the audio mixer's commands and the collector (R-RT-003).
 # A send on a bounded channel does not allocate. `std` is the only feature.
 crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
+# The capture backends' latest-frame mailbox (`jstream_platform::mailbox`, ARCH › Threads):
+# `AtomicCell`'s safe single-word swap, so the mailbox needs no `unsafe` in
+# `jstream-platform`. Already in the tree through `crossbeam-channel`; no dependencies.
+crossbeam-utils = { version = "0.8", default-features = false }
 # Deflate and CRC-32 for the portable Windows zip (`cargo xtask dist`, ADR-0020). Already in
 # the tree through `png`, with the same pure-Rust backend (`miniz_oxide`).
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

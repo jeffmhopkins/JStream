@@ -3000,6 +3000,7 @@ dependencies = [
 name = "jstream-platform"
 version = "0.0.0"
 dependencies = [
+ "crossbeam-utils",
  "jstream-media",
  "thiserror 2.0.21",
  "wgpu",

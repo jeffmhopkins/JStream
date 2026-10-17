@@ -24,8 +24,6 @@ mod codec;
 mod dbus;
 #[cfg(target_os = "linux")]
 mod dl;
-#[cfg(target_os = "linux")]
-mod mailbox;
 mod pipewire;
 mod portal;
 mod session;
