@@ -209,6 +209,11 @@ impl Compositor {
         self.gpu.queue.submit([encoder.finish()]);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
+        // wgpu validates the commands as they are recorded and submitted, so an error in
+        // this frame has been raised by now; one from an earlier call fails this frame.
+        if let Some(detail) = self.take_error() {
+            return Err(RenderError::Uncaptured { detail });
+        }
 
         let output = targets.output.clone();
         let pixels = match readback_buffer {
@@ -399,6 +404,34 @@ impl Compositor {
         self.gpu.context.as_ref()
     }
 
+    /// Why the device was lost, from wgpu's device-lost callback: `destroyed`, or `lost by
+    /// the driver` (a reset after a hang, Windows' TDR, a removed GPU) with the driver's
+    /// message. `None` while the device is usable. wgpu reports a loss when the device
+    /// is polled, so this polls it once, without waiting.
+    ///
+    /// Once it is lost, calls on this compositor fail or draw nothing. Nothing comes
+    /// back: open a new compositor ([`Self::open`]) and upload the images again.
+    pub fn lost(&self) -> Option<String> {
+        if self.gpu.faults.lost.get().is_none() {
+            let _ = self.gpu.device.poll(wgpu::PollType::Poll);
+        }
+        self.gpu.faults.lost.get().cloned()
+    }
+
+    /// The first uncaptured wgpu error on this compositor's device since the last call:
+    /// one no call returned, such as a validation error in a submitted command. wgpu's
+    /// default would panic on it. The compositor installs its own handler instead, so a
+    /// lost device's invalid resources fail the frame rather than the thread; an error
+    /// before a loss is also logged once, as `uncaptured wgpu error`.
+    pub fn take_error(&self) -> Option<String> {
+        self.gpu
+            .faults
+            .error
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+    }
+
     /// A one-line description of the adapter, for logs and test output.
     pub fn adapter_description(&self) -> String {
         self.gpu.description()
@@ -415,6 +448,7 @@ impl Compositor {
             max_texture_dimension_2d: self.gpu.max_texture_dimension_2d,
             max_buffer_size: self.gpu.max_buffer_size,
             context: self.gpu.context.clone(),
+            faults: Arc::clone(&self.gpu.faults),
         })
     }
 
