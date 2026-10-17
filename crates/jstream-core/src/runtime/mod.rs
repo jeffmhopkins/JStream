@@ -1,5 +1,5 @@
-//! The media pipeline behind `output.start`: capture, one-scene composite, encode,
-//! mix, and publish or record. Each stage runs on the thread
+//! The media pipeline behind `output.start`: capture, a composite of each video mix
+//! the outputs show, encode, the audio mix, and publish or record. Each stage runs on the thread
 //! [ARCH › Threads](../../../docs/ARCHITECTURE.md#threading) assigns.
 //!
 //! The control thread only starts and stops the pipeline. It does not hold the
@@ -22,8 +22,9 @@ pub use pipeline::OutputStats;
 #[cfg(test)]
 pub(crate) use pipeline::{DrawFn, STOP_DRAIN, gpu_draw, open_capture};
 pub(crate) use pipeline::{
-    EncodeKey, Encoders, FRAME_DEN, FRAME_NUM, Gate, MediaHost, OpenDraw, Pending, PipelineEvent,
-    Running, cpu_draw, launch, launch_program, launch_vcam, parts_from,
+    EncodeKey, Encoders, FRAME_DEN, FRAME_NUM, Gate, MediaHost, MixKey, OpenDraw, OutputEncode,
+    Pending, PipelineEvent, Release, Running, cpu_draw, launch, launch_program, launch_vcam,
+    parts_from,
 };
 #[cfg(test)]
 pub(crate) use publish::tests::serve as serve_rtmp;

@@ -144,6 +144,25 @@ pub(crate) fn join(lines: &[&str], like: &str) -> String {
     out
 }
 
+/// `doc`'s text with the inside of its `name` block replaced by `body`, and the 1-based
+/// line of the begin marker. Used by the generators that own one block in a hand-written
+/// doc (the README's progress table, the UI features summary).
+pub(crate) fn with_block(doc: &Doc, name: &str, body: &str) -> Result<(String, usize), String> {
+    let lines: Vec<&str> = doc.text.lines().collect();
+    let open = outside_fences(&lines);
+    let (b, e) = (begin(name), end(name));
+    let start = (0..lines.len())
+        .find(|&k| open[k] && lines[k].trim_end() == b)
+        .ok_or_else(|| format!("no `{b}` line to generate the `{name}` block into"))?;
+    let stop = (start + 1..lines.len())
+        .find(|&k| lines[k].trim_end() == e)
+        .ok_or_else(|| format!("the `{name}` block is not closed by `{e}`"))?;
+    let mut out: Vec<&str> = lines[..=start].to_vec();
+    out.extend(body.lines());
+    out.extend(&lines[stop..]);
+    Ok((join(&out, &doc.text), start + 1))
+}
+
 /// `text` without its well-formed `adr-status` blocks: what R-DOC-009 compares in an
 /// accepted ADR (ADR-0038). Used by the governance check.
 pub(crate) fn strip_status(text: &str) -> String {

@@ -77,6 +77,10 @@ opaque_id!(
     EncoderProfileId
 );
 opaque_id!(
+    /// A video mix in the collection: what an output's video shows.
+    VideoMixId
+);
+opaque_id!(
     /// A folder of the scene list (ADR-0024 §3). Folders organise only.
     FolderId
 );
@@ -88,6 +92,10 @@ opaque_id!(
     /// A paired device: one browser or other client admitted with its own device token
     /// (ADR-0044). Assigned by the server when the device pairs.
     DeviceId
+);
+opaque_id!(
+    /// A transition preset in the collection (ADR-0029).
+    TransitionPresetId
 );
 opaque_id!(
     /// An audio bus in the collection (ADR-0028). [`BusId::master`] names the master

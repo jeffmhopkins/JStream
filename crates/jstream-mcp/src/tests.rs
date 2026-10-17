@@ -241,7 +241,9 @@ fn handshake_list_and_call_round_trip() {
             "source",
             "state",
             "studio",
-            "video"
+            "transition",
+            "video",
+            "video_mix"
         ]
     );
     assert!(list.get("ttlMs").is_none() && list.get("resultType").is_none());
@@ -297,9 +299,12 @@ fn handshake_list_and_call_round_trip() {
         json!({"type": "state.get", "rev": 2,
                "canvas": {"width": 1920, "height": 1080}, "sources": [cam],
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
-               "outputs": [], "encoders": [],
+               "outputs": [], "encoders": [], "video_mixes": [],
                "buses": [{"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}],
-               "sends": [], "hotkeys": []})
+               "sends": [], "hotkeys": [],
+               "transitions": {"presets": [{"preset_id": "cut", "name": "Cut", "kind": "cut",
+                                            "duration_ms": 300, "easing": "ease_in_out"}],
+                               "default": "cut"}})
     );
     let started = f.call_tool(
         "output",
@@ -760,7 +765,7 @@ fn events_report_every_change_with_a_cursor() {
             {"seq": 1, "event": {"type": "state.changed", "rev": 1,
                                  "client_id": "mock_1", "request_id": "req_1"}},
             {"seq": 2, "event": {"type": "studio.changed", "program_scene": "s",
-                                 "client_id": "mock_1", "request_id": "req_1"}},
+                                 "preview_scene": "s", "client_id": "mock_1", "request_id": "req_1"}},
             {"seq": 3, "event": {"type": "output.state_changed",
                                  "output_id": "out_rec", "state": "starting"}},
             {"seq": 4, "event": {"type": "output.state_changed",

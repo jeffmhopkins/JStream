@@ -146,7 +146,7 @@ fn undo_and_redo_move_one_step_each_way() {
 
 fn program(control: &dyn Control) -> Option<SceneId> {
     match query(control, Query::StudioGet).expect("studio.get") {
-        QueryResult::StudioGet { program_scene } => program_scene,
+        QueryResult::StudioGet { program_scene, .. } => program_scene,
         other => panic!("not a studio result: {other:?}"),
     }
 }
@@ -198,6 +198,8 @@ fn program_follows_undo_and_redo() {
             },
             Event::StudioChanged {
                 program_scene: None,
+                preview_scene: None,
+                transition: None,
                 client_id: client_id.clone(),
                 request_id: Some(undone.id),
             },
@@ -212,6 +214,8 @@ fn program_follows_undo_and_redo() {
         drain(&mut events)[1..],
         [Event::StudioChanged {
             program_scene: Some(SceneId::new("a")),
+            preview_scene: Some(SceneId::new("a")),
+            transition: None,
             client_id,
             request_id: Some(redone.id),
         }]

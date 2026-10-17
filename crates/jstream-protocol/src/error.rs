@@ -174,10 +174,14 @@ pub enum EntityKind {
     Output,
     /// An encoder profile.
     Encoder,
+    /// A video mix.
+    VideoMix,
     /// A filter in a source's chain (0.22, ADR-0026). Its ID is unique within the
     /// source. Only an error answering a filter edit names it, so a client older than
     /// 0.22, which sends none, never reads it.
     Filter,
+    /// A transition preset.
+    Transition,
     /// A folder of the scene list.
     Folder,
     /// A label.
@@ -199,7 +203,9 @@ impl fmt::Display for EntityKind {
             EntityKind::Source => "source",
             EntityKind::Output => "output",
             EntityKind::Encoder => "encoder",
+            EntityKind::VideoMix => "video_mix",
             EntityKind::Filter => "filter",
+            EntityKind::Transition => "transition",
             EntityKind::Folder => "folder",
             EntityKind::Label => "label",
             EntityKind::Bus => "bus",
@@ -220,14 +226,16 @@ impl fmt::Display for EntityKind {
 pub struct Blocker {
     /// What kind of object refers to the target: an `item` that places a source, a
     /// `source` that shows a scene, whose settings refer to the target or that carries
-    /// a label, or a `scene` or `folder` that sits in a folder.
+    /// a label, a `video_mix` that shows a scene, or a `scene` or `folder` that sits in a
+    /// folder.
     pub entity: EntityKind,
     /// That object's ID.
     pub id: String,
     /// The field of that object that refers to the target, as a dotted path into its
     /// query form: `source_id` for an item, `kind.scene_id` for a `scene` source,
-    /// `settings.<param>` for a settings reference, `labels` for a source carrying a
-    /// label, `folder` for a scene in a folder, and `parent` for a folder in one.
+    /// `settings.<param>` for a settings reference, `mix.input.scene_id` for a mix,
+    /// `labels` for a source carrying a label, `folder` for a scene in a folder, and
+    /// `parent` for a folder in one.
     pub field: String,
 }
 

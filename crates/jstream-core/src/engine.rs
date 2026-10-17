@@ -18,27 +18,31 @@ use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
+use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::runtime::{
-    Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
-    Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program, launch_vcam,
-    parts_from,
+    Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
+    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, VcamOut,
+    launch, launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
-use crate::studio::Studio;
+use crate::studio::{self, Studio};
+use crate::transition;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
+use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
-use jstream_media::FrameSize;
+use jstream_media::{FrameSize, MediaTime};
 use jstream_platform::{
-    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, Secret, StreamKeyStore,
+    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, Secret, StreamKeyStore,
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
-    EncoderProfile, EncoderSessionInfo, EntityKind, Event, GestureId, HistoryCall,
+    EncoderProfile, EncoderSessionInfo, EntityKind, Event, FilterChain, GestureId, HistoryCall,
     HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PixelSize,
     PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    RtmpTarget, SecretString, SourceId, YoutubeAuth,
+    RtmpTarget, SceneId, SecretString, SourceId, TransitionPresetId, TransitionStarted,
+    YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -186,6 +190,20 @@ impl Engine {
     pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
         *lock(&self.shared.keys) = Some(store);
         self
+    }
+
+    /// Scans the CLAP search directories with `hosts` (ADR-0035) and adds each audio
+    /// effect found to `kind.list` and `kind.describe` as an audio-filter kind,
+    /// `clap/<plugin id>`, with the plugin's parameters as its settings. A kind an
+    /// earlier scan found stays. Each plugin file is scanned in its own host process, so
+    /// this can take seconds: call it from a worker thread. The engine's locks are held
+    /// only to add the kinds, after the scan.
+    pub fn scan_clap_plugins(&self, hosts: &dyn PluginHosts) -> ClapScan {
+        let scan = clap_kinds::scan(hosts);
+        let mut state = lock(&self.shared.state);
+        state.graph = std::mem::take(&mut state.graph)
+            .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
+        scan
     }
 
     /// Gives the engine YouTube (ADR-0058): a Google OAuth client, the HTTPS transport
@@ -504,6 +522,36 @@ impl Engine {
         };
         let shared = Arc::clone(&self.shared);
         Box::new(move || lock(&shared.state).routing.detach(generation))
+    }
+
+    /// Adds an output tap for `output_id` to the program's mixer, running the output's
+    /// audio chain, and returns its id and the closure that removes it once the output
+    /// has stopped. The closure holds the collection, not the [`MediaHost`].
+    ///
+    /// # Errors
+    /// When no program mixer runs, or the mixer refuses the tap.
+    pub(crate) fn add_output_tap(
+        &self,
+        output_id: &OutputId,
+    ) -> Result<(OutputTapId, Release), String> {
+        let tap = {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state
+                .routing
+                .add_output_tap(output_id, state.graph.state())?
+        };
+        let id = tap.id();
+        let shared = Arc::clone(&self.shared);
+        let output_id = output_id.clone();
+        Ok((
+            id,
+            Box::new(move || {
+                lock(&shared.state)
+                    .routing
+                    .remove_output_tap(&output_id, id);
+            }),
+        ))
     }
 
     /// Adds kinds the built-in registry doesn't have: the parity fixture's `mic`, an
@@ -830,7 +878,7 @@ impl Engine {
         if let Some((sink, pending)) = audit {
             sink.record(pending.finish(client_id, request_id, &result));
         }
-        Executed::Ready(result)
+        Executed::Ready(Box::new(result))
     }
 
     /// The YouTube actions and queries, or `None` for any other call. They run with no
@@ -1204,7 +1252,7 @@ impl Engine {
             None => None,
         };
         let mut wake = Vec::new();
-        let (parts, publish, generation, program, key) = loop {
+        let (parts, publish, generation, program, key, own_audio) = loop {
             // A failed pipeline may still be joining. When it held the program stage,
             // wait that out before opening devices, and do not hold the collection
             // lock across the wait.
@@ -1242,6 +1290,7 @@ impl Engine {
                 });
             }
             let key = encode_key(&state.graph, &output_id);
+            let own_audio = has_audio_chain(&state.graph, &output_id);
             let publish = match (
                 own_target(&state.graph, &output_id),
                 youtube_broadcast(&state.graph, &output_id),
@@ -1323,7 +1372,7 @@ impl Engine {
             // until this start has its own hold, or gives up. Taken last, so no early
             // return drops it under the locks.
             let program = gate.program();
-            break (parts, publish, generation, program, key);
+            break (parts, publish, generation, program, key, own_audio);
         };
         wake_all(std::mem::take(&mut wake));
 
@@ -1349,7 +1398,7 @@ impl Engine {
                 Opened::Muxed(destination) => launch(
                     self,
                     program,
-                    key,
+                    OutputEncode { key, own_audio },
                     destination,
                     output_id.clone(),
                     generation,
@@ -1612,15 +1661,16 @@ impl Engine {
     /// snapshot thread renders them after that lock is released, so the image shows
     /// open gestures as the output does.
     fn video_snapshot(&self) -> SnapshotReply {
-        let (snapshot, live, rev) = {
+        let (snapshot, live, rev, at) = {
             let state = lock(&self.shared.state);
             (
                 state.render.load(),
                 state.render.load_live(),
                 state.graph.rev(),
+                state.live.now(),
             )
         };
-        self.shared.snapshots.request(snapshot, live, rev)
+        self.shared.snapshots.request(snapshot, live, rev, at)
     }
 
     /// The render hub the pipeline's render thread reads, for tests.
@@ -1665,8 +1715,8 @@ impl Engine {
         state.live.set_media(media, state.graph.state());
     }
 
-    /// Re-plans the program mix now, as the live sources' thread does when a frame is
-    /// due, for tests that move time by hand.
+    /// Re-plans the program mix and each video mix's scene now, as the live sources'
+    /// thread does when a frame is due, for tests that move time by hand.
     #[cfg(test)]
     pub(crate) fn replan(&self) {
         lock(&self.shared.state).publish_render();
@@ -1675,7 +1725,8 @@ impl Engine {
 
 /// What [`Engine::execute`] produced: an answer, or a snapshot still being drawn.
 pub(crate) enum Executed {
-    Ready(Result<CallResult, ProtocolError>),
+    /// Boxed: a `state.get` result is large, and the snapshot case is small.
+    Ready(Box<Result<CallResult, ProtocolError>>),
     /// `video.snapshot`, answered by the snapshot thread, and the call's `command` span.
     Pending(SnapshotReply, tracing::Span),
 }
@@ -1693,18 +1744,42 @@ impl Drop for SettleOnDrop<'_> {
     }
 }
 
-/// Which encoder sessions `output_id` shares: its profile and that profile's encoding
-/// now, or the engine's default for an output with none or one the host declared.
+/// Which encoder sessions `output_id` shares: the video mix it shows with that mix's
+/// size and rate now, and its profile with that profile's encoding now. An output with
+/// no mix, or one the host declared, gets the program at the program stage's size and base
+/// rate; one with no profile the engine's default.
 fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
     let state = graph.state();
-    let profile_id = state
-        .output(output_id)
-        .and_then(|output| output.encoder_profile())
-        .cloned();
+    let output = state.output(output_id);
+    let profile_id = output.and_then(|output| output.encoder_profile()).cloned();
     let profile = state
         .encoding_of(output_id)
         .unwrap_or(EncoderProfile::DEFAULT);
-    (profile_id, profile)
+    let mix = output
+        .and_then(|output| output.video_mix())
+        .and_then(|id| state.video_mix(id))
+        .map_or(MixKey::PROGRAM, |mix| {
+            let spec = mix.mix();
+            MixKey {
+                mix: Some(mix.id().clone()),
+                // The graph keeps every resolution in range, so this is never `None`.
+                size: jstream_media::FrameSize::new(spec.resolution.width, spec.resolution.height)
+                    .ok(),
+                divisor: spec.fps_divisor,
+            }
+        });
+    (mix, profile_id, profile)
+}
+
+/// Whether `output_id` starts with its own audio encode: it has an audio chain
+/// (ADR-0027), even one whose filters are all off, so switching one on later changes
+/// nothing but the chain. A chain added to a running output takes effect at its next
+/// start.
+fn has_audio_chain(graph: &Graph, output_id: &OutputId) -> bool {
+    graph
+        .state()
+        .output(output_id)
+        .is_some_and(|output| !output.filters().chain(FilterChain::Audio).is_empty())
 }
 
 /// Where an output the engine sends to itself goes, rather than to a publish target
@@ -2206,7 +2281,9 @@ impl State {
     ///
     /// A batch whose idempotency key this client already used is not applied again: it
     /// gets the result of the first call with that key, and emits nothing. That check
-    /// comes first, so a retry succeeds even after `rev` moved on.
+    /// comes first, so a retry succeeds even after `rev` moved on. An `ends_gesture` the
+    /// client has no open gesture for is refused next, as the mock does, and then a
+    /// `filter.add` of a scanned CLAP kind, since nothing runs CLAP filters yet.
     fn batch(
         &mut self,
         client_id: &ClientId,
@@ -2229,6 +2306,7 @@ impl State {
                 format!("the client has no open gesture `{gesture_id}`"),
             ));
         }
+        clap_kinds::refuse_filters(&batch.edits)?;
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
             &batch.edits,
@@ -2419,7 +2497,7 @@ impl State {
             wake,
         );
         if moved {
-            self.emit_studio(client_id, request_id, wake);
+            self.emit_studio(client_id, request_id, None, wake);
         }
     }
 
@@ -2452,13 +2530,16 @@ impl State {
                 self.routing.reset_loudness();
                 return Ok(CallResult::action());
             }
-            Action::SceneSwitch { scene_id } => {
-                if self.studio.switch(self.graph.state(), &scene_id)? {
-                    // The program mix shows the new scene from the next frame: a cut.
-                    // Its `when_shown` audio follows, ramping over one mixer block.
-                    self.publish_render();
-                    self.route_audio();
-                    self.emit_studio(client_id, request_id, wake);
+            Action::SceneSwitch {
+                scene_id,
+                preset_id,
+            } => {
+                self.switch(client_id, request_id, scene_id, preset_id.as_ref(), wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::StudioSetPreview { scene_id } => {
+                if self.studio.set_preview(self.graph.state(), &scene_id)? {
+                    self.emit_studio(client_id, request_id, None, wake);
                 }
                 return Ok(CallResult::action());
             }
@@ -2500,6 +2581,7 @@ impl State {
                 },
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
+                    preview_scene: self.studio.preview().cloned(),
                 },
                 Query::DeviceList => return Err(served_by_the_server(query.name())),
                 other => return Err(not_implemented(other.name())),
@@ -2508,11 +2590,87 @@ impl State {
         Ok(CallResult::Query { result })
     }
 
-    /// `studio.changed` with the scene now on program, caused by `request_id`.
-    fn emit_studio(&mut self, client_id: &ClientId, request_id: &RequestId, wake: &mut Vec<Waker>) {
+    /// `scene.switch`: puts `scene_id` on program with the transition its preset runs
+    /// (ADR-0029). A switch while a transition runs retargets it: the new one starts from
+    /// what is on screen now. Switching to the scene already on program (or already
+    /// transitioning onto it) changes nothing and emits nothing.
+    fn switch(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        scene_id: SceneId,
+        named: Option<&TransitionPresetId>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        studio::exists(self.graph.state(), &scene_id)?;
+        let from_scene = self.studio.program().cloned();
+        let (preset_id, run) =
+            transition::resolve(&self.graph, from_scene.as_ref(), &scene_id, named)?;
+        if from_scene.as_ref() == Some(&scene_id) {
+            return Ok(());
+        }
+        let now = self.live.now();
+        let running = match (run, from_scene) {
+            (Some(run), Some(from_scene)) => {
+                let from =
+                    match self.studio.running() {
+                        Some(running) => {
+                            let Self {
+                                graph,
+                                frames,
+                                frame_versions,
+                                live,
+                                ..
+                            } = self;
+                            let visuals =
+                                snapshot::on_screen(graph, running, now, &mut |id| match frames
+                                    .get(id)
+                                {
+                                    Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                                    None => live.look(id, now, frame_versions),
+                                });
+                            transition::From::OnScreen(visuals.into())
+                        }
+                        None => transition::From::Scene(from_scene),
+                    };
+                Some(transition::Running {
+                    from,
+                    to: scene_id.clone(),
+                    start: now,
+                    run,
+                })
+            }
+            // Nothing on program yet: there is nothing to transition from.
+            _ => None,
+        };
+        self.studio.switch(scene_id, running);
+        let end_ms = self.publish_render();
+        // The new scene's `when_shown` audio follows at the switch, ramping over one
+        // mixer block; it doesn't follow the transition's timing yet (D29).
+        self.route_audio();
+        self.emit_studio(
+            client_id,
+            request_id,
+            Some(transition::started(preset_id, end_ms)),
+            wake,
+        );
+        Ok(())
+    }
+
+    /// `studio.changed` with the scenes now on program and preview, caused by
+    /// `request_id`, and the transition a switch started.
+    fn emit_studio(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        transition: Option<TransitionStarted>,
+        wake: &mut Vec<Waker>,
+    ) {
         self.subscribers.emit(
             &Event::StudioChanged {
                 program_scene: self.studio.program().cloned(),
+                preview_scene: self.studio.preview().cloned(),
+                transition,
                 client_id: client_id.clone(),
                 request_id: Some(request_id.clone()),
             },
@@ -2520,11 +2678,14 @@ impl State {
         );
     }
 
-    /// Re-plans the program mix at the current time and publishes it if it draws
-    /// something new. A source's stored frame wins over its live one. The live sources
-    /// are told when the plan's next frame change is due, to re-plan then. The mix shows
-    /// the program scene (ADR-0030). Returns the render generation current afterwards.
-    fn publish_render(&mut self) -> u64 {
+    /// Re-plans the program mix and the scene each video mix shows at the current time,
+    /// and publishes them if they draw something new. A source's stored frame wins over
+    /// its live one. The live sources are told when the plan's next frame change is due,
+    /// to re-plan then. The program mix shows the program scene (ADR-0030), or the
+    /// transition running toward it (ADR-0029), whose length in milliseconds it returns;
+    /// a transition that has ended is let go. The shot lists the displays and windows the
+    /// program and every mix capture.
+    fn publish_render(&mut self) -> Option<f32> {
         let Self {
             graph,
             frames,
@@ -2537,18 +2698,25 @@ impl State {
         } = self;
         let now = live.now();
         live.begin_plan();
-        let (shot, wake) =
-            snapshot::plan_with(graph, studio.program(), &mut |id| match frames.get(id) {
+        let planning = snapshot::plan_with(
+            graph,
+            studio.program(),
+            studio.running().map(|running| (running, now)),
+            &mut |id| match frames.get(id) {
                 Some(frame) => Some(Look::Frame(frame.clone(), None)),
                 None => live.look(id, now, frame_versions),
-            });
+            },
+        );
         live.end_plan();
         if let Some(sound) = live.take_audio() {
             audio.sync_live(sound);
         }
-        let generation = render.publish(shot);
-        live.wake_at(wake);
-        generation
+        if planning.finished {
+            studio.finish();
+        }
+        render.publish(planning.shot);
+        live.wake_at(planning.wake);
+        planning.end_ms
     }
 
     /// Opens or updates `client_id`'s gesture with `values` (ADR-0032). They are checked
@@ -2702,12 +2870,14 @@ impl PreviewSource for Shared {
         Arc<crate::runtime::RenderSnapshot>,
         Arc<crate::snapshot::LiveParams>,
         Rev,
+        MediaTime,
     ) {
         let state = lock(&self.state);
         (
             state.render.load(),
             state.render.load_live(),
             state.graph.rev(),
+            state.live.now(),
         )
     }
 }

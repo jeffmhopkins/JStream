@@ -23,13 +23,14 @@ use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use jstream_graph::{Graph, Placement as GraphPlacement, State};
-use jstream_media::{FrameSize, MediaTime, PixelFormat, VideoFrame};
+use jstream_graph::{Graph, Item as GraphItem, Placement as GraphPlacement, State};
+use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
-    Canvas, Crop as ProtocolCrop, Edit, ItemId, ProtocolError, QueryResult, Rev, SceneId, SourceId,
-    SourceKind,
+    Canvas, Crop as ProtocolCrop, Edit, ItemGeometry, ItemId, ProtocolError, QueryResult, Rev,
+    SceneId, SourceId, SourceKind, VideoMixId,
 };
+use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
@@ -38,6 +39,7 @@ use jstream_sources::CaptureSpec;
 
 use crate::lock;
 use crate::runtime::RenderSnapshot;
+use crate::transition::{self, From, Planned, Running, Visual};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
@@ -220,7 +222,7 @@ fn rgba_len(width: u32, height: u32) -> Result<usize, SourceFrameError> {
 
 /// What one visible item shows.
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum SourceRef {
+pub(crate) enum SourceRef {
     /// A source's latest [`Frame`], kept in [`Shot::frames`].
     Frame(SourceId),
     /// Another scene, composited first and then placed.
@@ -242,10 +244,11 @@ struct Placed {
     opacity: f32,
 }
 
-/// The program mix, copied out of the collection so it can be drawn without the
-/// collection lock: what each reachable scene places, the frames they show, and the
-/// passes that draw them. Immutable once [`plan`] returns it; the engine publishes it
-/// to the render thread through `arc-swap`. The default is an empty collection's.
+/// The program mix and every video mix, copied out of the collection so they can be
+/// drawn without the collection lock: what each reachable scene places, the frames they
+/// show, and the passes that draw them. Immutable once [`plan`] returns it; the engine
+/// publishes it to the render thread through `arc-swap`. The default is an empty
+/// collection's.
 #[derive(Debug)]
 pub(crate) struct Shot {
     /// The collection's canvas: the size every scene, nested ones included, is drawn at.
@@ -258,12 +261,29 @@ pub(crate) struct Shot {
     /// [`schedule`] of the program scene, made once here so drawing a frame schedules
     /// nothing. Empty without a program scene.
     passes: Vec<Pass>,
+    /// The scene each `scene` video mix shows. A `program` or `preview` mix, and a mix
+    /// not in the collection, shows the program.
+    mixes: BTreeMap<VideoMixId, SceneId>,
+    /// [`schedule`] of each scene a mix shows, other than the program scene.
+    mix_passes: BTreeMap<SceneId, Vec<Pass>>,
     /// The cache key of each frame in `frames`, built once so a frame's uploads look
     /// them up without allocating.
     uploads: Vec<(GpuKey, SourceId)>,
-    /// What the output pipeline captures for this shot: what its passes place, or the
-    /// primary display, which fills the output, when there is no program scene.
+    /// What the output pipeline captures for this shot: what the program's passes (or a
+    /// running transition's tracks) and each mix's place, or the primary display, which
+    /// fills the output, when there is no program scene.
     captures: BTreeSet<CaptureSpec>,
+    /// The transition running on program, which replaces the program pass: `passes`
+    /// then holds only the nested scenes its tracks show.
+    transition: Option<Transitioning>,
+}
+
+/// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
+/// the image it shows, sampled at the frame's time since `start`.
+#[derive(Debug, PartialEq)]
+struct Transitioning {
+    start: MediaTime,
+    tracks: Vec<(GpuKey, Track)>,
 }
 
 impl Default for Shot {
@@ -275,13 +295,38 @@ impl Default for Shot {
             scenes: BTreeMap::new(),
             frames: BTreeMap::new(),
             passes: Vec::new(),
+            mixes: BTreeMap::new(),
+            mix_passes: BTreeMap::new(),
             uploads: Vec::new(),
             captures: captures(&[]),
+            transition: None,
         }
     }
 }
 
 impl Shot {
+    /// The passes that draw `mix`: the program's for `None`, for a mix that shows the
+    /// program or the preview (which is the program until studio mode exists), and for a
+    /// mix the collection no longer has.
+    fn passes_of(&self, mix: Option<&VideoMixId>) -> &[Pass] {
+        mix.and_then(|id| self.mixes.get(id))
+            .and_then(|scene| self.mix_passes.get(scene))
+            .unwrap_or(&self.passes)
+    }
+
+    /// Whether `mix` shows the program mix, and so a running transition.
+    fn shows_program(&self, mix: Option<&VideoMixId>) -> bool {
+        mix.and_then(|id| self.mixes.get(id))
+            .and_then(|scene| self.mix_passes.get(scene))
+            .is_none()
+    }
+
+    /// The scene `mix` shows, for tests: [`Shot::passes_of`]'s root.
+    #[cfg(test)]
+    pub(crate) fn root_of(&self, mix: Option<&VideoMixId>) -> Option<&SceneId> {
+        self.passes_of(mix).last().map(|pass| &pass.scene)
+    }
+
     /// The program scene, for tests that follow what the render thread drew.
     #[cfg(test)]
     pub(crate) fn program(&self) -> Option<&SceneId> {
@@ -298,6 +343,17 @@ impl Shot {
     pub(crate) fn captures(&self) -> &BTreeSet<CaptureSpec> {
         &self.captures
     }
+
+    /// Whether a transition is running in this shot, so what it draws changes with time.
+    pub(crate) fn transitioning(&self) -> bool {
+        self.transition.is_some()
+    }
+
+    /// How many tracks the running transition draws, or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn transition_tracks(&self) -> Option<usize> {
+        self.transition.as_ref().map(|t| t.tracks.len())
+    }
 }
 
 /// Two shots are equal when they draw the same thing: the passes and keys follow from
@@ -306,9 +362,11 @@ impl PartialEq for Shot {
     fn eq(&self, other: &Self) -> bool {
         self.canvas == other.canvas
             && self.program == other.program
+            && self.mixes == other.mixes
             && self.scenes == other.scenes
             && self.frames == other.frames
             && self.captures == other.captures
+            && self.transition == other.transition
     }
 }
 
@@ -321,22 +379,40 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
         .scenes()
         .first()
         .map(|scene| scene.id().clone());
-    plan_with(graph, first.as_ref(), &mut |id| {
+    plan_with(graph, first.as_ref(), None, &mut |id| {
         frames.get(id).map(|f| Look::Frame(f.clone(), None))
     })
-    .0
+    .shot
 }
 
-/// Copies the program scene `program` (ADR-0030) and the scenes it nests out of
-/// `graph`, and schedules them, asking `look` what each source an item it reaches
-/// places shows: its frame and when that frame is next replaced, or what the pipeline
-/// captures for it. Returns the shot and the earliest such time, when it should be
-/// planned again.
+/// What [`plan_with`] returns.
+pub(crate) struct Planning {
+    pub(crate) shot: Shot,
+    /// When the shot should be planned again: the earliest time a frame it shows is
+    /// replaced, or the running transition ends.
+    pub(crate) wake: Option<MediaTime>,
+    /// Whether the running transition it was given has ended, so the shot shows the
+    /// program scene alone and the studio can let the transition go.
+    pub(crate) finished: bool,
+    /// How long the transition the shot draws lasts, in milliseconds from its start.
+    pub(crate) end_ms: Option<f32>,
+}
+
+/// Copies the program scene `program` (ADR-0030), the scene each `scene` video mix
+/// shows, and the scenes they nest out of `graph`, and schedules them, asking `look`
+/// what each source an item they reach places shows: its frame and when that frame is
+/// next replaced, or what the pipeline captures for it.
+///
+/// With a `running` transition (ADR-0029) toward `program` that has not ended at `now`,
+/// the shot draws the transition instead of the program scene: its tracks, planned from
+/// what it starts from and the program scene as the collection holds them now, and the
+/// nested scenes they show. A video mix that shows the program shows the transition too.
 pub(crate) fn plan_with(
     graph: &Graph,
     program: Option<&SceneId>,
+    running: Option<(&Running, MediaTime)>,
     look: &mut LookUp<'_>,
-) -> (Shot, Option<MediaTime>) {
+) -> Planning {
     let state = graph.state();
     let program = program.cloned();
     let mut shot = Shot {
@@ -349,18 +425,149 @@ pub(crate) fn plan_with(
         look,
         wake: None,
     };
-    if let Some(id) = &program {
+    let mut finished = running.is_some();
+    let mut end_ms = None;
+    if let Some((running, now)) =
+        running.filter(|(running, _)| Some(&running.to) == program.as_ref())
+    {
+        let planned = planner.transition(running, &mut shot);
+        let end = end_time(running.start, planned.end_ms);
+        if end.is_some_and(|end| now < end) {
+            finished = false;
+            end_ms = Some(planned.end_ms);
+            planner.wake = earliest(planner.wake, end);
+            shot.transition = Some(Transitioning {
+                start: running.start,
+                tracks: planned
+                    .tracks
+                    .into_iter()
+                    .map(|(visual, track)| (key(&visual.image), track))
+                    .collect(),
+            });
+            shot.passes = schedule_tracks(&shot);
+        } else {
+            // Ended: plan the program scene alone, without the transition's leftovers.
+            shot.scenes.clear();
+            shot.frames.clear();
+            planner.wake = None;
+        }
+    }
+    if shot.transition.is_none()
+        && let Some(id) = &program
+    {
         let mut path = BTreeSet::new();
         planner.collect(id, &mut shot, &mut path);
         shot.passes = schedule(&shot, id);
+    }
+    for mix in state.video_mixes() {
+        if let Some(scene_id) = mix.mix().scene() {
+            shot.mixes.insert(mix.id().clone(), scene_id.clone());
+        }
+    }
+    let roots: BTreeSet<SceneId> = shot
+        .mixes
+        .values()
+        // While a transition replaces the program pass, a mix of the program scene
+        // draws that scene from passes of its own.
+        .filter(|scene| shot.transition.is_some() || Some(*scene) != program.as_ref())
+        .cloned()
+        .collect();
+    for root in roots {
+        let mut path = BTreeSet::new();
+        planner.collect(&root, &mut shot, &mut path);
+        let passes = schedule(&shot, &root);
+        shot.mix_passes.insert(root, passes);
     }
     shot.uploads = shot
         .frames
         .keys()
         .map(|id| (GpuKey::Frame(id.clone()), id.clone()))
         .collect();
-    shot.captures = captures(&shot.passes);
-    (shot, planner.wake)
+    shot.captures = match &shot.transition {
+        Some(transition) => placed_captures(shot.passes.iter())
+            .chain(transition.tracks.iter().filter_map(|(key, _)| match key {
+                GpuKey::Capture(spec) => Some(spec.clone()),
+                _ => None,
+            }))
+            .collect(),
+        None => captures(&shot.passes),
+    };
+    shot.captures
+        .extend(placed_captures(shot.mix_passes.values().flatten()));
+    Planning {
+        shot,
+        wake: planner.wake,
+        finished,
+        end_ms,
+    }
+}
+
+/// What is on screen at `now` while `running` runs toward `program`, as the starting
+/// point of a switch that retargets it (ADR-0029 §7): the items its tracks still draw
+/// then, sampled with the function the render thread draws them with.
+pub(crate) fn on_screen(
+    graph: &Graph,
+    running: &Running,
+    now: MediaTime,
+    look: &mut LookUp<'_>,
+) -> Vec<Visual> {
+    let state = graph.state();
+    let mut shot = Shot {
+        canvas: state.canvas(),
+        ..Shot::default()
+    };
+    let mut planner = Planner {
+        state,
+        look,
+        wake: None,
+    };
+    let planned = planner.transition(running, &mut shot);
+    planned.on_screen(running.elapsed_ms(now), canvas_size(state.canvas()))
+}
+
+fn canvas_size(canvas: Canvas) -> [f32; 2] {
+    [canvas.width as f32, canvas.height as f32]
+}
+
+/// When a transition that started at `start` and lasts `end_ms` ends, on the same clock.
+fn end_time(start: MediaTime, end_ms: f32) -> Option<MediaTime> {
+    let ms = MediaTime::new(
+        end_ms.ceil() as i64,
+        jstream_media::Timebase::new(1, 1000).ok()?,
+    );
+    let ms = ms.rescale(start.timebase(), Rounding::Up).ok()?;
+    start.checked_add(ms).ok()
+}
+
+fn earliest(wake: Option<MediaTime>, at: Option<MediaTime>) -> Option<MediaTime> {
+    match (wake, at) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
+/// The cached image a visual shows: a frame's upload, the capture's, or a nested
+/// scene's layer one level below the program.
+fn key(image: &SourceRef) -> GpuKey {
+    match image {
+        SourceRef::Frame(id) => GpuKey::Frame(id.clone()),
+        SourceRef::Capture(spec) => GpuKey::Capture(spec.clone()),
+        SourceRef::Scene(id) => GpuKey::Layer(id.clone(), 1),
+    }
+}
+
+/// The passes a transition shot draws before its tracks: every nested scene a track
+/// shows, at depth 1, and the scenes they nest.
+fn schedule_tracks(shot: &Shot) -> Vec<Pass> {
+    let mut passes = Vec::new();
+    let mut done = BTreeSet::new();
+    let mut path = BTreeSet::new();
+    for (key, _) in shot.transition.iter().flat_map(|t| &t.tracks) {
+        if let GpuKey::Layer(scene, depth) = key {
+            visit(shot, scene, *depth, &mut path, &mut done, &mut passes);
+        }
+    }
+    passes
 }
 
 /// What the passes place from the pipeline's capture, or the primary display, which
@@ -369,14 +576,19 @@ fn captures(passes: &[Pass]) -> BTreeSet<CaptureSpec> {
     if passes.is_empty() {
         return BTreeSet::from([CaptureSpec::Display(None)]);
     }
+    placed_captures(passes.iter()).collect()
+}
+
+/// What `passes` place from the pipeline's capture.
+fn placed_captures<'a>(
+    passes: impl Iterator<Item = &'a Pass> + 'a,
+) -> impl Iterator<Item = CaptureSpec> + 'a {
     passes
-        .iter()
         .flat_map(|pass| &pass.layers)
         .filter_map(|layer| match &layer.image {
             GpuKey::Capture(spec) => Some(spec.clone()),
             _ => None,
         })
-        .collect()
 }
 
 /// What a source shows, as [`plan_with`] asks for it.
@@ -398,6 +610,114 @@ struct Planner<'a, 'f> {
 }
 
 impl Planner<'_, '_> {
+    /// Plans `running`: what it starts from, paired with the program scene's items. The
+    /// frames and nested scenes either side shows go into `out`.
+    fn transition(&mut self, running: &Running, out: &mut Shot) -> Planned {
+        let flatten = running.run.pairs;
+        let from = match &running.from {
+            From::Scene(scene) => self.visuals(scene, flatten, out),
+            From::OnScreen(items) => items
+                .iter()
+                .filter(|visual| self.shows(&visual.image, out))
+                .cloned()
+                .collect(),
+        };
+        let to = self.visuals(&running.to, flatten, out);
+        transition::plan(&from, &to, &running.run)
+    }
+
+    /// Whether `image` can be drawn now, putting its frame or scene in `out`.
+    fn shows(&mut self, image: &SourceRef, out: &mut Shot) -> bool {
+        match image {
+            SourceRef::Frame(id) => self.look(id, out).is_some(),
+            SourceRef::Capture(_) => true,
+            SourceRef::Scene(id) => {
+                self.collect(id, out, &mut BTreeSet::new());
+                true
+            }
+        }
+    }
+
+    /// The visible items of scene `id`, bottom first, as transition endpoints, each at
+    /// its own opacity. With `flatten`, a nested scene placed over the whole canvas,
+    /// uncropped and opaque, is replaced by its own items (ADR-0029 §4): it then draws
+    /// exactly what its layer would, so its items can pair one by one. Nesting stops at
+    /// [`MAX_NESTING`] levels.
+    fn visuals(&mut self, id: &SceneId, flatten: bool, out: &mut Shot) -> Vec<Visual> {
+        let mut visuals = Vec::new();
+        let mut path = BTreeSet::new();
+        self.visuals_into(id, flatten, 0, &mut path, out, &mut visuals);
+        visuals
+    }
+
+    fn visuals_into(
+        &mut self,
+        id: &SceneId,
+        flatten: bool,
+        depth: usize,
+        path: &mut BTreeSet<SceneId>,
+        out: &mut Shot,
+        visuals: &mut Vec<Visual>,
+    ) {
+        let state = self.state;
+        let Some(scene) = state.scene(id) else {
+            return;
+        };
+        if !path.insert(id.clone()) {
+            return;
+        }
+        let canvas = state.canvas();
+        for item in scene.items() {
+            if !item.visible() {
+                continue;
+            }
+            let Some(source) = state.source(item.source_id()) else {
+                continue;
+            };
+            let (image, size) = match source.kind() {
+                SourceKind::Scene { scene_id } => {
+                    if flatten
+                        && depth + 1 < MAX_NESTING
+                        && covers(item, canvas)
+                        && item.opacity().get() >= OPAQUE
+                    {
+                        self.visuals_into(scene_id, flatten, depth + 1, path, out, visuals);
+                        continue;
+                    }
+                    self.collect(scene_id, out, &mut BTreeSet::new());
+                    (
+                        SourceRef::Scene(scene_id.clone()),
+                        Some([canvas.width, canvas.height]),
+                    )
+                }
+                _ => match self.look(item.source_id(), out) {
+                    Some(SourceRef::Frame(id)) => {
+                        let size = out.frames.get(&id).map(|frame| [frame.width, frame.height]);
+                        (SourceRef::Frame(id), size)
+                    }
+                    // A capture's size isn't known when planning: the canvas stands in.
+                    Some(capture @ SourceRef::Capture(_)) => (capture, None),
+                    Some(SourceRef::Scene(_)) | None => continue,
+                },
+            };
+            let Some(geometry) = endpoint_geometry(item, size, canvas) else {
+                continue;
+            };
+            visuals.push(Visual {
+                image,
+                source_id: item.source_id().clone(),
+                at: Endpoint {
+                    geometry,
+                    crop: crop(item.crop()),
+                    opacity: item.opacity().get(),
+                },
+                size,
+                settings: *item.transition(),
+            });
+        }
+        path.remove(id);
+    }
+
     fn collect(&mut self, id: &SceneId, out: &mut Shot, path: &mut BTreeSet<SceneId>) {
         if out.scenes.contains_key(id) || !path.insert(id.clone()) {
             return;
@@ -556,6 +876,50 @@ fn visit(
     key
 }
 
+/// Whether `item`, which places a scene, shows it exactly as the scene draws on the
+/// canvas: over the whole canvas, unrotated and uncropped.
+fn covers(item: &GraphItem, canvas: Canvas) -> bool {
+    if *item.crop() != ProtocolCrop::NONE {
+        return false;
+    }
+    match item.placement() {
+        GraphPlacement::Geometry(geometry) => {
+            ItemGeometry::covering_canvas(canvas.width, canvas.height).is_ok_and(|whole| {
+                geometry.center == whole.center
+                    && geometry.size == whole.size
+                    && geometry.rotation_deg.get() == 0.0
+                    && geometry.is_neutral_3d()
+            })
+        }
+        GraphPlacement::Legacy(transform) => {
+            *transform == jstream_protocol::ItemTransform::IDENTITY
+        }
+        _ => false,
+    }
+}
+
+/// An item's box for a transition: its geometry, or the box its legacy transform draws
+/// for an image of `size` (the canvas when unknown, as for the captured display). `None`
+/// when the crop or the scale leaves nothing. A legacy negative scale's reflection is
+/// not kept while the item moves.
+fn endpoint_geometry(
+    item: &GraphItem,
+    size: Option<[u32; 2]>,
+    canvas: Canvas,
+) -> Option<ItemGeometry> {
+    match item.placement() {
+        GraphPlacement::Geometry(geometry) => Some(*geometry),
+        GraphPlacement::Legacy(transform) => {
+            let [width, height] = size.unwrap_or([canvas.width, canvas.height]);
+            ItemGeometry::from_legacy(*transform, *item.crop(), width, height)
+                .ok()
+                .flatten()
+                .map(|boxed| boxed.geometry)
+        }
+        _ => None,
+    }
+}
+
 /// The compositor's placement for an item's stored one, in the same form (ADR-0022): a
 /// legacy transform is evaluated against the frame's size when it is drawn.
 fn placement(placement: &GraphPlacement) -> Placement {
@@ -694,6 +1058,8 @@ struct Job {
     snapshot: Arc<RenderSnapshot>,
     live: Arc<LiveParams>,
     rev: Rev,
+    /// The moment to draw, on the media clock: where a running transition is.
+    at: MediaTime,
     reply: ReplyTx,
 }
 
@@ -705,13 +1071,14 @@ pub(crate) struct SnapshotWorker {
 }
 
 impl SnapshotWorker {
-    /// Queues `snapshot` with the live values `live` applied, answering with `rev`. The
-    /// returned future resolves when the thread has drawn it.
+    /// Queues `snapshot` with the live values `live` applied, as it is at `at`, answering
+    /// with `rev`. The returned future resolves when the thread has drawn it.
     pub(crate) fn request(
         &self,
         snapshot: Arc<RenderSnapshot>,
         live: Arc<LiveParams>,
         rev: Rev,
+        at: MediaTime,
     ) -> SnapshotReply {
         let (reply, answer) = reply_pair();
         let mut queue = lock(&self.queue);
@@ -735,6 +1102,7 @@ impl SnapshotWorker {
                 snapshot,
                 live,
                 rev,
+                at,
                 reply,
             })
         {
@@ -774,12 +1142,13 @@ fn worker(jobs: Receiver<Job>) {
         snapshot,
         live,
         rev,
+        at,
         reply,
     } in jobs
     {
         let result = panic::catch_unwind(AssertUnwindSafe(|| {
             let (compositor, cache) = open(&mut gpu, &mut backoff)?;
-            draw(snapshot.shot(), &live, rev, compositor, cache)
+            draw(snapshot.shot(), &live, rev, at, compositor, cache)
         }));
         let result = result.unwrap_or_else(|_| {
             gpu = None;
@@ -800,7 +1169,7 @@ fn open<'a>(
         if let Some(error) = backoff.cached(now) {
             return Err(error);
         }
-        match Compositor::open(OpenOptions::headless()) {
+        match Compositor::open(OpenOptions::hardware()) {
             Ok(compositor) => {
                 tracing::info!(
                     adapter = %compositor.adapter_description(),
@@ -903,6 +1272,7 @@ fn draw(
     shot: &Shot,
     live: &LiveParams,
     rev: Rev,
+    at: MediaTime,
     compositor: &mut Compositor,
     cache: &mut ResourceCache<GpuKey>,
 ) -> Result<QueryResult, ProtocolError> {
@@ -910,11 +1280,11 @@ fn draw(
     let output = compose(
         compositor,
         cache,
-        shot,
+        (shot, at),
+        None,
         live,
         &NoCaptures,
         shot.canvas().map_err(from_render)?,
-        true,
     );
     drop(cache.end_frame(compositor));
     let full = output
@@ -981,29 +1351,34 @@ impl Captures for NoCaptures {
     }
 }
 
-/// Draws the program mix of `shot` at `output`, over opaque black, between the caller's
-/// [`ResourceCache::begin_frame`] and [`ResourceCache::end_frame`]. An item with a live
-/// value in `live` is drawn with it instead of its placement or crop in `shot`.
+/// Draws `mix` of `shot` (the program mix for `None`) as it is at `at` (a running
+/// transition samples it) at `output`, over opaque black, and reads it back,
+/// between the caller's [`ResourceCache::begin_frame`] and
+/// [`ResourceCache::end_frame`]. Several mixes may be drawn between the two, so their
+/// shared uploads and layers are kept for all of them.
+/// An item with a live value in `live` is drawn with it instead of its placement or
+/// crop in `shot`.
 ///
 /// Every image comes from `cache`: a source frame is uploaded only when its version
 /// changed, and each nested scene is composited into the layer it had last frame
 /// ([`Compositor::render_into`]), so a steady frame allocates no texture. Each nested
 /// scene is premultiplied linear `Rgba16Float` that stays on the GPU, transparent where
-/// it draws nothing. The program scene is drawn at the canvas size: straight to the
-/// output when that is the canvas size, else into a layer that the output scales to
-/// fill. Without a program scene the output is the primary display's capture scaled to
-/// fill it, or black.
+/// it draws nothing. The mix's scene is drawn at the canvas size: straight to the output
+/// when that is the canvas size, else into a layer that the output fits inside itself,
+/// centred, with black bars where the aspect ratios differ (ADR-0022). Without a scene
+/// to draw (no program scene) the primary display's capture is scaled to fill the
+/// canvas, which is fitted the same way, or the output is black.
 ///
 /// # Errors
 /// What the compositor reports for an upload or a pass.
 pub(crate) fn compose(
     compositor: &mut Compositor,
     cache: &mut ResourceCache<GpuKey>,
-    shot: &Shot,
+    (shot, at): (&Shot, MediaTime),
+    mix: Option<&VideoMixId>,
     live: &LiveParams,
     captures: &dyn Captures,
     output: FrameSize,
-    readback: bool,
 ) -> Result<Output, RenderError> {
     let canvas = shot.canvas()?;
     for (key, source) in &shot.uploads {
@@ -1030,6 +1405,8 @@ pub(crate) fn compose(
             }
         }
     }
+    let passes = shot.passes_of(mix);
+    let tracks = shot.transition.as_ref().filter(|_| shot.shows_program(mix));
     let mut fallback = None;
     for spec in &shot.captures {
         let Some(capture) = captures.frame(spec) else {
@@ -1049,31 +1426,37 @@ pub(crate) fn compose(
         };
         fallback = Some(key);
     }
-    let Some((program, nested)) = shot.passes.split_last() else {
-        let image = fallback.as_ref().and_then(|key| cache.get(key));
-        // Scaled to fill the output, which follows the canvas, not the display.
-        let items: Vec<Item<'_>> = image
-            .into_iter()
-            .map(|image| {
-                let sx = output.width() as f32 / image.width() as f32;
-                let sy = output.height() as f32 / image.height() as f32;
-                whole(image, sx, sy)
-            })
-            .collect();
-        return compositor.render(&scene(output, Color::BLACK, &items), readback);
+    let (root, nested) = match (tracks, passes.split_last()) {
+        (Some(_), _) => (None, passes),
+        (None, Some((root, nested))) => (Some(root), nested),
+        (None, None) => {
+            let image = fallback.as_ref().and_then(|key| cache.get(key));
+            // Scaled to fill the canvas, which the output follows (not the display), and
+            // fitted inside the output like the canvas layer.
+            let (scale, offset) = fit_inside(canvas, output);
+            let items: Vec<Item<'_>> = image
+                .into_iter()
+                .map(|image| {
+                    let sx = canvas.width() as f32 * scale / image.width() as f32;
+                    let sy = canvas.height() as f32 * scale / image.height() as f32;
+                    Item {
+                        image,
+                        placement: Placement::Legacy(LegacyTransform {
+                            position: offset,
+                            scale: [sx, sy],
+                            ..LegacyTransform::IDENTITY
+                        }),
+                        crop: Crop::NONE,
+                        opacity: OPAQUE,
+                        visible: true,
+                    }
+                })
+                .collect();
+            return compositor.render(&scene(output, Color::BLACK, &items), true);
+        }
     };
     let direct = output == canvas;
-    for pass in nested {
-        cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
-    }
-    if !direct {
-        cache.layer(
-            compositor,
-            &GpuKey::Program,
-            canvas.width(),
-            canvas.height(),
-        )?;
-    }
+    claim_layers(compositor, cache, shot, mix, output)?;
     let cache = &*cache;
     let image = |key: &GpuKey| {
         cache.get(key).ok_or_else(|| RenderError::Invalid {
@@ -1089,16 +1472,55 @@ pub(crate) fn compose(
             image(&pass.key)?,
         )?;
     }
-    fill_items(&mut items, cache, program, live);
+    match (root, tracks) {
+        (_, Some(transition)) => fill_tracks(&mut items, cache, transition, canvas, at),
+        (Some(root), None) => fill_items(&mut items, cache, root, live),
+        (None, None) => items.clear(),
+    }
     if direct {
-        return compositor.render(&scene(output, Color::BLACK, &items), readback);
+        return compositor.render(&scene(output, Color::BLACK, &items), true);
     }
     let layer = image(&GpuKey::Program)?;
     compositor.render_into(&scene(canvas, Color::BLACK, &items), layer)?;
-    let sx = output.width() as f32 / canvas.width() as f32;
-    let sy = output.height() as f32 / canvas.height() as f32;
-    let placed = [whole(layer, sx, sy)];
-    compositor.render(&scene(output, Color::BLACK, &placed), readback)
+    let placed = [fitted(layer, canvas, output)];
+    compositor.render(&scene(output, Color::BLACK, &placed), true)
+}
+
+/// Marks the layers [`compose`] draws `mix` at `output` through as used in the cache's
+/// current frame, allocating any that are missing, without drawing: each nested
+/// scene's, and the program layer when `output` isn't the canvas size. The render
+/// thread calls it for every mix not due on a tick, so a mix with a divisor keeps its
+/// layers between the ticks it draws on and a steady frame allocates no texture.
+///
+/// # Errors
+/// What the compositor reports for a layer it allocates.
+pub(crate) fn claim_layers(
+    compositor: &mut Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    shot: &Shot,
+    mix: Option<&VideoMixId>,
+    output: FrameSize,
+) -> Result<(), RenderError> {
+    let canvas = shot.canvas()?;
+    let passes = shot.passes_of(mix);
+    let nested = match passes.split_last() {
+        // A running transition draws its tracks over every pass, all of them nested.
+        _ if shot.transition.is_some() && shot.shows_program(mix) => passes,
+        Some((_, nested)) => nested,
+        None => return Ok(()),
+    };
+    for pass in nested {
+        cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+    }
+    if output != canvas {
+        cache.layer(
+            compositor,
+            &GpuKey::Program,
+            canvas.width(),
+            canvas.height(),
+        )?;
+    }
+    Ok(())
 }
 
 /// Replaces `items` with the layers of `pass`, with the live values in `live` applied. A
@@ -1122,18 +1544,53 @@ fn fill_items<'a>(
     }));
 }
 
-/// `image` at the top-left, scaled by `sx` and `sy`.
-fn whole(image: &jstream_render::Image, sx: f32, sy: f32) -> Item<'_> {
+/// Replaces `items` with `transition`'s tracks sampled at `at`, in drawing order. A
+/// track that draws nothing then, or whose image is not cached, is left out.
+fn fill_tracks<'a>(
+    items: &mut Vec<Item<'a>>,
+    cache: &'a ResourceCache<GpuKey>,
+    transition: &Transitioning,
+    canvas: FrameSize,
+    at: MediaTime,
+) {
+    let elapsed = transition::elapsed_ms(transition.start, at);
+    let size = [canvas.width() as f32, canvas.height() as f32];
+    items.clear();
+    items.extend(transition.tracks.iter().filter_map(|(key, track)| {
+        let sampled = track.sample(elapsed, size)?;
+        Some(Item {
+            image: cache.get(key)?,
+            placement: Placement::Geometry(sampled.geometry),
+            crop: sampled.crop,
+            opacity: sampled.opacity,
+            visible: true,
+        })
+    }));
+}
+
+/// `image`, of size `from`, fitted inside `into`: scaled by the same factor both ways
+/// and centred, so it is never stretched and the rest stays as it was (ADR-0022).
+fn fitted(image: &jstream_render::Image, from: FrameSize, into: FrameSize) -> Item<'_> {
+    let (scale, offset) = fit_inside(from, into);
     Item {
         image,
         placement: Placement::Legacy(LegacyTransform {
-            scale: [sx, sy],
+            position: offset,
+            scale: [scale, scale],
             ..LegacyTransform::IDENTITY
         }),
         crop: Crop::NONE,
         opacity: OPAQUE,
         visible: true,
     }
+}
+
+/// The scale and top-left offset that fit `from` inside `into`, centred.
+fn fit_inside(from: FrameSize, into: FrameSize) -> (f32, [f32; 2]) {
+    let (fw, fh) = (from.width() as f32, from.height() as f32);
+    let (iw, ih) = (into.width() as f32, into.height() as f32);
+    let scale = (iw / fw).min(ih / fh);
+    (scale, [(iw - fw * scale) / 2.0, (ih - fh * scale) / 2.0])
 }
 
 fn scene<'a>(canvas: FrameSize, background: Color, items: &'a [Item<'a>]) -> Scene<'a> {
@@ -1305,9 +1762,10 @@ pub(crate) mod tests {
     use super::{
         CaptureFrame, CaptureImage, Captures, FIRST_RETRY, Frame, GpuKey, LiveParams, MAX_NESTING,
         MAX_RETRY, OpenBackoff, Placed, Shot, SourceFrameError, SourceRef, base64, captures,
-        compose, decode_base64, decode_png, draw, encode_png, fit, is_no_adapter, schedule,
+        claim_layers, compose, decode_base64, decode_png, draw, encode_png, fit, is_no_adapter,
+        schedule,
     };
-    use jstream_media::FrameSize;
+    use jstream_media::{FrameSize, MediaTime, Timebase};
     use jstream_protocol::{
         Canvas, Edit, ItemId, ProtocolError, QueryResult, Rev, SceneId, SourceId,
     };
@@ -1465,6 +1923,140 @@ pub(crate) mod tests {
         );
     }
 
+    /// A `scene` mix draws its own scene; program and preview mixes, no mix, and a mix
+    /// the collection doesn't have draw the program's passes.
+    #[test]
+    fn a_scene_mix_plans_its_own_scene() {
+        use jstream_graph::Graph;
+        use jstream_protocol::{Edit, MixInput, MixResolution, VideoMix, VideoMixId};
+
+        let mix = |id: &str, input| Edit::VideoMixCreate {
+            mix_id: VideoMixId::new(id),
+            name: id.into(),
+            mix: VideoMix {
+                input,
+                resolution: MixResolution {
+                    width: 640,
+                    height: 360,
+                },
+                fps_divisor: 1,
+            },
+        };
+        let mut graph = Graph::default();
+        graph
+            .apply(
+                &[
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("main"),
+                        name: "Main".into(),
+                        role: None,
+                    },
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("cam"),
+                        name: "Camera".into(),
+                        role: None,
+                    },
+                    mix(
+                        "side",
+                        MixInput::Scene {
+                            scene_id: SceneId::new("cam"),
+                        },
+                    ),
+                    mix("prog", MixInput::Program),
+                    mix("prev", MixInput::Preview),
+                ],
+                None,
+            )
+            .expect("edits");
+        let shot = super::plan(&graph, &BTreeMap::new());
+        let root = |id: Option<&str>| {
+            let id = id.map(VideoMixId::new);
+            shot.root_of(id.as_ref())
+                .map(|scene| scene.as_str().to_owned())
+        };
+        assert_eq!(root(Some("side")).as_deref(), Some("cam"));
+        for mix in [None, Some("prog"), Some("prev"), Some("gone")] {
+            assert_eq!(root(mix).as_deref(), Some("main"), "{mix:?}");
+        }
+    }
+
+    /// A display or window that only a `scene` mix shows is among the shot's captures,
+    /// beside the program's, so the render thread starts it for that mix.
+    #[test]
+    fn a_capture_only_a_mix_shows_is_captured() {
+        use jstream_graph::Graph;
+        use jstream_protocol::{
+            Edit, ItemId, MixInput, MixResolution, SourceKind, VideoMix, VideoMixId,
+        };
+
+        let display = |id: &str| Edit::SourceCreate {
+            source_id: SourceId::new(id),
+            name: id.into(),
+            kind: SourceKind::Builtin {
+                kind: "display".into(),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        };
+        let add = |scene: &str, source: &str| Edit::ItemAdd {
+            scene_id: SceneId::new(scene),
+            item_id: ItemId::new(source),
+            source_id: SourceId::new(source),
+            transform: None,
+            geometry: None,
+            opacity: None,
+            blend: None,
+        };
+        let mut graph = Graph::new().with_kinds(crate::kinds::builtin());
+        graph
+            .apply(
+                &[
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("main"),
+                        name: "Main".into(),
+                        role: None,
+                    },
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("cam"),
+                        name: "Camera".into(),
+                        role: None,
+                    },
+                    display("primary"),
+                    display("second"),
+                    add("main", "primary"),
+                    add("cam", "second"),
+                    Edit::VideoMixCreate {
+                        mix_id: VideoMixId::new("side"),
+                        name: "Side".into(),
+                        mix: VideoMix {
+                            input: MixInput::Scene {
+                                scene_id: SceneId::new("cam"),
+                            },
+                            resolution: MixResolution {
+                                width: 640,
+                                height: 360,
+                            },
+                            fps_divisor: 1,
+                        },
+                    },
+                ],
+                None,
+            )
+            .expect("edits");
+        let second = CaptureSpec::Display(Some("monitor:2".into()));
+        let shot = super::plan_with(&graph, Some(&SceneId::new("main")), None, &mut |id| {
+            Some(super::Look::Capture(match id.as_str() {
+                "second" => second.clone(),
+                _ => CaptureSpec::Display(None),
+            }))
+        })
+        .shot;
+        assert_eq!(
+            shot.captures(),
+            &BTreeSet::from([CaptureSpec::Display(None), second])
+        );
+    }
+
     /// The program scene is depth 0. A scene [`MAX_NESTING`] levels down is drawn; one
     /// level further is not.
     #[test]
@@ -1499,11 +2091,11 @@ pub(crate) mod tests {
         assert_eq!(shot.passes[0].layers.len(), 1);
     }
 
-    /// Draws `shot` on a software adapter and decodes the 1280x720 PNG. `None` when there
+    /// Draws `shot` on whatever adapter opens (software in CI) and decodes the 1280x720 PNG. `None` when there
     /// is no adapter outside CI.
     fn snap(shot: &Shot) -> Option<Vec<u8>> {
         let _gpu = crate::tests::one_gpu_test_at_a_time();
-        let mut compositor = match Compositor::open(OpenOptions::headless()) {
+        let mut compositor = match Compositor::open(OpenOptions::hardware()) {
             Ok(compositor) => compositor,
             Err(err) => {
                 let error = super::from_render(err);
@@ -1524,6 +2116,7 @@ pub(crate) mod tests {
             shot,
             &LiveParams::default(),
             Rev(1),
+            zero(),
             &mut compositor,
             &mut cache,
         )
@@ -1644,10 +2237,11 @@ pub(crate) mod tests {
         assert_eq!(at(&rgba, 1100, 360), GREEN);
     }
 
-    /// Opens the software adapter for a test that drives [`compose`] itself. `None` when
+    /// Opens whatever adapter opens (software in CI) for a test that drives [`compose`]
+    /// itself. `None` when
     /// there is no adapter outside CI.
     fn gpu() -> Option<Compositor> {
-        match Compositor::open(OpenOptions::headless()) {
+        match Compositor::open(OpenOptions::hardware()) {
             Ok(compositor) => Some(compositor),
             Err(err) => {
                 let error = super::from_render(err);
@@ -1659,6 +2253,10 @@ pub(crate) mod tests {
                 None
             }
         }
+    }
+
+    fn zero() -> MediaTime {
+        MediaTime::zero(Timebase::new(1, 1000).expect("valid"))
     }
 
     /// IEC 61966-2-1 encode, as the output applies it.
@@ -1699,8 +2297,16 @@ pub(crate) mod tests {
     ) -> jstream_render::Snapshot {
         cache.begin_frame();
         let captures = Every(capture.copied());
-        let output =
-            compose(compositor, cache, shot, live, &captures, size, true).expect("compose");
+        let output = compose(
+            compositor,
+            cache,
+            (shot, zero()),
+            None,
+            live,
+            &captures,
+            size,
+        )
+        .expect("compose");
         drop(cache.end_frame(compositor));
         output.pixels().expect("invariant: read back").clone()
     }
@@ -1751,8 +2357,8 @@ pub(crate) mod tests {
     }
 
     /// The render thread's output is the encoder size, not the canvas: with no program
-    /// scene the capture fills it, a program scene is scaled from the canvas to fill
-    /// it, and a `display` source shows the capture where its item is placed.
+    /// scene the capture fills it, a program scene is scaled from the canvas to fit it,
+    /// and a `display` source shows the capture where its item is placed.
     #[test]
     fn the_program_fills_an_output_of_another_size() {
         let _gpu = crate::tests::one_gpu_test_at_a_time();
@@ -1807,6 +2413,51 @@ pub(crate) mod tests {
             "the capture on the left"
         );
         assert_eq!(out.pixel(28, 9), Some(RED), "red on the right");
+    }
+
+    /// A mix whose aspect ratio differs from the canvas shows the canvas fitted inside
+    /// it with black bars, never stretched (ADR-0022), and a `scene` mix draws its own
+    /// scene, not the program.
+    #[test]
+    fn a_mix_letterboxes_the_canvas_and_draws_its_scene() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let square = FrameSize::new(32, 32).expect("invariant: non-zero");
+        let mut shot = shot(vec![
+            ("program", vec![fill("green")]),
+            ("cam", vec![fill("red")]),
+        ]);
+        use jstream_protocol::VideoMixId;
+        let side = VideoMixId::new("side");
+        shot.mixes.insert(side.clone(), SceneId::new("cam"));
+        shot.mix_passes
+            .insert(SceneId::new("cam"), schedule(&shot, &SceneId::new("cam")));
+
+        let mut draw = |mix: Option<&VideoMixId>| {
+            cache.begin_frame();
+            let output = compose(
+                &mut compositor,
+                &mut cache,
+                (&shot, zero()),
+                mix,
+                &LiveParams::default(),
+                &super::NoCaptures,
+                square,
+            )
+            .expect("compose");
+            drop(cache.end_frame(&compositor));
+            output.pixels().expect("invariant: read back").clone()
+        };
+        let program = draw(None);
+        // 1920x1080 fitted into 32x32 is 32x18, centred: rows 7 to 24.
+        assert_eq!(program.pixel(16, 16), Some(GREEN));
+        for y in [0, 5, 27, 31] {
+            assert_eq!(program.pixel(16, y), Some([0, 0, 0, 255]), "bar at row {y}");
+        }
+        let cam = draw(Some(&side));
+        assert_eq!(cam.pixel(16, 16), Some(RED));
+        assert_eq!(cam.pixel(16, 0), Some([0, 0, 0, 255]));
     }
 
     /// A GPU capture is sampled where it is: with no program scene it is scaled to fill
@@ -2049,6 +2700,64 @@ pub(crate) mod tests {
         // frame that last used the layers.
         let _ = frame_at(&mut compositor, &mut cache, &flat, None, canvas);
         assert_eq!(cache.pending(), 0, "freed after the frame fence");
+    }
+
+    /// Mixes drawn on different ticks keep their layers: on a tick where only the
+    /// program (drawn straight at the canvas size) is due, the half-rate mix claims the
+    /// program layer it fits from, so nothing is retired or allocated tick after tick.
+    #[test]
+    fn a_mix_keeps_its_layers_between_the_ticks_it_draws_on() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let nested = chain(2);
+        let canvas = nested.canvas().expect("canvas");
+        let small = FrameSize::new(32, 18).expect("invariant: non-zero");
+        use jstream_protocol::VideoMixId;
+        let half = VideoMixId::new("half");
+        let mut tick = |cache: &mut ResourceCache<GpuKey>, index: u32| {
+            cache.begin_frame();
+            compose(
+                &mut compositor,
+                cache,
+                (&nested, zero()),
+                None,
+                &LiveParams::default(),
+                &super::NoCaptures,
+                canvas,
+            )
+            .expect("program");
+            if index.is_multiple_of(2) {
+                compose(
+                    &mut compositor,
+                    cache,
+                    (&nested, zero()),
+                    Some(&half),
+                    &LiveParams::default(),
+                    &super::NoCaptures,
+                    small,
+                )
+                .expect("half");
+            } else {
+                claim_layers(&mut compositor, cache, &nested, Some(&half), small).expect("claim");
+            }
+            drop(cache.end_frame(&compositor));
+        };
+        tick(&mut cache, 0);
+        let program = cache
+            .get(&GpuKey::Program)
+            .expect("the mix's layer")
+            .texture()
+            .clone();
+        let live = cache.live();
+        for index in 1..6 {
+            tick(&mut cache, index);
+            assert_eq!((cache.live(), cache.pending()), (live, 0), "tick {index}");
+            assert!(
+                cache.get(&GpuKey::Program).expect("kept").texture() == &program,
+                "tick {index} kept the program layer"
+            );
+        }
     }
 
     /// A failed adapter open is answered from the cache until its wait is over, and

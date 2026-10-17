@@ -23,5 +23,7 @@ fake = []
 
 [dependencies]
 jstream-media.workspace = true
+# The out-of-process CLAP plugin hosts' block and control messages (`PluginHosts`).
+jstream-plugin-proto.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true
