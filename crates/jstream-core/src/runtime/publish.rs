@@ -316,7 +316,8 @@ pub(crate) mod tests {
     /// Plain `rtmp://` to another machine logs one warning that names the host and
     /// nothing from the path, where a pasted key would be; `rtmps://` and loopback log
     /// none (#353). An empty key fails the connect right after the check, so nothing
-    /// goes on the network.
+    /// goes on the network, and 192.0.2.1 is a documentation address (TEST-NET-1)
+    /// besides.
     #[test]
     fn plain_rtmp_to_another_machine_warns_with_the_host_only() {
         use std::fmt;
