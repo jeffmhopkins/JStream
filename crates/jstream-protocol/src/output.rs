@@ -61,6 +61,62 @@ pub enum OutputKind {
     Unknown,
 }
 
+impl OutputKind {
+    /// The server a stream key set for this output would be sent to, or `None` for a
+    /// kind that sends none (a recording, the virtual camera).
+    ///
+    /// For a generic RTMP(S) target this is `scheme://host:port`, with the scheme and
+    /// host lowercased and the scheme's default port (1935 for `rtmp`, 443 for `rtmps`)
+    /// filled in, so only a change of server changes it: the application path after the
+    /// host doesn't count. A YouTube target is `youtube`. The engine removes an output's
+    /// stream key when an applied batch, undo or redo changes this value or deletes the
+    /// output, so a key never goes to a server it wasn't set for.
+    #[must_use]
+    pub fn key_server(&self) -> Option<String> {
+        match self {
+            Self::Rtmp {
+                target: RtmpTarget::Generic { url },
+            } => Some(rtmp_server(url)),
+            Self::Rtmp {
+                target: RtmpTarget::YouTube { .. },
+            } => Some("youtube".to_owned()),
+            _ => None,
+        }
+    }
+}
+
+/// `scheme://host:port` of an RTMP(S) URL, lowercased with the default port filled in.
+/// A URL that doesn't split that way (the engine never stores one) is returned whole,
+/// so it only ever equals itself.
+fn rtmp_server(url: &str) -> String {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return url.to_owned();
+    };
+    let scheme = scheme.to_ascii_lowercase();
+    let default_port = match scheme.as_str() {
+        "rtmp" => 1935,
+        "rtmps" => 443,
+        _ => return url.to_owned(),
+    };
+    let authority = rest
+        .split_once('/')
+        .map_or(rest, |(authority, _)| authority)
+        .to_ascii_lowercase();
+    let (host, port) = match authority.rfind(':') {
+        // A colon inside `[v6]` is not a port separator.
+        Some(at) if !authority[at..].contains(']') => {
+            (&authority[..at], Some(&authority[at + 1..]))
+        }
+        _ => (authority.as_str(), None),
+    };
+    let port = match port.map(str::parse::<u16>) {
+        None => default_port,
+        Some(Ok(port)) => port,
+        Some(Err(_)) => return url.to_owned(),
+    };
+    format!("{scheme}://{host}:{port}")
+}
+
 /// The file format a recording is written in. Serialized as a snake_case string.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -249,6 +305,40 @@ mod tests {
     use super::{OutputKind, RecordContainer, RtmpTarget, SecretString};
     use crate::{ClientMessage, ProtocolError};
     use serde_json::json;
+
+    fn server(url: &str) -> Option<String> {
+        OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url: url.into() },
+        }
+        .key_server()
+    }
+
+    /// A stream key is bound to scheme, host and port (#343): the path doesn't count,
+    /// case and an explicit default port don't either.
+    #[test]
+    fn key_server_is_scheme_host_and_port() {
+        let youtube = server("rtmp://a.rtmp.youtube.com/live2");
+        assert_eq!(youtube.as_deref(), Some("rtmp://a.rtmp.youtube.com:1935"));
+        assert_eq!(server("RTMP://A.rtmp.YouTube.com:1935/other/app"), youtube);
+        assert_ne!(server("rtmp://attacker.example/live2"), youtube);
+        assert_ne!(server("rtmps://a.rtmp.youtube.com/live2"), youtube);
+        assert_ne!(server("rtmp://a.rtmp.youtube.com:1936/live2"), youtube);
+        assert_eq!(
+            server("rtmps://[::1]/live").as_deref(),
+            Some("rtmps://[::1]:443")
+        );
+        assert_eq!(
+            server("rtmp://[::1]:1936/live").as_deref(),
+            Some("rtmp://[::1]:1936")
+        );
+        let yt = OutputKind::Rtmp {
+            target: RtmpTarget::YouTube {
+                broadcast_id: "a".into(),
+            },
+        };
+        assert_eq!(yt.key_server().as_deref(), Some("youtube"));
+        assert_eq!(OutputKind::VirtualCam.key_server(), None);
+    }
 
     #[test]
     fn kind_wire_form_is_tagged_twice() {

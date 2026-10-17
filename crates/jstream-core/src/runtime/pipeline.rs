@@ -57,7 +57,7 @@ use jstream_platform::{
     VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
-    EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
+    EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
     RateControl as ProfileRate, VideoCodec,
 };
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
@@ -277,6 +277,11 @@ pub(crate) struct Pending {
     pub(crate) generation: u64,
     /// `output.stop` won this generation. The start must not settle `active`.
     pub(crate) cancel: bool,
+    /// The output's kind when the start checked its key (#343): what
+    /// [`Engine::output_kind`](crate::Engine::output_kind) answers for this output
+    /// until the start settles, so a retarget that lands while the host's opener runs
+    /// can't give it the new server's URL with the old server's key.
+    pub(crate) kind: Option<OutputKind>,
 }
 
 impl MediaHost {

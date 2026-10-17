@@ -993,7 +993,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Changes where an RTMP output publishes. A running output keeps its connection;\nthe new target applies from its next `output.start`. Its stream key is kept.\nInverse: `output.set_target` with the previous target.",
+                "description": "Changes where an RTMP output publishes. A running output keeps its connection;\nthe new target applies from its next `output.start`. Its stream key is kept only\nwhile the server stays the same (scheme, host and port; the path may change): a\nnew server removes the key from the credential store, so the old key never goes\nto it, and needs a new `output.set_key`. Inverse: `output.set_target` with the\nprevious target, which can't restore a removed key.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",
@@ -1043,7 +1043,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key stays in the credential store, so undoing the delete restores a\nworking output; `output.clear_key` removes it. Inverse: `output.create` with its\nkind.",
+                "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key is removed from the credential store, so an output created later\nwith the same ID doesn't inherit it. Inverse: `output.create` with its kind, which\ncan't restore the key: set it again with `output.set_key`.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",
@@ -3977,7 +3977,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Changes where an RTMP output publishes. A running output keeps its connection;\nthe new target applies from its next `output.start`. Its stream key is kept.\nInverse: `output.set_target` with the previous target.",
+                "description": "Changes where an RTMP output publishes. A running output keeps its connection;\nthe new target applies from its next `output.start`. Its stream key is kept only\nwhile the server stays the same (scheme, host and port; the path may change): a\nnew server removes the key from the credential store, so the old key never goes\nto it, and needs a new `output.set_key`. Inverse: `output.set_target` with the\nprevious target, which can't restore a removed key.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",
@@ -4000,7 +4000,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key stays in the credential store, so undoing the delete restores a\nworking output; `output.clear_key` removes it. Inverse: `output.create` with its\nkind.",
+                "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key is removed from the credential store, so an output created later\nwith the same ID doesn't inherit it. Inverse: `output.create` with its kind, which\ncan't restore the key: set it again with `output.set_key`.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",
@@ -4084,7 +4084,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace, control or non-ASCII characters, and\n`action_failed` when the engine has no credential store or the store refuses.",
+                "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace, control or non-ASCII characters, and\n`action_failed` when the engine has no credential store, the store refuses, or\nthe output's `output.start` is still opening its target (#343): send it again\nonce the start has settled.",
                 "properties": {
                   "key": {
                     "$ref": "#/$defs/SecretString",

@@ -420,8 +420,11 @@ pub enum Edit {
         kind: OutputKind,
     },
     /// Changes where an RTMP output publishes. A running output keeps its connection;
-    /// the new target applies from its next `output.start`. Its stream key is kept.
-    /// Inverse: `output.set_target` with the previous target.
+    /// the new target applies from its next `output.start`. Its stream key is kept only
+    /// while the server stays the same (scheme, host and port; the path may change): a
+    /// new server removes the key from the credential store, so the old key never goes
+    /// to it, and needs a new `output.set_key`. Inverse: `output.set_target` with the
+    /// previous target, which can't restore a removed key.
     #[serde(rename = "output.set_target")]
     OutputSetTarget {
         /// The output to change.
@@ -441,9 +444,9 @@ pub enum Edit {
         height: u32,
     },
     /// Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.
-    /// Its stream key stays in the credential store, so undoing the delete restores a
-    /// working output; `output.clear_key` removes it. Inverse: `output.create` with its
-    /// kind.
+    /// Its stream key is removed from the credential store, so an output created later
+    /// with the same ID doesn't inherit it. Inverse: `output.create` with its kind, which
+    /// can't restore the key: set it again with `output.set_key`.
     #[serde(rename = "output.delete")]
     OutputDelete {
         /// The output to delete.
@@ -663,7 +666,9 @@ pub enum Action {
     /// uses the new key from its next `output.start`. Fails with `not_found` for an
     /// output not in the collection, `invalid_argument` (field `key`) for an empty key,
     /// one over 1024 bytes or one with whitespace, control or non-ASCII characters, and
-    /// `action_failed` when the engine has no credential store or the store refuses.
+    /// `action_failed` when the engine has no credential store, the store refuses, or
+    /// the output's `output.start` is still opening its target (#343): send it again
+    /// once the start has settled.
     #[serde(rename = "output.set_key")]
     OutputSetKey {
         /// The output whose key to set.

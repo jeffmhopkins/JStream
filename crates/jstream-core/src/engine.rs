@@ -305,12 +305,33 @@ impl Engine {
     /// recording output (`OutputKind::Record`) needs no publish target: the engine
     /// opens its file itself. Nor does the virtual camera (`OutputKind::VirtualCam`),
     /// which publishes to the backends' [`VcamSink`](jstream_platform::VcamSink).
+    ///
+    /// While an `output.start` of this output is opening, it answers the kind the start
+    /// saw when it checked the output's key, not the collection's current one (#343). A
+    /// retarget that lands during the opener then can't pair the new server's URL with
+    /// the old server's key: the opener connects to the server the start was checked
+    /// for, and the next start sees the new target.
     pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
+        if let Some(kind) = self.starting_kind(output_id) {
+            return kind;
+        }
         lock(&self.shared.state)
             .graph
             .state()
             .output(output_id)
             .map(|output| output.kind().clone())
+    }
+
+    /// The kind an `output.start` of this output saw when it checked the output's key,
+    /// while that start is opening (#343); `None` when no start of it is pending. Takes
+    /// the gate lock alone.
+    fn starting_kind(&self, output_id: &OutputId) -> Option<Option<OutputKind>> {
+        let host = self.media.as_ref()?;
+        let gate = lock(&host.gate);
+        gate.pending
+            .as_ref()
+            .filter(|pending| pending.output_id == *output_id)
+            .map(|pending| pending.kind.clone())
     }
 
     /// Injects platform backends. `output.start` then runs the media pipeline
@@ -698,10 +719,12 @@ impl Engine {
             self.run_media_action(call)
         } else {
             let mut wake = Vec::new();
-            let result = lock(&self.shared.state).execute(client_id, request_id, call, &mut wake);
+            let (result, stale) = lock(&self.shared.state)
+                .execute_and_unbind_keys(client_id, request_id, call, &mut wake);
             for waker in wake {
                 waker.wake();
             }
+            self.remove_stale_keys(stale);
             self.with_key_set(result)
         };
         if matches!(
@@ -878,12 +901,24 @@ impl Engine {
                     });
                 }
                 check_key(&key)?;
+                // The opener of a start that is opening reads the server the start
+                // checked (`output_kind`), which a retarget since may have changed, so
+                // a key set now could be paired with the old server (#343).
+                if self.starting_kind(&output_id).is_some() {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: format!(
+                            "output `{output_id}` is starting: set its key once the start \
+                             has settled"
+                        ),
+                    });
+                }
                 let store = self.key_store().ok_or_else(no_key_store)?;
                 store
                     .set(output_id.as_str(), &Secret::new(key.expose()))
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not store the key: {err}"),
                     })?;
+                lock(&self.shared.state).stale_keys.remove(&output_id);
                 Ok(CallResult::action())
             }
             Action::OutputClearKey { output_id } => {
@@ -893,9 +928,40 @@ impl Engine {
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not remove the key: {err}"),
                     })?;
+                lock(&self.shared.state).stale_keys.remove(&output_id);
                 Ok(CallResult::action())
             }
             other => Err(not_implemented(other.name())),
+        }
+    }
+
+    /// Removes the stream keys of outputs that an applied batch, undo or redo deleted or
+    /// pointed at another server (`OutputKind::key_server`, #343), after the collection
+    /// lock is released. Each stays in `State::stale_keys`, which refuses its
+    /// `output.start`, until its key is gone: a store that refuses keeps it there until an
+    /// `output.set_key` or `output.clear_key` succeeds. The batch itself has already
+    /// succeeded, so a refusal is logged, never returned. Without a store there is no
+    /// key to remove.
+    fn remove_stale_keys(&self, stale: Vec<OutputId>) {
+        if stale.is_empty() {
+            return;
+        }
+        let store = self.key_store();
+        for output_id in stale {
+            let removed = match &store {
+                Some(store) => store.clear(output_id.as_str()),
+                None => Ok(()),
+            };
+            match removed {
+                Ok(()) => {
+                    lock(&self.shared.state).stale_keys.remove(&output_id);
+                }
+                Err(err) => tracing::warn!(
+                    output_id = %output_id,
+                    "the credential store did not remove the stream key of an output whose \
+                     server changed: {err}"
+                ),
+            }
         }
     }
 
@@ -1059,6 +1125,15 @@ impl Engine {
                     reason: "another output is starting".into(),
                 });
             }
+            if state.stale_keys.contains(&output_id) {
+                return Err(ProtocolError::ActionFailed {
+                    reason: format!(
+                        "output `{output_id}` changed server and its old stream key is not \
+                         removed yet: send `output.clear_key`, or `output.set_key` with the \
+                         new server's key"
+                    ),
+                });
+            }
             let key = encode_key(&state.graph, &output_id);
             let publish = match (
                 own_target(&state.graph, &output_id),
@@ -1123,6 +1198,11 @@ impl Engine {
                 output_id: output_id.clone(),
                 generation,
                 cancel: false,
+                kind: state
+                    .graph
+                    .state()
+                    .output(&output_id)
+                    .map(|output| output.kind().clone()),
             });
             match state.outputs.begin(&output_id, true) {
                 Ok(step) => emit_output(&mut state, &output_id, step, &mut wake),
@@ -1924,11 +2004,55 @@ struct State {
     stats_seq: u64,
     /// The program mixer's controls while it runs: it follows the collection's audio.
     routing: AudioRouting,
+    /// Outputs whose stream key must be removed because an applied change deleted them
+    /// or moved them to another server (#343). Marked under this lock in the same
+    /// critical section as the change, and unmarked once the store has removed the key,
+    /// so `output.start` (which refuses a marked output) never opens the new server with
+    /// the old key.
+    stale_keys: BTreeSet<OutputId>,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
 }
 
 impl State {
+    /// Executes `call`, and when it is a batch, undo or redo that applied, marks in
+    /// `stale_keys` and returns every output whose stream key it made stale: one it
+    /// deleted, or whose `OutputKind::key_server` it changed (#343). The caller removes
+    /// those keys once this lock is released, since the store is never called under it.
+    fn execute_and_unbind_keys(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        call: Call,
+        wake: &mut Vec<Waker>,
+    ) -> (Result<CallResult, ProtocolError>, Vec<OutputId>) {
+        if !matches!(call, Call::Batch(_) | Call::History(_)) {
+            return (self.execute(client_id, request_id, call, wake), Vec::new());
+        }
+        let before: Vec<(OutputId, Option<String>)> = self
+            .graph
+            .state()
+            .outputs()
+            .map(|output| (output.id().clone(), output.kind().key_server()))
+            .collect();
+        let result = self.execute(client_id, request_id, call, wake);
+        if result.is_err() {
+            return (result, Vec::new());
+        }
+        let after = self.graph.state();
+        let stale: Vec<OutputId> = before
+            .into_iter()
+            .filter(|(output_id, server)| {
+                after
+                    .output(output_id)
+                    .is_none_or(|output| output.kind().key_server() != *server)
+            })
+            .map(|(output_id, _)| output_id)
+            .collect();
+        self.stale_keys.extend(stale.iter().cloned());
+        (result, stale)
+    }
+
     fn execute(
         &mut self,
         client_id: &ClientId,
