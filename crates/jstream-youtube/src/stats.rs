@@ -129,7 +129,7 @@ impl ChatRate {
     }
 
     /// Records a chat poll at `at` that returned `messages` new messages. Polls older
-    /// than the window are dropped; so is the oldest when [`MAX_CHAT_POLLS`] are kept.
+    /// than the window are dropped; so is the oldest when `MAX_CHAT_POLLS` (128) are kept.
     pub fn record(&mut self, at: Instant, messages: usize) {
         self.forget_before(at);
         if self.polls.len() == MAX_CHAT_POLLS {
