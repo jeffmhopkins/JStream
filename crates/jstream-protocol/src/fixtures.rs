@@ -118,6 +118,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             geometry: ItemGeometry {
                 fit_mode: FitMode::Fill,
                 rotation_deg: Finite32::new(12.5).expect("finite"),
+                flip_h: true,
                 ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
             },
         },
@@ -1198,6 +1199,7 @@ fn item_infos() -> Vec<ItemInfo> {
             transform: corner_box().transform_view().expect("finite"),
             geometry: Some(ItemGeometry {
                 fit_mode: FitMode::Stretch,
+                flip_v: true,
                 ..corner_box()
             }),
             crop: Crop::NONE,

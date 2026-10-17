@@ -13,6 +13,7 @@
 
 pub mod app;
 pub mod canvas;
+pub mod header;
 pub mod host;
 pub mod pairing;
 pub mod panels;

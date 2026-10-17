@@ -54,8 +54,8 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
-| [Theme and shared controls](#theme) | 8 | 0 | 1 | 6 | 0 | 1 |
-| [Header bar](#header) | 9 | 0 | 3 | 3 | 3 | 0 |
+| [Theme and shared controls](#theme) | 8 | 2 | 1 | 4 | 0 | 1 |
+| [Header bar](#header) | 9 | 2 | 2 | 2 | 3 | 0 |
 | [Docking and layouts](#docking) | 10 | 0 | 0 | 9 | 1 | 0 |
 | [Canvas](#canvas) | 18 | 1 | 6 | 7 | 4 | 0 |
 | [Context menus](#menus) | 8 | 0 | 0 | 6 | 2 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 0 | 0 | 0 | 6 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 2 | 2 | 2 | 0 |
-| **Total** | **130** | **3** | **24** | **62** | **40** | **1** |
+| **Total** | **130** | **7** | **23** | **59** | **40** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -86,34 +86,34 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ⬜ | Today: system light or dark, with 7 variables of its own (`style.css`). |
-| WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the theme batch's font stack names Plex first and falls back to system fonts. |
-| WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ⬜ | |
+| WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ✅ | The palette's CSS variables in `style.css`; panels restyle further in their own rows. |
+| WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the font stack names Plex first and falls back to system fonts. |
+| WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
 | WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | Today: text glyphs (▲ ▼ ✕ ● ○ ↺). |
 | WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ⬜ | Used by the Inspector, filters, mixer and dialogs. |
 | WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | ⬜ | |
 | WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ⬜ | Rows already show tools on hover; the prototype's look and "stays on" rule are missing. |
-| WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ⬜ | Today: a fixed bottom-right error box with Dismiss. Errors may stay sticky; toasts are for confirmations ("Added a reference…"). |
+| WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ⬜ | Today: a fixed bottom-right error box with Dismiss, in the prototype's toast colours. Errors may stay sticky; toasts are for confirmations ("Added a reference…"). |
 
 <a id="header"></a>
 ## Header bar
 <!-- @section
-covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/panels/outputs.rs"]
+covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/panels/outputs.rs"]
 -->
 
 Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header-bar).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | 🟡 | Today: a status bar with the brand, engine URL, protocol, client ID, revision and Disconnect. The prototype's File and Edit are empty; the real ones hold Disconnect and the connection details, and Undo/Redo. |
+| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | 🟡 | Brand, File (connection details, Disconnect) and Edit (Undo, Redo) built; the prototype leaves File and Edit empty. View and Layout come with [docking](#docking) (HD-02, HD-03). |
 | HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ⬜ | Needs [docking](#docking). |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ⬜ | Needs [docking](#docking). |
-| HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | `stats.tick` has drop totals only; fps and CPU need engine stats (decision register D39). |
+| HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (#317). |
 | HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | 🔒 | T1 (#260) and T1u (#304). |
-| HD-07 | Record button | Starts and stops recording. | ⬜ | Start/stop the recording outputs; the Outputs panel already does it per output. |
+| HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
-| HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | 🟡 | Built in the Outputs panel (starts every stopped or failed stream output whose key is set); it moves to the header. |
+| HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
 
 <a id="docking"></a>
 ## Docking and layouts
@@ -150,7 +150,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | 🟡 | Today: a black stage up to 960px wide, scene name in a toolbar above. |
+| CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | 🟡 | The frame and area colours are built; today the stage is up to 960px wide, with the scene name in a toolbar above. |
 | CV-02 | Edits the selected scene | The canvas shows and edits the scene selected in Scenes; selecting on the canvas and in Scene objects is one selection. | ⬜ | Today it always shows the program scene, with a selection of its own. |
 | CV-03 | Live picture | The scene's real picture under the item boxes. | 🔒 | U4p (#302) adds the program preview; other scenes need previews for any target (D36). |
 | CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | 🟡 | Handles, knob and selection exist in a different style; no pill, no hover outline. |
