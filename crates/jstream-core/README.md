@@ -103,8 +103,8 @@ state machine. Contents:
     the host can't reset them. What the host sends back is checked first (#351):
     parameter descriptions with a non-finite or inverted range, a default outside it,
     or a repeated id are dropped from `Params`; a parameter change, from a control
-    message or the block's `params_out` ring, must name a parameter of the last
-    `Params` and be finite and within its range to become `ParamChanged`; and a saved
+    message or the block's `params_out` ring (read only once the run's first `Params`
+    has arrived), must name a parameter of the last `Params` and be finite and within its range to become `ParamChanged`; and a saved
     state over `MAX_STATE` (2 MiB) is ignored. Each dropped reply counts in `rejected`,
     and the first of each host run is an `Error`. `stop` asks the host to stop and
     kills it after `STOP_GRACE`.

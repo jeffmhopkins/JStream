@@ -66,7 +66,7 @@ impl PluginBlock {
             )
         }
         .os("CreateFileMappingW")?;
-        Self::map(Handle(handle))
+        Self::map(Handle(handle), true)
     }
 
     /// Duplicates the block's section handle into `process` (a host the engine just
@@ -97,8 +97,13 @@ impl PluginBlock {
     }
 
     /// Maps the block whose section handle the engine duplicated into this process,
-    /// `value` from its `ToHost::Block`, taking ownership of that handle. The host's
-    /// side.
+    /// `value` from its `ToHost::Block`, taking ownership of that handle once it maps.
+    /// The host's side.
+    ///
+    /// `value` comes from the engine, the trusted side, but this stays a safe function:
+    /// if it names something other than a section, `MapViewOfFile` fails, and then the
+    /// value is left open rather than closed, so a handle some other code owns is never
+    /// closed through it. Only a value that maps as a section is owned from then on.
     ///
     /// # Errors
     /// `value` can't be a handle, or isn't a section at least a block's size.
@@ -110,14 +115,20 @@ impl PluginBlock {
             .ok_or_else(|| PlatformError::Unsupported {
                 what: format!("a plugin block handle of {value:#x}"),
             })?;
-        Self::map(Handle(HANDLE(raw as *mut std::ffi::c_void)))
+        Self::map(Handle(HANDLE(raw as *mut std::ffi::c_void)), false)
     }
 
-    /// Maps the whole of `handle`'s section and checks it holds a `Shared`.
-    fn map(handle: Handle) -> Result<Self, PlatformError> {
-        // SAFETY: `handle` is a live section handle; 0 maps the whole section.
+    /// Maps the whole of `handle`'s section and checks it holds a `Shared`. When the
+    /// mapping fails and `owned` is false, the handle is left open: it may not be ours.
+    fn map(handle: Handle, owned: bool) -> Result<Self, PlatformError> {
+        // SAFETY: `MapViewOfFile` takes any handle value: one that isn't a live section
+        // this process may map fails with a null view, which is checked below, and maps
+        // nothing. 0 maps the whole section.
         let view = unsafe { MapViewOfFile(handle.0, FILE_MAP_ALL_ACCESS, 0, 0, 0) };
         if view.Value.is_null() {
+            if !owned {
+                std::mem::forget(handle);
+            }
             return Err(PlatformError::Os {
                 call: "MapViewOfFile",
                 code: None,

@@ -206,7 +206,7 @@ depends_on = ["docs/RULES.md#R-SEC-003", "docs/adr/0035-clap-plugins-out-of-proc
 
 | Kind | Trust | On main | Boundary |
 |---|---|---|---|
-| CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`), the mixer's side, the host process, its launcher and supervisor, and CLAP filters in a source's chain | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
+| CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`), the mixer's side, the host process, its launcher and supervisor, and CLAP filters in a source's chain (#488 in flight) | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
 | WASM automation plugins | Untrusted | Nothing (W1) | wasmtime, no filesystem or network unless declared and granted ([R-SEC-003](../RULES.md#R-SEC-003)) |
 | WGSL effect packs | Untrusted GPU code | Nothing (X1); only built-in shaders | naga validation ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)) |
 

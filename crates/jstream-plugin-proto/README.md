@@ -98,7 +98,7 @@ cleanly or inside a frame; descriptions with non-finite, inverted or default-out
 ranges and repeated ids dropped; changes for unknown ids, non-finite or out of range
 refused; and an `EngineBlock`'s counts surviving a host rewriting the status block.
 
-**Not here:** mapping and naming the block (`jstream-platform-windows`'s
+**Not here:** mapping and handing over the block (`jstream-platform-windows`'s
 `PluginBlock`), starting the host process (its `WindowsPluginHosts`), watching and
 restarting it (`jstream-core`'s `HostSupervisor`), and the host itself
 (`jstream-plugin-host`, with `jstream-plugin-clap`).

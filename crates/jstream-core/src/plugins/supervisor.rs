@@ -170,6 +170,9 @@ pub struct HostSupervisor {
     rejected: u64,
     /// Whether this host run has reported a dropped reply yet.
     reported: bool,
+    /// Whether this host run has described its parameters yet. Until then the block's
+    /// `params_out` ring is left alone, since its `Params` may still be in the reader.
+    described: bool,
 }
 
 impl std::fmt::Debug for HostSupervisor {
@@ -206,6 +209,7 @@ impl HostSupervisor {
             params: Vec::new(),
             rejected: 0,
             reported: false,
+            described: false,
         }
     }
 
@@ -296,6 +300,7 @@ impl HostSupervisor {
                 self.degraded = false;
                 self.params.clear();
                 self.reported = false;
+                self.described = false;
             }
             Err(e) => self.crash(format!("the plugin host didn't start: {e}"), now, events),
         }
@@ -314,11 +319,15 @@ impl HostSupervisor {
                         dropped.push((bad, "unusable parameter descriptions"));
                     }
                     self.params.clone_from(&params);
+                    self.described = true;
                     events.push(HostEvent::Params(params));
                 }
                 FromHost::ParamChanged(event) => match check_param_event(&self.params, event) {
                     Some(event) => events.push(HostEvent::ParamChanged(event)),
-                    None => dropped.push((1, "a parameter change out of range")),
+                    None => dropped.push((
+                        1,
+                        "a parameter change for no described parameter or out of range",
+                    )),
                 },
                 FromHost::State(state) if state.len() > MAX_STATE => {
                     dropped.push((1, "a saved state over 2 MiB"));
@@ -334,17 +343,22 @@ impl HostSupervisor {
                 FromHost::Plugins(_) => {}
             }
         }
-        // Changes the plugin made while processing come back through the block. The ring
-        // holds at most `PARAM_SLOTS`, so this ends however fast the host pushes.
+        // Changes the plugin made while processing come back through the block, once
+        // this run has described its parameters. The ring holds at most `PARAM_SLOTS`,
+        // so this ends however fast the host pushes.
         let block = host.block();
         let ring = &shared(&block).params_out;
-        for _ in 0..PARAM_SLOTS {
+        let slots = if self.described { PARAM_SLOTS } else { 0 };
+        for _ in 0..slots {
             let Some(event) = ring.pop() else {
                 break;
             };
             match check_param_event(&self.params, event) {
                 Some(event) => events.push(HostEvent::ParamChanged(event)),
-                None => dropped.push((1, "a parameter change out of range")),
+                None => dropped.push((
+                    1,
+                    "a parameter change for no described parameter or out of range",
+                )),
             }
         }
         for (n, what) in dropped {
@@ -879,6 +893,29 @@ mod tests {
         assert_eq!(changes(&events), vec![ok], "{events:?}");
         assert_eq!(rig.sup.rejected(), 3);
         assert_eq!(ring.pop(), None, "the ring was drained");
+    }
+
+    #[test]
+    fn the_block_ring_waits_for_the_first_description() {
+        let mut rig = Rig::new(SupervisorPolicy::default());
+        rig.hosts.start_loading(true);
+        rig.tick(Duration::ZERO);
+        let block = rig.sup.host.as_ref().expect("started").block();
+        let ring = &shared(&block).params_out;
+        let ok = ParamEvent { id: 1, value: 0.25 };
+        assert!(ring.push(ok));
+        rig.tick(Duration::from_millis(1));
+        assert_eq!(rig.sup.rejected(), 0, "no false alarm before `Params`");
+        rig.hosts.hosts()[0].finish_loading();
+        let mut seen = rig.until_ready();
+        for _ in 0..100 {
+            if changes(&seen).contains(&ok) {
+                break;
+            }
+            seen.extend(rig.tick(Duration::from_millis(1)));
+        }
+        assert!(changes(&seen).contains(&ok), "{seen:?}");
+        assert_eq!(rig.sup.rejected(), 0);
     }
 
     #[test]

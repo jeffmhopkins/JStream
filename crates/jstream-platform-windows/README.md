@@ -448,8 +448,9 @@ The code is ported from spikes S1 to S3. This first cut has:
     isn't inheritable. With no name, no other process can open it, and no other child
     of the engine inherits it. `share_with` duplicates its handle into one host process
     and returns the handle's value there. `from_handle` (the plugin host) maps the
-    section from that value, taking ownership of the handle, and refuses a value that
-    can't be a handle or a section smaller than this version's block. Both give
+    section from that value, taking ownership of the handle once it maps (a value that
+    doesn't map is left open, since it may not be the host's to close), and refuses a
+    value that can't be a handle or a section smaller than this version's block. Both give
     `&Shared` through `AsRef`, unmap on drop, and are `Send` and `Sync`, since the
     block is all atomics.
   - `ProAudioThread::register` registers the calling thread with MMCSS "Pro Audio"
