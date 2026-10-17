@@ -351,15 +351,19 @@ impl Ctx<'_> {
             });
         }
         let aux = draw.aux.unwrap_or(draw.input);
-        let straight = |image: &Image| f32::from(u8::from(image.alpha() == Alpha::Straight));
+        let alpha = |image: &Image| match image.alpha() {
+            Alpha::Premultiplied => 0.0,
+            Alpha::Straight => 1.0,
+            Alpha::PremultipliedSrgb => 2.0,
+        };
         let seconds = (self.clock.seconds.rem_euclid(TIME_WRAP_SECONDS)) as f32;
         let frame = super::params::Uniforms::new()
             .vec2([draw.input.width() as f32, draw.input.height() as f32])
             .vec2([draw.target.width() as f32, draw.target.height() as f32])
             .vec2([aux.width() as f32, aux.height() as f32])
             .f32(seconds)
-            .f32(straight(draw.input))
-            .f32(straight(aux))
+            .f32(alpha(draw.input))
+            .f32(alpha(aux))
             .finish();
         debug_assert_eq!(frame.len() as u64, FRAME_BYTES);
         let device = &self.gpu.device;

@@ -339,8 +339,10 @@ kinds.
   to one prelude (`prelude.wgsl`) that defines the fullscreen triangle, the bindings
   (input, a linear clamp sampler, a `Frame` uniform with the input, output and aux
   sizes and the time, an optional aux image, and the filter's `Params` uniform) and
-  colour helpers. `src` and `aux` always return premultiplied linear colour; an
-  imported input is premultiplied after sampling. A pipeline is built on first use and
+  colour helpers. `src`, `texel` and `aux` always return premultiplied linear colour:
+  a straight import is premultiplied after sampling, and a premultiplied import (a
+  browser page) is divided by alpha, decoded from sRGB and multiplied again, as the
+  compositor's own draw does (`Frame`'s `alpha` and `aux_alpha` say which). A pipeline is built on first use and
   kept for the compositor's life, keyed by the shader's label and source (up to four
   sources per label, so a reloaded pack's old and new filters don't evict each other).
   A shader wgpu refuses, by its own validation or a backend compiler's, is a
@@ -418,7 +420,8 @@ same tests run on lavapipe and on WARP.
 **Filters.** `filter::testing` runs one filter over a small uploaded image and reads
 the result back through a 1:1 scene on a transparent canvas, so each kind's golden
 test is a pixel or grid check like the ones below. A two-pass copy covers the harness
-itself, including a half-transparent texel round-tripping.
+itself, including a half-transparent texel round-tripping, and copies a premultiplied
+browser-page import through unchanged (read as premultiplied linear, it would brighten).
 
 **Why tolerance instead of a smoke-only Linux run.** Flat, opaque, channel-pure sRGB
 colours (0 and 1) round-trip through the linear FP16 target exactly, and a 1:1

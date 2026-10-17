@@ -693,7 +693,12 @@ fn srgb_texture(compositor: &Compositor, width: u32, height: u32, rgba: [u8; 4])
 }
 
 /// A `Rgba8Unorm` texture of one colour, `rgba` given as code values.
-fn unorm_texture(compositor: &Compositor, width: u32, height: u32, rgba: [u8; 4]) -> wgpu::Texture {
+pub(crate) fn unorm_texture(
+    compositor: &Compositor,
+    width: u32,
+    height: u32,
+    rgba: [u8; 4],
+) -> wgpu::Texture {
     let size = wgpu::Extent3d {
         width,
         height,
