@@ -241,7 +241,10 @@ state machine. Contents:
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
-  rotation (`audit.rs`), and of undo and redo (`undo_and_redo_are_audited`), the
+  rotation (`audit.rs`), the user-only files (`private_file.rs`: a new file never
+  replaces one, appending to an existing one, a directory refused, mode `0600` on Unix,
+  and on Windows a DACL that passes `check_private_file`), a stale temporary file a
+  crashed save left replaced (`collection.rs`), and of undo and redo (`undo_and_redo_are_audited`), the
   preview streams (`src/tests/preview.rs`: no subscription without a binary channel,
   JPEG without an encoder following the mix's changes and the canvas size, H.264 from
   the platform fakes starting at a keyframe and JPEG beside it for a client that asks,
@@ -352,17 +355,18 @@ settings), `png`
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
-source scopes)
-and `tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
+source scopes), `tracing` (see *Logging*) and, on Windows only,
+`jstream-platform-windows` (`create_private_file` and `check_private_file` for the audit
+log and the collection file, `src/private_file.rs`; the GPU capture hardware test,
+`src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature, uses it
+too). No async runtime: `output.start` blocks the call until
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`), `jstream-youtube`'s `fake` feature (`src/tests/youtube.rs`),
 `jstream-browser`'s `fake` feature (the browser pages in `src/tests/audio.rs`),
-`zune-jpeg` (decoding the preview's JPEG pictures in tests), `jstream-mcp`
-(`tests/mcp.rs`) and, on Windows,
-`jstream-platform-windows` (the GPU capture hardware test, `src/tests/windows_gpu.rs`,
-compiled only with this crate's `hw-tests` feature); the tests also use `serde_json`
+`zune-jpeg` (decoding the preview's JPEG pictures in tests) and `jstream-mcp`
+(`tests/mcp.rs`); the tests also use `serde_json`
 for settings values and saved collection files. All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this

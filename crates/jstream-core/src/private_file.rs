@@ -31,30 +31,30 @@ pub(crate) fn open_append(path: &Path) -> io::Result<File> {
     #[cfg(windows)]
     {
         match create_new(path) {
-            // A new file is empty, so writing from its start appends.
-            Ok(file) => Ok(file),
+            // The new file's own handle is not in append mode: it is closed and the
+            // file reopened below like an existing one, so a second writer's lines
+            // interleave rather than overwrite (and the reopened file is checked too).
+            Ok(file) => drop(file),
             // Windows reports a directory in the way as `AccessDenied`, not
             // `AlreadyExists`, so anything already at `path` is opened, and a directory
             // fails there.
             Err(error)
                 if error.kind() == io::ErrorKind::AlreadyExists
-                    || std::fs::symlink_metadata(path).is_ok() =>
-            {
-                let file = OpenOptions::new().read(true).append(true).open(path)?;
-                jstream_platform_windows::check_private_file(&file).map_err(|why| {
-                    io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        format!(
-                            "`{}` may be accessible to other users: {why}; make it \
-                             user-only or move it away",
-                            path.display()
-                        ),
-                    )
-                })?;
-                Ok(file)
-            }
-            Err(error) => Err(error),
+                    || std::fs::symlink_metadata(path).is_ok() => {}
+            Err(error) => return Err(error),
         }
+        let file = OpenOptions::new().read(true).append(true).open(path)?;
+        jstream_platform_windows::check_private_file(&file).map_err(|why| {
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "`{}` may be accessible to other users: {why}; make it user-only or \
+                     move it away",
+                    path.display()
+                ),
+            )
+        })?;
+        Ok(file)
     }
     #[cfg(not(windows))]
     {
