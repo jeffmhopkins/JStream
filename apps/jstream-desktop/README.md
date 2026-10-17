@@ -40,17 +40,21 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard and
   shutdown.
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds.
+- **Crash reports** (`crash.rs`): the panic hook that writes a redacted report beside
+  the log file, and `Redacting`, the key store wrapper that registers each stream key
+  with its redaction.
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
-  script's escaping, the command line, the virtual camera's status values and the
-  capped log file), and one integration test, `tests/delay_load.rs` (Windows MSVC
+  script's escaping, the command line, the virtual camera's status values, the
+  capped log file, and the crash hook in a child process, with a stream key loaded
+  through `crash::Redacting`), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
 
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
 virtual camera's registration mode (`jstream.exe --register-vcam`, which
-`jstream-daemon` provides for now), a native dialog when WebView2 is missing, crash
-reports, MCP and the token for outside clients, and browser sources in a default build
+`jstream-daemon` provides for now), a native dialog when WebView2 is missing, native crash
+dumps (only a panic writes a report, as in the daemon), MCP and the token for outside clients, and browser sources in a default build
 (the `cef` feature is off). `cargo xtask dist` builds the portable folder
 ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 
@@ -100,6 +104,9 @@ folder, and its log `logs\cef.log`.
   capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to
   its console; a release build has no console window. The audit log goes in the same
   folder, as the daemon's does. The token is never logged.
+- **Crash reports.** A panic writes `logs\crash-<UTC time>-<pid>-<n>.txt` in the data
+  folder; the newest 10 are kept. Nothing is uploaded
+  ([R-SEC-004](../../docs/RULES.md#R-SEC-004)).
 - **When it can't start** (no data folder, Media Foundation missing, the collection
   file unreadable, no UI bundle), the window shows what went wrong and the log has the
   details. An unknown command-line argument is shown the same way.
@@ -196,3 +203,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-
   app. With no device, pages play audio but show no frames.
 - **Logs and the token.** The token reaches only the bootstrap script. It is never
   logged, written to disk, or put in a URL (R-SEC-001).
+- **Crash reports** (`crash.rs`, [R-SEC-004](../../docs/RULES.md#R-SEC-004)), as the
+  daemon writes them ([jstream-daemon › Design](../jstream-daemon/README.md#design)).
+  Both apps are layer 6, so the desktop can't use the daemon's module and has its own
+  copy. `main.rs` installs the panic hook as soon as it has the data folder, before the
+  log file, into the `logs` folder (created if missing). A report holds the app and
+  protocol versions, OS and architecture, the UTC time, the process ID, the thread
+  name, the panic's location and message (cut at 16 KiB) and a backtrace; never the
+  environment, the command line or settings. The control token (registered by
+  `Host::start`) and every stream key the live engine stores or reads (its Credential
+  Manager store is behind `crash::Redacting`) are replaced by `***` in the report and
+  in its stderr line (R-SEC-001). Only their length and BLAKE3 digest are kept. The
+  hook replaces the default one, whose stderr line would quote the message
+  unredacted. Before each report the oldest beyond 10 are deleted; the log file and
+  the audit log in the same folder are left alone. A native crash writes nothing yet
+  (the daemon's open question 4 holds here too).
