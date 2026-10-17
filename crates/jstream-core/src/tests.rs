@@ -1055,7 +1055,7 @@ fn output_start_without_a_publish_target_fails() {
 }
 
 /// `output.start` runs capture, one composite, both encodes and the FLV publish
-/// against the platform fakes. A missing software adapter skips the test, and fails
+/// against the platform fakes. A missing adapter (software in CI) skips the test, and fails
 /// it when `CI` is set.
 #[test]
 fn output_start_publishes_fake_audio_and_video() {
@@ -1748,7 +1748,7 @@ fn the_render_snapshot_follows_scene_switch() {
 /// failure to open still fails the test, just later.
 const GPU_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
-/// One software-adapter test at a time. Parallel compositors starve the pipeline
+/// One GPU test at a time, on whatever adapter opens (software in CI). Parallel compositors starve the pipeline
 /// test's media wait and crash WARP. The lock schedules tests; it is not engine state.
 pub(crate) fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
     static SLOT: Mutex<()> = Mutex::new(());

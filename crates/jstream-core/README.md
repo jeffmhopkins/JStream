@@ -160,7 +160,7 @@ state machine. Contents:
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
   end), the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
-  `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
+  `video.snapshot` on whatever adapter opens (the software one in CI), nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
   thread's output size (the capture filling it with no scene, the program scaled from
   the canvas, a `display` source showing the capture, the same for a GPU capture of
@@ -175,7 +175,7 @@ state machine. Contents:
   the DX12 device of a real Windows machine (`src/tests/windows_gpu.rs`, behind
   `hw-tests` and ignored), the
   pipeline against the platform fakes
-  (on the software adapter, and again on a CPU stand-in for the compositor so the
+  (on whatever adapter opens, the software one in CI, and again on a CPU stand-in for the compositor so the
   stage-failure, late-tick, teardown, final-tick, link-loss, stalled-stop and
   blocked-send stop tests, and the final tick's count of what a blocked send leaves
   queued, run without one),
@@ -682,8 +682,8 @@ or a size that does not fit in memory is `SourceFrameError`.
 
 The work runs on `jstream-snapshot`, a thread the engine starts on the first
 snapshot. It owns the compositor, serves requests in order, and stops when the
-engine goes away. The compositor opens on the first snapshot, software adapter first
-(`OpenOptions::headless`: lavapipe or WARP). No adapter is `internal`, and the reason
+engine goes away. The compositor opens on the first snapshot, hardware adapter first,
+with lavapipe or WARP as the fallback (`OpenOptions::hardware`). No adapter is `internal`, and the reason
 starts with `no wgpu adapter`. A failed open is cached: until its retry time,
 snapshots answer that error at once instead of probing adapters again. The first
 retry is 5 s after the failure, and each failure in a row doubles the wait, up to
@@ -710,8 +710,9 @@ number the client chose, and they end with `preview.unsubscribe` or the session.
 The codec is picked when the client subscribes: the first of its `codecs` the engine
 can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends) and
 JPEG always. One `jstream-preview` thread per engine, started by the first stream and
-gone once none is left, serves them all. It owns a compositor (`Compositor::open`
-headless, or the CPU stand-in under `with_cpu_compositor`) and keeps each stream's
+gone once none is left, serves them all. It owns a compositor (`Compositor::open`,
+hardware adapter first with the software one as the fallback, or the CPU stand-in
+under `with_cpu_compositor`) and keeps each stream's
 encoder and pacing to itself, so the stream its session holds is only flags. On each
 pass it loads the published render snapshot and `rev` (a brief collection lock, never
 held while drawing), and for each stream that is due draws the shot at the stream's
@@ -973,7 +974,8 @@ takes the publish target, records an in-flight generation, emits `starting`, and
 drops the collection lock before it opens devices or joins anything. When no other
 output is running it opens the program stage and waits,
 up to 10 s, for the render thread to open its compositor (on the platform's GPU
-context, or on the software adapter without one; see [Runtime](#runtime)); that bound only
+context, or without one on a hardware adapter first and the software adapter as the
+fallback; see [Runtime](#runtime)); that bound only
 keeps a stuck adapter from blocking the call, and the GPU tests raise it because
 lavapipe can open slower than that on a loaded CI runner. When others are running it shares
 theirs. It then gets the encoder session for its key (opening one if no running
@@ -1077,7 +1079,10 @@ emits `stopping` and `stopped` as from `active`.
 The render thread reads the platform capture mailbox, composites the program mix of
 the render snapshot (see *Snapshots*) at 30 frames per second, repeats the last
 capture when the mailbox is empty, and reads the composite back as RGBA8 because this
-cut has no GPU encode target. It draws at the canvas size the collection has when the
+cut has no GPU encode target. Without the platform's GPU context it opens its
+compositor on a hardware adapter when the machine has one, and on the software adapter
+otherwise (`OpenOptions::hardware`): on WARP a 720p program ran at about 10 fps
+(#433). It draws at the canvas size the collection has when the
 program stage opens, rounded down to even sizes for NV12 (`output_size`), so every
 output encodes at the canvas, not the display (#433); a canvas change while outputs
 run takes effect when the stage next opens. The capture keeps the display's size and
@@ -1367,10 +1372,10 @@ platform's `GpuInterop` for its device. With one, the render thread's compositor
 the render thread samples where they are, with no CPU copy, and counts
 (`OutputStats::gpu_captures`). Each fallback is logged and keeps the output running on
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
-opens its own device, software adapter first), a backend with no GPU path or one that
-refuses the context, and a GPU capture that does not start. The render loop drops the
-held frame, the compositor and the capture stream before the context, so the
-platform's state goes first as `GpuContext` requires.
+opens its own device, hardware adapter first with the software one as the fallback), a
+backend with no GPU path or one that refuses the context, and a GPU capture that does
+not start. The render loop drops the held frame, the compositor and the capture stream
+before the context, so the platform's state goes first as `GpuContext` requires.
 
 The mixer thread polls the media clock and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs, the pages' audio and the media files' sound (see *Audio

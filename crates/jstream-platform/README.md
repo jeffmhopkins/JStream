@@ -186,7 +186,8 @@ Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene on
 that device when the engine has one, sampling capture frames there, and opens its own
-(software adapter first) when it does not; it does not write the NV12 encode target.
+(hardware adapter first, the software one as the fallback) when it does not; it does not
+write the NV12 encode target.
 Windows' H.264 encoder takes encode targets on the context it reached through
 `Codecs::on_context`; the engine does not write or push them yet.
 
@@ -214,8 +215,8 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
     - The media adapter is the one that drives the captured display, with
       `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device when the
       engine has one, so capture, render and encode share one adapter. With no interop it
-      opens its own, software adapter first. On a hybrid-GPU machine where sharing an
-      adapter isn't possible, the platform says so (ARCH step 6).
+      opens its own, hardware adapter first with the software one as the fallback. On a
+      hybrid-GPU machine where sharing an adapter isn't possible, the platform says so (ARCH step 6).
     - The platform keeps the raw objects it took from the device (S1's
       `ID3D12Device` clone) inside its own state. It releases them before the wgpu device,
       as ARCH step 2 requires: `GpuContext` drops the platform's state first.
