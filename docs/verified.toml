@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:bb7e9052166ca391", by = "agent:mac1-keychain", note = "macOS row now names the Keychain store for stream keys and OAuth tokens; Cargo summary change adds the Keychain store and the layer and unsafe flags are unchanged" }
+stamp = { hash = "b3:eb84b51b410e5821", by = "agent:wasm-epoch", note = "re-read: the jstream-plugin-wasm row and manifest summary now say fuel, wall-time and memory limits, matching the epoch deadline added in plugin.rs; other rows untouched" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -87,7 +87,7 @@ stamp = { hash = "b3:22a476a9c93201fc", by = "agent:claude@session_012JH6K3TesVL
 stamp = { hash = "b3:1ff7a5731ca92f93" }
 
 ["ARCH#crate-map"."file:crates/jstream-plugin-wasm/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:deec4b7b3435524b", by = "agent:w1-builder", note = "jstream-plugin-wasm now exists at layer 3 as the row said; row now names the capability list (empty by default), fuel/memory limits and no WASI. Its only member dependency is jstream-control (L2), so layering holds" }
+stamp = { hash = "b3:422c28c6104d1883", by = "agent:wasm-epoch", note = "re-read: the jstream-plugin-wasm row and manifest summary now say fuel, wall-time and memory limits, matching the epoch deadline added in plugin.rs; other rows untouched" }
 
 ["ARCH#crate-map"."file:crates/jstream-protocol/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:be2cb77094d2d1e3" }
@@ -1980,7 +1980,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:48aac723c0fe210f", by = "agent:claude-e3d", note = "Says the render thread converts into a ring of encode targets and pushes them to on_context sessions; rest of the section (import, fences, frame lifetime) unchanged by this diff" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:bb7e9052166ca391", by = "agent:mac1-keychain", note = "Re-read: the crate-map change only reworded the macOS row's Keychain store; the gpu-frames claims (GpuInterop and GPU frame types with wgpu types here, platform crates import via wgpu-hal) still hold" }
+stamp = { hash = "b3:eb84b51b410e5821", by = "agent:wasm-epoch", note = "re-read against the crate map change, which only edits the jstream-plugin-wasm row (wall-time limits); the GPU frames section names no plugin crate; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:bb9d34d698b4cea6", by = "agent:claude-e3d", note = "Says the render thread converts into a ring of encode targets and pushes them to on_context sessions; rest of the section (import, fences, frame lifetime) unchanged by this diff" }
@@ -2445,19 +2445,19 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-plugin-wasm#abi"."body"]
-stamp = { hash = "b3:7993f7d74c7f3cb6", by = "agent:find-idle-work", note = "plugin.rs now charges call/result_read/input_read before copying; ABI text says so and that a short budget stops the plugin out of fuel; import table, statuses and 1 MiB cap unchanged; holds" }
+stamp = { hash = "b3:e7e031285c2cde67", by = "agent:wasm-epoch", note = "re-read: plugin.rs's call now re-arms the epoch deadline when it returns, which the section now says; imports, statuses and results unchanged" }
 
 ["CRATE-jstream-plugin-wasm#abi"."file:crates/jstream-plugin-wasm/src/abi.rs"]
 stamp = { hash = "b3:a503050fc04dd943", by = "agent:w1-builder", note = "ABI v0 table matches abi.rs and the linker in plugin.rs: five imports with their signatures, status codes 0-3 with the result each leaves, 1 MiB call cap, out-of-memory pointers trap, () -> () entry points, no hello/events for plugins; marked unstable" }
 
 ["CRATE-jstream-plugin-wasm#abi"."file:crates/jstream-plugin-wasm/src/plugin.rs"]
-stamp = { hash = "b3:1959409ddae735b7", by = "agent:find-idle-work", note = "plugin.rs now charges call/result_read/input_read before copying; ABI text says so and that a short budget stops the plugin out of fuel; import table, statuses and 1 MiB cap unchanged; holds" }
+stamp = { hash = "b3:07cea1ee1209aaad", by = "agent:wasm-epoch", note = "re-read: plugin.rs's call now re-arms the epoch deadline when it returns, which the section now says; imports, statuses and results unchanged" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."body"]
-stamp = { hash = "b3:9a99df15709000c7", by = "agent:find-idle-work", note = "Limits bullet now says host calls are charged to the fuel budget (1,000 + 1 per byte copied or parsed), matching charge() in plugin.rs and the new host_calls_are_charged_by_size test; other claims unchanged; holds" }
+stamp = { hash = "b3:8ef08eb579c0bc76", by = "agent:wasm-epoch", note = "re-read: Limits now has the 100 ms call and 1 s load deadlines (lower-only, in 10 ms EPOCH_TICK ticks plus the current one), the 64 MiB memory default and Error::Deadline; PluginHost enables epoch_interruption and runs the ticker thread, kept alive by every plugin; call re-arms the deadline on return. The section states each, the Tests list matches limits.rs, plugin.rs and tests/plugin.rs, Capabilities and Not here now cite ADR-0069 (#348) and list its unbuilt queue cap, command cap and forbidden code; Cargo summary says wall-time" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-plugin-wasm"]
-stamp = { hash = "b3:cc9827e15751b295", by = "agent:w1-builder", note = "New crate README: sandbox (only the five jstream imports, WASI refused at load), capability list empty by default and checked per command name before Control, fuel/memory/table/stack defaults and lower-only config, blocking Control bridge, deps and tests all match src/ and tests/plugin.rs; policy left to #348" }
+stamp = { hash = "b3:26bd6918da3024f2", by = "agent:wasm-epoch", note = "re-read: Limits now has the 100 ms call and 1 s load deadlines (lower-only, in 10 ms EPOCH_TICK ticks plus the current one), the 64 MiB memory default and Error::Deadline; PluginHost enables epoch_interruption and runs the ticker thread, kept alive by every plugin; call re-arms the deadline on return. The section states each, the Tests list matches limits.rs, plugin.rs and tests/plugin.rs, Capabilities and Not here now cite ADR-0069 (#348) and list its unbuilt queue cap, command cap and forbidden code; Cargo summary says wall-time" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."dep:docs/RULES.md#R-SEC-003"]
 stamp = { hash = "b3:e62d5f1a75c6baa0", by = "agent:w1-builder", note = "New crate README: sandbox (only the five jstream imports, WASI refused at load), capability list empty by default and checked per command name before Control, fuel/memory/table/stack defaults and lower-only config, blocking Control bridge, deps and tests all match src/ and tests/plugin.rs; policy left to #348" }
@@ -2466,7 +2466,7 @@ stamp = { hash = "b3:e62d5f1a75c6baa0", by = "agent:w1-builder", note = "New cra
 stamp = { hash = "b3:97ad7e8e9e7724bf", by = "agent:w1-builder", note = "New crate README: sandbox (only the five jstream imports, WASI refused at load), capability list empty by default and checked per command name before Control, fuel/memory/table/stack defaults and lower-only config, blocking Control bridge, deps and tests all match src/ and tests/plugin.rs; policy left to #348" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."file:crates/jstream-plugin-wasm/Cargo.toml"]
-stamp = { hash = "b3:c6c97fdb6a271a7c", by = "agent:w1-builder", note = "New crate README: sandbox (only the five jstream imports, WASI refused at load), capability list empty by default and checked per command name before Control, fuel/memory/table/stack defaults and lower-only config, blocking Control bridge, deps and tests all match src/ and tests/plugin.rs; policy left to #348" }
+stamp = { hash = "b3:6bd477a0f43e4849", by = "agent:wasm-epoch", note = "re-read: Limits now has the 100 ms call and 1 s load deadlines (lower-only, in 10 ms EPOCH_TICK ticks plus the current one), the 64 MiB memory default and Error::Deadline; PluginHost enables epoch_interruption and runs the ticker thread, kept alive by every plugin; call re-arms the deadline on return. The section states each, the Tests list matches limits.rs, plugin.rs and tests/plugin.rs, Capabilities and Not here now cite ADR-0069 (#348) and list its unbuilt queue cap, command cap and forbidden code; Cargo summary says wall-time" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."file:crates/jstream-plugin-wasm/src/abi.rs"]
 stamp = { hash = "b3:a503050fc04dd943", by = "agent:w1-builder", note = "New crate README: sandbox (only the five jstream imports, WASI refused at load), capability list empty by default and checked per command name before Control, fuel/memory/table/stack defaults and lower-only config, blocking Control bridge, deps and tests all match src/ and tests/plugin.rs; policy left to #348" }
@@ -2478,22 +2478,22 @@ stamp = { hash = "b3:7d51335d41a15f30", by = "agent:w1-builder", note = "New cra
 stamp = { hash = "b3:071255de6711c6d1", by = "agent:w1-builder", note = "New crate README: sandbox (only the five jstream imports, WASI refused at load), capability list empty by default and checked per command name before Control, fuel/memory/table/stack defaults and lower-only config, blocking Control bridge, deps and tests all match src/ and tests/plugin.rs; policy left to #348" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."file:crates/jstream-plugin-wasm/src/error.rs"]
-stamp = { hash = "b3:2be0ae9b739c6e35", by = "agent:w1-builder", note = "New crate README: sandbox (only the five jstream imports, WASI refused at load), capability list empty by default and checked per command name before Control, fuel/memory/table/stack defaults and lower-only config, blocking Control bridge, deps and tests all match src/ and tests/plugin.rs; policy left to #348" }
+stamp = { hash = "b3:c2be0495b1d6288b", by = "agent:wasm-epoch", note = "re-read: Limits now has the 100 ms call and 1 s load deadlines (lower-only, in 10 ms EPOCH_TICK ticks plus the current one), the 64 MiB memory default and Error::Deadline; PluginHost enables epoch_interruption and runs the ticker thread, kept alive by every plugin; call re-arms the deadline on return. The section states each, the Tests list matches limits.rs, plugin.rs and tests/plugin.rs, Capabilities and Not here now cite ADR-0069 (#348) and list its unbuilt queue cap, command cap and forbidden code; Cargo summary says wall-time" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."file:crates/jstream-plugin-wasm/src/lib.rs"]
-stamp = { hash = "b3:4ac2b85dd60a5dbd", by = "agent:w1-builder", note = "New crate README: sandbox (only the five jstream imports, WASI refused at load), capability list empty by default and checked per command name before Control, fuel/memory/table/stack defaults and lower-only config, blocking Control bridge, deps and tests all match src/ and tests/plugin.rs; policy left to #348" }
+stamp = { hash = "b3:feb841e33191b226", by = "agent:wasm-epoch", note = "re-read: Limits now has the 100 ms call and 1 s load deadlines (lower-only, in 10 ms EPOCH_TICK ticks plus the current one), the 64 MiB memory default and Error::Deadline; PluginHost enables epoch_interruption and runs the ticker thread, kept alive by every plugin; call re-arms the deadline on return. The section states each, the Tests list matches limits.rs, plugin.rs and tests/plugin.rs, Capabilities and Not here now cite ADR-0069 (#348) and list its unbuilt queue cap, command cap and forbidden code; Cargo summary says wall-time" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."file:crates/jstream-plugin-wasm/src/limits.rs"]
-stamp = { hash = "b3:ddb46af5ceaf894e", by = "agent:w1-builder", note = "New crate README: sandbox (only the five jstream imports, WASI refused at load), capability list empty by default and checked per command name before Control, fuel/memory/table/stack defaults and lower-only config, blocking Control bridge, deps and tests all match src/ and tests/plugin.rs; policy left to #348" }
+stamp = { hash = "b3:c82e3f252b987549", by = "agent:wasm-epoch", note = "re-read: Limits now has the 100 ms call and 1 s load deadlines (lower-only, in 10 ms EPOCH_TICK ticks plus the current one), the 64 MiB memory default and Error::Deadline; PluginHost enables epoch_interruption and runs the ticker thread, kept alive by every plugin; call re-arms the deadline on return. The section states each, the Tests list matches limits.rs, plugin.rs and tests/plugin.rs, Capabilities and Not here now cite ADR-0069 (#348) and list its unbuilt queue cap, command cap and forbidden code; Cargo summary says wall-time" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."file:crates/jstream-plugin-wasm/src/no_ambient_capabilities.rs"]
 stamp = { hash = "b3:b91ccfc213c6ef03", by = "agent:w1-builder", note = "New crate README: sandbox (only the five jstream imports, WASI refused at load), capability list empty by default and checked per command name before Control, fuel/memory/table/stack defaults and lower-only config, blocking Control bridge, deps and tests all match src/ and tests/plugin.rs; policy left to #348" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."file:crates/jstream-plugin-wasm/src/plugin.rs"]
-stamp = { hash = "b3:1959409ddae735b7", by = "agent:find-idle-work", note = "Limits bullet now says host calls are charged to the fuel budget (1,000 + 1 per byte copied or parsed), matching charge() in plugin.rs and the new host_calls_are_charged_by_size test; other claims unchanged; holds" }
+stamp = { hash = "b3:07cea1ee1209aaad", by = "agent:wasm-epoch", note = "re-read: Limits now has the 100 ms call and 1 s load deadlines (lower-only, in 10 ms EPOCH_TICK ticks plus the current one), the 64 MiB memory default and Error::Deadline; PluginHost enables epoch_interruption and runs the ticker thread, kept alive by every plugin; call re-arms the deadline on return. The section states each, the Tests list matches limits.rs, plugin.rs and tests/plugin.rs, Capabilities and Not here now cite ADR-0069 (#348) and list its unbuilt queue cap, command cap and forbidden code; Cargo summary says wall-time" }
 
 ["CRATE-jstream-plugin-wasm#purpose"."file:crates/jstream-plugin-wasm/tests/plugin.rs"]
-stamp = { hash = "b3:4f98ed9e4b04bbad", by = "agent:find-idle-work", note = "Limits bullet now says host calls are charged to the fuel budget (1,000 + 1 per byte copied or parsed), matching charge() in plugin.rs and the new host_calls_are_charged_by_size test; other claims unchanged; holds" }
+stamp = { hash = "b3:c764f191de32a690", by = "agent:wasm-epoch", note = "re-read: Limits now has the 100 ms call and 1 s load deadlines (lower-only, in 10 ms EPOCH_TICK ticks plus the current one), the 64 MiB memory default and Error::Deadline; PluginHost enables epoch_interruption and runs the ticker thread, kept alive by every plugin; call re-arms the deadline on return. The section states each, the Tests list matches limits.rs, plugin.rs and tests/plugin.rs, Capabilities and Not here now cite ADR-0069 (#348) and list its unbuilt queue cap, command cap and forbidden code; Cargo summary says wall-time" }
 
 ["CRATE-jstream-protocol#design"."body"]
 stamp = { hash = "b3:5596095b513e1bb1", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: hello/welcome examples at minor 24 as examples.snap; wave/m2's bus references (bus param type, bus reference, not_found for a missing bus, bus.delete blockers, the bus delete.plan target, MAX_BUSES) sit beside main's 0.22 opacity/blend/filters, 0.21 pairing, 0.23 YouTube and 0.20 binary streams; fixed the Audio paragraph, which still said filters are not in the protocol: filter chains (0.22) belong only to sources, so none feeds a bus from another; the rest matches the merged sources and both snapshots" }
