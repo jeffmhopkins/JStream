@@ -3010,6 +3010,7 @@ dependencies = [
 name = "jstream-platform-linux"
 version = "0.0.0"
 dependencies = [
+ "ash",
  "jstream-aac",
  "jstream-platform",
  "libc",
@@ -3017,6 +3018,7 @@ dependencies = [
  "ring",
  "rustls",
  "rustls-native-certs",
+ "wgpu",
 ]
 
 [[package]]
