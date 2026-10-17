@@ -98,7 +98,9 @@ and calls this crate.
   alpha: exact for an opaque capture, a fringe at partly transparent edges. A browser
   page's texture holds sRGB code values already multiplied by alpha (CEF's layout), so
   `import_premultiplied` takes `Rgba8Unorm` or `Bgra8Unorm` and reads it that way, with
-  no fringe. A compositor opened `on_context` reports that context's `ContextKey`
+  no fringe. `import_opaque` takes what `import` takes and reads every texel's alpha as
+  1: for a captured frame, whose alpha means nothing, as the CPU capture path treats it
+  (#451). A compositor opened `on_context` reports that context's `ContextKey`
   (`Compositor::context`), so a caller can tell a texture from that context from one
   it can't sample. A
   `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
@@ -165,7 +167,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    without the banding 8 bits would give in the darks; it costs 8 bytes per texel
    instead of 4, and the conversion is CPU work at upload time only.
 
-   **Imported textures** (`import`, `import_frame`, `import_premultiplied`) are not
+   **Imported textures** (`import`, `import_frame`, `import_premultiplied`,
+   `import_opaque`) are not
    converted: a capture changes every frame while its `Image` lives, so a conversion
    would be a per-frame pass. A straight import is sampled as straight alpha and
    premultiplied after the filter. For an opaque texture, such as a captured frame,
@@ -174,7 +177,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    so the filter averages premultiplied code values and transparent edges stay clean;
    the shader then divides by alpha, decodes sRGB and multiplies by alpha again.
    Averaging code values rather than linear light differs from an upload only where
-   the filter mixes texels of different colour.
+   the filter mixes texels of different colour. An opaque import (a capture) is decoded
+   by the sampler and its alpha replaced by 1, in the composite shader and in a
+   filter's input alike.
 2. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
    by alpha). Each visible item is two triangles. The vertex buffer holds clip-space
@@ -248,8 +253,8 @@ only that callback; a frame that fails before `end_frame` leaves its retirees to
 next frame's fence, which covers it.
 
 `import` keyed by an ID samples a `GpuFrame` with no copy (`import_premultiplied`
-does the same for a premultiplied texture, and replaces an entry the key imported the
-other way, as a new import does). The entry's image carries
+does the same for a premultiplied texture, and `import_opaque` for a capture, and each
+replaces an entry the key imported another way, as a new import does). The entry's image carries
 the frame's `FrameSync` hold, so each `render` that draws it stages it, until
 `end_frame`, which drops every live entry's hold (as retiring does): a cached image
 never keeps a platform texture from being reused. The import itself, texture view and
@@ -379,8 +384,9 @@ kinds.
   sizes and the time, an optional aux image, and the filter's `Params` uniform) and
   colour helpers. `src`, `texel` and `aux` always return premultiplied linear colour:
   a straight import is premultiplied after sampling, and a premultiplied import (a
-  browser page) is divided by alpha, decoded from sRGB and multiplied again, as the
-  compositor's own draw does (`Frame`'s `alpha` and `aux_alpha` say which). A pipeline is built on first use and
+  browser page) is divided by alpha, decoded from sRGB and multiplied again, and an
+  opaque import (a capture) has its alpha read as 1, as the compositor's own draw does
+  (`Frame`'s `alpha` and `aux_alpha` say which). A pipeline is built on first use and
   kept for the compositor's life, keyed by the shader's label and source (up to four
   sources per label, so a reloaded pack's old and new filters don't evict each other).
   A shader wgpu refuses, by its own validation or a backend compiler's, is a
@@ -600,7 +606,10 @@ opaque-red-then-transparent upload drawn half a pixel off and at scale 2 keeps r
 at 255 where it is partly covered (straight filtering gave 187 on lavapipe); an
 imported sRGB texture is read as straight alpha, and a premultiplied `Unorm` import
 of half-transparent red over white keeps full red and lets half the white through in
-linear light (each refused in the other's format). An image from another compositor on
+linear light (each refused in the other's format). An opaque import of
+half-transparent red draws full red over black, faded only by the item's opacity, and
+an identity filter over it keeps it opaque; the cache reuses an opaque import and
+replaces it with a straight one of the same texture. An image from another compositor on
 the same device is refused. GPU frames through the cache: a frame drawn from an
 import is staged once, and once the frame ends nothing but the frame holds its
 `FrameSync`; a second texture under the key is a second import, the first texture
@@ -657,8 +666,9 @@ a hardware GPU.
   ends the submit in `PRESENT`. Software adapters often lack `TEXTURE_FORMAT_NV12`,
   so that pass cannot be the CI path. Proposed default: keep this RGBA output, and
   let a later pass sample it into the platform `encode_target` on the real device.
-- **Capture formats.** Windows capture's GPU frames (`WgcCapture::on_gpu`) are opaque
-  `Bgra8UnormSrgb`, which `import` takes as is, so they need no conversion pass. A
+- **Capture formats.** Windows capture's GPU frames (`WgcCapture::on_gpu`) are
+  `Bgra8UnormSrgb`, which `import_opaque` takes as is, so they need no conversion pass;
+  their alpha, which a driver or HDR mode can leave below 1, is read as 1. A
   browser page's frames are premultiplied `Bgra8Unorm`, which `import_premultiplied`
   takes as is.
 - **Opacity and blend ownership** was left open by ADR-0022 (decision-register D2).
