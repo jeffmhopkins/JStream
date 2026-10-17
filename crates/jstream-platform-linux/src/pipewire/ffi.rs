@@ -361,6 +361,8 @@ pub(crate) const PW_DIRECTION_OUTPUT: c_int = 1;
 pub(crate) const FLAG_AUTOCONNECT: u32 = 1 << 0;
 /// `PW_STREAM_FLAG_MAP_BUFFERS`.
 pub(crate) const FLAG_MAP_BUFFERS: u32 = 1 << 2;
+/// `PW_STREAM_FLAG_RT_PROCESS`: `process` runs on the context's real-time data loop.
+pub(crate) const FLAG_RT_PROCESS: u32 = 1 << 4;
 /// `PW_STREAM_STATE_ERROR`.
 pub(crate) const STATE_ERROR: c_int = -1;
 /// `PW_STREAM_STATE_UNCONNECTED`.
