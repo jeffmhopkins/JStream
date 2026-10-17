@@ -134,7 +134,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
-| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0020). The **single owner** of the encoder and decoder traits. | no |
+| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0066). The **single owner** of the encoder and decoder traits. | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
@@ -145,7 +145,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
-| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
+| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
 | 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling; draws an effect through `jstream-render`'s filter harness. No GPU device of its own | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
@@ -167,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md", "docs/adr/0064-nested-scene-folders.md"]
 -->
 
 ```
@@ -180,8 +180,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                          items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (reserved, empty in v1), transition }
-├── folders        Folder { id, name }   ordered, one level; organising only
-├── labels         Label { id, name, icon, color }   ordered
+├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
+├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
@@ -262,7 +262,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   and saved with the collection, so every client and agent sees the same thing
   ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not per
   person). Folders change no rendering, switching or nesting; scenes keep their flat
-  display order, and a variant sits under its parent, never in a folder. Labels and
+  display order, and a variant sits under its parent, never in a folder. A folder sits in
+  at most one other (`parent`, [ADR-0064](adr/0064-nested-scene-folders.md)), never inside itself, and
+  the folders in one parent show in folder order. A folder that holds anything, or a
+  label a source carries, can't be deleted; `delete.plan` moves what the folder holds up
+  to its parent, or takes the label off its sources. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
   decision. Deleting the scene, source, output or transition preset a binding's action
@@ -420,18 +424,20 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the master at 0 dB. A send always runs from a source to a bus, and filters have no
   sidechain keys yet, so no edit can close an audio cycle. The engine routes these into
   the program stage's mixer while it runs.
+  Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
+  and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), video filters that read a scene (`scene_mask` passes
   its input through), blend modes
   other than `normal`,
   bus monitors, per-placement effects, 3D
   geometry, variants and overrides (so no edit drops
-  any yet), folders, labels, favourites and other organisation metadata,
-  `background`, output audio buses and chains, the `YouTube` kind, a virtual camera's
-  video mix (it always shows the program), and everything outside `sources`, `scenes`,
-  `outputs`, `encoders`, `video_mixes`, `audio`, `hotkeys` and `transitions`. The
-  collection file saves everything built so far, encoder profiles, video mixes, each
-  output's profile and mix, `duplicated_from`, buses, sends, source audio, hotkeys and
+  any yet), `background`, output audio buses and chains, the `YouTube` kind, a virtual
+  camera's video mix (it always shows the program), and everything outside `sources`,
+  `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
+  `hotkeys` and `transitions`. The collection file saves everything built so far,
+  encoder profiles, video mixes, each output's profile and mix, `duplicated_from`,
+  buses, sends, source audio, folders, labels, organisation metadata, hotkeys and
   transitions included
   ([Persistence](#persistence)).
   The program and preview scenes and the running transition are built in `jstream-core`
@@ -630,6 +636,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   output or transition preset an action names removes its bindings in the same edit, the batch result lists
   them as `removed_hotkeys`, and undo restores them
   ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
+  `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
+  `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
+  `source.set_meta` edit labels and organisation metadata
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -697,7 +708,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
-  batch that deletes a scene or source (or, from protocol 0.24, a bus) with everything
+  batch that deletes a scene or source (or, from protocol 0.24, a bus, or a folder or
+  label) with everything
   that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
   source's `target` can name; audio levels are the `meters.tick` event, not a query).
@@ -732,7 +744,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
   [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)), and so does a `bus.delete`
   refused because a setting draws the bus (protocol 0.24: a `bus` reference, as the
-  `waveform` and `spectrum` kinds' `audio` setting holds).
+  `waveform` and `spectrum` kinds' `audio` setting holds), and a `folder.delete` or
+  `label.delete` refused because a scene or folder is in the folder or a source carries
+  the label.
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
   `preview.subscribe` opens a stream of the program mix for the calling session,
   scaled down, at most `fps` pictures a second and only when the mix changes (as it
@@ -789,7 +803,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -806,7 +820,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 593 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 659 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -1047,8 +1061,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 - **Collections:** JSON with a `schema_version` field and forward migrations in
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
-  settings) is omitted when empty or at its default (for presets, a new collection's one
-  `cut`), so a file without it is still valid at the same `schema_version`. `jstream-core`
+  settings, folders, labels and organisation metadata) is omitted when empty or at its
+  default (for presets, a new collection's one `cut`), so a file without it is still
+  valid at the same `schema_version`. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
@@ -1070,11 +1085,11 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 ## Packaging
 <!-- @section
 covers = ["xtask/src/dist.rs", ".cargo/config.toml"]
-depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
+depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md"]
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
-admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
+admin ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The folder also holds
 `jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
 runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder,
 with the sandboxed browser helper: CEF's `bootstrap.exe` renamed
@@ -1105,8 +1120,12 @@ Direct3D 12).
   and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The sandboxed browser helper and the CEF runtime are not in it yet; they join it when the hosts turn their `cef` features on.
 - **Virtual camera:** the app registers the COM media source from its own folder the first
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
-  because Frame Server ignores per-user registration. The app can unregister the source and
-  detects a moved folder. Until the desktop app has that mode, `jstream-daemon --register-vcam` is
+  because Frame Server ignores per-user registration. The registered DLL is the one in the app's
+  folder, which the user can usually write to (#242).
+  [ADR-0066](adr/0066-portable-windows-distribution-v2.md) (accepted) makes registering
+  optional and registers an administrators-only copy under `%ProgramFiles%` instead, in
+  the same prompt (#561; [THREAT-MODEL › Virtual camera](security/threat-model.md#vcam)). The app can unregister
+  the source and detects a moved folder. Until the desktop app has that mode, `jstream-daemon --register-vcam` is
   that mode, and the daemon warns at startup when the registration names another folder
   ([jstream-daemon › Usage](../apps/jstream-daemon/README.md#usage)); unregistering waits
   for the app. Spike S2 (Windows 11 25H2, build 26200) found:

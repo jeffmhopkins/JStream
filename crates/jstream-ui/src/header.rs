@@ -1,0 +1,451 @@
+//! The header bar along the top of the shell (docs/UI-FEATURES.md#header): the brand,
+//! the File and Edit menus, the dropped-frames readout, Record, and Go Live / End
+//! stream. It keeps its own copy of the outputs, like the outputs panel does, and reports
+//! a failed call in the shell's problem bar.
+//!
+//! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
+
+use crate::app::{SessionContext, SessionInfo};
+use crate::canvas::model::{history, is_history_empty};
+use crate::panels::outputs::{
+    OutputRow, Vcam, go_live_targets, is_running, live_outputs, load, start_blocker,
+    start_or_stop_all,
+};
+use crate::store::Studio;
+use futures_util::StreamExt;
+use jstream_control::protocol::{DropCounts, Event, HistoryOp, OutputId, OutputKind};
+use leptos::prelude::*;
+use leptos::task::spawn_local;
+
+/// The recording outputs Record starts: every recording that is stopped or failed.
+pub fn record_targets<'a>(rows: impl IntoIterator<Item = &'a OutputRow>) -> Vec<OutputId> {
+    rows.into_iter()
+        .filter(|row| matches!(row.info.kind, OutputKind::Record { .. }))
+        .filter(|row| start_blocker(row, Vcam::Unknown).is_none())
+        .map(|row| row.info.output_id.clone())
+        .collect()
+}
+
+/// The recording outputs that run: what "Stop recording" stops.
+pub fn recording<'a>(rows: impl IntoIterator<Item = &'a OutputRow>) -> Vec<OutputId> {
+    rows.into_iter()
+        .filter(|row| matches!(row.info.kind, OutputKind::Record { .. }))
+        .filter(|row| is_running(row.state))
+        .map(|row| row.info.output_id.clone())
+        .collect()
+}
+
+/// What the Record button does when pressed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RecordButton {
+    /// No recording output exists: the button is disabled.
+    NoRecording,
+    /// Recordings run: pressing stops them.
+    Stop(Vec<OutputId>),
+    /// None runs: pressing starts these.
+    Start(Vec<OutputId>),
+}
+
+impl RecordButton {
+    /// The button for these outputs.
+    pub fn of(rows: &[OutputRow]) -> RecordButton {
+        let running = recording(rows);
+        if !running.is_empty() {
+            return RecordButton::Stop(running);
+        }
+        let targets = record_targets(rows);
+        if targets.is_empty() {
+            RecordButton::NoRecording
+        } else {
+            RecordButton::Start(targets)
+        }
+    }
+}
+
+/// Frames dropped since the header first heard `stats.tick`, from its running totals.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Dropped {
+    /// The totals the count starts from, and the last tick's `seq` and totals.
+    base: Option<(DropCounts, u64, DropCounts)>,
+}
+
+impl Dropped {
+    /// Takes one `stats.tick`. A `seq` that doesn't increase, or a total that shrank,
+    /// means the engine restarted: the count starts over from this tick.
+    pub fn observe(&mut self, seq: u64, drops: DropCounts) {
+        self.base = match self.base {
+            Some((base, last_seq, last)) if seq > last_seq && !shrank(drops, last) => {
+                Some((base, seq, drops))
+            }
+            _ => Some((drops, seq, drops)),
+        };
+    }
+
+    /// Video frames dropped anywhere in the pipeline since the count started, or `None`
+    /// before the first tick.
+    pub fn frames(&self) -> Option<u64> {
+        self.base
+            .map(|(base, _, last)| frames(last).saturating_sub(frames(base)))
+    }
+}
+
+/// The video frames among `drops`: captured, rendered and encoded frames.
+fn frames(drops: DropCounts) -> u64 {
+    drops
+        .capture_frames
+        .saturating_add(drops.render_ticks)
+        .saturating_add(drops.encode_frames)
+}
+
+/// Whether any total in `now` is below `before`'s.
+fn shrank(now: DropCounts, before: DropCounts) -> bool {
+    now.capture_frames < before.capture_frames
+        || now.audio_frames < before.audio_frames
+        || now.render_ticks < before.render_ticks
+        || now.encode_frames < before.encode_frames
+        || now.encode_blocks < before.encode_blocks
+        || now.output_packets < before.output_packets
+}
+
+/// A top menu of the header.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Menu {
+    File,
+    Edit,
+}
+
+/// The header bar.
+#[component]
+pub fn Header(
+    /// The open session's details, which the File menu shows.
+    info: RwSignal<SessionInfo>,
+    /// Ends the session.
+    disconnect: impl Fn() + 'static,
+) -> impl IntoView {
+    let session = expect_context::<SessionContext>();
+    let studio = expect_context::<Studio>();
+    let rows = RwSignal::new(Vec::<OutputRow>::new());
+    let dropped = RwSignal::new(Dropped::default());
+    let open = RwSignal::new(None::<Menu>);
+    let loads = StoredValue::new(0_u64);
+    let disconnect = StoredValue::new_local(disconnect);
+
+    let reload = move || {
+        let Some(session) = session.get() else {
+            return;
+        };
+        let Some(mine) = loads.try_update_value(|n| {
+            *n += 1;
+            *n
+        }) else {
+            return;
+        };
+        spawn_local(async move {
+            let loaded = load(&*session.control).await;
+            if loads.try_get_value() != Some(mine) {
+                return;
+            }
+            match loaded {
+                Ok(snapshot) => {
+                    rows.try_set(snapshot.outputs);
+                }
+                Err(problem) => {
+                    studio.problem.try_set(Some(problem));
+                }
+            }
+        });
+    };
+
+    // A stream key changed, which no event reports: re-read whether Go Live can start.
+    Effect::new(move |previous: Option<u64>| {
+        let now = studio.keys_changed.get();
+        if previous.is_some() {
+            reload();
+        }
+        now
+    });
+
+    if let Some(current) = session.get() {
+        let mut events = current.control.events();
+        drop(current);
+        reload();
+        spawn_local(async move {
+            while let Some(event) = events.next().await {
+                match event {
+                    Event::StateChanged { .. } | Event::EventsDropped { .. } => reload(),
+                    Event::OutputStateChanged { output_id, state } => {
+                        let known = rows.try_update(|rows| {
+                            rows.iter_mut()
+                                .find(|row| row.info.output_id == output_id)
+                                .map(|row| row.state = state)
+                                .is_some()
+                        });
+                        if known == Some(false) {
+                            reload();
+                        }
+                    }
+                    Event::StatsTick { seq, drops } => {
+                        dropped.try_update(|d| d.observe(seq, drops));
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+
+    // Starts or stops `outputs`, reporting every failure in the problem bar.
+    let start_or_stop = move |outputs: Vec<OutputId>, start: bool| {
+        let Some(session) = session.get() else {
+            return;
+        };
+        spawn_local(async move {
+            let outcome = start_or_stop_all(&*session.control, outputs, start).await;
+            if let Err(problem) = outcome {
+                studio.problem.try_set(Some(problem));
+            }
+        });
+    };
+    let undo_or_redo = move |op: HistoryOp| {
+        open.set(None);
+        let Some(session) = session.get() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Err(error) = history(&*session.control, op).await {
+                let problem = if is_history_empty(&error) {
+                    match op {
+                        HistoryOp::Redo => "Nothing to redo.".to_owned(),
+                        _ => "Nothing to undo.".to_owned(),
+                    }
+                } else {
+                    error.to_string()
+                };
+                studio.problem.try_set(Some(problem));
+            }
+        });
+    };
+
+    let targets = move || rows.with(|rows| go_live_targets(rows.iter()));
+    let live = move || rows.with(|rows| live_outputs(rows.iter()));
+    let record = move || rows.with(|rows| RecordButton::of(rows));
+    // Escape closes an open menu wherever focus is: WebKit doesn't focus a clicked button,
+    // so the key may not reach the header.
+    let escape = window_event_listener(leptos::ev::keydown, move |event| {
+        if event.key() == "Escape" && open.get_untracked().is_some() {
+            open.set(None);
+        }
+    });
+    on_cleanup(move || escape.remove());
+    let toggle =
+        move |menu: Menu| open.update(|open| *open = (*open != Some(menu)).then_some(menu));
+    let menu_button = move |menu: Menu, label: &'static str| {
+        view! {
+            <button
+                class="menu-button"
+                class:open=move || open.get() == Some(menu)
+                aria-haspopup="menu"
+                aria-expanded=move || if open.get() == Some(menu) { "true" } else { "false" }
+                on:click=move |_| toggle(menu)
+            >
+                {label}
+            </button>
+        }
+    };
+
+    view! {
+        <header
+            class="app-header"
+            data-rev=move || info.with(|i| i.rev.clone())
+        >
+            <span class="brand"><span class="brand-mark"></span>"JStream"</span>
+            {move || open.get().map(|_| view! {
+                <div class="menu-catcher" on:pointerdown=move |_| open.set(None)></div>
+            })}
+            <div class="top-menu">
+                {menu_button(Menu::File, "File")}
+                <Show when=move || open.get() == Some(Menu::File)>
+                    <div class="dropdown" role="menu" aria-label="File">
+                        <p class="menu-head">"CONNECTION"</p>
+                        <dl class="connection">
+                            <dt>"Engine"</dt>
+                            <dd>{move || info.with(|i| i.url.clone())}</dd>
+                            <dt>"Protocol"</dt>
+                            <dd>{move || info.with(|i| i.protocol.clone())}</dd>
+                            <dt>"Client"</dt>
+                            <dd>{move || info.with(|i| i.client_id.clone())}</dd>
+                            <dt>"Revision"</dt>
+                            <dd>{move || info.with(|i| i.rev.clone())}</dd>
+                        </dl>
+                        <div class="menu-sep"></div>
+                        <button class="menuitem" role="menuitem" on:click=move |_| disconnect.with_value(|d| d())>
+                            "Disconnect"
+                        </button>
+                    </div>
+                </Show>
+            </div>
+            <div class="top-menu">
+                {menu_button(Menu::Edit, "Edit")}
+                <Show when=move || open.get() == Some(Menu::Edit)>
+                    <div class="dropdown" role="menu" aria-label="Edit">
+                        <button
+                            class="menuitem"
+                            role="menuitem"
+                            on:click=move |_| undo_or_redo(HistoryOp::Undo)
+                        >
+                            <span>"Undo"</span>
+                            <span class="hint">"Ctrl+Z"</span>
+                        </button>
+                        <button
+                            class="menuitem"
+                            role="menuitem"
+                            on:click=move |_| undo_or_redo(HistoryOp::Redo)
+                        >
+                            <span>"Redo"</span>
+                            <span class="hint">"Ctrl+Shift+Z"</span>
+                        </button>
+                    </div>
+                </Show>
+            </div>
+            <span class="spacer"></span>
+            <span class="readout" title="Video frames dropped since this page connected">
+                {move || dropped.with(|d| d.frames()).map(|n| format!("{n} dropped"))}
+            </span>
+            <button
+                class="header-button"
+                class:on=move || matches!(record(), RecordButton::Stop(_))
+                disabled=move || record() == RecordButton::NoRecording
+                title=move || match record() {
+                    RecordButton::NoRecording => "Add a recording output first",
+                    RecordButton::Stop(_) => "Stop every recording",
+                    RecordButton::Start(_) => "Start every recording output",
+                }
+                on:click=move |_| match record() {
+                    RecordButton::Stop(ids) => start_or_stop(ids, false),
+                    RecordButton::Start(ids) => start_or_stop(ids, true),
+                    RecordButton::NoRecording => {}
+                }
+            >
+                {move || match record() {
+                    RecordButton::Stop(_) => "Stop recording",
+                    _ => "Record",
+                }}
+            </button>
+            {move || if live().is_empty() {
+                view! {
+                    <button
+                        class="go-live"
+                        disabled=move || targets().is_empty()
+                        title="Starts every stopped stream output that has its key set"
+                        on:click=move |_| start_or_stop(targets(), true)
+                    >
+                        "Go Live"
+                    </button>
+                }
+                .into_any()
+            } else {
+                view! {
+                    <button class="go-live live" on:click=move |_| start_or_stop(live(), false)>
+                        "End stream"
+                    </button>
+                }
+                .into_any()
+            }}
+        </header>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jstream_control::protocol::{OutputInfo, OutputState, RecordContainer, RtmpTarget};
+
+    fn row(id: &str, kind: OutputKind, state: OutputState) -> OutputRow {
+        OutputRow {
+            info: OutputInfo {
+                output_id: OutputId::new(id),
+                kind,
+                encoder_profile: None,
+                filters: Default::default(),
+                video_mix: None,
+            },
+            state,
+            key_set: true,
+        }
+    }
+
+    fn record(id: &str, state: OutputState) -> OutputRow {
+        row(
+            id,
+            OutputKind::Record {
+                path: "/tmp/show.mp4".into(),
+                container: RecordContainer::Mp4,
+            },
+            state,
+        )
+    }
+
+    fn stream(id: &str, state: OutputState) -> OutputRow {
+        row(
+            id,
+            OutputKind::Rtmp {
+                target: RtmpTarget::Generic {
+                    url: "rtmp://127.0.0.1/live".into(),
+                },
+            },
+            state,
+        )
+    }
+
+    #[test]
+    fn record_starts_stopped_recordings_and_stops_running_ones() {
+        assert_eq!(RecordButton::of(&[]), RecordButton::NoRecording);
+        assert_eq!(
+            RecordButton::of(&[stream("a", OutputState::Stopped)]),
+            RecordButton::NoRecording,
+            "a stream is not a recording"
+        );
+        let rows = [
+            record("r1", OutputState::Stopped),
+            record("r2", OutputState::Failed),
+            stream("s", OutputState::Stopped),
+        ];
+        let ids =
+            |names: &[&str]| -> Vec<OutputId> { names.iter().map(|n| OutputId::new(*n)).collect() };
+        assert_eq!(
+            RecordButton::of(&rows),
+            RecordButton::Start(ids(&["r1", "r2"]))
+        );
+        let rows = [
+            record("r1", OutputState::Active),
+            record("r2", OutputState::Stopped),
+        ];
+        assert_eq!(
+            RecordButton::of(&rows),
+            RecordButton::Stop(ids(&["r1"])),
+            "while one records, the button stops it"
+        );
+    }
+
+    #[test]
+    fn dropped_counts_video_frames_since_the_first_tick() {
+        let mut d = Dropped::default();
+        assert_eq!(d.frames(), None);
+        let totals = |capture, render, encode, packets| DropCounts {
+            capture_frames: capture,
+            render_ticks: render,
+            encode_frames: encode,
+            output_packets: packets,
+            ..DropCounts::default()
+        };
+        d.observe(4, totals(10, 2, 1, 50));
+        assert_eq!(d.frames(), Some(0), "counts from the first tick it sees");
+        d.observe(5, totals(12, 3, 1, 90));
+        assert_eq!(d.frames(), Some(3), "packets are not frames");
+        d.observe(7, totals(12, 3, 4, 90));
+        assert_eq!(d.frames(), Some(6), "a missed tick still counts");
+        d.observe(1, totals(1, 0, 0, 0));
+        assert_eq!(d.frames(), Some(0), "an engine restart starts over");
+        d.observe(2, totals(0, 0, 0, 0));
+        assert_eq!(d.frames(), Some(0), "a shrinking total starts over");
+    }
+}

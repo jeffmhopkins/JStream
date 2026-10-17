@@ -5,6 +5,7 @@
 //! Docs: crates/jstream-ui/README.md#design
 
 use crate::canvas::Canvas;
+use crate::header::Header;
 use crate::panels::{Mixer, Outputs, Properties, Scenes, Sources};
 use crate::session::{Session, engine_url_for_page};
 use crate::store::Studio;
@@ -262,7 +263,7 @@ fn Inspector() -> impl IntoView {
     }
 }
 
-/// The workspace: a status bar over the scene and sources lists, the preview canvas and
+/// The workspace: the header bar over the scene and sources lists, the preview canvas and
 /// the inspector, with the mixer along the bottom. Each region is its own component, so
 /// the panels and the canvas are built separately.
 #[component]
@@ -270,14 +271,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     let studio = expect_context::<Studio>();
     view! {
         <div class="shell">
-            <header class="status-bar">
-                <span class="brand">"JStream"</span>
-                <span>{move || info.with(|i| i.url.clone())}</span>
-                <span>"protocol " {move || info.with(|i| i.protocol.clone())}</span>
-                <span>"client " {move || info.with(|i| i.client_id.clone())}</span>
-                <span>"rev " {move || info.with(|i| i.rev.clone())}</span>
-                <button on:click=move |_| disconnect()>"Disconnect"</button>
-            </header>
+            <Header info=info disconnect=disconnect />
             {move || studio.problem.get().map(|problem| view! {
                 <div class="problem-bar" role="alert">
                     <span>{problem}</span>
