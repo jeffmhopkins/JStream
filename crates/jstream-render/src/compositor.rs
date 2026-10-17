@@ -292,7 +292,7 @@ impl Compositor {
     /// # Errors
     /// [`RenderError::Invalid`] when `input` came from another compositor,
     /// [`RenderError::TooLarge`] for an output past the adapter limit, and
-    /// [`RenderError::Sync`] when staging an imported input fails.
+    /// [`RenderError::Sync`] when staging an imported input or reference image fails.
     pub fn apply_filter(
         &mut self,
         filter: &mut VideoFilter,
@@ -324,15 +324,19 @@ impl Compositor {
             runtime: &mut self.filters,
             encoder: &mut encoder,
             clock,
+            holds: &mut self.staged,
         };
-        filter.pass_mut().encode(&mut ctx, input, &output)?;
+        ctx.holds.clear();
+        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, &output) {
+            self.staged.clear();
+            return Err(err);
+        }
+        ctx.hold(input);
         // Staged only once recording succeeded, right before the submit it arms, and
-        // handed back to the platform at the end of that submit, as `render` does.
-        self.staged.clear();
-        if let Some(sync) = input.sync() {
+        // handed back to the platform at the end of that submit, as `render` does: the
+        // input's hold and those of the images the filter reads besides it, each once.
+        for (sync, _) in &self.staged {
             sync.stage(&self.gpu.queue).map_err(RenderError::Sync)?;
-            self.staged
-                .push((Arc::clone(sync), input.texture().clone()));
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
