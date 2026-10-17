@@ -3471,7 +3471,7 @@ stamp = { hash = "b3:8547ab2b9342942f" }
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#canvas"."body"]
-stamp = { hash = "b3:c43202419161c596", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): re-read the Undoable edits bullet: live.set is in the protocol, the canvas doesn't send it; model.rs sends ends_gesture: None; holds" }
+stamp = { hash = "b3:3b545c17a006534c", by = "agent:wave-owner", note = "Retarget to wave/m2-2: intro and Preview bullet re-checked against preview.rs, screen.rs and mod.rs (rewrapped one sentence); JPEG path re-run in Chromium against the daemon at protocol 0.24 | merge: Merging wave/m1-2 into wave/m2-2 brings #244's sentence that live.set is in the protocol but the canvas doesn't send it. That agrees with #302's preview bullet, which says a drag shows once committed." }
 
 ["CRATE-jstream-ui#canvas"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -3480,10 +3480,16 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 stamp = { hash = "b3:ff923b70ae781b73" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: intro and Preview bullet re-checked against preview.rs, screen.rs and mod.rs (rewrapped one sentence); JPEG path re-run in Chromium against the daemon at protocol 0.24" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:4df886f9dc4ccbfd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the canvas section after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): canvas/model.rs only gains ends_gesture: None; drags still commit batches, and the section makes no live-values claim. Holds." }
+
+["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/preview.rs"]
+stamp = { hash = "b3:496a37975201c003", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: intro and Preview bullet re-checked against preview.rs, screen.rs and mod.rs (rewrapped one sentence); JPEG path re-run in Chromium against the daemon at protocol 0.24" }
+
+["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/screen.rs"]
+stamp = { hash = "b3:63ad6f74be1d92c5", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: intro and Preview bullet re-checked against preview.rs, screen.rs and mod.rs (rewrapped one sentence); JPEG path re-run in Chromium against the daemon at protocol 0.24" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -3504,10 +3510,16 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; placement via style: bindings plus the .stage-screen class; holds with the wave's shell and panels" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:4df886f9dc4ccbfd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against control#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the fader bullet (live.set doesn't take faders yet) is unchanged and true (is_live_adjustable: placements and crops). Holds." }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/preview.rs"]
+stamp = { hash = "b3:496a37975201c003", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; placement via style: bindings plus the .stage-screen class; holds with the wave's shell and panels" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/screen.rs"]
+stamp = { hash = "b3:63ad6f74be1d92c5", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; placement via style: bindings plus the .stage-screen class; holds with the wave's shell and panels" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -3555,10 +3567,10 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:bf798978c4952851", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the design against control#design after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the fader bullet (live.set doesn't take faders yet) is unchanged and true (is_live_adjustable: placements and crops). Holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:a3ba61c525d96483", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged. style.css gains main's panel and mixer styles beside the pairing panel's." }
+stamp = { hash = "b3:b91f93088a6b059f", by = "agent:wave-owner", note = "Retarget to wave/m2-2: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; placement via style: bindings plus the .stage-screen class; holds with the wave's shell and panels | merge: Merging wave/m1-2 into wave/m2-2 adds #288's pairing styles to style.css next to #302's .stage-screen rule. The Styles bullet still holds, with classes in style.css and no inline styles beyond the preview box's computed size." }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:9a20394443b85faa", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged." }
+stamp = { hash = "b3:80c8b01305dccf37", by = "agent:wave-owner", note = "Retarget to wave/m2-2: Canvas bullet (boxes over the live program preview, no 'not hooked up yet') matches canvas/mod.rs; the wave's new panels entries are untouched and unaffected | merge: Merging wave/m1-2 into wave/m2-2 brings #288's Pairing contents bullet in next to #302's canvas line (live program preview, no 'not hooked up'). Both hold for pairing.rs and canvas/." }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -3567,10 +3579,16 @@ stamp = { hash = "b3:8b72f650cbef12f9" }
 stamp = { hash = "b3:327c1072f1d13d2d", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. Body, against wave/m1-2: gains main's Store (store.rs: Studio, Selection, call helpers) and panels (scenes, sources, properties, confirm, mixer, outputs as an inspector page), inspector_pages routing, events and shared state, the mixer and the debug bundle size note, beside wave/m1-2's pairing panel and /pair cookie text; the merge puts the pairing panel under the inspector's pages, outside the tabs, since it hides itself when the server pairs nothing (the Pairing bullet and Routing say so). Inputs: app.rs gains main's Inspector with inspector_pages (Properties, Outputs), the scene, sources and mixer regions, with the pairing panel kept under the inspector; lib.rs's docs name main's session, app, store and panels plus pairing, and it gains main's store module beside pairing; pairing.rs is wave/m1-2's, unchanged." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: Canvas bullet (boxes over the live program preview, no 'not hooked up yet') matches canvas/mod.rs; the wave's new panels entries are untouched and unaffected" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:4df886f9dc4ccbfd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the purpose after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): store.rs, mixer.rs and canvas/model.rs only carry ends_gesture: None on their Batch literals from this PR; the wave changed no UI text here. Holds." }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/preview.rs"]
+stamp = { hash = "b3:496a37975201c003", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: Canvas bullet (boxes over the live program preview, no 'not hooked up yet') matches canvas/mod.rs; the wave's new panels entries are untouched and unaffected" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/screen.rs"]
+stamp = { hash = "b3:63ad6f74be1d92c5", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Retarget to wave/m2-2: Canvas bullet (boxes over the live program preview, no 'not hooked up yet') matches canvas/mod.rs; the wave's new panels entries are untouched and unaffected" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -4254,13 +4272,19 @@ stamp = { hash = "b3:61d5c9e46ca8096c", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:076299ee126c849d", by = "agent:claude-ui-features", note = "session.rs: connect and open with hello and engine_url_for_page back the connect form; host.rs: desktop() hands the desktop app's engine for the automatic connection and desktop_vcam its camera; pairing.rs: start, devices and revoke back the pairing panel per ADR-0044." }
 
 ["UI-FEATURES#canvas"."body"]
-stamp = { hash = "b3:13edeeb41a2f1cf4", by = "agent:claude-ui-features", note = "canvas/mod.rs draws the program scene only with its own selected signal (CV-02 to build), ACCENT #3b6ef5 handles and knob (CV-04 partial) and the Snap checkbox toolbar (CV-11); model.rs reads the program scene and sends one item.set_geometry batch per gesture plus history undo/redo (CV-12 built); snap.rs pulls edges and centres within SNAP_DISTANCE 6 onto the canvas and other items with guides (CV-05); transform.rs has Alt to skip snap, Shift to free corners and 15-degree ROTATE_STEP (CV-05 to CV-07 partial); store.rs: Studio.selection is separate from the canvas's, which CV-02 joins." }
+stamp = { hash = "b3:59d07e4f3f8af884", by = "agent:wave-owner", note = "#493 wrote these rows on wave/m1-2. wave/m2-2 has #302's live program preview (canvas/preview.rs, screen.rs, mod.rs), so the m1-2 merge moves CV-03 from 🔒 to 🟡, which notes that other scenes still need D36. I re-read the other CV rows against canvas/ and store.rs, and they hold." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c", by = "agent:claude-ui-features", note = "canvas/mod.rs draws the program scene only with its own selected signal (CV-02 to build), ACCENT #3b6ef5 handles and knob (CV-04 partial) and the Snap checkbox toolbar (CV-11); model.rs reads the program scene and sends one item.set_geometry batch per gesture plus history undo/redo (CV-12 built); snap.rs pulls edges and centres within SNAP_DISTANCE 6 onto the canvas and other items with guides (CV-05); transform.rs has Alt to skip snap, Shift to free corners and 15-degree ROTATE_STEP (CV-05 to CV-07 partial); store.rs: Studio.selection is separate from the canvas's, which CV-02 joins." }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:wave-owner", note = "#493 wrote these rows on wave/m1-2. wave/m2-2 has #302's live program preview (canvas/preview.rs, screen.rs, mod.rs), so the m1-2 merge moves CV-03 from 🔒 to 🟡, which notes that other scenes still need D36. I re-read the other CV rows against canvas/ and store.rs, and they hold." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:4df886f9dc4ccbfd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Re-read the canvas rows after merging wave/m1-2 at 81a5435 (K1 hotkeys #319, #343 key binding, #354, #487, #498-#512): the UI's canvas/model.rs and store.rs gain only ends_gesture: None from this PR; CV-05 move and CV-08 crop rows make no claim about live values. Holds." }
+
+["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/preview.rs"]
+stamp = { hash = "b3:496a37975201c003", by = "agent:wave-owner", note = "#493 wrote these rows on wave/m1-2. wave/m2-2 has #302's live program preview (canvas/preview.rs, screen.rs, mod.rs), so the m1-2 merge moves CV-03 from 🔒 to 🟡, which notes that other scenes still need D36. I re-read the other CV rows against canvas/ and store.rs, and they hold." }
+
+["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/screen.rs"]
+stamp = { hash = "b3:63ad6f74be1d92c5", by = "agent:wave-owner", note = "#493 wrote these rows on wave/m1-2. wave/m2-2 has #302's live program preview (canvas/preview.rs, screen.rs, mod.rs), so the m1-2 merge moves CV-03 from 🔒 to 🟡, which notes that other scenes still need D36. I re-read the other CV rows against canvas/ and store.rs, and they hold." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220", by = "agent:claude-ui-features", note = "canvas/mod.rs draws the program scene only with its own selected signal (CV-02 to build), ACCENT #3b6ef5 handles and knob (CV-04 partial) and the Snap checkbox toolbar (CV-11); model.rs reads the program scene and sends one item.set_geometry batch per gesture plus history undo/redo (CV-12 built); snap.rs pulls edges and centres within SNAP_DISTANCE 6 onto the canvas and other items with guides (CV-05); transform.rs has Alt to skip snap, Shift to free corners and 15-degree ROTATE_STEP (CV-05 to CV-07 partial); store.rs: Studio.selection is separate from the canvas's, which CV-02 joins." }
@@ -4302,7 +4326,7 @@ stamp = { hash = "b3:f7fb9c28c97ac7ba", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:21059aa036e88f43", by = "agent:claude-ui-features", note = "canvas/mod.rs on_key: Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo (KB-03), Escape deselects and arrows nudge (KB-01 partial); canvas/transform.rs: Shift frees corner aspect and steps 15 degrees, Alt skips snapping (KB-02 partial). No duplicate, delete, rename or copy keys (KB-04, KB-05 to build)." }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c", by = "agent:claude-ui-features", note = "canvas/mod.rs on_key: Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo (KB-03), Escape deselects and arrows nudge (KB-01 partial); canvas/transform.rs: Shift frees corner aspect and steps 15 degrees, Alt skips snapping (KB-02 partial). No duplicate, delete, rename or copy keys (KB-04, KB-05 to build)." }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:wave-owner", note = "merge: Merging wave/m1-2 into wave/m2-2 brings #302's canvas/mod.rs preview wiring. No key handling changed, so KB-01 to KB-03 hold." }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/canvas/transform.rs"]
 stamp = { hash = "b3:3e890dfae55620cc", by = "agent:claude-ui-features", note = "canvas/mod.rs on_key: Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo (KB-03), Escape deselects and arrows nudge (KB-01 partial); canvas/transform.rs: Shift frees corner aspect and steps 15 degrees, Alt skips snapping (KB-02 partial). No duplicate, delete, rename or copy keys (KB-04, KB-05 to build)." }
@@ -4335,10 +4359,10 @@ stamp = { hash = "b3:e0fff104df6bbece", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:b24a15b358dcb55b", by = "agent:claude-ui-features", note = "panels/scenes.rs: rows with a Program badge and a hover Program button, up/down reorder buttons, double-click rename, delete and the New scene name field (SC-02, SC-04, SC-05 partial; SC-10 cut button); folders, labels and keyframes are B11 #323 and K1 as noted." }
 
 ["UI-FEATURES#summary"."body"]
-stamp = { hash = "b3:8681c382fa022389", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script after FL-08 moved to locked: 130 rows, 3 built, 24 partial, 59 to build, 43 need the engine, 1 decision." }
+stamp = { hash = "b3:ced45c8084072fc9", by = "agent:wave-owner", note = "Canvas row recounted after CV-03 moved 🔒→🟡 (18: 1 ✅, 7 🟡, 7 ⬜, 3 🔒), and the totals now read 25 🟡 and 42 🔒. The other area rows are unchanged." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#canvas"]
-stamp = { hash = "b3:13edeeb41a2f1cf4", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script after FL-08 moved to locked: 130 rows, 3 built, 24 partial, 59 to build, 43 need the engine, 1 decision." }
+stamp = { hash = "b3:59d07e4f3f8af884", by = "agent:wave-owner", note = "Canvas row recounted after CV-03 moved 🔒→🟡 (18: 1 ✅, 7 🟡, 7 ⬜, 3 🔒), and the totals now read 25 🟡 and 42 🔒. The other area rows are unchanged." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#dialogs"]
 stamp = { hash = "b3:b5a3b25e65d5b835", by = "agent:claude-ui-features", note = "Recounted every area from the tables by script after FL-08 moved to locked: 130 rows, 3 built, 24 partial, 59 to build, 43 need the engine, 1 decision." }
@@ -4392,5 +4416,5 @@ stamp = { hash = "b3:c3bf32d6cb3bcaf4", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:8547ab2b9342942f", by = "agent:claude-ui-features", note = "style.css: 7 colour variables under color-scheme light dark with a prefers-color-scheme dark block and system-ui font, so WS-01/WS-03 to build and WS-08's bottom-right Dismiss box hold; index.html: only the Trunk css and rust links, no font link, matching WS-02 waiting on bundling Plex." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:a3ba61c525d96483", by = "agent:claude-ui-features", note = "style.css: 7 colour variables under color-scheme light dark with a prefers-color-scheme dark block and system-ui font, so WS-01/WS-03 to build and WS-08's bottom-right Dismiss box hold; index.html: only the Trunk css and rust links, no font link, matching WS-02 waiting on bundling Plex." }
+stamp = { hash = "b3:b91f93088a6b059f", by = "agent:wave-owner", note = "merge: Merging wave/m1-2 into wave/m2-2 brings in #302's .stage-screen rule in style.css. It's layout for the preview picture and changes no WS row (palette, fonts, scrollbars, toasts)." }
 
