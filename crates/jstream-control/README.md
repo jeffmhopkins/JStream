@@ -105,8 +105,8 @@ its own, and is used with default features off.
 ### Mock
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
-`dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, buses and
-sends in memory, with an
+`dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, video
+mixes, buses, sends and hotkey bindings in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
@@ -124,8 +124,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - a placement edit's `scene_id` naming a scene other than the item's own;
   - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
     not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
-  - deleting a source that an item places, or a scene that a scene source shows, or
-    either while a source's settings refer to it;
+  - deleting a source that an item places, or a scene that a scene source or a video
+    mix shows, or either while a source's settings refer to it;
   - nesting cycles from `item.add`, `item.set_source` and `item.move`;
   - a `source.create` whose `duplicated_from` names the source itself. Like the graph,
     the mock stores `duplicated_from` as a plain link (`source.duplicate` sets it) and
@@ -140,6 +140,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
     naming a missing output, then a missing profile;
+  - video mixes: `VideoMix::problem`'s checks and a missing scene in
+    `video_mix.create` and `video_mix.update`, deleting a mix an output shows, and
+    `output.set_video_mix` naming a missing output, then a missing mix;
   - an `opacity` outside 0 to 1 and a blend mode other than `normal`, in `item.add`,
     `item.set_opacity` and `item.set_blend`;
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
@@ -171,14 +174,14 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
-  scene), `output.list`, `encoder.list` and `bus.list` (ordered by ID), each at the
-  current `rev`.
+  scene), `output.list`, `encoder.list`, `video_mix.list` and `bus.list` (ordered by
+  ID), each at the current `rev`.
   So it keeps everything an edit sets: the canvas, source names, kinds, settings and
   filter chains, each item's placement (its transform, or its geometry and the
   transform view of it), crop, visibility, opacity and blend, each scene's role and
-  each item's scene after an `item.move`, each output's kind, target and encoder
-  profile, each profile, each source's audio, the buses and sends, and the hotkey
-  bindings (in `state.get`, ordered by chord).
+  each item's scene after an `item.move`, each output's kind, target, encoder profile
+  and video mix, each profile, each mix, each source's audio, the buses and sends, and
+  the hotkey bindings (in `state.get`, ordered by chord).
   `video.snapshot` is not one of those reads: the mock has no compositor and answers
   it with `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
@@ -218,8 +221,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and sends, a deleted source's audio and sends, and each audio edit back to the values
   it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
-  back with its encoder profile and the hotkeys its delete removed, hotkey edits undo
-  to the binding as it was, encoder profile edits undo to the profile as it was,
+  back with its encoder profile and video mix and the hotkeys its delete removed,
+  hotkey edits undo to the binding as it was, encoder profile and video mix edits undo
+  to the profile or mix as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with

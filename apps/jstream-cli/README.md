@@ -106,13 +106,14 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name> [role:scene|role:group]`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings, encoder profiles, `source.create`'s
-  `duplicated_from` and the filter edits. `source.set_settings`,
+  protocol is supported except settings, encoder profiles, video mixes,
+  `source.create`'s `duplicated_from` and the filter edits. `source.set_settings`,
   `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`,
-  `output.set_encoder` and the `filter.*` edits need a JSON argument form the CLI
+  `output.set_encoder`, `video_mix.create`, `video_mix.update`, `video_mix.delete`,
+  `output.set_video_mix` and the `filter.*` edits need a JSON argument form the CLI
   doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
-  default encoder (MCP and the WebSocket API take them). `item.add` of a
+  default encoder and the program (MCP and the WebSocket API take them). `item.add` of a
   `display`, `window` or `webcam` source sends a `geometry` covering the canvas with
   `fit`, so the whole capture is in frame; the canvas is the batch's latest
   `canvas.set_size`, else `state.get`'s, which the CLI also reads for the kind of a

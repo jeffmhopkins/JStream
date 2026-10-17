@@ -31,6 +31,8 @@
 //!   credential store, outside the collection.
 //! - Every output's encoder profile exists, and every profile holds an encoding the
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
+//! - Every output's video mix exists, every mix passes `VideoMix::problem`, and the
+//!   scene a `scene` mix shows exists.
 //! - Every item's opacity is in [0, 1], and its blend mode is one the compositor draws
 //!   (`normal` so far). Its `effects[]` is empty: per-placement effects are reserved
 //!   (ADR-0023 §1), and [`Effect`] has no values yet.
@@ -51,6 +53,7 @@ use jstream_protocol::{
     Action, BlendMode, BusId, Canvas, Chord, Crop, EncoderProfile, EncoderProfileId, FilterChain,
     FilterId, Finite32, ItemGeometry, ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind,
     PlacementForm, Rev, SceneId, SceneRole, Settings, SourceAudio, SourceId, SourceKind,
+    VideoMix as MixSpec, VideoMixId,
 };
 use std::collections::BTreeMap;
 
@@ -121,6 +124,7 @@ pub struct State {
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
     pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
+    pub(crate) video_mixes: BTreeMap<VideoMixId, VideoMix>,
     /// The master bus among them.
     pub(crate) buses: BTreeMap<BusId, Bus>,
     /// Each send's gain in dB, keyed by bus, then by source: the order `bus.list`
@@ -139,6 +143,7 @@ impl Default for State {
             scenes: Vec::new(),
             outputs: BTreeMap::new(),
             encoders: BTreeMap::new(),
+            video_mixes: BTreeMap::new(),
             buses: BTreeMap::from([(master.id.clone(), master)]),
             sends: BTreeMap::new(),
             hotkeys: BTreeMap::new(),
@@ -218,6 +223,16 @@ impl State {
             Some(id) => self.encoders.get(id)?.profile,
             None => EncoderProfile::DEFAULT,
         })
+    }
+
+    /// Every video mix, ordered by ID.
+    pub fn video_mixes(&self) -> impl ExactSizeIterator<Item = &VideoMix> {
+        self.video_mixes.values()
+    }
+
+    /// The video mix with this ID.
+    pub fn video_mix(&self, id: &VideoMixId) -> Option<&VideoMix> {
+        self.video_mixes.get(id)
     }
 
     /// Every bus, ordered by ID, the master among them.
@@ -516,6 +531,7 @@ pub struct Output {
     pub(crate) id: OutputId,
     pub(crate) kind: OutputKind,
     pub(crate) encoder_profile: Option<EncoderProfileId>,
+    pub(crate) video_mix: Option<VideoMixId>,
 }
 
 impl Output {
@@ -532,6 +548,11 @@ impl Output {
     /// The encoder profile it uses, or `None` for the engine's default.
     pub fn encoder_profile(&self) -> Option<&EncoderProfileId> {
         self.encoder_profile.as_ref()
+    }
+
+    /// The video mix it shows, or `None` for the program at the engine's canvas size.
+    pub fn video_mix(&self) -> Option<&VideoMixId> {
+        self.video_mix.as_ref()
     }
 }
 
@@ -598,5 +619,30 @@ impl Bus {
     /// Whether it is muted.
     pub fn muted(&self) -> bool {
         self.muted
+    }
+}
+
+/// One video mix: a named picture at a size and rate that outputs can show.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VideoMix {
+    pub(crate) id: VideoMixId,
+    pub(crate) name: String,
+    pub(crate) mix: MixSpec,
+}
+
+impl VideoMix {
+    /// Its ID.
+    pub fn id(&self) -> &VideoMixId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// What it shows, and at what size and rate.
+    pub fn mix(&self) -> &MixSpec {
+        &self.mix
     }
 }

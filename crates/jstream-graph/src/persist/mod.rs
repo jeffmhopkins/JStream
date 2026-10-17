@@ -19,7 +19,7 @@ use jstream_protocol::{
     Action, BlendMode, BusId, Canvas, Chord, Crop, Edit, EncoderProfile, EncoderProfileId,
     FilterChain, FilterId, FilterOwner, Finite32, ItemGeometry, ItemId, ItemTransform, OutputId,
     OutputKind, ProtocolError, Rev, SceneId, SceneRole, Settings, SourceAudio, SourceId,
-    SourceKind,
+    SourceKind, VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -111,6 +111,9 @@ struct File {
     /// without profiles saves as it did before they existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     encoders: Vec<FileEncoder>,
+    /// Video mixes, ordered by ID; omitted when there are none, like `encoders`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    video_mixes: Vec<FileMix>,
     /// Audio buses, ordered by ID, the master among them; omitted when the master is
     /// the only one and has its defaults, so a collection without audio saves as it
     /// did before buses existed. Missing, the master has its defaults.
@@ -235,6 +238,9 @@ struct FileOutput {
     /// The output's encoder profile; omitted for the engine's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     encoder_profile: Option<EncoderProfileId>,
+    /// The video mix the output shows; omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    video_mix: Option<VideoMixId>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq)]
@@ -269,6 +275,14 @@ struct FileEncoder {
     id: EncoderProfileId,
     name: String,
     profile: EncoderProfile,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileMix {
+    id: VideoMixId,
+    name: String,
+    mix: VideoMix,
 }
 
 impl Graph {
@@ -355,6 +369,7 @@ impl Graph {
                     id: output.id.clone(),
                     kind: output.kind.clone(),
                     encoder_profile: output.encoder_profile.clone(),
+                    video_mix: output.video_mix.clone(),
                 })
                 .collect(),
             encoders: state
@@ -364,6 +379,15 @@ impl Graph {
                     id: encoder.id.clone(),
                     name: encoder.name.clone(),
                     profile: encoder.profile,
+                })
+                .collect(),
+            video_mixes: state
+                .video_mixes
+                .values()
+                .map(|mix| FileMix {
+                    id: mix.id.clone(),
+                    name: mix.name.clone(),
+                    mix: mix.mix.clone(),
                 })
                 .collect(),
             buses: file_buses(state),
@@ -517,10 +541,10 @@ fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
 /// scenes, empty, in display order and with their roles; then the buses with their
 /// faders, which a source's settings may refer to; then sources, each after the
 /// sources its settings refer to; then every source's filters; then items, encoder
-/// profiles, and outputs, each with its profile; then the sends (the sources made their
-/// default master sends, so when the file lists sends a source without one has it
-/// removed), and each source's audio settings; and last the hotkey bindings, whose
-/// actions name scenes and outputs.
+/// profiles, video mixes, and outputs, each with its profile and mix; then the sends (the
+/// sources made their default master sends, so when the file lists sends a source without
+/// one has it removed), and each source's audio settings; and last the hotkey bindings,
+/// whose actions name scenes and outputs.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -633,6 +657,16 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             },
         ));
     }
+    for mix in &file.video_mixes {
+        edits.push((
+            format!("video mix `{}`", mix.id),
+            Edit::VideoMixCreate {
+                mix_id: mix.id.clone(),
+                name: mix.name.clone(),
+                mix: mix.mix.clone(),
+            },
+        ));
+    }
     for output in &file.outputs {
         let object = format!("output `{}`", output.id);
         edits.push((
@@ -644,10 +678,19 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         ));
         if output.encoder_profile.is_some() {
             edits.push((
-                object,
+                object.clone(),
                 Edit::OutputSetEncoder {
                     output_id: output.id.clone(),
                     profile_id: output.encoder_profile.clone(),
+                },
+            ));
+        }
+        if output.video_mix.is_some() {
+            edits.push((
+                object,
+                Edit::OutputSetVideoMix {
+                    output_id: output.id.clone(),
+                    mix_id: output.video_mix.clone(),
                 },
             ));
         }

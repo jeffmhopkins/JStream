@@ -239,7 +239,8 @@ fn handshake_list_and_call_round_trip() {
             "source",
             "state",
             "studio",
-            "video"
+            "video",
+            "video_mix"
         ]
     );
     assert!(list.get("ttlMs").is_none() && list.get("resultType").is_none());
@@ -295,7 +296,7 @@ fn handshake_list_and_call_round_trip() {
         json!({"type": "state.get", "rev": 2,
                "canvas": {"width": 1920, "height": 1080}, "sources": [cam],
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
-               "outputs": [], "encoders": [],
+               "outputs": [], "encoders": [], "video_mixes": [],
                "buses": [{"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}],
                "sends": [], "hotkeys": []})
     );
@@ -416,7 +417,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(25));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(26));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(

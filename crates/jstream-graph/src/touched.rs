@@ -5,7 +5,7 @@
 
 use jstream_protocol::{
     BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, ItemId, OutputId, SceneId,
-    SourceId, SourceKind,
+    SourceId, SourceKind, VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -17,8 +17,10 @@ enum Object {
     Source(SourceId),
     Output(OutputId),
     Encoder(EncoderProfileId),
+    VideoMix(VideoMixId),
     /// A filter, by its owner's source and its ID there (ADR-0026).
     Filter(SourceId, FilterId),
+    /// An audio bus.
     Bus(BusId),
     /// One source's send into one bus.
     Send(SourceId, BusId),
@@ -53,6 +55,10 @@ enum Prop {
     EncoderChoice,
     /// An encoder profile's encoding.
     Encoding,
+    /// The video mix an output shows.
+    MixChoice,
+    /// A video mix's input, resolution and rate.
+    Mix,
     /// Whether a filter runs.
     Enabled,
     /// Whether a source's audio is open.
@@ -201,6 +207,29 @@ impl Touched {
                 let encoder = Object::Encoder(profile_id.clone());
                 self.prop(encoder.clone(), Prop::Name);
                 self.prop(encoder, Prop::Encoding);
+            }
+            Edit::VideoMixCreate { mix_id, mix, .. } => {
+                self.exists.insert(Object::VideoMix(mix_id.clone()));
+                if let Some(scene_id) = mix.scene() {
+                    self.uses.insert(Object::Scene(scene_id.clone()));
+                }
+            }
+            Edit::VideoMixDelete { mix_id } => {
+                self.exists.insert(Object::VideoMix(mix_id.clone()));
+            }
+            Edit::VideoMixUpdate { mix_id, mix, .. } => {
+                let video_mix = Object::VideoMix(mix_id.clone());
+                self.prop(video_mix.clone(), Prop::Name);
+                self.prop(video_mix, Prop::Mix);
+                if let Some(scene_id) = mix.scene() {
+                    self.uses.insert(Object::Scene(scene_id.clone()));
+                }
+            }
+            Edit::OutputSetVideoMix { output_id, mix_id } => {
+                self.prop(Object::Output(output_id.clone()), Prop::MixChoice);
+                if let Some(mix_id) = mix_id {
+                    self.uses.insert(Object::VideoMix(mix_id.clone()));
+                }
             }
             Edit::FilterAdd {
                 owner, filter_id, ..

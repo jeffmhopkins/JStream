@@ -368,9 +368,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   plain link that reads as absent once the original is deleted. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
-  refers to, or a scene a source still shows or a setting refers to, is rejected, and so
-  is deleting a bus a setting refers to (a `bus` reference, which never closes a cycle); a
-  reference in a filter's settings is an edge of the filter's source. The
+  refers to, or a scene a source or a video mix still shows or a setting refers to, is
+  rejected, and so is deleting a bus a setting refers to (a `bus` reference, which never
+  closes a cycle); a reference in a filter's settings is an edge of the filter's
+  source.
   built-in kinds come from `jstream-sources`. The engine runs a source of each one
   whose kind is built (`browser` and its `youtube_chat` preset, through the host's
   browser backend, and `color`, `display`, `image`, `media`, `text`, `waveform`,
@@ -383,7 +384,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `compressor`, `limiter`, `delay`). A `browser` page's audio and a `media` file's
   sound are mixer inputs of their running source, routed the same way. No video filter
   kind is built in yet.
-  Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
+  Outputs, ordered by ID, with their `kind`, an optional `encoder_profile` and an
+  optional `video_mix`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
   container: mp4 }`, the path checked to be absolute and to end in a file name, or
   `VirtualCam`, which has no settings and ignores its profile. A stream
@@ -391,8 +393,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
   H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
   rate), checked against the ranges the protocol states. An output with no profile uses
-  the engine's default; a profile an output uses can't be deleted. The mix is always
-  `Program` until video mixes exist, so outputs share a session by profile alone.
+  the engine's default; a profile an output uses can't be deleted. Video mixes
+  (protocol 0.28), ordered by ID, each with a name besides the fields above: the
+  resolution's sides even and 16 to 8192, the divisor 1 to 60. An output with no mix
+  shows `Program` at the canvas size and base rate; a mix an output shows can't be
+  deleted. Outputs share a session by mix and profile. `Preview` shows `Program` until
+  studio mode has a preview scene.
   Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
   others with their faders, and the post-fader sends, a new channel source sending to
@@ -404,11 +410,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   bus monitors, per-placement effects, the transition fields, 3D
   geometry, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
-  `background`, hotkeys, an output's mix, audio buses and chains, the
-  `YouTube` kind, and everything outside `sources`, `scenes`,
-  `outputs`, `encoders` and `audio`. The collection file saves everything built so
-  far, encoder profiles, each output's profile, `duplicated_from`, buses, sends and
-  source audio included
+  `background`, output audio buses and chains, the `YouTube` kind, a virtual camera's
+  video mix (it always shows the program), and everything outside `sources`, `scenes`,
+  `outputs`, `encoders`, `video_mixes`, `audio` and `hotkeys`. The collection file
+  saves everything built so far, encoder profiles, video mixes, each output's profile
+  and mix, `duplicated_from`, buses, sends, source audio and hotkeys included
   ([Persistence](#persistence)).
   The program scene is built in `jstream-core` as runtime state, so the file doesn't
   hold it (no preview scene yet).
@@ -435,7 +441,7 @@ every mix runs at the base rate divided by an integer.
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Preview (one per engine, while any preview stream is open) | Draws the program mix small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
 next to its code, which that section covers: the output pipeline in
@@ -503,9 +509,10 @@ when a snapshot references them and destroyed after the frame fence that last us
 
 The **render snapshot** is built. After every applied batch, undo and redo, every stored
 source frame and a collection file's load, the control side re-plans the program mix
-under the collection lock: the reachable scenes, the frames they show and the passes
-that draw them. It publishes that as the next render generation only when it draws
-something new, so a batch that touches nothing on program publishes nothing. The render
+and the scene each video mix shows under the collection lock: the reachable scenes, the
+frames they show and the passes that draw them. It publishes that as the next render
+generation only when it draws something new, so a batch that touches nothing on program
+or any mix publishes nothing. The render
 thread loads it without the lock. `video.snapshot` and the preview thread read it
 together with `rev` and the live values under the lock, and draw the live values over
 it. The render
@@ -586,6 +593,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
+  `video_mix.create`, `video_mix.update` and `video_mix.delete` configure video mixes
+  (an input, a resolution and a divisor of the base rate), and `output.set_video_mix`
+  points an output at one or back at the program (protocol 0.28). A mix an output shows
+  can't be deleted, and a mix showing a scene blocks that scene's delete.
   `item.set_opacity` and `item.set_blend` set a placement's opacity and blend mode
   (`item.add` takes both too), and `filter.add`, `filter.remove`, `filter.set_enabled`,
   `filter.set_settings` and `filter.reorder` edit a source's filter chains, addressed by
@@ -646,13 +657,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   that stage is covered by the privacy screen.
 - **Encoder sessions** (protocol 0.13): `output.status` reports, per running output,
   its encoder session's profile and the other outputs sharing it, plus the sessions and
-  hardware sessions in use. A profile's settings at start count, so an output started
-  after `encoder.update` gets a session of its own. Planned: when the encoder refuses a
+  hardware sessions in use. A profile's settings and the output's video mix at start
+  count, so an output started after `encoder.update` gets a session of its own, and
+  outputs on different mixes never share one. Planned: when the encoder refuses a
   session, `output.start` fails with a stable session-limit error code naming the
   outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video.snapshot` → the program mix as a PNG in the
+  `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
+  (protocol 0.28), `video.snapshot` → the program mix (not a video mix) as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
@@ -747,7 +760,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio` and `video` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -764,7 +777,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 484 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 520 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking

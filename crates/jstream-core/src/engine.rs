@@ -21,9 +21,9 @@ use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::runtime::{
-    Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
-    Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program, launch_vcam,
-    parts_from,
+    Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
+    OutputStats, Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program,
+    launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
@@ -1680,8 +1680,8 @@ impl Engine {
         state.live.set_media(media, state.graph.state());
     }
 
-    /// Re-plans the program mix now, as the live sources' thread does when a frame is
-    /// due, for tests that move time by hand.
+    /// Re-plans the program mix and each video mix's scene now, as the live sources'
+    /// thread does when a frame is due, for tests that move time by hand.
     #[cfg(test)]
     pub(crate) fn replan(&self) {
         lock(&self.shared.state).publish_render();
@@ -1708,18 +1708,31 @@ impl Drop for SettleOnDrop<'_> {
     }
 }
 
-/// Which encoder sessions `output_id` shares: its profile and that profile's encoding
-/// now, or the engine's default for an output with none or one the host declared.
+/// Which encoder sessions `output_id` shares: the video mix it shows with that mix's
+/// size and rate now, and its profile with that profile's encoding now. An output with
+/// no mix, or one the host declared, gets the program at the program stage's size and base
+/// rate; one with no profile the engine's default.
 fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
     let state = graph.state();
-    let profile_id = state
-        .output(output_id)
-        .and_then(|output| output.encoder_profile())
-        .cloned();
+    let output = state.output(output_id);
+    let profile_id = output.and_then(|output| output.encoder_profile()).cloned();
     let profile = state
         .encoding_of(output_id)
         .unwrap_or(EncoderProfile::DEFAULT);
-    (profile_id, profile)
+    let mix = output
+        .and_then(|output| output.video_mix())
+        .and_then(|id| state.video_mix(id))
+        .map_or(MixKey::PROGRAM, |mix| {
+            let spec = mix.mix();
+            MixKey {
+                mix: Some(mix.id().clone()),
+                // The graph keeps every resolution in range, so this is never `None`.
+                size: jstream_media::FrameSize::new(spec.resolution.width, spec.resolution.height)
+                    .ok(),
+                divisor: spec.fps_divisor,
+            }
+        });
+    (mix, profile_id, profile)
 }
 
 /// Where an output the engine sends to itself goes, rather than to a publish target
@@ -2538,10 +2551,12 @@ impl State {
         );
     }
 
-    /// Re-plans the program mix at the current time and publishes it if it draws
-    /// something new. A source's stored frame wins over its live one. The live sources
-    /// are told when the plan's next frame change is due, to re-plan then. The mix shows
-    /// the program scene (ADR-0030). Returns the render generation current afterwards.
+    /// Re-plans the program mix and the scene each video mix shows at the current time,
+    /// and publishes them if they draw something new. A source's stored frame wins over
+    /// its live one. The live sources are told when the plan's next frame change is due,
+    /// to re-plan then. The program mix shows the program scene (ADR-0030). The shot lists
+    /// the displays and windows the program and every mix capture. Returns the render
+    /// generation current afterwards.
     fn publish_render(&mut self) -> u64 {
         let Self {
             graph,

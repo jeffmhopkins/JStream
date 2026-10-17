@@ -11,6 +11,7 @@ use crate::hotkey::HotkeyBinding;
 use crate::id::{BusId, DeviceId, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::live::GestureInfo;
+use crate::mix::VideoMixInfo;
 use crate::output::OutputInfo;
 use crate::settings::Settings;
 use crate::youtube::{BroadcastInfo, BroadcastListStatus, BroadcastType, StreamInfo, YoutubeAuth};
@@ -46,8 +47,8 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
-    /// items, every output, every encoder profile, the buses and sends, and every hotkey
-    /// binding) at one revision: what a client
+    /// items, every output, every encoder profile, every video mix, the buses and sends,
+    /// and every hotkey binding) at one revision: what a client
     /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
     /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
@@ -82,6 +83,9 @@ pub enum Query {
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
+    /// Lists the collection's video mixes, ordered by ID.
+    #[serde(rename = "video_mix.list")]
+    VideoMixList,
     /// Lists the open live-value gestures (ADR-0032), every client's, ordered by client
     /// and gesture ID, with the values each holds now: what a client that connects
     /// during a drag reads to show it. Live values are runtime state, not collection
@@ -184,6 +188,7 @@ impl Query {
             Query::OutputList => "output.list",
             Query::StudioGet => "studio.get",
             Query::EncoderList => "encoder.list",
+            Query::VideoMixList => "video_mix.list",
             Query::LiveList => "live.list",
             Query::YoutubeStatus => "youtube.status",
             Query::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",
@@ -275,6 +280,10 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
+        /// Every video mix, ordered by ID. Missing (from a server older than 0.28)
+        /// parses as empty.
+        #[serde(default)]
+        video_mixes: Vec<VideoMixInfo>,
         /// Every audio bus, ordered by ID, the master among them. Missing (from a
         /// server older than 0.19) parses as empty.
         #[serde(default)]
@@ -337,6 +346,14 @@ pub enum QueryResult {
         rev: Rev,
         /// The profiles, ordered by ID.
         encoders: Vec<EncoderProfileInfo>,
+    },
+    /// The result of `video_mix.list`.
+    #[serde(rename = "video_mix.list")]
+    VideoMixList {
+        /// The revision the list was read at.
+        rev: Rev,
+        /// The mixes, ordered by ID.
+        video_mixes: Vec<VideoMixInfo>,
     },
     /// The result of `live.list`.
     #[serde(rename = "live.list")]
@@ -426,6 +443,7 @@ impl QueryResult {
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::StudioGet { .. } => "studio.get",
             QueryResult::EncoderList { .. } => "encoder.list",
+            QueryResult::VideoMixList { .. } => "video_mix.list",
             QueryResult::LiveList { .. } => "live.list",
             QueryResult::YoutubeStatus { .. } => "youtube.status",
             QueryResult::YoutubeListBroadcasts { .. } => "youtube.list_broadcasts",

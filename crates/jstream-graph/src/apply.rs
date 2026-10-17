@@ -324,6 +324,9 @@ fn apply_edit(
     if let Some(applied) = crate::encoder::apply(state, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::mix::apply(state, edit, at) {
+        return applied;
+    }
     if let Some(applied) = crate::filter::apply(state, kinds, edit, at) {
         return applied;
     }
@@ -745,6 +748,7 @@ fn apply_edit(
                     id: output_id.clone(),
                     kind: kind.clone(),
                     encoder_profile: None,
+                    video_mix: None,
                 },
             );
             Ok(vec![Edit::OutputDelete {
@@ -784,8 +788,14 @@ fn apply_edit(
             }];
             if let Some(profile_id) = output.encoder_profile {
                 inverse.push(Edit::OutputSetEncoder {
-                    output_id: output.id,
+                    output_id: output.id.clone(),
                     profile_id: Some(profile_id),
+                });
+            }
+            if let Some(mix_id) = output.video_mix {
+                inverse.push(Edit::OutputSetVideoMix {
+                    output_id: output.id,
+                    mix_id: Some(mix_id),
                 });
             }
             Ok(inverse)

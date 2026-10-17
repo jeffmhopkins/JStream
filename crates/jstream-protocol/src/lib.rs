@@ -21,6 +21,7 @@ mod hotkey;
 mod id;
 mod kind;
 mod live;
+mod mix;
 mod output;
 #[cfg(feature = "fixtures")]
 pub mod parity;
@@ -59,7 +60,7 @@ pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
     BusId, ClientId, DeviceId, EncoderProfileId, FilterId, GestureId, IdempotencyKey, ItemId,
-    OutputId, RequestId, Rev, SceneId, SourceId,
+    OutputId, RequestId, Rev, SceneId, SourceId, VideoMixId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
@@ -68,6 +69,7 @@ pub use kind::{
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
 };
+pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
 pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
