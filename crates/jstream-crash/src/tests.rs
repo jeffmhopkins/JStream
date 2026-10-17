@@ -189,7 +189,8 @@ fn old_reports_are_pruned_to_the_cap() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// `install` creates a missing folder, user-only on Unix.
+/// The folder helper `install` uses creates a missing folder and its parents,
+/// user-only on Unix. (The hook test covers `install` itself making a missing folder.)
 #[test]
 fn install_creates_the_folder() {
     let dir = scratch("create").join("data").join("logs");
@@ -227,7 +228,12 @@ fn a_panic_writes_a_redacted_report() {
             .set("someone", &StoredSecret::new(FAKE_REFRESH_TOKEN))
             .expect("stored");
         let tokens = Redacting::new(secrets.clone(), Arc::new(tokens));
-        super::install(PathBuf::from(dir), PROGRAM, secrets);
+        // The app's notifier: the test reads the line on the child's stderr.
+        fn notify(line: &str) {
+            use std::io::Write;
+            let _ = writeln!(std::io::stderr().lock(), "{line}");
+        }
+        super::install(PathBuf::from(dir), PROGRAM, secrets, notify);
         let _ = std::thread::Builder::new()
             .name("crash-test-worker".to_owned())
             .spawn(move || {

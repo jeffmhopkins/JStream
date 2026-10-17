@@ -22,13 +22,15 @@ dependencies are `jstream-platform`, for the credential-store traits `Redacting`
 implements, and `jstream-protocol`, for `PROTOCOL_VERSION`; its one other is `blake3`.
 
 Contents:
-- `install(dir, program, secrets)` creates `dir` if it is missing (user-only on Unix),
+- `install(dir, program, secrets, notify)` creates `dir` if it is missing (user-only on Unix),
   prunes old reports there and sets the panic hook. On a panic the hook writes
   `crash-<UTC time>-<pid>-<n>.txt` (user-only on Unix, its folder's ACL on Windows): the
   program's name and version, the protocol version, the OS and architecture, the time,
   the process ID, the panicking thread's name, the panic's location and message (cut at
   16 KiB), and a backtrace. Nothing else: no environment, no command line, no settings.
-  It prints a redacted line naming the report to stderr in place of the default hook's.
+  In place of the default hook's stderr line, it hands `notify` (`Notify`, the app's own
+  `fn(&str)`) a redacted line naming the report. The crate itself never prints
+  ([R-RS-005](../../docs/RULES.md#R-RS-005)); both apps write that line to stderr.
   The newest 10 reports are kept (`MAX_REPORTS`); other files in the folder, such as log
   files and the audit log, are never touched.
 - `Secrets`: the secrets to redact, as a shared handle. The app makes one at startup and
@@ -52,4 +54,5 @@ need its own ADR.
 UTC dates, `Secrets` shared by clones, `Redacting` on key and token stores, pruning to the
 cap without touching other files, the folder created user-only, and the real hook in a
 child process (this test binary again), whose report holds the facts and none of a fake
-token, stream key and refresh token, nor does its stderr line.
+token, stream key and refresh token, nor does the line it hands the test's notifier
+(written to the child's stderr).

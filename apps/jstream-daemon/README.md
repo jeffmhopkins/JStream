@@ -458,7 +458,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   and hands straight to its connect, and the OAuth access token (left open on #353);
   only their length and BLAKE3 digest are kept, and the text is scanned for windows
   with that digest, so the hook holds no plaintext. It replaces the default hook,
-  whose stderr line would quote the message unredacted. A panic in a tokio task writes
+  whose stderr line would quote the message unredacted; `main.rs`'s `crash_line` prints
+  the hook's redacted line instead (the crate never prints). A panic in a tokio task writes
   a report too, even though the daemon carries on. The oldest reports beyond 10 are
   deleted before each new one.
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
@@ -473,8 +474,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `jstream-youtube` on Windows only (the HTTPS transport) and `serde_json` (the
-  OAuth client file), `jstream-crash` (the crash reports), `anyhow` and `tracing` (the
-  startup line), all already in the tree through core and the server, tokio (`rt-multi-thread` for the runtime,
+  OAuth client file), `anyhow` and `tracing` (the startup line), all already in the
+  tree through core and the server; `jstream-crash` (the crash reports,
+  [ADR-0067](../../docs/adr/0067-shared-crash-reports.md)), a workspace crate only the
+  two apps use; tokio (`rt-multi-thread` for the runtime,
   `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), `tracing-subscriber`
   (features `fmt` and `std` only: no `ansi`, `env-filter` or `tracing-log`, so it adds
   only `sharded-slab` and `thread_local`), and `getrandom`

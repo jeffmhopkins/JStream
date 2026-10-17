@@ -36,6 +36,7 @@ fn main() -> ExitCode {
                 version: env!("CARGO_PKG_VERSION"),
             },
             secrets.clone(),
+            crash_line,
         );
     }
     let log = app::init_logging(data.as_deref());
@@ -56,6 +57,14 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Prints the crash hook's redacted line naming the report. Best effort: a release
+/// build has no console, and the report is what matters.
+#[cfg(windows)]
+fn crash_line(line: &str) {
+    use std::io::Write;
+    let _ = writeln!(std::io::stderr().lock(), "{line}");
 }
 
 /// No window here yet: says so and fails.

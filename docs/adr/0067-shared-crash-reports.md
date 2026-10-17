@@ -49,9 +49,15 @@ in an app, but [R-RS-008](../RULES.md#R-RS-008) forbids global mutable state in
   owns it) and to every `Redacting` store, and registers its control token with it. The
   panic hook itself is the only process-wide thing, as `std::panic::set_hook` makes it.
 - **The program is named by the caller.** `install(dir, Program { name, version },
-  secrets)`: each app passes its own package name and version for the report's `program:`
-  line. `install` creates the folder if it is missing (user-only on Unix), as the desktop
-  app's copy did; the daemon creates it first anyway.
+  secrets, notify)`: each app passes its own package name and version for the report's
+  `program:` line. `install` creates the folder if it is missing, as the desktop app's
+  copy did, and now user-only on Unix, which the desktop's copy didn't do; the daemon
+  creates it first anyway.
+- **The library never prints.** As a library crate it falls under
+  [R-RS-005](../RULES.md#R-RS-005), so the hook builds the redacted line naming the
+  report and hands it to `notify`, a plain `fn(&str)` each app supplies. Both apps pass
+  one that writes the line to stderr, which keeps their output unchanged. The redaction
+  and the cut stay in the crate, so no app can print an unredacted message.
 - **What stays in the apps:** wiring only, where the `Secrets` is made and which stores
   `Redacting` wraps. The daemon's rotating log files (`logs.rs`) stay its own.
 

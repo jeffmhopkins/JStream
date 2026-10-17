@@ -161,6 +161,12 @@ fn log_dir(options: &Options) -> Result<PathBuf, Failure> {
     }
 }
 
+/// Prints the crash hook's redacted line naming the report. Best effort: the report is
+/// what matters.
+fn crash_line(line: &str) {
+    let _ = writeln!(stderr().lock(), "{line}");
+}
+
 /// Creates the log directory, installs the crash-report hook there, and installs the
 /// process's log subscriber: the libraries' `tracing` spans and events, filtered by
 /// `filter`, as text lines on stderr (stdout carries only the banner lines) and in the
@@ -175,6 +181,7 @@ fn init_logging(dir: &Path, filter: Targets, secrets: &Secrets) -> Result<(), Fa
             version: env!("CARGO_PKG_VERSION"),
         },
         secrets.clone(),
+        crash_line,
     );
     let files = logs::LogFiles::open(dir)
         .with_context(|| format!("could not create a log file in `{}`", dir.display()))?;

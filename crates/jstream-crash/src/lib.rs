@@ -176,18 +176,30 @@ impl<S: OAuthTokenStore + ?Sized> OAuthTokenStore for Redacting<S> {
 /// Installs the panic hook that writes `program`'s crash reports into `dir`, redacting
 /// `secrets`. It creates `dir` and its parents if they are missing (user-only on Unix,
 /// mode 0700) and prunes old reports there. It replaces the default hook, whose stderr
-/// line would quote the message unredacted, with a redacted line naming the report.
-pub fn install(dir: PathBuf, program: Program, secrets: Secrets) {
-    // Best effort: if the folder can't be made, each report says so on stderr.
+/// line would quote the message unredacted, and hands `notify` a redacted line naming
+/// the report instead.
+pub fn install(dir: PathBuf, program: Program, secrets: Secrets, notify: Notify) {
+    // Best effort: if the folder can't be made, each report's line says so.
     let _ = create_dir(&dir);
     prune(&dir, MAX_REPORTS);
     std::panic::set_hook(Box::new(move |info| {
-        on_panic(&dir, program, &secrets, info);
+        on_panic(&dir, program, &secrets, notify, info);
     }));
 }
 
+/// How the hook tells the user about a panic: the app's function, given the redacted
+/// line naming the report (or saying why none was written). The library never prints
+/// (R-RS-005); each app passes one that writes the line to stderr. It must not panic.
+pub type Notify = fn(&str);
+
 /// The hook. It must not panic: a panic here aborts the process.
-fn on_panic(dir: &Path, program: Program, secrets: &Secrets, info: &PanicHookInfo<'_>) {
+fn on_panic(
+    dir: &Path,
+    program: Program,
+    secrets: &Secrets,
+    notify: Notify,
+    info: &PanicHookInfo<'_>,
+) {
     let now = SystemTime::now();
     let thread = std::thread::current();
     let thread = thread.name().unwrap_or("<unnamed>");
@@ -223,23 +235,20 @@ fn on_panic(dir: &Path, program: Program, secrets: &Secrets, info: &PanicHookInf
         }
     };
     let written = write_report(dir, now, &report);
-    let mut err = io::stderr().lock();
     let summary = truncate(&summary, 512);
-    // Best effort: the report is what matters. A release desktop build has no console.
-    let _ = match &written {
-        Ok(path) => writeln!(
-            err,
+    let line = match &written {
+        Ok(path) => format!(
             "error: panic in thread '{thread}' at {location}: {summary}\n\
              crash report: {}",
             path.display()
         ),
-        Err(error) => writeln!(
-            err,
+        Err(error) => format!(
             "error: panic in thread '{thread}' at {location}: {summary}\n\
              could not write a crash report in `{}`: {error}",
             dir.display()
         ),
     };
+    notify(&line);
 }
 
 /// What a report says about the panic, apart from its message and backtrace.
