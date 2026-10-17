@@ -4,11 +4,12 @@
 //! `support_tier`), four-character codes and `OSStatus` errors, the VideoToolbox and
 //! AudioToolbox settings for an encoder configuration, the VideoToolbox H.264 and HEVC
 //! encoder on CPU frames (`VideoToolboxCodecs`, with Annex B output from
-//! `annexb_access_unit`), and the AudioToolbox AAC-LC encoder, whose raw access units are
-//! framed and timed by `AacFramer`. Capture (`ScreenCaptureKitCapture`), audio
-//! (`CoreAudioIo`) and decoding report `Unsupported` until their follow-ups land. Layer 2,
-//! and one of the crates allowed `unsafe` (R-UNSAFE-001): every system call is wrapped
-//! here behind safe APIs.
+//! `annexb_access_unit`), the AudioToolbox AAC-LC encoder, whose raw access units are
+//! framed and timed by `AacFramer`, and display and window capture through
+//! ScreenCaptureKit (`ScreenCaptureKitCapture`) on CPU frames, behind the Screen Recording
+//! permission. Audio (`CoreAudioIo`) and decoding report `Unsupported` until their
+//! follow-ups land. Layer 2, and one of the crates allowed `unsafe` (R-UNSAFE-001): every
+//! system call is wrapped here behind safe APIs.
 //!
 //! Apple's frameworks are called through the objc2 crates and Mach time through `mach2`
 //! (ADR-0063 §12), so the crate type-checks on any host for an Apple target. The backends

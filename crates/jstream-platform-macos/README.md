@@ -25,9 +25,10 @@ wrapped here behind safe APIs, with RAII types for what the system hands back
 **Bindings are maintained crates** (ADR-0063 §12, [R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)).
 Apple's frameworks are called through the objc2 framework crates, at the versions wgpu's
 Metal backend already uses (`objc2-foundation`, `-core-foundation`, `-core-media`,
-`-core-video`, `-video-toolbox`, `-audio-toolbox` and `-core-audio-types` so far), and
-Mach time through `mach2`. They carry their generated bindings and link frameworks with
-`#[link]`, so the crate type-checks from any host with `cargo clippy -p jstream-platform-macos --target aarch64-apple-darwin`; linking and the
+`-core-video`, `-video-toolbox`, `-audio-toolbox`, `-core-audio-types`,
+`-screen-capture-kit` and `-core-graphics` so far, with `objc2`, `block2` and `dispatch2`
+for ScreenCaptureKit's classes, blocks and queues), and Mach time through `mach2`. They
+carry their generated bindings and link frameworks with `#[link]`, so the crate type-checks from any host with `cargo clippy -p jstream-platform-macos --target aarch64-apple-darwin`; linking and the
 macOS tests need a Mac. Everything that calls macOS is under `cfg(target_os = "macos")`.
 On other targets the crate builds just its platform-independent helpers, which are tested
 on every platform.
@@ -82,14 +83,35 @@ It has:
   keyframe, as Media Foundation emits them. **`cm_time_parts`** and
   **`media_time_from_cm`** map media-clock times to Core Media's value and timescale and
   back without rounding, and **`copy_rows`** copies a plane between row strides.
-- **`ScreenCaptureKitCapture`** (`Capture`) and **`CoreAudioIo`** (`AudioIo`) check the
-  floor when created. Listing and starting report `Unsupported` for now. `CoreAudioIo`
-  first refuses desktop and application audio before 14.2 (`check_input`).
+- **`ScreenCaptureKitCapture`** (`Capture`) checks the floor when created. `targets`
+  lists the displays from `SCShareableContent` as `display:<CGDirectDisplayID>` (named
+  `Display <id>`, the main one primary) and the on-screen windows of other applications
+  at layer 0 as `window:<CGWindowID>` (named by title, else application), each with its
+  size in pixels (the content's points times its scale). `start` captures one through an
+  `SCStream` in BGRA, sRGB, with the cursor, at that size; a resized window is scaled to
+  fit, keeping its aspect ratio. Frames arrive on the stream's serial dispatch queue,
+  whose callbacks catch panics. Each complete frame (`SCStreamFrameInfoStatus`; idle,
+  blank and suspended frames are skipped) is converted to NV12, BT.709 limited range,
+  with `jstream_platform::nv12` (an odd size loses its last column or row), timed by its
+  presentation time on the host clock, and put in the shared `Mailbox`, reusing a frame
+  the reader skipped. A stopped stream (the menu bar's Stop, or macOS stopping it)
+  makes `latest` report `DeviceLost`. Dropping the stream stops it and waits for its
+  queue.
+- **The Screen Recording permission**: listing and starting check it first
+  (`CGPreflightScreenCaptureAccess`). When it isn't granted, the backend asks macOS once
+  (`CGRequestScreenCaptureAccess`, which prompts the first time) and returns a
+  `PlatformError::Os` naming System Settings › Privacy & Security › Screen & System
+  Audio Recording (Screen Recording on macOS 14); later calls report it without asking
+  again, and nothing retries on its own. ScreenCaptureKit's `UserDeclined` maps to the same error.
+  `screen_recording_granted` reads the state without prompting. A grant takes effect
+  when JStream restarts.
+- **`CoreAudioIo`** (`AudioIo`) checks the floor when created and refuses desktop and
+  application audio before 14.2 (`check_input`). Listing and opening report
+  `Unsupported` for now.
 
 Not here yet, in roughly the order they follow:
-- ScreenCaptureKit targets from `SCShareableContent`, the Screen Recording permission
-  check and request, and capture streams (CPU frames first, then IOSurface into Metal
-  and wgpu once a spike proves the synchronisation);
+- capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
+  proves the synchronisation;
 - Core Audio devices and streams, and process taps for desktop and application audio;
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
@@ -100,9 +122,11 @@ Not here yet, in roughly the order they follow:
 The virtual camera is out of scope (`Backends::vcam` is `None` on macOS) until its own
 ADR.
 
-Tests run on every platform where they can. The macOS ones (the clock, reading the
-release, encoding with VideoToolbox, which falls back to Apple's software encoder on a
-Mac without a hardware one, and encoding AAC with AudioToolbox) need no permission, so
-they run in the `macos` CI job. The
-`hw-tests` feature is for tests that need the Screen Recording, Camera, Microphone or
-system audio recording permission, or the hardware encoders, which run by hand on a Mac.
+Tests run on every platform where they can: the capture's target IDs, names, sizes, frame
+layouts and statuses, permission steps and error mapping are platform independent. The
+macOS ones (the clock, reading the release, encoding with VideoToolbox, which falls back
+to Apple's software encoder on a Mac without a hardware one, encoding AAC with
+AudioToolbox, and opening the capture backend) need no permission, so they run in the
+`macos` CI job. The `hw-tests` feature is for tests that need the Screen Recording,
+Camera, Microphone or system audio recording permission (listing and capturing a display,
+and the missing-permission error), or the hardware encoders, which run by hand on a Mac.
