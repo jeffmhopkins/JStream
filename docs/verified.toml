@@ -1026,7 +1026,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:e75da49d0dd4e69d", by = "agent:claude-e3d", note = "Render thread paragraph: GPU sessions get NV12 encode targets, others readback; per-tick allocation now per CPU session; Not-yet list no longer lists a GPU encode target" }
+stamp = { hash = "b3:4f3a0d6c2b139c4f", by = "agent:claude-e3d", note = "Drop counts table now lists the encode ring as a render-thread source of encode_frames (review B3), next to the session input drops; render thread paragraph still holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:07bfecd36d847078", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live sources keep wave/m2's Source::sound (MediaAudio, audible per end_plan, take_audio to AudioSources::sync_live), painters, begin_plan/show and media injection beside main's browser pages (Source::audio, with_browser rebuilding opens_browser kinds); Audio sources describe main's Recorded::Own inputs and wave/m2's live sound inputs side by side with the filter chains; Audio routing has wave/m2's MAX_BUSES assert and ScopeTaps bullet; Locking has the sources thread painting with no lock beside main's preview and YouTube locks; protocol and control design deps re-read (0.24 bus references, the mock); fixed Dependencies to name arc-swap and the jstream-browser fake and zune-jpeg dev-dependencies, which Cargo.toml has" }
@@ -1305,7 +1305,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:c65c43538952c785", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: Live on Windows lists wave/m2's MfMediaDecoders with its delay-loaded mfplat.dll and mfreadwrite.dll, matching serve.rs, beside main's browser sources (cef), device file, pairing on loopback and paths data directory; core's design dep re-read (its Dependencies now name arc-swap and the browser and zune-jpeg dev-dependencies, and the audio sources text both page and media inputs), none of which changes what the daemon wires; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:e75da49d0dd4e69d", by = "agent:claude-e3d", note = "Re-read the GPU and browser passages: they concern the browser device, not the encode path, and still hold" }
+stamp = { hash = "b3:4f3a0d6c2b139c4f", by = "agent:claude-e3d", note = "Re-read: no drop-count or encode-path text; the core Design change (drop table row) doesn't affect it" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:c3a365bb1d6adc81", by = "agent:claude", note = "Cascade from core Design (pairing calls answer `unsupported`, device sessions audited as device:<name>; #444's non-ASCII key refusal) and server Design (pairing, plus #251's preview frames forwarded through Admitted): Paired devices (<token file>.devices, device tokens on loopback only, an unusable device file exits 1) still matches serve.rs, and the daemon adds nothing for preview; holds" }
