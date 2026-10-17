@@ -1,23 +1,23 @@
 //! Audio through Core Audio (ADR-0063 §4).
 //!
-//! Devices and inputs go through the Core Audio HAL: `CoreAudioIo` lists every device
-//! under its persistent UID, once per direction it has channels in, and records an input
-//! with an IOProc on the device (`input`), at the device's own rate as interleaved `f32`.
-//! Desktop and application audio will go through process taps, which need macOS 14.2
-//! ([`Feature::ProcessTaps`]): the loopback targets are checked for that and otherwise
-//! report `Unsupported`, as playing audio does, until they are built.
+//! Devices, inputs and outputs go through the Core Audio HAL: `CoreAudioIo` lists every
+//! device under its persistent UID, once per direction it has channels in, and records an
+//! input or plays on an output with an IOProc on the device (`stream`), at the device's
+//! own rate as interleaved `f32`. Desktop and application audio will go through process
+//! taps, which need macOS 14.2 ([`Feature::ProcessTaps`]): the loopback targets are
+//! checked for that and otherwise report `Unsupported` until they are built.
 //!
-//! `layout` holds the parts that make no system call, so they are tested on every
-//! platform; `hal` reads the HAL's properties and `input` runs the streams.
+//! `layout` and `permission` hold the parts that make no system call, so they are tested
+//! on every platform; `hal` reads the HAL's properties and `stream` runs the streams.
 
 #[cfg(target_os = "macos")]
 mod hal;
-#[cfg(target_os = "macos")]
-mod input;
 #[cfg(any(target_os = "macos", test))]
 mod layout;
 #[cfg(any(target_os = "macos", test))]
 mod permission;
+#[cfg(target_os = "macos")]
+mod stream;
 
 use jstream_platform::{AudioInputTarget, PlatformError};
 
@@ -54,10 +54,12 @@ mod backend {
         AudioOutputTarget, AudioProcess, AudioStream, PlatformError,
     };
 
-    use super::input::{self, Which};
     use std::sync::atomic::{AtomicBool, Ordering};
 
+    use jstream_platform::AudioDirection;
+
     use super::permission::{self, MicStep};
+    use super::stream::{self, Which};
     use super::{check_input, hal};
     use crate::{Feature, MacosVersion, check_floor};
 
@@ -70,8 +72,14 @@ mod backend {
     /// The device an input target records, for the targets the HAL serves.
     fn which(target: &AudioInputTarget) -> Result<Which, PlatformError> {
         match target {
-            AudioInputTarget::DefaultInput => Ok(Which::Default),
-            AudioInputTarget::Input(id) => Ok(Which::Device(id.clone())),
+            AudioInputTarget::DefaultInput => Ok(Which {
+                direction: AudioDirection::Input,
+                device: None,
+            }),
+            AudioInputTarget::Input(id) => Ok(Which {
+                direction: AudioDirection::Input,
+                device: Some(id.clone()),
+            }),
             AudioInputTarget::DefaultOutputLoopback
             | AudioInputTarget::OutputLoopback(_)
             | AudioInputTarget::ProcessLoopback { .. } => {
@@ -83,9 +91,26 @@ mod backend {
         }
     }
 
-    /// Audio I/O through Core Audio (ADR-0063 §4): it lists devices and records inputs
-    /// through the HAL. Desktop and application audio, which need process taps, are
-    /// refused before 14.2 and report `Unsupported` after, as playing does, for now.
+    /// The device an output target plays on.
+    fn which_output(target: &AudioOutputTarget) -> Result<Which, PlatformError> {
+        let device = match target {
+            AudioOutputTarget::DefaultOutput => None,
+            AudioOutputTarget::Output(id) => Some(id.clone()),
+            other => {
+                return Err(PlatformError::Unsupported {
+                    what: format!("audio output target {other:?}"),
+                });
+            }
+        };
+        Ok(Which {
+            direction: AudioDirection::Output,
+            device,
+        })
+    }
+
+    /// Audio I/O through Core Audio (ADR-0063 §4): it lists devices, records inputs and
+    /// plays on outputs through the HAL. Desktop and application audio, which need
+    /// process taps, are refused before 14.2 and report `Unsupported` after, for now.
     ///
     /// Recording an input needs the Microphone permission: without it macOS would record
     /// silence, so opening one checks it first and asks macOS to prompt once.
@@ -138,7 +163,7 @@ mod backend {
 
         fn input_format(&self, target: &AudioInputTarget) -> Result<AudioFormat, PlatformError> {
             check_input(target, self.version)?;
-            input::format(&which(target)?)
+            stream::format(&which(target)?)
         }
 
         fn open_input(
@@ -149,15 +174,16 @@ mod backend {
             check_input(target, self.version)?;
             let which = which(target)?;
             self.check_microphone()?;
-            input::open(which, handler)
+            stream::open_input(which, handler)
         }
 
         fn open_output(
             &self,
-            _target: &AudioOutputTarget,
-            _handler: Box<dyn AudioOutputHandler>,
+            target: &AudioOutputTarget,
+            handler: Box<dyn AudioOutputHandler>,
         ) -> Result<Box<dyn AudioStream>, PlatformError> {
-            Err(not_built("playing audio"))
+            // Playing needs no permission.
+            stream::open_output(which_output(target)?, handler)
         }
     }
 }
@@ -191,7 +217,10 @@ mod tests {
 /// `macos` CI job; a runner may have no audio devices at all.
 #[cfg(all(test, target_os = "macos"))]
 mod macos_tests {
-    use jstream_platform::{AudioDirection, AudioInputTarget, AudioIo, DeviceId, PlatformError};
+    use jstream_platform::{
+        AudioDirection, AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget,
+        AudioRenderBuffer, DeviceId, PlatformError,
+    };
 
     use super::CoreAudioIo;
 
@@ -236,6 +265,23 @@ mod macos_tests {
     }
 
     #[test]
+    fn an_unknown_output_is_not_found() {
+        struct Silence;
+        impl AudioOutputHandler for Silence {
+            fn render(&mut self, buffer: &mut AudioRenderBuffer<'_>) {
+                buffer.samples.fill(0.0);
+            }
+            fn on_error(&mut self, _error: &PlatformError) {}
+        }
+        let audio = CoreAudioIo::new().expect("backend");
+        let target = AudioOutputTarget::Output(DeviceId::new("no-such-jstream-device"));
+        assert!(matches!(
+            audio.open_output(&target, Box::new(Silence)),
+            Err(PlatformError::NotFound { .. })
+        ));
+    }
+
+    #[test]
     fn an_unknown_input_is_not_found() {
         let audio = CoreAudioIo::new().expect("backend");
         let target = AudioInputTarget::Input(DeviceId::new("no-such-jstream-device"));
@@ -265,7 +311,8 @@ mod hw_tests {
     use std::time::Duration;
 
     use jstream_platform::{
-        AudioInputHandler, AudioInputTarget, AudioIo, AudioPacket, MediaClock, PlatformError,
+        AudioInputHandler, AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget,
+        AudioPacket, AudioRenderBuffer, MediaClock, PlatformError,
     };
 
     use super::CoreAudioIo;
@@ -297,6 +344,65 @@ mod hw_tests {
         }
 
         fn on_error(&mut self, _error: &PlatformError) {}
+    }
+
+    /// Plays a quiet tone and counts the frames it was asked for.
+    struct Tone {
+        channels: usize,
+        phase: f32,
+        frames: Arc<AtomicU64>,
+        next_pos: u64,
+        backwards: Arc<AtomicBool>,
+    }
+
+    impl AudioOutputHandler for Tone {
+        fn render(&mut self, buffer: &mut AudioRenderBuffer<'_>) {
+            if buffer.device_position < self.next_pos {
+                self.backwards.store(true, Ordering::Relaxed);
+            }
+            for frame in buffer.samples.chunks_exact_mut(self.channels) {
+                // A quiet 440 Hz tone at 48 kHz, close enough at other rates.
+                frame.fill(0.05 * (self.phase * std::f32::consts::TAU).sin());
+                self.phase = (self.phase + 440.0 / 48_000.0).fract();
+            }
+            let frames = (buffer.samples.len() / self.channels) as u64;
+            self.next_pos = buffer.device_position + frames;
+            self.frames.fetch_add(frames, Ordering::Relaxed);
+        }
+
+        fn on_error(&mut self, _error: &PlatformError) {}
+    }
+
+    #[test]
+    #[ignore = "needs speakers and plays a tone"]
+    fn plays_on_the_default_output() {
+        let audio = CoreAudioIo::new().expect("backend");
+        let expected = super::stream::format(&super::stream::Which {
+            direction: jstream_platform::AudioDirection::Output,
+            device: None,
+        })
+        .expect("output format");
+        let frames = Arc::new(AtomicU64::new(0));
+        let backwards = Arc::new(AtomicBool::new(false));
+        let stream = audio
+            .open_output(
+                &AudioOutputTarget::DefaultOutput,
+                Box::new(Tone {
+                    channels: expected.channels(),
+                    phase: 0.0,
+                    frames: Arc::clone(&frames),
+                    next_pos: 0,
+                    backwards: Arc::clone(&backwards),
+                }),
+            )
+            .expect("open");
+        assert_eq!(stream.format(), expected);
+        std::thread::sleep(Duration::from_secs(1));
+        drop(stream);
+        let got = frames.load(Ordering::Relaxed);
+        let rate = u64::from(expected.sample_rate());
+        assert!(got > rate / 2, "{got} frames in a second at {rate} Hz");
+        assert!(!backwards.load(Ordering::Relaxed));
     }
 
     #[test]

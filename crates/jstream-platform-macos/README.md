@@ -151,14 +151,22 @@ It has:
   error saying whoever manages the Mac has to allow it. A grant counts from the next
   open; nothing retries on its own. Listing devices and `input_format` need no
   permission. The prompt's usage string is in the daemon's embedded `Info.plist`
-  ([jstream-daemon](../../apps/jstream-daemon/README.md#purpose)). Desktop and application audio are refused before 14.2
-  (`check_input`) and, like `processes` and playing audio (`open_output`), report
-  `Unsupported` for now.
+  ([jstream-daemon](../../apps/jstream-daemon/README.md#purpose)).
+  **`open_output`** plays on the default output, followed when the system default
+  changes, or one output by UID, with no permission. It is planned and watched the same
+  way, from the output streams' formats and the output's preferred stereo pair. Each
+  IOProc cycle clears the device's output buffers, then has the handler fill a buffer
+  allocated before the start, in the same chunks, each with its device position (frames
+  from the stream's first output sample time) and the host time its first frame is
+  expected to play, on `MachClock`. The handler's channels go to the planned device
+  channels, and the rest stay silent; a buffer list the plan doesn't match plays
+  silence until the watcher re-plans. Desktop and application audio are refused before
+  14.2 (`check_input`) and, like `processes`, report `Unsupported` for now.
 
 Not here yet, in roughly the order they follow:
 - capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
   proves the synchronisation;
-- Core Audio output streams, and process taps for desktop and application audio;
+- process taps for desktop and application audio;
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
 - AVFoundation webcams;
@@ -173,8 +181,9 @@ platform independent. The macOS ones (the clock, reading the release, encoding w
 VideoToolbox, which falls back to Apple's software encoder on a Mac without a hardware
 one, encoding AAC with AudioToolbox, opening the capture backend, round trips through
 the login keychain with uniquely named items, deleted afterwards, listing audio
-devices and their input formats, and reading the Microphone status without prompting)
-need no permission, so they run in the `macos` CI
-job. The `hw-tests` feature is for tests that need the Screen Recording,
-Camera, Microphone or system audio recording permission (listing and capturing a display,
-the missing-permission error, and recording the default input), or the hardware encoders, which run by hand on a Mac.
+devices and their input formats, refusing an unknown output, and reading the Microphone
+status without prompting) need no permission, so they run in the `macos` CI job. The
+`hw-tests` feature is for tests that need the Screen Recording, Camera, Microphone or
+system audio recording permission (listing and capturing a display, the
+missing-permission error, and recording the default input), speakers (playing a tone on
+the default output), or the hardware encoders, which run by hand on a Mac.
