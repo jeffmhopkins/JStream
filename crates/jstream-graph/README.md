@@ -28,13 +28,13 @@ codes, so the engine passes them to clients unchanged.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
-  holding the master, the `sends`, keyed by bus and source, the `hotkeys`: each
-  `Chord` bound to the protocol `Action` it fires
+  holding the master, the `sends`, keyed by bus and source, the master stage's filter
+  `Chains` (`State::master`,
+  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), and the
+  `hotkeys`: each `Chord` bound to the protocol `Action` it fires
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
-  §3), and the master stage's filter `Chains` (`State::master`,
-  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). A binding
-  always names objects that exist. Each `Output` has its own `Chains` too; only their
-  audio chains hold filters so far.
+  §3). A binding always names objects that exist. Each `Output` has its own `Chains`
+  too; only their audio chains hold filters so far.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,

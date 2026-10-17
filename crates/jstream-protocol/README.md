@@ -140,8 +140,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
   reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.29 because of
   the master stage's and outputs' filter chains (the `master` and `output` filter
-  owners, `OutputInfo.filters` and `state.get`'s `master`); 0.28 added video mixes (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and
-  the mixes in `state.get` and `output.list`); 0.27 added the `capture.targets` query;
+  owners, `OutputInfo.filters` and `state.get`'s `master`); 0.28 added video mixes
+  (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and the mixes in
+  `state.get` and `output.list`); 0.27 added the `capture.targets` query;
   0.26 added live values ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the
   `live.changed` and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
   hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
@@ -653,8 +654,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `sends` (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
   parses as empty) and the master stage (`master`, with its filter chains; omitted
-  while it has none, so missing, also from a pre-0.29 server, parses as empty). A client reads it on connecting, and again after a
-  `state.changed` it didn't cause.
+  while it has none, so missing, also from a pre-0.29 server, parses as empty). A
+  client reads it on connecting, and again after a `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
