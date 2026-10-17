@@ -282,8 +282,8 @@ impl Display {
         if ptr.is_null() {
             return String::new();
         }
-        // SAFETY: non-null and NUL-terminated, and copied before the display drops.
-        // C: `int vaMaxNumEntrypoints(VADisplay)`.
+        // SAFETY: non-null and NUL-terminated, as `vaQueryVendorString` returns it (see
+        // above), and copied before the display drops.
         unsafe { CStr::from_ptr(ptr) }
             .to_string_lossy()
             .into_owned()
