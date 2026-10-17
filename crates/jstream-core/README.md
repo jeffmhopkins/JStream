@@ -1444,7 +1444,11 @@ called after the call completes, with no engine lock held. A sink must not block
 writer thread, and when that is full counts what it drops; the next line written is
 `{"time":…,"dropped":n}`. The writer appends one JSON line per entry to `audit.jsonl`
 in the directory the host names (the data directory,
-[ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)), with mode `0600` on Unix.
+[ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)), creating it user-only:
+mode `0600` on Unix, a protected DACL for SYSTEM and the user on Windows
+(`jstream_platform_windows::create_private_file`, #547). On Windows an existing
+`audit.jsonl` whose owner or DACL lets other users in is refused with `PermissionDenied`,
+so opening the `AuditFile` fails and names why.
 When a line would take it past 8 MiB (or the limit given to `with_limit`) it is
 renamed to `audit.1.jsonl`, replacing the previous one, so the log stays under about
 twice the limit. A write error is logged at `warn` and loses the entry; it never fails
@@ -1473,7 +1477,10 @@ serialize the graph, and writes with only the file's mutex held: saves happen on
 time, never under the collection lock, and one whose `rev` the file already has (or
 passed, because a later change saved first) writes nothing. The write is atomic: a
 temporary `.<name>.<pid>.tmp` beside the file, flushed to disk, renamed over it, and on
-Unix the directory flushed too; on Unix it is mode `0600`. A failed save is logged at
+Unix the directory flushed too. The temporary file is user-only (mode `0600` on Unix, a
+protected DACL for SYSTEM and the user on Windows, which the rename keeps), so a file
+that only inherited its folder's ACL is replaced by a private one at the first save; it
+is not checked on load. A failed save is logged at
 `error` with the path and `rev`, removes the temporary file, and leaves the call's
 result as it is: the change stays applied and the next change saves again. Undo
 history, idempotency keys and the program scene are not saved (see *Program scene*).
