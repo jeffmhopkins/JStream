@@ -165,7 +165,7 @@ stamp = { hash = "b3:8f6c25a84d2e8a73" }
 stamp = { hash = "b3:18846eee0f8db3cf", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the built-in video filter sentence: a filter draws one premultiplied Rgba16Float image into another of its output_size, and the chain runtime is not built. Checked against filter/ and Compositor::apply_filter; the rest of the section is unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:3481e3fb4c094fd8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (render ratio.rs, ratio.wgsl, aspect/mod.rs) and its README paragraph, after the V1 paragraph. The section's filter sentence (a filter draws one premultiplied image into one of its output_size; chain runtime not built) still covers it, and aspect_ratio's output_size is exactly such a size change; holds" }
+stamp = { hash = "b3:1f618631da761bcc", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2: browser pages imported on the stage context as premultiplied sRGB, placed before the step-5 encoder sentence; edited the filter sentence (apply_filter draws from any image, imports and browser pages included, into a premultiplied Rgba16Float layer); X1's effect-pack wording kept; render README now also has the wave's aspect_ratio kind, which the section doesn't describe; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
@@ -861,7 +861,7 @@ stamp = { hash = "b3:c470e006d8095daa" }
 stamp = { hash = "b3:3e63f714aef88590" }
 
 ["CRATE-jstream-browser#open-items"."body"]
-stamp = { hash = "b3:198f285698a6a137", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: kept this PR's packaging (helper and runtime) and measurements items, dropped the wave's sandbox item (ADR-0048 resolves it), and took the wave's Hosts item, since #291 now wires the daemon too" }
+stamp = { hash = "b3:4942af5fcf3217ef", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B3): Hosts now say the engine replaces the host's device with the stage context while it runs and doesn't give it back; Compositing no longer says the mix doesn't draw pages (this PR imports them premultiplied on the stage context) and names what's left, a real CEF texture on hardware (#336); other items unchanged; holds" }
 
 ["CRATE-jstream-browser#open-items"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
@@ -873,7 +873,7 @@ stamp = { hash = "b3:1300403d18de6566" }
 stamp = { hash = "b3:7d20d7a1c4f8bf54", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the sandbox item is gone (ADR-0048 runs CEF sandboxed in the helper), so only the first item, packaging (now naming the renamed bootstrap exe and its DLL), blocks shipping cef; a new Measurements item says S4 hasn't been re-run in the helper (second copy, pipe round trip); audio timestamps now say the helper could send CEF's pts; matches ADR-0048 and the code" }
 
 ["CRATE-jstream-browser#purpose"."body"]
-stamp = { hash = "b3:263452a0c0ba87a1", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: resolved the page_check conflict by keeping this PR's helper layout with the wave's note that it uses the engine's own device as the daemon will once the engine hands it out; the rest matches cef/, helper/, wire.rs and link.rs and ARCH browser-source" }
+stamp = { hash = "b3:bcdafb44609bd0c8", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B3): edited The seam: use_device gets the host's media-adapter device for paints before a stage, then the stage's own context while it runs (LiveSources::use_gpu), taken back to none at stop; 'the engine doesn't hand out its own device yet' was false with this PR; rest unchanged; holds" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
 stamp = { hash = "b3:a9974d858b3dc647", by = "agent:claude-c8b1", note = "re-read after merging wave/m1: resolved the page_check conflict by keeping this PR's helper layout with the wave's note that it uses the engine's own device as the daemon will once the engine hands it out; the rest matches cef/, helper/, wire.rs and link.rs and ARCH browser-source" }
@@ -930,7 +930,7 @@ stamp = { hash = "b3:4891bf706a904c96", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:dc6d71acf3e43565", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: rewritten for ADR-0048: a cdylib whose only code is the RunWinMain export, shipped beside CEF's bootstrap.exe renamed jstream-browser-helper.exe, which sets up the sandbox and hands the process to jstream_browser::run_helper; unsafe_allowed for the unmangled export; cef turns on jstream-browser's helper feature; the manifest and build.rs are gone; matches src/lib.rs and Cargo.toml" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:crates/jstream-browser/README.md#purpose"]
-stamp = { hash = "b3:263452a0c0ba87a1", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the helper DLL beside the renamed bootstrap exe and CEF runtime, started by jstream-browser's CEF backend, still matches ADR-0048, the browser crate's purpose and the crate map's apps row" }
+stamp = { hash = "b3:bcdafb44609bd0c8", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2: stale via browser#purpose's seam paragraph (which device the backend copies paints onto); the helper's text names only the exe, its processes and pipes, not the engine-side device; holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:8b380b76610ee295", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the helper DLL beside the renamed bootstrap exe and CEF runtime, started by jstream-browser's CEF backend, still matches ADR-0048, the browser crate's purpose and the crate map's apps row" }
@@ -1134,7 +1134,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:b88e83265793cf4b", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 on wave/m1-2: Live sources text merges the wave's youtube_chat/opens_browser wording with the GPU-frame path; live.rs frame() keeps the plan/show bookkeeping before the GPU branch and re-plans for every kind that opens_browser; holds" }
+stamp = { hash = "b3:d0435aa343a1752f", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2: Live sources keeps the GPU page path (use_gpu, ContextKey gate, re-plan every program frame for opens_browser kinds) beside the wave's youtube_chat wording; Video codecs matches pipeline.rs video_codec/sink.rs; engine.rs's with_browser doc now says the stage's context replaces the host's device, as Live sources does; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1248,7 +1248,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:b88e83265793cf4b", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 replayed on wave/m1-2: test list adds the browser composite test in gpu_capture.rs and the own-context test in snapshot.rs, both present and passing; holds" }
+stamp = { hash = "b3:d0435aa343a1752f", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2: test list keeps the browser composite test (gpu_capture.rs) and the own-context test (snapshot.rs); pipeline.rs's wave changes (video_codec, fallible stream_info) don't touch it; engine.rs changed only in with_browser's doc (the host's device covers paints before a stage, use_gpu lends the stage's context); holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1371,7 +1371,7 @@ stamp = { hash = "b3:7ef3df79abb4dc2c", by = "agent:claude@session_01Y3YB5ZnzRmE
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:211f676f26ec5d84", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "'YouTube is optional' now cites ADR-0058 (0041 superseded); the design still matches serve.rs and youtube.rs" }
+stamp = { hash = "b3:e25d8af5f7660b24", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B2): edited the Browser sources bullet, whose 'program mix doesn't draw pages yet, device still to be settled' was false with this PR: the stage lends its own context via Engine::use_gpu (pipeline.rs launch_program, live.rs use_gpu -> use_device), pages are drawn into the mix, and Program::drop takes it back leaving no device, so serve.rs's own device covers only paints before the first stage; core#design's Live sources GPU path and the wave's YouTube sign-in text (#482) re-read; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:ff07f7df78275725", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): stale via core#design (the merged Live sources text and the wave's Video codecs paragraph); daemon's browser-sources bullet (use_device before the first paint) still matches; holds" }
@@ -1467,7 +1467,7 @@ stamp = { hash = "b3:b038f3237bed79f6", by = "agent:claude@session_01YKRrREb5gUV
 stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:42693e57e0ab79dd", by = "agent:claude", note = "ADR-0047: Design says the desktop turns pairing off, so its server answers no credential call (they reach the session as unsupported), the UI's pairing panel stays hidden, and there is no /pair page or device cookie; matches host.rs:57 and the server's pairing switch. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): #316's vcam text and #291's browser wiring sit beside it without touching the server config; holds" }
+stamp = { hash = "b3:edfaa81bd9f74a08", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B3): edited the Browser sources bullet: pages paint on the app's media-adapter device until a program stage runs, then on the stage's context the engine lends (Engine::use_gpu), so the mix draws them, taken back at stop; browser.rs comment matches; holds" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1494,7 +1494,7 @@ stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): vcam status values match host.rs VcamStatus strings; build.rs delay-loads mfsensorgroup.dll; WindowsVcam behind --no-vcam" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/browser.rs"]
-stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the browser bullet no longer says a cef build links libcef.dll at load time; with ADR-0048 CEF runs only in the helper, which starts on the first page, so a missing helper or CEF files fail that source, as browser.rs's doc now says; the device and clock text holds" }
+stamp = { hash = "b3:79c52e0bc8185aad", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B3): edited the Browser sources bullet: pages paint on the app's media-adapter device until a program stage runs, then on the stage's context the engine lends (Engine::use_gpu), so the mix draws them, taken back at stop; browser.rs comment matches; holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
 stamp = { hash = "b3:2b06c1a3f73fabba", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. host.rs, against wave/m1-2, gains main's MfMediaDecoders in the Windows backends (the media field), beside wave/m1-2's config.pairing = false. The design text on the backends and pairing being off still holds." }
@@ -1533,7 +1533,7 @@ stamp = { hash = "b3:92bb167bdbfb5350", by = "agent:claude@session_01BL6HM3DJQvG
 stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): contents list matches app.rs, host.rs (vcam_status), bootstrap.rs (vcam in the global) and ui.rs" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/browser.rs"]
-stamp = { hash = "b3:ee15cfa2c79de61e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 against wave/m1: the apps/* row still says the desktop links sources and jstream-browser with cef; browser.rs now drives the sandboxed helper (its doc names ADR-0048 and says the app doesn't link CEF), and the Browser sources bullet still describes it; holds" }
+stamp = { hash = "b3:79c52e0bc8185aad", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (round 4 B3): browser.rs changed only in its comment on the device it opens (now: covers paints before a program stage, the stage lends its own context); Purpose's browser-sources bullet says only which backend is used; holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
 stamp = { hash = "b3:2b06c1a3f73fabba", by = "agent:wave-owner", note = "Merged main (wave/m2 landing #470, #471, #474) into wave/m1-2. host.rs, against wave/m1-2, gains main's MfMediaDecoders in the Windows backends (the media field), beside wave/m1-2's config.pairing = false. The purpose (live wiring as the daemon's; the server pairs no device) still holds." }
@@ -1575,7 +1575,7 @@ stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVL
 stamp = { hash = "b3:3466907ce4516fb9", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 B3: re-read the whole section; restored the wave's shader-path bullet (asset-path rules under the collection root, DOS device names refused, symlink out refused), which matches manifest.rs check_shader_path; the dependency and Drawing paragraphs still match pack.rs" }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
-stamp = { hash = "b3:21a6ebbf40745cdd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR changes render Filters only by adding the aspect_ratio paragraph (a built-in kind with its own output_size). Purpose relies on the harness parts of Filters: the prelude (FILTER_PRELUDE), Params at group 0 binding 4, ExternalFilter and the per-label pipeline rebuild, all unchanged in this PR; no effects code changed; holds" }
+stamp = { hash = "b3:9e6b73ad7a72bf89", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2: stale via render#filters (this PR's prelude sentence on premultiplied-sRGB imports, and the wave's aspect_ratio paragraph); the shader contract names no Frame field and no pack or effects test reads frame.straight/alpha; holds" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
 stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
@@ -2523,7 +2523,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:b77ad66612d353db", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 after merging wave/m1-2 (#489): imported-texture and composite-step text match composite.wgsl mode 2 and cache.rs; the wave's apply_filter lives in Filters, not here; holds" }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:21a6ebbf40745cdd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "Aspect ratio (V1a): not yet" with the aspect_ratio paragraph. Checked against ratio.rs (descriptor settings, ranges and visible_if; output_size's crop/pad/stretch rule, rounding, floor of 1, saturating math, TooLarge) and ratio.wgsl (crop and pad copy 1:1 with the anchor offset; bilinear, Catmull-Rom and Lanczos-3 resample, normalised and clamped to [0, a] as an SDR assumption; no downscale widening). aspect/mod.rs registers the kind. (V1 already dropped filter/mod.rs's unused_imports allow; this PR leaves filter/mod.rs unchanged.) Harness text above is unchanged; holds""" }
+stamp = { hash = "b3:9e6b73ad7a72bf89", by = "agent:claude@session_019dshZgpgXvzmo9CSXAyfpL", note = "C8b5 vs wave/m1-2 (#311 aspect_ratio merged in): edited the prelude sentence: src, texel and aux also convert a premultiplied browser-page import (Frame alpha/aux_alpha 0/1/2, matching composite.wgsl), as pass.rs and prelude.wgsl do; the wave's aspect_ratio paragraph matches aspect/ratio.rs and uses only the prelude helpers, no Frame alpha field; X1's harness, cache, error-scope and external paragraphs unchanged; holds" }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the Filters section: the harness (VideoFilter::new, set_settings, output_size; Compositor::apply_filter drawing into a new layer of output_size in one submit, an imported input's FrameSync staged after a successful encode right before the submit, and its texture handed back in PRESENT at the end of that submit as render does; Ctx::draw fullscreen passes over prelude.wgsl with the Frame uniform and aux image, pipelines cached per shader; Ctx::scratch; params.rs descriptor builders, settings reader and uniform writer; filter::testing), the four empty group modules and the per-call allocation note. Checked against filter/mod.rs, pass.rs, params.rs, prelude.wgsl, testing.rs and compositor.rs; holds" }

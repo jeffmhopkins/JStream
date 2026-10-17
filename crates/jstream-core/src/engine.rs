@@ -347,8 +347,9 @@ impl Engine {
     /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
     /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
     /// that no backend is set; giving one builds the ones already there again.
-    /// The host also hands the backend a GPU device (`use_device`): for now one it opens
-    /// on the media adapter itself, since the engine doesn't hand out its own yet.
+    /// The host also hands the backend a GPU device (`use_device`), one it opens on the
+    /// media adapter itself, for paints before a program stage; while a stage runs the
+    /// engine lends the backend the stage's own context instead (`use_gpu`).
     #[must_use]
     pub fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
         {
