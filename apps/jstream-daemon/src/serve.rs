@@ -102,7 +102,11 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> Engine {
                 return engine;
             }
         };
-        let tokens = Arc::new(jstream_platform_windows::WindowsCredentials);
+        // Behind `Redacting`, like the stream keys, so a refresh token is registered with
+        // the crash redaction as it is stored or loaded (#353).
+        let tokens = Arc::new(crate::crash::Redacting(Arc::new(
+            jstream_platform_windows::WindowsCredentials,
+        )));
         if let Some(client) = client {
             tracing::info!("YouTube sign-in is available, with the developer's OAuth client");
             return youtube::set_up(engine, client, transport, tokens);
@@ -801,6 +805,12 @@ mod tests {
             }))
             .await
             .expect("output.set_key");
+            // On the first pass no start has read the key yet, so this checks that
+            // `output.set_key` itself registered it.
+            assert!(
+                crate::crash::is_registered(SECRET),
+                "output.set_key registers the key before any start reads it"
+            );
             let refused = timely(control.call(start(id)))
                 .await
                 .expect_err("nothing to publish to");

@@ -310,7 +310,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   and before the token is touched. `serve.rs` then calls `Engine::with_youtube` with
   that client, else with `YoutubeSetup::built_in` (JStream's client, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md), `None`
   while it is empty), over `jstream_youtube::HttpsTransport` (the OS's root store) with
-  `WindowsCredentials` as the token store, before the engine goes live; core keeps the
+  `WindowsCredentials` behind `crash::Redacting` as the token store (so each refresh
+  token is redacted from crash reports, [Crash reports](#design)), before the engine
+  goes live; core keeps the
   token under its fixed account ID. Off Windows there is no OAuth token store, so a
   developer's client is dropped with a warning. Neither an empty built-in client nor a
   transport that can't be built stops the daemon: YouTube is optional (ADR-0058).
@@ -432,8 +434,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   line ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): the control token, by `token.rs`,
   and every stream key the live engine stores or reads, since `serve::live` hands the
   engine and the publish opener its key store behind `crash::Redacting`, which
-  registers each secret as it is stored or loaded (refresh tokens too, once the daemon
-  keeps an OAuth token store);
+  registers each secret as it is stored or loaded, and every YouTube refresh token,
+  since `serve.rs` hands YouTube its Credential Manager token store behind
+  `crash::Redacting` too. Secrets that pass through neither store are not registered:
+  a YouTube output's stream key from `Youtube::ingest` and the OAuth access token,
+  once the daemon streams to a YouTube-bound output;
   only their length and BLAKE3 digest are kept, and the text is scanned for windows
   with that digest, so the hook holds no plaintext. It replaces the default hook,
   whose stderr line would quote the message unredacted. A panic in a tokio task writes
@@ -460,7 +465,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
-  `jstream-platform` (feature `fake`), for the live engine and opener tests;
+  `jstream-platform` (feature `fake`), for the live engine and opener tests and
+  `crash.rs`'s `Redacting` tests (`MemoryKeyStore`, `MemoryTokenStore`);
   `jstream-browser` (feature `fake`), for the browser wiring's test;
   `jstream-youtube` (feature `fake`), for the YouTube setup's test.
 
