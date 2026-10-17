@@ -506,16 +506,16 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     },
                 ],
                 outputs: outputs(),
-                master: MasterInfo {
+                master: Box::new(MasterInfo {
                     filters: audio_chain(vec![FilterInfo {
                         filter_id: FilterId::new("m1"),
                         kind: "gain".into(),
                         enabled: true,
                         settings: gain_db(-1.0),
                     }]),
-                },
+                }),
                 encoders: encoders(),
-                transitions: TransitionsInfo::default(),
+                transitions: Box::new(TransitionsInfo::default()),
                 video_mixes: video_mixes(),
                 folders: Vec::new(),
                 labels: Vec::new(),

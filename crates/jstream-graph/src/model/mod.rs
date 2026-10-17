@@ -61,10 +61,10 @@
 use jstream_protocol::MAX_DURATION_MS;
 use jstream_protocol::{
     Action, BlendMode, BusId, Canvas, Chord, Crop, Easing, EncoderProfile, EncoderProfileId,
-    FilterChain, FilterId, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
-    ItemTransform, ItemTransition, KindDescriptor, LabelId, OutputId, OutputKind, PlacementForm,
-    Rev, SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind,
-    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
+    FilterChain, FilterId, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform,
+    ItemTransition, KindDescriptor, LabelId, OutputId, OutputKind, PlacementForm, Rev, SceneId,
+    SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
+    TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
     builtin_transition_kinds, initial_preset,
 };
 use std::collections::{BTreeMap, BTreeSet};

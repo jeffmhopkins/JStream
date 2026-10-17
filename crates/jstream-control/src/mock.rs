@@ -981,16 +981,16 @@ impl State {
                 video_mixes: self.collection.video_mix_infos(),
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
-                master: jstream_protocol::MasterInfo {
+                master: Box::new(jstream_protocol::MasterInfo {
                     filters: self.collection.master.clone(),
-                },
+                }),
                 hotkeys: self
                     .collection
                     .hotkeys
                     .iter()
                     .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
                     .collect(),
-                transitions: TransitionsInfo::default(),
+                transitions: Box::new(TransitionsInfo::default()),
                 folders: Vec::new(),
                 labels: Vec::new(),
             },
@@ -3256,7 +3256,7 @@ mod tests {
                 sends: vec![],
                 master: Default::default(),
                 hotkeys: vec![],
-                transitions: TransitionsInfo::default(),
+                transitions: Box::new(TransitionsInfo::default()),
                 folders: Vec::new(),
                 labels: Vec::new(),
             }

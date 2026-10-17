@@ -1315,7 +1315,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             ],
             outputs: output_infos(),
             encoders: encoder_infos(),
-            transitions: transitions_info(),
+            transitions: Box::new(transitions_info()),
             video_mixes: mix_infos(),
             folders: vec![
                 FolderInfo {
@@ -1337,7 +1337,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }],
             buses: bus_infos(),
             sends: send_infos(),
-            master: MasterInfo {
+            master: Box::new(MasterInfo {
                 filters: FilterChains {
                     video: vec![],
                     audio: vec![FilterInfo {
@@ -1347,7 +1347,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         settings: limiter(),
                     }],
                 },
-            },
+            }),
             hotkeys: hotkey_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's

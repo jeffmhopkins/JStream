@@ -315,7 +315,7 @@ pub enum QueryResult {
         /// The master stage. Omitted while it has no filters, so missing (also from a
         /// server older than 0.29) parses as empty.
         #[serde(default, skip_serializing_if = "MasterInfo::is_empty")]
-        master: MasterInfo,
+        master: Box<MasterInfo>,
         /// Every hotkey binding, ordered by chord. Missing (from a server older than
         /// 0.25) parses as empty.
         #[serde(default)]
@@ -324,7 +324,7 @@ pub enum QueryResult {
         /// (from a server older than 0.30) parses as the one `cut` preset every
         /// collection starts with.
         #[serde(default)]
-        transitions: TransitionsInfo,
+        transitions: Box<TransitionsInfo>,
         /// Every folder of the scene list, in folder order (ADR-0024 §3). Omitted when
         /// there are none; missing (from an older server) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

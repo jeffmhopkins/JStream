@@ -158,7 +158,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.30 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.31 because of
+  folders, labels and organisation metadata (the `folder.*` and `label.*` edits,
+  `scene.set_folder`, `scene.set_meta`, `source.set_meta`, `state.get`'s `folders` and
+  `labels`, `SceneInfo`'s `folder` and `meta`, `SourceInfo`'s `meta`, the `folder` and
+  `label` `delete.plan` targets, entity kinds and blockers); 0.30 added
   transition presets and studio mode's preview (the `transition.*` edits,
   `scene.set_transitions`, `item.set_transition`, `scene.switch`'s `preset_id`,
   `studio.set_preview`, `studio.changed`'s `preview_scene` and `transition`, and the
@@ -251,8 +255,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":30},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":30},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":31},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":31},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -627,6 +631,7 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
 - Reads report a binding as a `HotkeyBinding {chord, action}` whose `action` is plain
   JSON, so a client older than an action type still reads the collection; it keeps the
   binding and can't run it. `HotkeyBinding::action` parses it.
+
 Folders, labels and organisation metadata are collection state too
 ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4). They change no
 rendering, switching or nesting. Folders organise the scene list as a tree: an ordered

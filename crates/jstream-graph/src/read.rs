@@ -12,8 +12,8 @@ use crate::model::{
 };
 use jstream_protocol::{
     BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, FolderInfo, HotkeyBinding,
-    ItemInfo, KindDescriptor, LabelInfo, MasterInfo, OutputInfo, ProtocolError, Query,
-    QueryResult, SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
+    ItemInfo, KindDescriptor, LabelInfo, MasterInfo, OutputInfo, ProtocolError, Query, QueryResult,
+    SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
 };
 
 impl Graph {
@@ -173,13 +173,13 @@ impl Graph {
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
             encoders: self.state.encoders().map(Encoder::to_info).collect(),
-            transitions: self.state.transitions_info(),
+            transitions: Box::new(self.state.transitions_info()),
             video_mixes: self.state.video_mixes().map(VideoMix::to_info).collect(),
             buses: self.state.buses().map(Bus::to_info).collect(),
             sends: self.send_infos(),
-            master: MasterInfo {
+            master: Box::new(MasterInfo {
                 filters: self.state.master().to_info(),
-            },
+            }),
             hotkeys: self
                 .state
                 .hotkeys()
@@ -423,7 +423,7 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
-                transitions: jstream_protocol::TransitionsInfo::default(),
+                transitions: Box::new(jstream_protocol::TransitionsInfo::default()),
                 video_mixes: vec![],
                 buses: vec![jstream_protocol::BusInfo {
                     bus_id: jstream_protocol::BusId::master(),

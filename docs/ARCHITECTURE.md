@@ -421,8 +421,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the master at 0 dB. A send always runs from a source to a bus, and filters have no
   sidechain keys yet, so no edit can close an audio cycle. The engine routes these into
   the program stage's mixer while it runs.
-  Folders (a tree), labels, scenes' and sources' organisation metadata, and hotkey
-  bindings (protocol 0.25), as the organisation bullet above describes.
+  Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
+  and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), video filter kinds, blend modes other than `normal`,
   bus monitors, per-placement effects, 3D
@@ -635,7 +635,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
   `source.set_meta` edit labels and organisation metadata
-  ([ADR-0024](adr/0024-scene-structure.md)).
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -815,7 +815,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   events are not returned to agents (ADR-0058 §3).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 593 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 659 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
