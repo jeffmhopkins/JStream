@@ -4122,7 +4122,7 @@ stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:fbe7c61707faa7bd" }
 
 ["THREAT-MODEL#vcam"."body"]
-stamp = { hash = "b3:cc97d5c518c738e4", by = "agent:claude", note = "Re-read the vcam section: added an in-flight controls paragraph for #540 (producer refuses a pre-existing mapping with a foreign owner or loose DACL; DLL owner-checks textures and fence) and marked the #356 gap as fixed in flight; main's controls and accepted risks unchanged" }
+stamp = { hash = "b3:056fbce9528dd967", by = "agent:claude", note = "Re-read the vcam section after review N4: the in-flight #540 control now says the DACL may let in only the user, SYSTEM, Administrators and LOCAL SERVICE, matching security::check with LOCAL_SERVICE_SID; the rest unchanged" }
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
