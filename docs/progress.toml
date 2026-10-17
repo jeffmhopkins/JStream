@@ -844,8 +844,8 @@ id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
-prs = [359, 368, 611]
-note = "effect packs #368 land with wave/m1-2; 3D transforms part 1, the drawn polygon and unplace (#611), in review into wave/m3-2; the compositor draw and lifting the rejection to build"
+prs = [359, 368, 611, 622]
+note = "effect packs #368 land with wave/m1-2; 3D transforms part 1, the drawn polygon and unplace (#611), and part 2, the compositor draw (#622, without mips), in review; mips and lifting the rejection to build"
 needs = ["wave", "build"]
 
 [[item]]
