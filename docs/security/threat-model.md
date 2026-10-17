@@ -194,16 +194,17 @@ makes Windows contact a remote host.
   `nul.mp4`, `CON`, `COM1`, …), which Windows opens in place of a file. They are written to a `.part` file created
   new, and never replace an existing file.
 - Fuzz targets cover the protocol, source and output kind settings, collection loading,
-  AMF0, H.264, HEVC, AV1, AAC and the muxers (`fuzz/`).
+  the image decoders and font loading, AMF0, H.264, HEVC, AV1, AAC and the muxers
+  (`fuzz/`). The scheduled `fuzz` workflow runs each of them nightly and files an issue on
+  a crash.
 
 **Accepted:** a token holder may read any file the user can, as an image or font, and
 write recordings anywhere the user can. That follows from ADR-0006's full access.
 
 **Gaps:** `absolute` paths accept UNC and device paths, so a shared collection can make
 Windows send the user's NTLM hash to a remote host (#345); a file created between the
-recording's last check and its rename is replaced (#355); no fuzzing of the image and
-font decoders, and no fuzzing in CI (#352). The Media Foundation file reader (in flight,
-#245) will parse untrusted media in native code inside the engine.
+recording's last check and its rename is replaced (#355). The Media Foundation file
+reader (in flight, #245) will parse untrusted media in native code inside the engine.
 
 <a id="plugins"></a>
 ## Plugins
@@ -324,7 +325,6 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #348 | WASM | No CPU, memory or API-scope limits decided | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
-| #352 | Files | Image and font decoders unfuzzed; no fuzzing in CI | Low |
 | #353 | Secrets | `rtmp://` cleartext, crash-report redaction, redaction test scope | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
